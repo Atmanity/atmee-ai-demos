@@ -59,8 +59,11 @@ export class AvatarError extends Error {
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-// The recogniser marks a user turn that started over the avatar's speech.
-const cleanUserText = (text: string) => text.replace(/^\s*\[interruption\]\s*/i, '');
+// The recogniser tags words said over the avatar's speech: "[interruption]" for
+// a turn that started there, "[backchannel]" for words it did not take as a
+// turn (live, "Sure, I can share a photo" came as "[backchannel] Sure, I." and
+// "can share a photo."). The words are still the user's.
+const cleanUserText = (text: string) => text.replace(/^\s*\[(?:interruption|backchannel)\]\s*/i, '');
 
 let joins = 0;
 

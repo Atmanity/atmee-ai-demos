@@ -1,0 +1,126 @@
+import { useMemo, useState } from "react";
+
+import type { CatalogEntry, Room } from "../engine/types.ts";
+
+/**
+ * The furniture picker.
+ *
+ * Asking out loud is still the nicer way to say "a queen bed by the window". It
+ * is a poor way to browse two dozen pieces, or to add a fourth chair.
+ *
+ * The kit comes from the planner's snapshot rather than living here: two lists of furniture
+ * dimensions is two chances for the drawing and the rules to disagree about how
+ * big a queen bed is. And the picker sends a TYPE and a ROOM, never a position —
+ * where it goes is still the solver's job.
+ */
+
+const FAMILY_ORDER = ["Beds", "Seating", "Tables", "Storage", "Soft"];
+
+export function AddPiece({
+  catalog,
+  rooms,
+  activeRoom,
+  busy,
+  onAdd,
+}: {
+  catalog: CatalogEntry[];
+  rooms: Room[];
+  activeRoom: string | null;
+  busy: boolean;
+  onAdd: (type: string, room: string, near: string) => void;
+}) {
+  const [family, setFamily] = useState(FAMILY_ORDER[0]);
+  const [room, setRoom] = useState<string>("");
+  const [near, setNear] = useState("center");
+
+  const families = useMemo(() => {
+    const present = new Set(catalog.map((entry) => entry.family));
+    return FAMILY_ORDER.filter((name) => present.has(name));
+  }, [catalog]);
+
+  // The room the client last touched is almost always the one they mean, so it
+  // is the default — but it stays overridable, because "put a chair in the
+  // study" while looking at the kitchen is a perfectly ordinary thing to want.
+  const target = room || activeRoom || rooms[0]?.id || "";
+
+  if (catalog.length === 0 || rooms.length === 0) {
+    return (
+      <section className="rp-add">
+        <h2 className="rp-side__title">Furniture</h2>
+        <p className="rp-side__none">
+          {rooms.length === 0
+            ? "Lay the rooms out first, then you can furnish them."
+            : "Ask out loud for what you want."}
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rp-add" aria-label="Add furniture">
+      <h2 className="rp-side__title">Furniture</h2>
+
+      <div className="rp-add__row">
+        <select
+          className="rp-select"
+          aria-label="Room"
+          value={target}
+          onChange={(event) => setRoom(event.target.value)}
+        >
+          {rooms.map((entry) => (
+            <option key={entry.id} value={entry.id}>
+              {entry.name}
+            </option>
+          ))}
+        </select>
+        <select
+          className="rp-select"
+          aria-label="Where in the room"
+          value={near}
+          onChange={(event) => setNear(event.target.value)}
+        >
+          <option value="center">in the middle</option>
+          <option value="window">by a window</option>
+          <option value="door">by the door</option>
+          <option value="north_wall">north wall</option>
+          <option value="south_wall">south wall</option>
+          <option value="east_wall">east wall</option>
+          <option value="west_wall">west wall</option>
+        </select>
+      </div>
+
+      <div className="rp-add__families">
+        {families.map((name) => (
+          <button
+            key={name}
+            type="button"
+            className={`rp-chip${name === family ? " rp-chip--on" : ""}`}
+            onClick={() => setFamily(name)}
+          >
+            {name}
+          </button>
+        ))}
+      </div>
+
+      <div className="rp-add__pieces">
+        {catalog
+          .filter((entry) => entry.family === family)
+          .map((entry) => (
+            <button
+              key={entry.type}
+              type="button"
+              className="rp-piece-btn"
+              disabled={busy || !target}
+              title={`${entry.w_cm} × ${entry.h_cm} cm`}
+              onClick={() => onAdd(entry.type, target, near)}
+            >
+              <span className="rp-piece-btn__label">{entry.label}</span>
+              <span className="rp-piece-btn__size">
+                {entry.w_cm}×{entry.h_cm}
+              </span>
+            </button>
+          ))}
+      </div>
+    </section>
+  );
+}

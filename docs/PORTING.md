@@ -85,6 +85,29 @@ up clues ("home to the Burj Khalifa" for New York) in 2 of 3 live runs despite
 a standing note forbidding it. Outcomes that depend on a secret (is this guess
 right?) cannot be staged: that race stays.
 
+### What the live runs taught
+
+Fourteen apps run live on staging (each README has its run) settled these:
+
+- **Staged answers work.** Whatever was in `state` or a note before the user
+  spoke shaped the avatar's immediate reply in every app: Orion's rising time,
+  the quadratic's next line, the pot, the no-advice refusal, the emergency
+  line. Only what you send after the transcript is too late for that reply.
+- **A holding line is a promise only the app can keep.** When the judge missed
+  a line, the avatar had already said "let's see" or "let me pull that up", and
+  nothing followed. The misses were the recogniser's variants ("Raise to five"
+  heard as "Raised to five.", "Lob it" as "Lobbied"), so test the judge on
+  variants, not only on the clean sentence.
+- **Tell every refusal or "unavailable" as an event, even a staged one.** The
+  travel guide had "no news source" staged and still answered "let me pull
+  that up for you right now!". Prefix such events "You may already have
+  answered them; do not repeat yourself." Then the worst case is the answer
+  said twice, which beats never.
+- **The avatar invents what it cannot know yet** (the next spot, how the shot
+  will land, "putting ZQXWQ up"). Anything not staged comes back as an
+  invention, then your event. Stage it if it is predictable; otherwise the
+  screen is the truth.
+
 ## Telling the avatar (director.ts)
 
 - `NOTES`: the app's rules for the avatar, condensed from the old

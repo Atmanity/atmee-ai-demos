@@ -1,0 +1,672 @@
+/* Chess Opponent: the original panel's wood-and-felt, in the kit's page.
+ *
+ * Ported from the in-call panel's styles.css. What changed: the panel was an
+ * iframe sized by the host, so it owned html/body and a fixed height; here it
+ * is the right-hand column of the kit layout (the avatar on the left), and
+ * the kit itself is themed to the same palette. Everything else, including
+ * the notes on why each size is what it is, is the original's.
+ *
+ * NOTE for every size in this file: `box-sizing: border-box` is global (kit),
+ * so a `min-height`/`height` is the OUTER box, border and padding included. */
+
+:root {
+  --chess-bg: #17140f;
+  --chess-panel: #221d16;
+  --chess-line: #3a3128;
+  --chess-text: #efe6d8;
+  --chess-muted: #a2957f;
+  --chess-accent: #d8b25c;
+  /* The refusal warm: deliberately NOT the accent, because a refusal and a
+     result are different news and once shared one box. */
+  --chess-warn: #e0913f;
+  --chess-warn-bg: rgba(224, 145, 63, 0.13);
+  --chess-accent-bg: rgba(216, 178, 92, 0.14);
+  /* The smallest thing a thumb can be asked to hit. */
+  --chess-tap: 44px;
+  color-scheme: dark;
+
+  /* The kit (avatar stage, composer, transcript) in the board's colours. */
+  --accent: var(--chess-accent);
+  --accent-ink: #241c0c;
+  --page: var(--chess-bg);
+  --surface: var(--chess-panel);
+  --ink: var(--chess-text);
+  --muted: var(--chess-muted);
+  --line: var(--chess-line);
+  --stage-bg: #0d0b08;
+}
+
+body {
+  background: radial-gradient(120% 90% at 50% 0%, #2a2318 0%, var(--chess-bg) 70%) fixed;
+  color: var(--chess-text);
+  font-size: 14px;
+}
+
+/* The kit's light-theme leftovers, on a dark page. */
+.kit-btn:hover:not(:disabled) { background: #2c251c; }
+.kit-primary:hover:not(:disabled) { background: var(--accent); }
+.kit-input { color: var(--chess-text); }
+.kit-input::placeholder { color: var(--chess-muted); }
+.kit-icon.is-off { background: rgba(224, 145, 63, 0.18); }
+.kit-danger { color: #f08a8a; }
+.kit-line.is-user { background: rgba(216, 178, 92, 0.08); }
+
+/* A button otherwise renders in the UA's font inside a page that set one. */
+.chess-app button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.chess-app button:disabled {
+  cursor: default;
+}
+
+/* Nothing in the original was keyboard-visible: no focus ring existed at all,
+   and the UA default is suppressed by the custom backgrounds below. */
+.chess-app button:focus-visible {
+  outline: 2px solid var(--chess-accent);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------ page */
+
+.chess-app {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--chess-line);
+  border-radius: var(--radius);
+  background: rgba(23, 20, 15, 0.72);
+}
+
+.chess-app__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--chess-line);
+}
+
+.chess-app__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--chess-accent);
+}
+
+.chess-app__tagline {
+  font-size: 12px;
+  color: var(--chess-muted);
+  text-align: right;
+}
+
+/* ---------------------------------------------------------------- lobby */
+
+.chess-lobby {
+  display: grid;
+  place-items: center;
+  min-height: 420px;
+}
+
+.chess-lobby-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--chess-muted);
+}
+
+.chess-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--chess-line);
+  border-top-color: var(--chess-accent);
+  border-radius: 50%;
+  animation: chess-spin 0.8s linear infinite;
+}
+
+@keyframes chess-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ----------------------------------------------------------------- game */
+
+.chess-game {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* The board and the two rows that read it. `position: relative` because the
+   sound toggle lives in THIS block's corner, the corner the top player row
+   already reserves. */
+.chess-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Everything that is words about the game. */
+.chess-side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.chess-board-wrap {
+  position: relative;
+  width: 100%;
+  max-width: min(100%, 72vh);
+  margin: 0 auto;
+  border-radius: 10px;
+  transition: box-shadow 140ms ease, filter 140ms ease, opacity 140ms ease;
+}
+
+/* Wide enough for two columns: the board takes the height, the words take the
+   gutter beside it (the original did this for a short, wide panel docked
+   under a video call; here it is a wide window). */
+@media (min-width: 1180px) {
+  .chess-game {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .chess-stage {
+    flex: 0 1 auto;
+    width: min(calc(100vh - 150px), 60%);
+  }
+
+  .chess-side {
+    flex: 1 1 240px;
+  }
+
+  .chess-board-wrap {
+    max-width: 100%;
+  }
+
+  .chess-move-log {
+    max-height: calc(100vh - 420px);
+  }
+}
+
+/* Whose move it is, at the size of the board. "Your move" and "Waiting" were
+   both 12px grey text; this is the cue that survives being read from across
+   a room while the avatar is talking. */
+.chess-board-wrap--yours {
+  box-shadow: 0 0 0 3px var(--chess-accent), 0 0 18px rgba(216, 178, 92, 0.35);
+}
+
+.chess-board-wrap--theirs {
+  box-shadow: 0 0 0 3px rgba(162, 149, 127, 0.4);
+}
+
+/* A finished board that still looks live invites a drag that cannot land. */
+.chess-board-wrap--over {
+  opacity: 0.78;
+  filter: grayscale(0.4);
+}
+
+.chess-player-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 2px;
+  min-height: 34px;
+}
+
+/* The sound toggle is absolutely positioned in this corner, so the TOP row,
+ * and only the top row, has to leave it room. Without this the opponent's
+ * status reads as a name with a speaker icon sitting on the rest of it. */
+.chess-player-row--top {
+  padding-right: calc(var(--chess-tap) + 8px);
+}
+
+.chess-player-row__name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.chess-meta__label {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ------------------------------------------------------------- statuses */
+
+.chess-meta__status {
+  flex: none;
+  padding: 3px 9px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1.25;
+  white-space: nowrap;
+  color: var(--chess-muted);
+}
+
+/* The side to move is FILLED, not tinted: at a glance the eye finds one solid
+   shape on the panel and that is whose turn it is. */
+.chess-meta__status--active {
+  background: var(--chess-accent);
+  border-color: var(--chess-accent);
+  color: #241c0c;
+  font-weight: 700;
+}
+
+.chess-meta__status--thinking {
+  background: var(--chess-accent-bg);
+  border-color: rgba(216, 178, 92, 0.55);
+  color: var(--chess-accent);
+  font-weight: 600;
+}
+
+.chess-meta__status--idle {
+  color: var(--chess-muted);
+}
+
+.chess-meta__status--result {
+  background: var(--chess-panel);
+  border-color: var(--chess-line);
+  color: var(--chess-text);
+  font-weight: 600;
+}
+
+/* The seating, in words, where the brief seats it — beside the player, not
+   buried in the hint wall under the board. */
+.chess-side-chip {
+  flex: none;
+  padding: 2px 7px;
+  border: 1px solid var(--chess-line);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--chess-muted);
+  white-space: nowrap;
+}
+
+/* A softened strength had NO rule at all and rendered as " · beginner
+   strength" at the end of a grey sentence. It is a chip on the opponent, next
+   to his name, because it is a fact about HIM. */
+.chess-difficulty {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid rgba(224, 145, 63, 0.5);
+  border-radius: 999px;
+  background: var(--chess-warn-bg);
+  color: var(--chess-warn);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------- captured */
+
+.chess-captured {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--chess-text);
+}
+
+.chess-captured--white .chess-captured__piece {
+  color: #f4ece0;
+  text-shadow: 0 0 1px rgba(0, 0, 0, 0.9);
+}
+
+/* A black glyph at #100d09 on the #221d16 panel is a contrast ratio of about
+   1.05:1 — the pieces the player has taken were, in practice, not on screen.
+   A light STROKE draws the outline of the piece instead of smearing a halo
+   behind it, which is how a black piece reads on a dark board anyway. */
+.chess-captured--black .chess-captured__piece {
+  color: #14110c;
+  -webkit-text-stroke: 0.8px rgba(239, 230, 216, 0.9);
+  paint-order: stroke fill;
+  text-shadow: none;
+}
+
+.chess-captured__advantage {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  margin-left: 5px;
+  color: var(--chess-accent);
+}
+
+.chess-captured__advantage-value {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* "+3" with no unit reads as a score. It is three PAWNS of material, now. */
+.chess-captured__advantage-unit {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--chess-muted);
+}
+
+/* ------------------------------------------------------- notices, log */
+
+.chess-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  border: 1px solid var(--chess-line);
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: var(--chess-panel);
+  text-align: center;
+}
+
+.chess-notice__text {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.chess-notice__detail {
+  font-size: 11px;
+  color: var(--chess-muted);
+}
+
+/* Refused: warm, and unmistakably not the result line it used to overwrite. */
+.chess-notice--refusal {
+  border-color: rgba(224, 145, 63, 0.55);
+  border-left-color: var(--chess-warn);
+  background: var(--chess-warn-bg);
+}
+
+.chess-notice--refusal .chess-notice__text {
+  color: var(--chess-warn);
+}
+
+/* The result: the sentence the whole game exists to produce. */
+.chess-notice--result {
+  border-color: rgba(216, 178, 92, 0.5);
+  border-left-color: var(--chess-accent);
+  background: var(--chess-accent-bg);
+}
+
+.chess-notice--result .chess-notice__text {
+  font-size: 15px;
+  color: var(--chess-accent);
+}
+
+.chess-hint,
+.chess-opening-label {
+  font-size: 12px;
+  color: var(--chess-muted);
+  text-align: center;
+}
+
+.chess-hint em {
+  color: var(--chess-text);
+  font-style: normal;
+}
+
+.chess-hint__ask {
+  display: block;
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+/* Same scroll affordance as the column: a move log sliced at the fold with no
+   scrollbar is a log that stops at move 14 as far as the player knows. */
+.chess-move-log {
+  flex: 1;
+  min-height: 48px;
+  padding: 6px 8px;
+  border: 1px solid var(--chess-line);
+  border-radius: 8px;
+  background: var(--chess-panel);
+  overflow-y: auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  background-image:
+    linear-gradient(to bottom, var(--chess-panel) 30%, rgba(34, 29, 22, 0)),
+    linear-gradient(to top, var(--chess-panel) 30%, rgba(34, 29, 22, 0)),
+    radial-gradient(farthest-side at 50% 0, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0)),
+    radial-gradient(farthest-side at 50% 100%, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0));
+  background-repeat: no-repeat;
+  background-size: 100% 24px, 100% 24px, 100% 10px, 100% 10px;
+  background-position: top center, bottom center, top center, bottom center;
+  background-attachment: local, local, scroll, scroll;
+}
+
+/* A scoresheet is read DOWN a column. The grid laid the pairs out row-major
+   (1, 2 / 3, 4 …), so finding move 11 in a 30-move game meant scanning
+   left-to-right across a table nobody reads that way. */
+.chess-move-log__list {
+  columns: 108px auto;
+  column-gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chess-move-log__list li {
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;
+  padding: 1px 0;
+}
+
+.chess-move-log__num {
+  display: inline-block;
+  width: 22px;
+  color: var(--chess-muted);
+}
+
+.chess-move-log__white,
+.chess-move-log__black {
+  display: inline-block;
+  min-width: 40px;
+}
+
+.chess-move-log__empty {
+  color: var(--chess-muted);
+}
+
+/* -------------------------------------------------------------- controls */
+
+.chess-game-over-controls {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.chess-btn {
+  min-height: var(--chess-tap);
+  padding: 7px 20px;
+  border: 1px solid var(--chess-accent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--chess-accent);
+  font-weight: 600;
+}
+
+.chess-btn:hover {
+  background: rgba(216, 178, 92, 0.12);
+}
+
+/* "New game" is the only way out of a finished board, and an outline button
+   next to a greyed-out board is not obviously the way out. */
+.chess-btn--primary {
+  background: var(--chess-accent);
+  color: #241c0c;
+  font-weight: 700;
+}
+
+.chess-btn--primary:hover {
+  background: #e6c274;
+}
+
+/* 26x26 against a 44px floor. The size is the OUTER box (border-box above), so
+   the icon is centred by the flex rather than by padding. */
+.chess-sound-toggle {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--chess-tap);
+  height: var(--chess-tap);
+  padding: 0;
+  border: 1px solid var(--chess-line);
+  border-radius: 10px;
+  background: var(--chess-panel);
+  color: var(--chess-muted);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.chess-sound-toggle:hover {
+  color: var(--chess-text);
+}
+
+.chess-sound-toggle.is-muted {
+  color: var(--chess-muted);
+  border-color: var(--chess-line);
+  opacity: 0.85;
+}
+
+/* ------------------------------------------------- side, strength, resign */
+
+/* The controls the original left to voice alone. Quiet, because the board is
+   the point; segmented, because each is one choice among two or three. */
+.chess-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 8px 10px;
+  border: 1px solid var(--chess-line);
+  border-radius: 8px;
+  background: var(--chess-panel);
+}
+
+.chess-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chess-control--actions {
+  margin-left: auto;
+  gap: 6px;
+}
+
+.chess-control__label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--chess-muted);
+}
+
+.chess-segmented {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--chess-line);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.chess-segmented__option {
+  min-height: 30px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--chess-muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.chess-segmented__option:hover:not(:disabled):not(.is-on) {
+  color: var(--chess-text);
+}
+
+.chess-segmented__option.is-on {
+  background: var(--chess-accent);
+  color: #241c0c;
+  font-weight: 700;
+}
+
+.chess-segmented__option:disabled {
+  opacity: 0.55;
+}
+
+/* A second press is needed: the button says so in the warn colour. */
+.chess-segmented__option.is-armed,
+.chess-btn.is-armed {
+  background: var(--chess-warn-bg);
+  color: var(--chess-warn);
+  box-shadow: inset 0 0 0 1px var(--chess-warn);
+}
+
+.chess-btn--quiet {
+  min-height: 32px;
+  padding: 4px 14px;
+  border-color: var(--chess-line);
+  color: var(--chess-text);
+  font-size: 12px;
+}
+
+.chess-btn:disabled {
+  opacity: 0.5;
+}
+
+@media (max-width: 1179px) {
+  .chess-move-log {
+    max-height: 220px;
+  }
+}
+
+/* --------------------------------------------------------- reduced motion */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Except the one animation that is not decoration: a frozen spinner reads as
+     "stuck", which is the opposite of what it is there to say. (The board's
+     piece animation is JS-driven and unreachable from here — `ChessBoard.tsx`
+     reads the same preference and sets its duration to 0.) */
+  .chess-spinner {
+    animation: chess-spin 0.8s linear infinite !important;
+  }
+}

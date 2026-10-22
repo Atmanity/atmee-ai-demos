@@ -1,0 +1,1034 @@
+/* Fashion Advisor. The board's rules are the original panel's (its
+   styles.css, the fashion-* half), unchanged; above them, its dark rose
+   palette as the kit's theme, and below them the pieces this port added:
+   the page frame, onboarding steps, the drop zone, the toolbar. */
+
+:root {
+  /* The original panel's tokens (livekit_demos' dark theme). */
+  --bg: #0b0a13;
+  --text: #f9fafb;
+  --text-muted: #9ca3af;
+  --border: rgba(255, 255, 255, 0.12);
+  /* The kit, themed to match. */
+  --accent: #ec4899;
+  --accent-ink: #fff;
+  --stage-bg: #090912;
+  --ink: #f9fafb;
+  --muted: #9ca3af;
+  --line: rgba(255, 255, 255, 0.1);
+  --surface: #15141f;
+  --page: #0b0a13;
+  --radius: 18px;
+  color-scheme: dark;
+}
+
+body {
+  background:
+    radial-gradient(ellipse at 70% -10%, rgba(236, 72, 153, 0.12), transparent 55%),
+    radial-gradient(ellipse at 0% 100%, rgba(168, 85, 247, 0.08), transparent 50%),
+    var(--page);
+  background-attachment: fixed;
+}
+
+/* The kit's light-theme leftovers, on a dark page. */
+.fashion-page .kit-btn:hover:not(:disabled) { background: #22212e; }
+.fashion-page .kit-primary:hover:not(:disabled) { background: var(--accent); }
+.fashion-page .kit-input { color: var(--ink); }
+.fashion-page .kit-icon.is-off { background: #3a1626; }
+.fashion-page .kit-danger { color: #fb7185; }
+.fashion-page .kit-line { background: rgba(255, 255, 255, 0.03); }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- the original board ----------------------------------------------- */
+
+.fashion-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 12px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.fashion-empty-icon {
+  font-size: 3rem;
+  margin-bottom: 8px;
+}
+
+.fashion-empty h3 {
+  font-size: 1.3rem;
+  color: var(--text);
+}
+
+.fashion-empty p {
+  font-size: 0.95rem;
+  max-width: 260px;
+  line-height: 1.5;
+}
+
+.fashion-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(236, 72, 153, 0.12), transparent 38%),
+    linear-gradient(180deg, rgba(23, 23, 38, 0.82), rgba(16, 16, 27, 0.94));
+  animation: fashion-panel-enter 360ms ease-out both;
+}
+
+.fashion-combined-view {
+  display: block;
+  padding: 20px 28px 24px;
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.fashion-combined-view::-webkit-scrollbar {
+  display: none;
+}
+
+.fashion-review-grid {
+  display: grid;
+  grid-template-columns: minmax(290px, 0.98fr) minmax(300px, 1.02fr);
+  gap: 16px;
+  height: 100%;
+  min-height: 100%;
+  align-content: start;
+  grid-auto-rows: min-content;
+}
+
+.fashion-review-grid--resizable-columns {
+  grid-template-columns: var(--fashion-left-column-width, minmax(290px, 0.98fr)) 8px minmax(300px, 1.02fr);
+  column-gap: 8px;
+}
+
+.fashion-review-grid--resizable-rows {
+  grid-template-rows: minmax(0, var(--fashion-top-row-height, calc(40% - 8px))) 8px minmax(0, 1fr);
+  row-gap: 8px;
+  align-content: stretch;
+  grid-auto-rows: min-content;
+}
+
+.fashion-review-grid--resizable-rows.fashion-review-grid--has-worn-items {
+  grid-template-rows: minmax(0, var(--fashion-top-row-height, calc(40% - 16px))) 8px auto minmax(0, 1fr);
+}
+
+.fashion-review-grid > .fashion-image-view {
+  grid-column: 1;
+  grid-row: 1;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  align-self: start;
+}
+
+.fashion-review-grid--resizable-rows > .fashion-image-view:not(.fashion-image-view--compact) {
+  height: 100%;
+  align-self: stretch;
+  overflow: hidden;
+}
+
+.fashion-review-grid > .fashion-analysis-card,
+.fashion-review-grid > .fashion-analysis-loading,
+.fashion-review-grid > .fashion-analysis-waiting {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.fashion-review-grid--resizable-columns > .fashion-analysis-card,
+.fashion-review-grid--resizable-columns > .fashion-analysis-loading,
+.fashion-review-grid--resizable-columns > .fashion-analysis-waiting {
+  grid-column: 3;
+}
+
+.fashion-review-grid--resizable-rows > .fashion-analysis-card,
+.fashion-review-grid--resizable-rows > .fashion-analysis-loading,
+.fashion-review-grid--resizable-rows > .fashion-analysis-waiting {
+  height: 100%;
+}
+
+.fashion-review-grid--resizable-rows > .fashion-analysis-card {
+  justify-content: flex-start;
+  gap: clamp(12px, 1.2vw, 18px);
+  padding: clamp(16px, 1.4vw, 22px);
+}
+
+.fashion-column-resize-handle,
+.fashion-row-resize-handle {
+  position: relative;
+  z-index: 4;
+  touch-action: none;
+  background: transparent;
+}
+
+.fashion-column-resize-handle {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: stretch;
+  cursor: col-resize;
+}
+
+.fashion-row-resize-handle {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  cursor: row-resize;
+}
+
+.fashion-column-resize-handle::before,
+.fashion-row-resize-handle::before {
+  content: '';
+  position: absolute;
+  border-radius: 999px;
+  background: rgba(244, 114, 182, 0.16);
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.fashion-column-resize-handle::before {
+  top: 8%;
+  bottom: 8%;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+}
+
+.fashion-row-resize-handle::before {
+  left: 8%;
+  right: 8%;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-50%);
+}
+
+.fashion-column-resize-handle:hover::before,
+.fashion-column-resize-handle:active::before,
+.fashion-row-resize-handle:hover::before,
+.fashion-row-resize-handle:active::before {
+  background: rgba(244, 114, 182, 0.48);
+  box-shadow: 0 0 14px rgba(236, 72, 153, 0.22);
+}
+
+.fashion-recommendations {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  min-width: 0;
+  min-height: 0;
+  padding: 14px clamp(16px, 2.4vw, 28px) 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 50% -20%, rgba(236, 72, 153, 0.14), transparent 42%),
+    rgba(18, 17, 30, 0.72);
+  animation: fashion-panel-enter 420ms ease-out 100ms both;
+  overflow-y: auto;
+}
+
+.fashion-review-grid--resizable-rows.fashion-review-grid--has-worn-items > .fashion-recommendations {
+  grid-row: 4;
+}
+
+.fashion-worn-items {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(168, 85, 247, 0.12), transparent 34%),
+    rgba(18, 17, 30, 0.62);
+  animation: fashion-panel-enter 390ms ease-out 80ms both;
+}
+
+.fashion-worn-items--analysis {
+  grid-column: auto;
+  grid-row: auto;
+  gap: 8px;
+  padding: 12px 14px;
+  border-color: rgba(244, 114, 182, 0.2);
+  background:
+    linear-gradient(135deg, rgba(236, 72, 153, 0.14), rgba(139, 92, 246, 0.08)),
+    rgba(255, 255, 255, 0.035);
+  animation: none;
+}
+
+.fashion-review-grid--resizable-rows > .fashion-worn-items {
+  grid-row: 3;
+}
+
+.fashion-worn-header {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.fashion-worn-title {
+  font-size: 0.98rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.fashion-worn-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fashion-worn-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 10px;
+  border: 1px solid rgba(236, 72, 153, 0.25);
+  border-radius: 999px;
+  background: rgba(236, 72, 153, 0.1);
+  color: #fce7f3;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.fashion-recommendations-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 14px;
+  text-align: center;
+}
+
+.fashion-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 2px;
+}
+
+.fashion-analysis-card {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(168, 85, 247, 0.16), transparent 34%),
+    radial-gradient(circle at 0% 0%, rgba(236, 72, 153, 0.13), transparent 38%),
+    linear-gradient(180deg, rgba(23, 23, 38, 0.9), rgba(16, 16, 27, 0.96));
+}
+
+.fashion-analysis-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, rgba(255, 255, 255, 0.06), transparent 36%);
+  opacity: 0.45;
+}
+
+.fashion-analysis-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.fashion-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fashion-summary {
+  font-size: clamp(1.15rem, 1.55vw, 1.55rem);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.28;
+  overflow-wrap: anywhere;
+}
+
+.fashion-occasion {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.fashion-score-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.fashion-score-ring {
+  flex-shrink: 0;
+  width: clamp(56px, 5vw, 72px);
+  height: clamp(56px, 5vw, 72px);
+  border-radius: 50%;
+  border: 4px solid;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.fashion-score-number {
+  font-size: clamp(1.3rem, 1.7vw, 1.65rem);
+  font-weight: 800;
+}
+
+.fashion-score-of {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+}
+
+.fashion-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fashion-feedback {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.fashion-suggestions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  justify-content: stretch;
+  align-items: stretch;
+  gap: 16px;
+  width: 100%;
+}
+
+.fashion-job-status {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.fashion-more-suggestions-loading {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0 4px;
+}
+
+/* Fashion image view */
+
+.fashion-image-view {
+  --fashion-image-drag-x: 0px;
+  --fashion-image-drag-y: 0px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(236, 72, 153, 0.16), transparent 42%),
+    rgba(18, 17, 30, 0.78);
+  animation: fashion-image-enter 420ms ease-out both;
+  transform-origin: top center;
+  transform: translate3d(var(--fashion-image-drag-x), var(--fashion-image-drag-y), 0) scale(1);
+  transition:
+    transform 220ms ease,
+    background 220ms ease,
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+}
+
+.fashion-review-grid--resizable-rows > .fashion-image-view:not(.fashion-image-view--compact) .fashion-image-result,
+.fashion-review-grid--resizable-rows > .fashion-image-view:not(.fashion-image-view--compact) .fashion-image-loading {
+  flex: 1;
+}
+
+.fashion-image-view--inline {
+  height: auto;
+}
+
+.fashion-image-view--compact {
+  position: fixed;
+  top: 76px;
+  right: 24px;
+  width: min(360px, calc(100vw - 48px));
+  z-index: 9;
+  border-color: rgba(244, 114, 182, 0.2);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(236, 72, 153, 0.18), transparent 36%),
+    rgba(18, 17, 30, 0.9);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.38);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  transform-origin: top right;
+  transform: translate3d(var(--fashion-image-drag-x), var(--fashion-image-drag-y), 0) scale(0.78);
+}
+
+.fashion-image-view--dragging {
+  cursor: grabbing;
+  transition:
+    background 220ms ease,
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+}
+
+.fashion-image-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fashion-image-kicker {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(244, 114, 182, 0.78);
+}
+
+.fashion-image-title {
+  margin: 0;
+  font-size: clamp(1.12rem, 2vw, 1.45rem);
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.fashion-image-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  flex: 1;
+  min-height: 260px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.fashion-analysis-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 170px;
+  height: auto;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.fashion-analysis-waiting {
+  min-height: 120px;
+  height: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  padding: 12px;
+}
+
+.fashion-capture-cta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
+.fashion-capture-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.spinner--fashion {
+  width: 48px;
+  height: 48px;
+  border: 3px solid var(--border);
+  border-top-color: #ec4899;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.fashion-image-result {
+  flex: 0 1 auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  width: min(100%, 520px);
+  height: auto;
+  aspect-ratio: 4 / 3;
+  margin: 0 auto;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #090912;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.32);
+}
+
+.fashion-review-grid--resizable-rows > .fashion-image-view:not(.fashion-image-view--compact) .fashion-image-result {
+  width: 100%;
+  max-width: none;
+  min-height: 0;
+  aspect-ratio: auto;
+}
+
+.fashion-image-result--loading {
+  position: relative;
+}
+
+.fashion-generated-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 20%;
+  display: block;
+}
+
+.fashion-generated-img--dim {
+  filter: brightness(0.55) saturate(0.8);
+  transition: filter 200ms ease-out;
+}
+
+/* Keep the generated image fully hidden while it downloads/decodes so it never
+   paints in progressively; it's revealed at once once fully loaded. */
+.fashion-generated-img--pending {
+  opacity: 0;
+}
+
+.fashion-generated-img:not(.fashion-generated-img--pending) {
+  animation: fashion-image-reveal 220ms ease-out;
+}
+
+@keyframes fashion-image-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fashion-image-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(15, 15, 20, 0.35);
+  border-radius: 16px;
+  backdrop-filter: blur(2px);
+  color: var(--text);
+  pointer-events: none;
+}
+
+.fashion-image-loading-overlay p {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+.fashion-reset-btn {
+  align-self: center;
+  margin-top: 8px;
+  padding: 6px 14px;
+  border: 1px solid var(--text-muted, #9ca3af);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted, #9ca3af);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.fashion-reset-btn:hover {
+  color: var(--text, #f9fafb);
+  border-color: var(--text, #f9fafb);
+}
+
+.fashion-image-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 24px;
+}
+
+@keyframes fashion-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fashion-image-enter {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@keyframes fashion-item-enter {
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+
+/* ---------------------------------------------------------------------------
+   Suggestion cards and analysis feedback.
+
+   These classes were in the markup from the day of the port and in no
+   stylesheet, so "Recommended pieces" rendered as raw browser defaults —
+   unstyled buttons and blue underlined links sitting under body text — inside
+   an otherwise finished panel. Written against the tokens already in use here:
+   the pink accent, the muted grey, the same radii and pill buttons.
+--------------------------------------------------------------------------- */
+
+.suggestions-heading {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 650;
+  color: #f9fafb;
+}
+
+.suggestion-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(23, 23, 38, 0.9), rgba(16, 16, 27, 0.96));
+  animation: fashion-panel-enter 0.28s ease both;
+}
+
+.suggestion-card--tried {
+  border-color: rgba(236, 72, 153, 0.45);
+}
+
+.suggestion-card--applying {
+  opacity: 0.75;
+}
+
+/* Reserves the image's space so a card does not resize when one arrives. */
+.suggestion-thumb {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.suggestion-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.suggestion-state-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #ec4899;
+  box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.25);
+}
+
+.suggestion-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.suggestion-item {
+  font-size: 0.9rem;
+  font-weight: 650;
+  color: #f9fafb;
+}
+
+.suggestion-text {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--text-muted, #9ca3af);
+}
+
+.suggestion-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.suggestion-action {
+  flex: 1;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.8rem;
+  font-weight: 650;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.1s;
+}
+
+.suggestion-action:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+.suggestion-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.suggestion-action--try {
+  color: #111827;
+  background: #f9a8d4;
+  border-color: #fbcfe8;
+}
+
+.suggestion-action--buy {
+  color: #fce7f3;
+  background: rgba(236, 72, 153, 0.1);
+  border-color: rgba(236, 72, 153, 0.25);
+}
+
+.suggestion-button-spinner {
+  width: 12px;
+  height: 12px;
+  border-width: 2px;
+  margin-right: 6px;
+  display: inline-block;
+  vertical-align: -2px;
+}
+
+.suggestion-thumb-spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.palette-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 0.75rem;
+  color: #f9fafb;
+}
+
+.feedback-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-left: 3px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0 10px 10px 0;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.feedback-block--positive {
+  border-left-color: #34d399;
+}
+
+.feedback-block--tip {
+  border-left-color: #ec4899;
+}
+
+.feedback-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted, #9ca3af);
+}
+
+.feedback-block p {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #f9fafb;
+}
+
+/* The three steps on the empty board. Numbered on purpose: the old copy
+   offered a try-on as the first move, which is the last one — the user has to
+   see that a photo comes before it, or the deflection reads as a bug. */
+.fashion-empty-steps {
+  margin: 12px auto 8px;
+  padding-left: 20px;
+  max-width: 34ch;
+  text-align: left;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.fashion-empty-steps li + li {
+  margin-top: 6px;
+}
+
+
+/* ---- added by the port --------------------------------------------------- */
+
+/* The board column: a card of its own height, scrolling inside, so the
+   original's floating image and load-on-scroll behave as they did. */
+.fashion-app {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  height: calc(100vh - 40px);
+  position: sticky;
+  top: 20px;
+  padding: 16px 0 0;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 22px;
+  background: rgba(13, 12, 22, 0.72);
+  overflow: hidden;
+}
+.fashion-app > .fashion-combined-view,
+.fashion-app > .fashion-empty { flex: 1; min-height: 0; }
+.fashion-app-header,
+.fashion-toolbar,
+.fashion-picker,
+.fashion-app > .fashion-drop,
+.fashion-app > .fashion-upload__error { margin: 0 28px; }
+
+.fashion-app-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.fashion-app-title { margin: 2px 0 0; font-size: 1.35rem; font-weight: 800; letter-spacing: -0.02em; color: var(--text); }
+.fashion-target {
+  padding: 7px 14px; border-radius: 999px; font: inherit; font-size: 0.82rem; cursor: pointer;
+  border: 1px solid rgba(236, 72, 153, 0.35); background: rgba(236, 72, 153, 0.12); color: #fce7f3;
+}
+.fashion-target:disabled { opacity: 0.6; cursor: default; }
+.fashion-toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.fashion-upload-row { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 8px; }
+.fashion-upload {
+  padding: 7px 14px; border-radius: 999px; font: inherit; font-size: 0.84rem; cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.22); background: rgba(255, 255, 255, 0.08); color: #fff;
+  transition: background 0.15s, transform 0.1s;
+}
+.fashion-upload:hover:not(:disabled) { background: rgba(255, 255, 255, 0.14); transform: translateY(-1px); }
+.fashion-upload:disabled { opacity: 0.5; cursor: default; }
+.fashion-upload__error { color: #ffb4ab; font-size: 0.82rem; margin-top: 0; margin-bottom: 0; }
+
+/* The original's empty board centred one short message; the steps can be taller than the column,
+   so they are centred with auto margins instead (which never clip the top). */
+.fashion-empty { overflow-y: auto; padding: 8px 28px 24px; justify-content: flex-start; }
+.fashion-onboarding { display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 520px; margin: auto; padding: 12px 0 24px; text-align: center; color: var(--text-muted); }
+.fashion-onboarding p { max-width: 46ch; margin: 0; }
+.fashion-onboarding h3 { margin: 0; font-size: 1.3rem; color: var(--text); }
+.fashion-onboarding .fashion-empty-icon { font-size: 3rem; margin-bottom: 4px; }
+.fashion-analysis-waiting .fashion-onboarding { padding: 0; }
+
+.fashion-steps { display: flex; gap: 6px; list-style: none; margin: 0 0 4px; padding: 0; }
+.fashion-steps li {
+  padding: 4px 12px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text-muted);
+}
+.fashion-steps li.is-current { border-color: rgba(236, 72, 153, 0.6); color: #fce7f3; background: rgba(236, 72, 153, 0.14); }
+.fashion-steps li.is-done { color: #f9a8d4; }
+
+.fashion-field { display: flex; gap: 8px; width: 100%; max-width: 420px; }
+.fashion-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.fashion-chip {
+  padding: 6px 12px; border-radius: 999px; font: inherit; font-size: 0.82rem; cursor: pointer;
+  border: 1px solid rgba(236, 72, 153, 0.25); background: rgba(236, 72, 153, 0.08); color: #fce7f3;
+}
+.fashion-chip:hover:not(:disabled) { background: rgba(236, 72, 153, 0.2); }
+.fashion-chip:disabled { opacity: 0.5; cursor: default; }
+.fashion-link { border: 0; background: none; color: var(--text-muted); font: inherit; font-size: 0.84rem; text-decoration: underline; cursor: pointer; }
+.fashion-link:disabled { opacity: 0.5; cursor: default; }
+
+.fashion-drop {
+  display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; max-width: 460px;
+  padding: 22px 18px; border-radius: 18px; border: 1.5px dashed rgba(244, 114, 182, 0.4);
+  background: radial-gradient(circle at 50% 0%, rgba(236, 72, 153, 0.1), transparent 60%), rgba(18, 17, 30, 0.7);
+  transition: border-color 0.15s, background 0.15s;
+}
+.fashion-drop.is-over { border-color: #ec4899; background: rgba(236, 72, 153, 0.16); }
+.fashion-drop.is-disabled { opacity: 0.6; }
+.fashion-drop--compact { padding: 12px 14px; max-width: none; flex-direction: row; justify-content: space-between; flex-wrap: wrap; }
+.fashion-drop-icon { font-size: 2rem; }
+.fashion-drop-label { margin: 0; color: var(--text); font-size: 0.92rem; }
+
+.fashion-picker {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 14px;
+  border-radius: 16px; border: 1px solid rgba(236, 72, 153, 0.25); background: rgba(18, 17, 30, 0.85);
+}
+.fashion-picker .fashion-chips { justify-content: flex-start; }
+
+.fashion-described {
+  margin: 0; padding: 10px 14px; max-width: 460px; border-left: 3px solid #ec4899; border-radius: 0 10px 10px 0;
+  background: rgba(255, 255, 255, 0.04); color: var(--text); font-style: italic; text-align: left;
+}
+
+.fashion-analysis-card--stale .fashion-score-ring { opacity: 0.55; }
+.fashion-more-row { display: flex; justify-content: center; padding: 14px 0 2px; }
+.fashion-shop-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.fashion-shop-links .suggestion-action { flex: 0 1 auto; }
+
+/* No image model: no catalogue shots will come, so the slot shrinks to a quiet mark of where the piece goes. */
+.suggestion-thumb--placeholder {
+  aspect-ratio: 5 / 2; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 50% 30%, rgba(236, 72, 153, 0.12), rgba(255, 255, 255, 0.03));
+}
+.suggestion-glyph { font-size: 1.8rem; opacity: 0.85; }
+.suggestion-button-spinner { border-radius: 50%; border-style: solid; border-color: rgba(17, 24, 39, 0.25); border-top-color: #111827; animation: spin 0.8s linear infinite; }
+
+@media (max-width: 860px) {
+  .fashion-app { height: auto; position: static; overflow: visible; }
+  .fashion-combined-view { height: auto; overflow: visible; padding: 16px; }
+  .fashion-review-grid, .fashion-review-grid--resizable-columns, .fashion-review-grid--resizable-rows { grid-template-columns: 1fr; grid-template-rows: none; }
+  .fashion-review-grid > .fashion-image-view,
+  .fashion-review-grid > .fashion-analysis-card,
+  .fashion-review-grid > .fashion-analysis-loading,
+  .fashion-review-grid > .fashion-analysis-waiting { grid-column: 1; grid-row: auto; position: static; }
+  .fashion-recommendations { grid-row: auto; }
+  .fashion-column-resize-handle, .fashion-row-resize-handle { display: none; }
+  .fashion-app-header, .fashion-toolbar, .fashion-picker, .fashion-app > .fashion-drop, .fashion-app > .fashion-upload__error { margin: 0 16px; }
+}
