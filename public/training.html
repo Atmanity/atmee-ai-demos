@@ -47,7 +47,7 @@
             log('avatar', `trainer: ${text}`);
             // Follow the trainer: when it moves to a slide, show it.
             const m = text.match(/slide (\d)/i); if (m && Number(m[1]) !== current) showSlide(Number(m[1]));
-            if (/that'?s (right|correct)|correct!|well done|exactly/i.test(text)) $('score').textContent = String(Math.min(2, Number($('score').textContent) + 1));
+            if (/^\W*(correct|spot on|that'?s right|exactly right|well done)/i.test(text)) $('score').textContent = String(Math.min(2, Number($('score').textContent) + 1));
           }
         },
         onRelay: (topic, text) => log('relay', `→ ${topic}: ${text.slice(0, 140)}`),

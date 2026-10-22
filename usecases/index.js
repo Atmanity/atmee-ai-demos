@@ -91,8 +91,8 @@ const training = {
       { id: "slide2", instructions: `Teach slide 2 in about four sentences: "${SLIDES[1].body}" Give one example of what goes wrong when one person takes two roles. Then move on.`, edges: [{ to: "slide3", speak: true }] },
       { id: "slide3", instructions: `Teach slide 3 in about four sentences: "${SLIDES[2].body}" Then ask whether the trainee has questions before the quiz.`, edges: [{ to: "qna" }] },
       { id: "qna", instructions: "Answer the trainee's questions about the three slides. If they have none, say so and start the quiz.", edges: [{ to: "quiz1", when: "The trainee has no more questions, or asked to start the quiz." }, { to: "qna" }] },
-      { id: "quiz1", instructions: `Quiz question 1: "${QUIZ[0].q}" Wait for the answer, say whether it is right (the answer is: ${QUIZ[0].a}) and why, in two sentences.`, edges: [{ to: "quiz2", when: "The trainee has answered question 1 and you have told them whether it was right." }, { to: "quiz1" }] },
-      { id: "quiz2", instructions: `Quiz question 2: "${QUIZ[1].q}" Wait for the answer, say whether it is right (the answer is: ${QUIZ[1].a}).`, edges: [{ to: "wrap", when: "The trainee has answered question 2 and you have told them whether it was right." }, { to: "quiz2" }] },
+      { id: "quiz1", instructions: `Quiz question 1: "${QUIZ[0].q}" Wait for the answer. Begin your verdict with the word "Correct" or "Incorrect" (the answer is: ${QUIZ[0].a}), then say why in one sentence.`, edges: [{ to: "quiz2", when: "The trainee has answered question 1 and you have told them whether it was right." }, { to: "quiz1" }] },
+      { id: "quiz2", instructions: `Quiz question 2: "${QUIZ[1].q}" Wait for the answer. Begin your verdict with the word "Correct" or "Incorrect" (the answer is: ${QUIZ[1].a}).`, edges: [{ to: "wrap", when: "The trainee has answered question 2 and you have told them whether it was right." }, { to: "quiz2" }] },
       { id: "wrap", instructions: "Give the score out of two from the app state, one sentence of encouragement, and close the module.", emotion: "warm" },
     ],
   },
@@ -105,7 +105,7 @@ const training = {
   },
   onAvatarSaid(h, text) {
     // The app keeps score from what the trainer says, and shows it in state.
-    if (/that'?s (right|correct)|correct!|well done|exactly/i.test(text)) { h.memo.score = (h.memo.score || 0) + 1; return [state(trainingState(h))]; }
+    if (/^\W*(correct|spot on|that'?s right|exactly right|well done)/i.test(text) && (h.memo.score || 0) < 2) { h.memo.score = (h.memo.score || 0) + 1; return [state(trainingState(h))]; }
     return [];
   },
 };

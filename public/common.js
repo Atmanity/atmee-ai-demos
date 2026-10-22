@@ -38,7 +38,11 @@
       if (participant && participant.identity === room.localParticipant.identity) return; // our own typed turns
       let text = '';
       try { for await (const chunk of reader) { text += chunk; opts.onCaption && opts.onCaption(text, false); } } catch (e) {}
-      const final = attrs[FINAL_ATTR] !== 'false';
+      // The avatar's transcription arrives one stream per sentence, and every
+      // stream is attributed interim (lk.transcription_final is never 'true'
+      // on them), so a completed stream is a finished sentence.
+      const final = true;
+      if (!text.trim()) return;
       opts.onCaption && opts.onCaption(text, final);
       if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'caption', text, final, id: info.id }));
     });
