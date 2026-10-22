@@ -1,0 +1,443 @@
+{
+  "name": "raise-ladder-to-showdown",
+  "description": "Preflop raise and re-raise ladder (min-raise is a raise-TO total), then checked down to a real showdown with revealed hands.",
+  "config": {
+    "small_blind": 10,
+    "big_blind": 20,
+    "starting_stack": 1000
+  },
+  "hands": [
+    {
+      "hole": {
+        "user": [
+          "Qs",
+          "3s"
+        ],
+        "agent": [
+          "2h",
+          "Ts"
+        ]
+      },
+      "board": [
+        "7c",
+        "4h",
+        "3d",
+        "7h",
+        "9h"
+      ],
+      "steps": [
+        {
+          "apply": "deal",
+          "state": {
+            "game": "poker",
+            "street": "PREFLOP",
+            "board": [],
+            "pot": 30,
+            "current_bet": 20,
+            "min_raise": 20,
+            "to_call": 10,
+            "action_to": "user",
+            "valid_actions": [
+              "fold",
+              "call",
+              "raise"
+            ],
+            "button": "user",
+            "players": {
+              "user": {
+                "stack": 990,
+                "bet": 10,
+                "folded": false
+              },
+              "agent": {
+                "stack": 980,
+                "bet": 20,
+                "folded": false
+              }
+            },
+            "revealed_hands": null,
+            "winner": null
+          }
+        },
+        {
+          "apply": {
+            "by": "user",
+            "kind": "raise",
+            "amount": 60
+          },
+          "state": {
+            "game": "poker",
+            "street": "PREFLOP",
+            "board": [],
+            "pot": 80,
+            "current_bet": 60,
+            "min_raise": 100,
+            "to_call": 40,
+            "action_to": "agent",
+            "valid_actions": [
+              "fold",
+              "call",
+              "raise"
+            ],
+            "button": "user",
+            "players": {
+              "user": {
+                "stack": 940,
+                "bet": 60,
+                "folded": false
+              },
+              "agent": {
+                "stack": 980,
+                "bet": 20,
+                "folded": false
+              }
+            },
+            "revealed_hands": null,
+            "winner": null
+          }
+        },
+        {
+          "apply": {
+            "by": "agent",
+            "kind": "raise",
+            "amount": 140
+          },
+          "state": {
+            "game": "poker",
+            "street": "PREFLOP",
+            "board": [],
+            "pot": 200,
+            "current_bet": 140,
+            "min_raise": 220,
+            "to_call": 80,
+            "action_to": "user",
+            "valid_actions": [
+              "fold",
+              "call",
+              "raise"
+            ],
+            "button": "user",
+            "players": {
+              "user": {
+                "stack": 940,
+                "bet": 60,
+                "folded": false
+              },
+              "agent": {
+                "stack": 860,
+                "bet": 140,
+                "folded": false
+              }
+            },
+            "revealed_hands": null,
+            "winner": null
+          }
+        },
+        {
+          "apply": {
+            "by": "user",
+            "kind": "call",
+            "amount": null
+          },
+          "state": {
+            "game": "poker",
+            "street": "FLOP",
+            "board": [
+              "7c",
+              "4h",
+              "3d"
+            ],
+            "pot": 280,
+            "current_bet": 0,
+            "min_raise": 220,
+            "to_call": 0,
+            "action_to": "agent",
+            "valid_actions": [
+              "fold",
+              "check",
+              "raise"
+            ],
+            "button": "user",
+            "players": {
+              "user": {
+                "stack": 860,
+                "bet": 0,
+                "folded": false
+              },
+              "agent": {
+                "stack": 860,
+                "bet": 0,
+                "folded": false
+              }
+            },
+            "revealed_hands": null,
+            "winner": null
+          }
+        },
+        {
+          "apply": {
+            "by": "agent",
+            "kind": "check",
+            "amount": null
+          },
+          "state": {
+            "game": "poker",
+            "street": "FLOP",
+            "board": [
+              "7c",
+              "4h",
+              "3d"
+            ],
+            "pot": 280,
+            "current_bet": 0,
+            "min_raise": 220,
+            "to_call": 0,
+            "action_to": "user",
+            "valid_actions": [
+              "fold",
+              "check",
+              "raise"
+            ],
+            "button": "user",
+            "players": {
+              "user": {
+                "stack": 860,
+                "bet": 0,
+                "folded": false
+              },
+              "agent": {
+                "stack": 860,
+                "bet": 0,
+                "folded": false
+              }
+            },
+            "revealed_hands": null,
+            "winner": null
+          }
+        },
+        {
+          "apply": {
+            "by": "user",
+            "kind": "check",
+            "amount": null
+          },
+          "state": {
+            "game": "poker",
+            "street": "TURN",
+            "board": [
+              "7c",
+              "4h",
+              "3d",
+              "7h"
+            ],
+            "pot": 280,
+            "current_bet": 0,
+            "min_raise": 220,
+            "to_call": 0,
+            "action_to": "agent",
+            "valid_actions": [
+              "fold",
+              "check",
+              "raise"
+            ],
+            "button": "user",
+            "players": {
+              "user": {
+                "stack": 860,
+                "bet": 0,
+                "folded": false
+              },
+              "agent": {
+                "stack": 860,
+                "bet": 0,
+                "folded": false
+              }
+            },
+            "revealed_hands": null,
+            "winner": null
+          }
+        },
+        {
+          "apply": {
+            "by": "agent",
+            "kind": "check",
+            "amount": null
+          },
+          "state": {
+            "game": "poker",
+            "street": "TURN",
+            "board": [
+              "7c",
+              "4h",
+              "3d",
+              "7h"
+            ],
+            "pot": 280,
+            "current_bet": 0,
+            "min_raise": 220,
+            "to_call": 0,
+            "action_to": "user",
+            "valid_actions": [
+              "fold",
+              "check",
+              "raise"
+            ],
+            "button": "user",
+            "players": {
+              "user": {
+                "stack": 860,
+                "bet": 0,
+                "folded": false
+              },
+              "agent": {
+                "stack": 860,
+                "bet": 0,
+                "folded": false
+              }
+            },
+            "revealed_hands": null,
+            "winner": null
+          }
+        },
+        {
+          "apply": {
+            "by": "user",
+            "kind": "check",
+            "amount": null
+          },
+          "state": {
+            "game": "poker",
+            "street": "RIVER",
+            "board": [
+              "7c",
+              "4h",
+              "3d",
+              "7h",
+              "9h"
+            ],
+            "pot": 280,
+            "current_bet": 0,
+            "min_raise": 220,
+            "to_call": 0,
+            "action_to": "agent",
+            "valid_actions": [
+              "fold",
+              "check",
+              "raise"
+            ],
+            "button": "user",
+            "players": {
+              "user": {
+                "stack": 860,
+                "bet": 0,
+                "folded": false
+              },
+              "agent": {
+                "stack": 860,
+                "bet": 0,
+                "folded": false
+              }
+            },
+            "revealed_hands": null,
+            "winner": null
+          }
+        },
+        {
+          "apply": {
+            "by": "agent",
+            "kind": "check",
+            "amount": null
+          },
+          "state": {
+            "game": "poker",
+            "street": "RIVER",
+            "board": [
+              "7c",
+              "4h",
+              "3d",
+              "7h",
+              "9h"
+            ],
+            "pot": 280,
+            "current_bet": 0,
+            "min_raise": 220,
+            "to_call": 0,
+            "action_to": "user",
+            "valid_actions": [
+              "fold",
+              "check",
+              "raise"
+            ],
+            "button": "user",
+            "players": {
+              "user": {
+                "stack": 860,
+                "bet": 0,
+                "folded": false
+              },
+              "agent": {
+                "stack": 860,
+                "bet": 0,
+                "folded": false
+              }
+            },
+            "revealed_hands": null,
+            "winner": null
+          }
+        },
+        {
+          "apply": {
+            "by": "user",
+            "kind": "check",
+            "amount": null
+          },
+          "state": {
+            "game": "poker",
+            "street": "SHOWDOWN",
+            "board": [
+              "7c",
+              "4h",
+              "3d",
+              "7h",
+              "9h"
+            ],
+            "pot": 0,
+            "current_bet": 0,
+            "min_raise": 220,
+            "to_call": 0,
+            "action_to": null,
+            "valid_actions": [],
+            "button": "user",
+            "players": {
+              "user": {
+                "stack": 1140,
+                "bet": 0,
+                "folded": false
+              },
+              "agent": {
+                "stack": 860,
+                "bet": 0,
+                "folded": false
+              }
+            },
+            "revealed_hands": {
+              "user": [
+                "Qs",
+                "3s"
+              ],
+              "agent": [
+                "2h",
+                "Ts"
+              ]
+            },
+            "winner": {
+              "who": "user",
+              "amount": 280,
+              "hand_rank": "Two Pair"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

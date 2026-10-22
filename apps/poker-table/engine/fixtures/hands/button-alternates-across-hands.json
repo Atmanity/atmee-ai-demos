@@ -1,0 +1,181 @@
+{
+  "name": "button-alternates-across-hands",
+  "description": "Two consecutive hands on one table: the button (and with it the small blind and preflop order) must swap between hands.",
+  "config": {
+    "small_blind": 10,
+    "big_blind": 20,
+    "starting_stack": 1000
+  },
+  "hands": [
+    {
+      "hole": {
+        "user": [
+          "Jc",
+          "2d"
+        ],
+        "agent": [
+          "6h",
+          "Qs"
+        ]
+      },
+      "board": [],
+      "steps": [
+        {
+          "apply": "deal",
+          "state": {
+            "game": "poker",
+            "street": "PREFLOP",
+            "board": [],
+            "pot": 30,
+            "current_bet": 20,
+            "min_raise": 20,
+            "to_call": 10,
+            "action_to": "user",
+            "valid_actions": [
+              "fold",
+              "call",
+              "raise"
+            ],
+            "button": "user",
+            "players": {
+              "user": {
+                "stack": 990,
+                "bet": 10,
+                "folded": false
+              },
+              "agent": {
+                "stack": 980,
+                "bet": 20,
+                "folded": false
+              }
+            },
+            "revealed_hands": null,
+            "winner": null
+          }
+        },
+        {
+          "apply": {
+            "by": "user",
+            "kind": "fold",
+            "amount": null
+          },
+          "state": {
+            "game": "poker",
+            "street": "SHOWDOWN",
+            "board": [],
+            "pot": 0,
+            "current_bet": 0,
+            "min_raise": 20,
+            "to_call": 0,
+            "action_to": null,
+            "valid_actions": [],
+            "button": "user",
+            "players": {
+              "user": {
+                "stack": 990,
+                "bet": 0,
+                "folded": true
+              },
+              "agent": {
+                "stack": 1010,
+                "bet": 0,
+                "folded": false
+              }
+            },
+            "revealed_hands": null,
+            "winner": {
+              "who": "agent",
+              "amount": 10,
+              "hand_rank": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "hole": {
+        "user": [
+          "2h",
+          "6s"
+        ],
+        "agent": [
+          "Qs",
+          "9c"
+        ]
+      },
+      "board": [],
+      "steps": [
+        {
+          "apply": "deal",
+          "state": {
+            "game": "poker",
+            "street": "PREFLOP",
+            "board": [],
+            "pot": 30,
+            "current_bet": 20,
+            "min_raise": 20,
+            "to_call": 10,
+            "action_to": "agent",
+            "valid_actions": [
+              "fold",
+              "call",
+              "raise"
+            ],
+            "button": "agent",
+            "players": {
+              "user": {
+                "stack": 970,
+                "bet": 20,
+                "folded": false
+              },
+              "agent": {
+                "stack": 1000,
+                "bet": 10,
+                "folded": false
+              }
+            },
+            "revealed_hands": null,
+            "winner": null
+          }
+        },
+        {
+          "apply": {
+            "by": "agent",
+            "kind": "fold",
+            "amount": null
+          },
+          "state": {
+            "game": "poker",
+            "street": "SHOWDOWN",
+            "board": [],
+            "pot": 0,
+            "current_bet": 0,
+            "min_raise": 20,
+            "to_call": 0,
+            "action_to": null,
+            "valid_actions": [],
+            "button": "agent",
+            "players": {
+              "user": {
+                "stack": 1000,
+                "bet": 0,
+                "folded": false
+              },
+              "agent": {
+                "stack": 1000,
+                "bet": 0,
+                "folded": true
+              }
+            },
+            "revealed_hands": null,
+            "winner": {
+              "who": "user",
+              "amount": 10,
+              "hand_rank": null
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
