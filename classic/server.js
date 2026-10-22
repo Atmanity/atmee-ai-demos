@@ -24,7 +24,7 @@ import { USECASES } from "./usecases/index.js";
 import { describeFrame } from "./usecases/observer.js";
 
 const BASE = process.env.ATMEE_BASE_URL || "https://staging.atmanity.us";
-const PORT = Number(process.env.PORT || 3333);
+const PORT = Number(process.env.CLASSIC_PORT || 3333);
 const KEY = process.env.ATMEE_API_KEY;
 if (!KEY) throw new Error("ATMEE_API_KEY is required");
 const headers = { "X-Api-Key": KEY, "Content-Type": "application/json" };
@@ -124,8 +124,8 @@ async function endSession(h) {
 // ---------------------------------------------------------------------------
 const app = express();
 app.use(express.json({ limit: "6mb" }));
-app.use(express.static("public"));
-app.get("/api/usecases", (_req, res) => res.json(Object.fromEntries(Object.entries(USECASES).map(([k, v]) => [k, { title: v.title, page: v.page, avatarId: process.env[`AVATAR_${k.toUpperCase()}`] || null, conductor: !!v.conductor, tools: v.appTools ? v.appTools.tools.map((t) => t.name) : [] }]))));
+app.use(express.static(new URL("./public", import.meta.url).pathname));
+app.get("/api/usecases", (_req, res) => res.json(Object.fromEntries(Object.entries(USECASES).map(([k, v]) => [k, { title: v.title, page: v.page, avatarId: process.env[`AVATAR_${k.toUpperCase()}`] || null, conductor: !!v.conductor }]))));
 
 app.post("/api/:usecase/session", async (req, res) => {
   const h = hub(req.params.usecase);
