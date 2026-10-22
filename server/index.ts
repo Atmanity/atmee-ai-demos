@@ -27,7 +27,8 @@ if (production) {
   app.use(express.static('dist', { extensions: ['html'] }));
 } else {
   const { createServer } = await import('vite');
-  const vite = await createServer({ server: { middlewareMode: true }, appType: 'mpa' });
+  // HMR=0: no reloads pushed to open pages (a live session survives edits elsewhere).
+  const vite = await createServer({ server: { middlewareMode: true, hmr: process.env.HMR !== '0' }, appType: 'mpa' });
   app.use(vite.middlewares);
 }
 
