@@ -9,6 +9,13 @@ const apps = readdirSync('apps').filter((dir) => existsSync(`apps/${dir}/index.h
 
 export default defineConfig({
   plugins: [react()],
+  // Every page library, bundled when the server starts. A library first met
+  // later (one app opened after another) makes Vite rebundle them all, and a
+  // page already open then mixes two copies of React: react-chessboard failed
+  // with "Cannot read properties of null (reading 'use')" that way.
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react-dom/client', 'react/jsx-dev-runtime', 'livekit-client', 'chess.js', 'react-chessboard', 'leaflet'],
+  },
   build: {
     rollupOptions: {
       input: { home: 'index.html', ...Object.fromEntries(apps.map((app) => [app, `apps/${app}/index.html`])) },

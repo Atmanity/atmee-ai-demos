@@ -67,7 +67,7 @@ export const avatarCount = () => document.querySelectorAll('.kit-line.is-avatar'
 export const live = () => Boolean(document.querySelector('.kit-badge'));
 export const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function waitLive(ms = 120000) {
+export async function waitLive(ms = 240000) {
   for (let i = 0; i < ms / 500 && !live(); i++) await wait(500);
   mark(live() ? 'live' : 'NOT LIVE');
   return live();
