@@ -3,7 +3,7 @@
 // is set; otherwise a stub that only reports "the screen changed", so the rest
 // of the loop still runs.
 const KEY = process.env.GEMINI_API_KEY;
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
 export async function describeFrame(dataUrl, previous, hint) {
   if (!dataUrl) throw new Error("image is required");
