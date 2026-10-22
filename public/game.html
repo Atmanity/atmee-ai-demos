@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Treasure island</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="demo.css">
+</head>
+<body class="dark">
+<div id="stage"><video id="video" autoplay playsinline></video><audio id="audio" autoplay></audio><div id="caption"></div></div>
+<div id="side">
+  <div id="status">An event-driven narrator: it speaks only when the game sends an <code>atmee.app event</code>, and the player's audio is muted — except at the oracle's shrine (🔮), where the game unmutes and allows conversation.</div>
+  <div id="panel">
+    <div><button id="start">Start the game</button><button id="leave" class="secondary" disabled>Leave the shrine</button></div>
+    <div class="tiles" id="tiles"></div>
+    <div id="inv" class="obs">inventory: nothing</div>
+  </div>
+  <div id="log"></div>
+  <form class="typed" id="f"><input id="text" placeholder="Ask the oracle (only at the shrine)…" maxlength="300" autocomplete="off" disabled><button disabled id="send">Send</button></form>
+</div>
+<script src="https://unpkg.com/livekit-client@2.9.5/dist/livekit-client.umd.js"></script>
+<script src="common.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const log = (cls, text) => { const d = document.createElement('div'); d.className = 'm ' + cls; d.textContent = text; $('log').appendChild(d); $('log').scrollTop = 1e9; };
+  // A 4x4 island. Each tile is an event the narrator tells; the shrine opens a conversation.
+  const MAP = [
+    ['⛵ the landing beach', '🌴 a palm grove', '🦀 crabs on black rocks', '🪨 a cliff with carvings'],
+    ['🐾 strange footprints in the sand', '🗝️ a rusty key half-buried', '🌊 a tidal pool', '🕳️ a dark cave mouth'],
+    ['🔥 an abandoned campfire', '🔮 the oracle\'s shrine', '🌉 a rope bridge', '💀 a skeleton holding a map piece'],
+    ['🌺 a hibiscus meadow', '🏚️ a wrecked hut', '🧭 a compass on a rock', '💰 the treasure chest (locked)'],
+  ];
+  let s, here = [0, 0], inv = new Set(), visited = new Set(['0,0']), atShrine = false;
+  function render() {
+    $('tiles').innerHTML = '';
+    MAP.forEach((row, r) => row.forEach((cell, c) => {
+      const d = document.createElement('div'); d.className = 'tile' + (visited.has(`${r},${c}`) ? ' visited' : '') + (here[0] === r && here[1] === c ? ' here' : '');
+      d.textContent = cell.slice(0, 2); d.title = cell; d.onclick = () => move(r, c); $('tiles').appendChild(d);
+    }));
+    $('inv').textContent = 'inventory: ' + (inv.size ? [...inv].join(', ') : 'nothing');
+  }
+  function move(r, c) {
+    if (!s || (Math.abs(r - here[0]) + Math.abs(c - here[1])) !== 1) return; // one step at a time
+    if (atShrine) leaveShrine();
+    here = [r, c]; visited.add(`${r},${c}`); const cell = MAP[r][c];
+    let text = `The player walks to ${cell.slice(3)}.`;
+    if (cell.includes('key')) { inv.add('rusty key'); text += ' They pick up the rusty key.'; }
+    if (cell.includes('map piece')) { inv.add('map piece'); text += ' They take the map piece from the skeleton.'; }
+    if (cell.includes('chest')) text += inv.has('rusty key') ? ' The rusty key turns: the chest opens on a heap of gold and a pearl the size of an egg. The hunt is won.' : ' It is locked; the key must be somewhere on the island.';
+    if (cell.includes('shrine')) { atShrine = true; $('leave').disabled = false; $('text').disabled = $('send').disabled = false; log('user', 'you kneel at the shrine'); s.user('enter_shrine', 'The player kneels at the oracle\'s shrine.'); render(); return; }
+    log('user', text); s.user('move', text); render();
+  }
+  function leaveShrine() { atShrine = false; $('leave').disabled = true; $('text').disabled = $('send').disabled = true; log('user', 'you leave the shrine'); s.user('leave_shrine', 'The player leaves the shrine.'); }
+  $('leave').onclick = leaveShrine;
+  $('start').onclick = async () => {
+    $('start').disabled = true; $('status').textContent = 'Waking the narrator…';
+    try {
+      s = await Atmee.join({
+        usecase: 'game', video: $('video'), audio: $('audio'), mic: false,
+        onCaption: (text, final) => { $('caption').textContent = text; if (final) log('avatar', `narrator: ${text}`); },
+        onRelay: (topic, text) => log('relay', `→ ${topic}: ${text.slice(0, 140)}`),
+        onEnd: () => { $('status').textContent = 'Game over (session ended).'; },
+      });
+      $('status').textContent = `Playing, room ${s.session.roomName}. Click a neighbouring tile to move.`;
+      setTimeout(() => s.user('move', 'The player lands on the beach of a small island; a 4x4 map, a locked chest somewhere, a key to find.'), 1500);
+    } catch (e) { $('status').textContent = `Could not start: ${e.message}`; $('start').disabled = false; }
+  };
+  $('f').onsubmit = (e) => { e.preventDefault(); const t = $('text').value.trim(); if (!t || !s || !atShrine) return; log('user', `you (to the oracle): ${t}`); s.user('typed', t); $('text').value = ''; };
+  render();
+  window.addEventListener('beforeunload', () => navigator.sendBeacon('/api/game/session/end'));
+</script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Stream host</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="demo.css">
+</head>
+<body class="dark">
+<div id="stage"><video id="video" autoplay playsinline></video><audio id="audio" autoplay></audio><div id="caption"></div></div>
+<div id="side">
+  <div id="status">Not started. The host reads the <a href="livestream-viewer.html" target="_blank">chatroom</a>; it never hears anyone.</div>
+  <button id="start">Start the stream</button>
+  <div id="log"></div>
+</div>
+<script src="https://unpkg.com/livekit-client@2.9.5/dist/livekit-client.umd.js"></script>
+<script src="common.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const log = (cls, text) => { const d = document.createElement('div'); d.className = 'm ' + cls; d.textContent = text; $('log').appendChild(d); $('log').scrollTop = 1e9; };
+  let s;
+  $('start').onclick = async () => {
+    $('start').disabled = true; $('status').textContent = 'Starting the avatar session…';
+    try {
+      s = await Atmee.join({
+        usecase: 'livestream', video: $('video'), audio: $('audio'), mic: false,
+        onCaption: (text, final) => { $('caption').textContent = text; if (final) log('avatar', `host: ${text}`); },
+        onRelay: (topic, text) => log('relay', `→ ${topic}: ${text.slice(0, 140)}`),
+        onMessage: (m) => { if (m.type === 'chat') log('viewer', `${m.name}: ${m.text}`); if (m.type === 'viewers') $('status').textContent = `Live, room ${s.session.roomName}, ${m.count} viewer(s)`; },
+        onEnd: () => { $('status').textContent = 'Session ended.'; $('start').disabled = false; },
+      });
+      $('status').textContent = `Live, room ${s.session.roomName} (max ${s.session.maxSeconds}s)`;
+    } catch (e) { $('status').textContent = `Could not start: ${e.message}`; $('start').disabled = false; }
+  };
+  window.addEventListener('beforeunload', () => navigator.sendBeacon('/api/livestream/session/end'));
+</script>
+</body>
+</html>

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Companion</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="demo.css">
+</head>
+<body class="light">
+<div id="stage"><video id="video" autoplay playsinline></video><audio id="audio" autoplay></audio><div id="caption"></div></div>
+<div id="side">
+  <div id="status">The companion watches what you are doing through an observer the app runs: the page sends a frame when the screen changes, a vision model describes it, and the description reaches the avatar as <code>atmee.app state</code>; something noteworthy becomes an <code>event</code>. The avatar never sees pixels itself.</div>
+  <div id="panel">
+    <div><button id="start">Start (microphone)</button><button id="startTyped" class="secondary">Typing only</button></div>
+    <div><button id="share" class="secondary" disabled>Share my screen</button><button id="simulate" class="secondary" disabled>Simulate a work session</button></div>
+    <canvas id="screen" width="640" height="400"></canvas>
+    <div id="seen" class="obs">observer: idle</div>
+  </div>
+  <div id="log"></div>
+  <form class="typed" id="f"><input id="text" placeholder="Talk to the companion by typing…" maxlength="500" autocomplete="off" disabled><button disabled id="send">Send</button></form>
+</div>
+<script src="https://unpkg.com/livekit-client@2.9.5/dist/livekit-client.umd.js"></script>
+<script src="common.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const log = (cls, text) => { const d = document.createElement('div'); d.className = 'm ' + cls; d.textContent = text; $('log').appendChild(d); $('log').scrollTop = 1e9; };
+  const canvas = $('screen'), ctx = canvas.getContext('2d');
+  let s, source = null, lastSent = null, timer = null;
+
+  // --- the observer's input: a frame every few seconds, sent only when it changed
+  function frameData() { return ctx.getImageData(0, 0, canvas.width, canvas.height).data; }
+  function changed(a, b) { if (!a) return true; let diff = 0; for (let i = 0; i < a.length; i += 64) if (Math.abs(a[i] - b[i]) > 24) diff++; return diff / (a.length / 64) > 0.03; }
+  async function observe(hint) {
+    const now = frameData();
+    if (!changed(lastSent, now) && Date.now() - (observe.last || 0) < 60000) return;
+    lastSent = now; observe.last = Date.now();
+    $('seen').textContent = 'observer: looking…';
+    const res = await fetch('/api/presence/frame', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image: canvas.toDataURL('image/jpeg', 0.6), hint }) });
+    const seen = await res.json();
+    $('seen').textContent = `observer (${seen.model || '?'}): ${seen.description}${seen.noteworthy ? ' — ' + seen.noteworthy : ''}`;
+    log('obs', `observer: ${seen.description}${seen.noteworthy ? ' ‼ ' + seen.noteworthy : ''}`);
+  }
+
+  // --- two frame sources: the real screen, or a simulated work session
+  $('share').onclick = async () => {
+    try { source = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 2 }, audio: false }); } catch (e) { log('relay', 'screen share refused'); return; }
+    const v = document.createElement('video'); v.srcObject = source; await v.play();
+    clearInterval(timer); timer = setInterval(() => { ctx.drawImage(v, 0, 0, canvas.width, canvas.height); observe(); }, 5000);
+  };
+  const SCENES = [
+    { hint: 'code editor', draw: () => { bg('#1e1e1e'); mono('#9cdcfe', ['def normalize_prime(source, output):', '    original = measure_loudness(source)', '    measured_ms = measure_lead_silence_ms(source)', '    target_ms = lead_silence_ms()', '    ...']); } },
+    { hint: 'terminal with a failing test', draw: () => { bg('#000'); mono('#f85149', ['$ pytest tests/unit/v2_build -q', 'F.......... [100%]', 'FAILED test_the_prime_opens_with_exactly_the_target_silence', 'AssertionError: 0.395 != 0.400 ± 0.005', '1 failed, 11 passed in 2.1s']); } },
+    { hint: 'the same code editor, test fixed', draw: () => { bg('#1e1e1e'); mono('#9cdcfe', ['def normalize_prime(source, output):', '    ...', '# all 12 tests pass', '$ git commit -m "fix: pad the prime lead exactly"']); } },
+    { hint: 'a cat video on YouTube', draw: () => { bg('#fff'); ctx.fillStyle = '#f00'; ctx.fillRect(20, 20, 600, 320); ctx.fillStyle = '#fff'; ctx.font = '40px sans-serif'; ctx.fillText('▶  Funny cats compilation #42', 60, 190); ctx.fillStyle = '#333'; ctx.font = '18px sans-serif'; ctx.fillText('12M views · 3 days ago', 20, 370); } },
+  ];
+  function bg(c) { ctx.fillStyle = c; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+  function mono(c, lines) { ctx.fillStyle = c; ctx.font = '18px Menlo, monospace'; lines.forEach((l, i) => ctx.fillText(l, 20, 40 + i * 30)); }
+  $('simulate').onclick = () => {
+    if (source) source.getTracks().forEach((t) => t.stop());
+    let i = 0; clearInterval(timer);
+    const step = () => { const sc = SCENES[i % SCENES.length]; sc.draw(); log('user', `(screen now: ${sc.hint})`); observe(sc.hint); i++; };
+    step(); timer = setInterval(step, 25000);
+  };
+
+  async function start(mic) {
+    $('start').disabled = $('startTyped').disabled = true; $('status').textContent = 'Starting the companion…';
+    try {
+      s = await Atmee.join({
+        usecase: 'presence', video: $('video'), audio: $('audio'), mic,
+        onCaption: (text, final) => { $('caption').textContent = text; if (final) log('avatar', `companion: ${text}`); },
+        onRelay: (topic, text) => log('relay', `→ ${topic}: ${text.slice(0, 140)}`),
+        onEnd: () => { $('status').textContent = 'Session ended.'; clearInterval(timer); },
+      });
+      $('status').textContent = `Companion present, room ${s.session.roomName}`;
+      $('share').disabled = $('simulate').disabled = false; $('text').disabled = $('send').disabled = false;
+    } catch (e) { $('status').textContent = `Could not start: ${e.message}`; $('start').disabled = $('startTyped').disabled = false; }
+  }
+  $('start').onclick = () => start(true);
+  $('startTyped').onclick = () => start(false);
+  $('f').onsubmit = (e) => { e.preventDefault(); const t = $('text').value.trim(); if (!t || !s) return; log('user', `you: ${t}`); s.user('typed', t); $('text').value = ''; };
+  bg('#fff'); ctx.fillStyle = '#999'; ctx.font = '20px sans-serif'; ctx.fillText('(your screen, as the observer sees it)', 150, 200);
+  window.addEventListener('beforeunload', () => navigator.sendBeacon('/api/presence/session/end'));
+</script>
+</body>
+</html>

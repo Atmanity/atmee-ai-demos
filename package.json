@@ -1,0 +1,9 @@
+{
+  "name": "livestream-chat-demo",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Demo: a chat-only livestream host built on the Atmee Avatar API (v2 session + lk.chat / atmee.app text streams)",
+  "scripts": { "start": "node server.js" },
+  "dependencies": { "express": "^4.21.2", "ws": "^8.18.0" }
+}

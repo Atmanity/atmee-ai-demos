@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Training module</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="demo.css">
+</head>
+<body class="light">
+<div id="stage"><video id="video" autoplay playsinline></video><audio id="audio" autoplay></audio><div id="caption"></div></div>
+<div id="side">
+  <div id="status">Lesson → Q&A → quiz, run by a conductor set through the API. The trainer speaks through the three slides on its own (<code>speak</code> edges), then waits for your questions, then quizzes you. The app sends the slide on screen and your score as <code>atmee.app state</code>.</div>
+  <div id="panel">
+    <div><button id="start">Start the module (microphone)</button><button id="startTyped" class="secondary">Typing only</button></div>
+    <div id="slides"></div>
+    <div>Score: <b id="score">0</b> / 2</div>
+  </div>
+  <div id="log"></div>
+  <form class="typed" id="f"><input id="text" placeholder="Answer or ask by typing…" maxlength="500" autocomplete="off" disabled><button disabled id="send">Send</button></form>
+</div>
+<script src="https://unpkg.com/livekit-client@2.9.5/dist/livekit-client.umd.js"></script>
+<script src="common.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const log = (cls, text) => { const d = document.createElement('div'); d.className = 'm ' + cls; d.textContent = text; $('log').appendChild(d); $('log').scrollTop = 1e9; };
+  const SLIDES = [
+    { id: 1, title: 'Why incident response', body: 'Every minute of an outage costs trust. Incident response is a practiced routine, not heroics.' },
+    { id: 2, title: 'Roles', body: 'Incident commander runs the call. Communications lead updates stakeholders. Operators fix. Nobody does two roles.' },
+    { id: 3, title: 'The first ten minutes', body: 'Declare, assign roles, open the channel, post the first status update within ten minutes.' },
+  ];
+  let s, current = 0;
+  function showSlide(n) {
+    current = n; const sl = SLIDES[n - 1];
+    $('slides').innerHTML = sl ? `<div class="slide"><h3>Slide ${sl.id}: ${sl.title}</h3>${sl.body}</div>` : '<div class="slide"><h3>Incident response, in ten minutes</h3>Three slides, a Q&A, a two-question quiz.</div>';
+    $('slides').innerHTML += `<div>${SLIDES.map(x => `<button class="secondary" onclick="goto(${x.id})">${x.id}</button>`).join('')}</div>`;
+    if (s) s.user('slide', String(n));
+  }
+  window.goto = showSlide;
+  async function start(mic) {
+    $('start').disabled = $('startTyped').disabled = true; $('status').textContent = 'Starting the trainer…';
+    try {
+      s = await Atmee.join({
+        usecase: 'training', video: $('video'), audio: $('audio'), mic,
+        onCaption: (text, final) => {
+          $('caption').textContent = text;
+          if (final) {
+            log('avatar', `trainer: ${text}`);
+            // Follow the trainer: when it moves to a slide, show it.
+            const m = text.match(/slide (\d)/i); if (m && Number(m[1]) !== current) showSlide(Number(m[1]));
+            if (/that'?s (right|correct)|correct!|well done|exactly/i.test(text)) $('score').textContent = String(Math.min(2, Number($('score').textContent) + 1));
+          }
+        },
+        onRelay: (topic, text) => log('relay', `→ ${topic}: ${text.slice(0, 140)}`),
+        onEnd: () => { $('status').textContent = 'Module ended.'; $('text').disabled = $('send').disabled = true; },
+      });
+      $('status').textContent = `Running, room ${s.session.roomName}${mic ? '' : ' (typing only)'}`;
+      $('text').disabled = $('send').disabled = false;
+      showSlide(0);
+    } catch (e) { $('status').textContent = `Could not start: ${e.message}`; $('start').disabled = $('startTyped').disabled = false; }
+  }
+  $('start').onclick = () => start(true);
+  $('startTyped').onclick = () => start(false);
+  $('f').onsubmit = (e) => { e.preventDefault(); const t = $('text').value.trim(); if (!t || !s) return; log('user', `you: ${t}`); s.user('typed', t); $('text').value = ''; };
+  showSlide(0);
+  window.addEventListener('beforeunload', () => navigator.sendBeacon('/api/training/session/end'));
+</script>
+</body>
+</html>
