@@ -2,45 +2,219 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Screening call</title>
+<title>Screening call · Northwind Talent</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="demo.css">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<style>
+  :root {
+    --bg: #f4f6f5; --surface: #ffffff; --surface-2: #eef2f0; --text: #14201c; --muted: #61706b; --line: #dfe5e2;
+    --accent: #0d7c66; --accent-ink: #fff; --accent-soft: #e2f2ee; --stage: #111a17;
+    --font: "Plus Jakarta Sans", system-ui, sans-serif; --font-display: var(--font);
+  }
+  .topbar { display: flex; align-items: center; gap: 14px; padding: 14px max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; letter-spacing: -.01em; }
+  .brand .mark { width: 28px; height: 28px; border-radius: 50%; background: conic-gradient(from 200deg, #0d7c66, #34c39b, #0d7c66); }
+  .spacer { flex: 1; }
+  .timeleft { font-variant-numeric: tabular-nums; }
+
+  /* Pre-join */
+  .prejoin { max-width: 1060px; margin: 0 auto; padding: 24px max(16px, env(safe-area-inset-left, 0px)) 48px; padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; grid-template-columns: 1.2fr 1fr; gap: 28px; align-items: center; min-height: calc(100vh - 60px); }
+  .preview { aspect-ratio: 16 / 10; border-radius: 20px; background: linear-gradient(160deg, #1d2a26, #0f1714); display: grid; place-items: center; color: #e8efec; position: relative; }
+  .preview .me { width: 108px; height: 108px; border-radius: 50%; background: #2c3c37; display: grid; place-items: center; font-size: 38px; font-weight: 700; }
+  .preview .note { position: absolute; bottom: 16px; left: 16px; right: 16px; display: flex; justify-content: space-between; font-size: 13px; opacity: .8; }
+  .level { display: inline-flex; gap: 3px; align-items: end; height: 16px; }
+  .level i { width: 3px; background: #34c39b; border-radius: 2px; height: 3px; transition: height .08s; }
+  .joinbox { display: grid; gap: 18px; }
+  .joinbox h1 { font-size: 30px; letter-spacing: -.02em; }
+  .job { padding: 18px; display: grid; gap: 8px; }
+  .job .title { font-weight: 700; font-size: 17px; }
+  .tags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .field { display: grid; gap: 6px; font-size: 14px; font-weight: 600; }
+  .field input { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); outline: none; font-weight: 500; }
+  .field input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  /* Call */
+  .call { height: calc(100vh - 60px); display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; padding: 0 max(16px, env(safe-area-inset-left, 0px)) 16px; padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .main { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+  .main .stage { flex: 1; min-height: 0; }
+  .main .stage video { object-fit: contain; }
+  .nameplate { position: absolute; left: 16px; bottom: 16px; z-index: 1; background: rgb(0 0 0 / .5); color: #fff; padding: 6px 12px; border-radius: 10px; font-size: 14px; display: flex; gap: 8px; align-items: center; }
+  .nameplate .bars { display: inline-flex; gap: 2px; align-items: end; height: 12px; }
+  .nameplate .bars i { width: 3px; height: 4px; background: #34c39b; border-radius: 2px; }
+  .stage.talking .nameplate .bars i { animation: eq .6s ease-in-out infinite; }
+  .stage.talking .nameplate .bars i:nth-child(2) { animation-delay: .15s; } .stage.talking .nameplate .bars i:nth-child(3) { animation-delay: .3s; }
+  @keyframes eq { 50% { height: 12px; } }
+  .selfie { position: absolute; right: 16px; top: 16px; z-index: 1; width: 132px; aspect-ratio: 4 / 3; border-radius: 12px; background: #23302c; color: #e8efec; display: grid; place-items: center; font-weight: 700; font-size: 22px; border: 2px solid rgb(255 255 255 / .12); }
+  .selfie small { position: absolute; bottom: 6px; left: 8px; font-size: 11px; font-weight: 500; opacity: .8; }
+  .controls { display: flex; justify-content: center; gap: 12px; }
+  .controls .icon-btn { width: 52px; height: 52px; }
+  .panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .agenda { padding: 18px 18px 14px; border-bottom: 1px solid var(--line); }
+  .agenda h2 { font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+  .agenda ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .agenda li { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); padding: 4px 0; }
+  .agenda li i { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line); flex: none; display: grid; place-items: center; }
+  .agenda li.done { color: var(--text); } .agenda li.done i { background: var(--accent); border-color: var(--accent); }
+  .agenda li.done i::after { content: ""; width: 8px; height: 5px; border: 2px solid #fff; border-top: 0; border-right: 0; transform: rotate(-45deg) translate(1px, -1px); }
+  .agenda li.now { color: var(--text); font-weight: 600; } .agenda li.now i { border-color: var(--accent); box-shadow: inset 0 0 0 4px var(--surface), inset 0 0 0 10px var(--accent); }
+  .panel .transcript { flex: 1; padding: 16px; }
+  .panel form { padding: 12px; border-top: 1px solid var(--line); }
+  .wrapup { max-width: 560px; margin: 10vh auto; padding: 36px; text-align: center; display: grid; gap: 14px; justify-items: center; }
+  .wrapup .tick { width: 64px; height: 64px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; }
+  .wrapup .tick svg { width: 30px; height: 30px; }
+
+  @media (max-width: 900px) {
+    .prejoin, .call { grid-template-columns: 1fr; height: auto; }
+    .main .stage { aspect-ratio: 4 / 5; flex: none; }
+    .panel { height: 460px; }
+    .selfie { width: 92px; }
+  }
+</style>
 </head>
-<body class="light">
-<div id="stage"><video id="video" autoplay playsinline></video><audio id="audio" autoplay></audio><div id="caption"></div></div>
-<div id="side">
-  <div id="status">A regular back-and-forth interview. The recruiter follows an agenda set through the conductor API: greet → background → must-haves → logistics → your questions → wrap.</div>
-  <div id="panel">
-    <label>Your name <input id="name" value="Alex Chen" maxlength="40"></label>
-    <div><button id="start">Join the call (microphone)</button><button id="startTyped" class="secondary">Join by typing only</button></div>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="mark"></span>Northwind Talent</div>
+  <span class="spacer"></span>
+  <span class="chip" id="timechip" hidden><span class="dot" style="color:var(--accent)"></span>In call · <b class="timeleft" id="timeleft">–</b> left</span>
+</header>
+
+<main id="prejoin" class="prejoin">
+  <div class="preview" aria-label="Your preview">
+    <div class="me" id="initials">AC</div>
+    <div class="note"><span>Camera off · audio call</span><span class="level" id="level"><i></i><i></i><i></i><i></i><i></i></span></div>
   </div>
-  <div id="log"></div>
-  <form class="typed" id="f"><input id="text" placeholder="Type an answer instead of speaking…" maxlength="500" autocomplete="off" disabled><button disabled id="send">Send</button></form>
-</div>
+  <div class="joinbox">
+    <div class="eyebrow">First-round screening · about 10 minutes</div>
+    <h1>Ready to meet your recruiter?</h1>
+    <div class="card job">
+      <div class="title">Senior Backend Engineer (Go) · Payments</div>
+      <div class="muted">Remote · Full-time</div>
+      <div class="tags"><span class="chip">5+ years</span><span class="chip">Production Go</span><span class="chip">PostgreSQL</span><span class="chip">On-call</span></div>
+    </div>
+    <label class="field">Your name<input id="name" value="Alex Chen" maxlength="40" autocomplete="name"></label>
+    <div class="actions">
+      <button class="btn primary lg" id="joinMic" type="button"></button>
+      <button class="btn ghost lg" id="joinType" type="button"></button>
+    </div>
+    <div class="notice warn" id="joinError" hidden></div>
+    <p class="muted" style="font-size:13px;margin:0">Your recruiter is an AI assistant working for the hiring team. The conversation is transcribed for the team's notes.</p>
+  </div>
+</main>
+
+<main id="call" class="call" hidden>
+  <section class="main">
+    <div class="stage" id="stage">
+      <video id="video" autoplay playsinline muted></video><audio id="audio" autoplay></audio>
+      <div class="selfie" id="selfie">AC<small>You</small></div>
+      <div class="nameplate"><span class="bars"><i></i><i></i><i></i></span>Recruiter · Northwind Talent</div>
+      <div class="caption" id="caption"></div>
+      <div class="overlay" id="overlay"></div>
+    </div>
+    <div class="controls">
+      <button class="icon-btn" id="mic" type="button" hidden></button>
+      <button class="icon-btn end" id="hangup" type="button" title="Leave the call" aria-label="Leave the call"></button>
+    </div>
+  </section>
+  <aside class="card panel">
+    <div class="agenda">
+      <h2>Today's agenda</h2>
+      <ol id="agenda"></ol>
+    </div>
+    <div class="transcript" id="transcript"></div>
+    <form class="composer" id="composer">
+      <input id="text" placeholder="Type a reply instead of speaking…" maxlength="500" autocomplete="off" disabled>
+      <button class="icon-btn" id="send" type="submit" aria-label="Send" disabled></button>
+    </form>
+  </aside>
+</main>
+
+<main id="after" hidden>
+  <div class="card wrapup">
+    <div class="tick" id="tick"></div>
+    <h1 id="thanks">Thanks for your time</h1>
+    <p class="muted" style="margin:0">The hiring team will review your screening. If it's a match, the next step is a technical interview, usually within a week. We'll email you either way.</p>
+    <div class="actions"><a class="btn ghost" href="/">Back to all apps</a><button class="btn primary" onclick="location.reload()">Start over</button></div>
+  </div>
+</main>
+
 <script src="https://unpkg.com/livekit-client@2.9.5/dist/livekit-client.umd.js"></script>
 <script src="common.js"></script>
+<script src="kit.js"></script>
 <script>
-  const $ = (id) => document.getElementById(id);
-  const log = (cls, text) => { const d = document.createElement('div'); d.className = 'm ' + cls; d.textContent = text; $('log').appendChild(d); $('log').scrollTop = 1e9; };
-  let s;
-  async function start(mic) {
-    $('start').disabled = $('startTyped').disabled = true; $('status').textContent = 'Starting the recruiter…';
+  const { $, icon } = UI;
+  $('joinMic').innerHTML = `${icon.mic}Join with microphone`; $('joinType').innerHTML = `${icon.keyboard}Join and type`;
+  $('send').innerHTML = icon.send; $('hangup').innerHTML = icon.end; $('tick').innerHTML = icon.check;
+
+  const AGENDA = [
+    ['greet', 'Introductions', /introduce|tell me (a bit )?about yourself|welcome/i],
+    ['background', 'Your background', /current (role|position|job)|recent project|working on|what was your part/i],
+    ['fit', 'Must-haves', /how many years|years of|production|on-?call|postgres/i],
+    ['logistics', 'Logistics', /notice|time ?zone|location|salary|compensation|start date/i],
+    ['questions', 'Your questions', /any questions|questions for me|anything you'?d like to ask/i],
+    ['wrap', 'Next steps', /next step|technical interview|thanks? (you )?for (your|taking)/i],
+  ];
+  let at = 0, s, stopClock = () => {}, name = 'Alex Chen';
+  const initials = (n) => n.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'You';
+  $('name').oninput = () => { $('initials').textContent = initials($('name').value); };
+  function paintAgenda() { $('agenda').innerHTML = AGENDA.map(([, label], i) => `<li class="${i < at ? 'done' : i === at ? 'now' : ''}"><i></i>${label}</li>`).join(''); }
+  // The agenda moves one item at a time: what the recruiter asks next marks
+  // the next topic (an echo of an earlier answer must not skip ahead).
+  function follow(text) { const next = AGENDA[at + 1]; if (next && next[2].test(text)) { at++; paintAgenda(); } }
+  paintAgenda();
+
+  const tr = UI.transcript($('transcript'), { avatar: 'Recruiter', user: 'You' });
+  const caption = UI.captions($('caption'));
+  const debug = UI.debugLog();
+  const sender = UI.politeSender(() => s);
+  const overlay = UI.stage($('overlay'), {
+    starting: ['Setting up your call…', 'Finding your recruiter.'],
+    warming: ['Your recruiter is getting ready…', 'This takes a minute or two when the line is quiet.'],
+    connecting: ['Connecting…', 'Joining the call.'],
+    arriving: ['Waiting for your recruiter to join…', 'They will greet you in a moment.'],
+  });
+
+  // A small live meter in the preview, so you can see the microphone works.
+  async function meter(stream) {
+    const ctx = new AudioContext(); const an = ctx.createAnalyser(); an.fftSize = 256;
+    ctx.createMediaStreamSource(stream).connect(an); const buf = new Uint8Array(an.frequencyBinCount); const bars = [...$('level').children];
+    (function loop() { an.getByteFrequencyData(buf); const v = buf.reduce((a, b) => a + b, 0) / buf.length; bars.forEach((b, i) => { b.style.height = `${Math.max(3, Math.min(16, v / 4 - i * 2))}px`; }); if (stream.active) requestAnimationFrame(loop); })();
+  }
+
+  async function join(withMic) {
+    $('joinError').hidden = true;
+    name = $('name').value.trim() || 'Candidate';
+    let mic = null;
+    if (withMic) { try { mic = await Atmee.requestMic(); meter(mic); } catch (e) { $('joinError').textContent = e.friendly; $('joinError').hidden = false; return; } }
+    $('selfie').firstChild.textContent = initials(name);
+    $('prejoin').hidden = true; $('call').hidden = false;
+    connect(mic);
+  }
+  async function connect(mic) {
     try {
       s = await Atmee.join({
         usecase: 'recruiter', video: $('video'), audio: $('audio'), mic,
-        onCaption: (text, final) => { $('caption').textContent = text; if (final) log('avatar', `recruiter: ${text}`); },
-        onRelay: (topic, text) => log('relay', `→ ${topic}: ${text.slice(0, 140)}`),
-        onEnd: () => { $('status').textContent = 'Call ended.'; $('text').disabled = $('send').disabled = true; },
+        onPhase: (p, d) => overlay.phase(p, d),
+        onCaption: (text, final) => { caption(text, final); tr.avatar(text, final); if (final) follow(text); },
+        onSpeaking: (v) => { $('stage').classList.toggle('talking', v); sender.speaking(v); },
+        onRelay: debug,
+        onEnd: () => finish(),
       });
-      s.user('name', $('name').value.trim() || 'the candidate');
-      $('status').textContent = `In the call, room ${s.session.roomName}${mic ? '' : ' (typing only)'}`;
-      $('text').disabled = $('send').disabled = false;
-    } catch (e) { $('status').textContent = `Could not start: ${e.message}`; $('start').disabled = $('startTyped').disabled = false; }
+      s.user('name', name);
+      UI.micButton($('mic'), s);
+      $('text').disabled = $('send').disabled = false; $('timechip').hidden = false;
+      stopClock = UI.countdown($('timeleft'), s.session.maxSeconds, () => tr.note('About a minute left on this call'));
+    } catch (e) {
+      overlay.error(e.friendly || 'Something went wrong.', 'Try again', async () => connect(mic ? await Atmee.requestMic().catch(() => null) : null));
+    }
   }
-  $('start').onclick = () => start(true);
-  $('startTyped').onclick = () => start(false);
-  $('f').onsubmit = (e) => { e.preventDefault(); const t = $('text').value.trim(); if (!t || !s) return; log('user', `you: ${t}`); s.user('typed', t); $('text').value = ''; };
-  window.addEventListener('beforeunload', () => navigator.sendBeacon('/api/recruiter/session/end'));
+  function finish() { stopClock(); $('call').hidden = true; $('after').hidden = false; $('timechip').hidden = true; $('thanks').textContent = `Thanks, ${name.split(' ')[0]}.`; }
+  $('joinMic').onclick = () => join(true);
+  $('joinType').onclick = () => join(false);
+  $('hangup').onclick = async () => { if (s) await s.end(); finish(); };
+  $('composer').onsubmit = (e) => { e.preventDefault(); const t = $('text').value.trim(); if (!t || !s) return; tr.user(t); sender.send('typed', t); $('text').value = ''; };
 </script>
 </body>
 </html>

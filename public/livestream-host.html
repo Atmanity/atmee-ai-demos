@@ -2,37 +2,151 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Stream host</title>
+<title>Studio · Nightcap Live</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="demo.css">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<style>
+  :root {
+    --bg: #0c0b10; --surface: #16141d; --surface-2: #211e2b; --text: #f2f0f7; --muted: #9b96ad; --line: #2a2735;
+    --accent: #ff3d81; --accent-ink: #fff; --accent-soft: rgb(255 61 129 / .14); --stage: #050407;
+    --font: "Space Grotesk", system-ui, sans-serif; --font-display: var(--font); color-scheme: dark;
+  }
+  .topbar { display: flex; align-items: center; gap: 14px; padding: 12px max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); border-bottom: 1px solid var(--line); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; }
+  .brand .moon { width: 26px; height: 26px; border-radius: 50%; box-shadow: inset -7px -3px 0 0 var(--accent); }
+  .brand small { color: var(--muted); font-weight: 500; font-size: 14px; }
+  .spacer { flex: 1; }
+  .studio { height: calc(100vh - 57px); display: grid; grid-template-columns: minmax(0, 1fr) 360px; }
+  .left { display: flex; flex-direction: column; gap: 16px; padding: 20px max(16px, env(safe-area-inset-left, 0px)); min-width: 0; min-height: 0; overflow: auto; }
+  .player { aspect-ratio: 16 / 9; width: 100%; max-height: calc(100vh - 230px); border-radius: 14px; }
+  .player video { object-fit: contain; }
+  .hud { position: absolute; top: 14px; left: 14px; z-index: 1; display: flex; gap: 8px; }
+  .hud .chip { background: rgb(0 0 0 / .55); color: #fff; }
+  .hud .chip.live { background: #e5384f; }
+  .hud .chip.off { background: rgb(0 0 0 / .55); }
+  .meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .meta .host-av { width: 52px; height: 52px; border-radius: 50%; background: linear-gradient(135deg, #ff3d81, #7c3aed); flex: none; }
+  .meta h1 { font-size: 21px; }
+  .meta .sub { color: var(--muted); font-size: 14px; }
+  .meta .actions { margin-left: auto; display: flex; gap: 10px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .stat { padding: 14px 16px; }
+  .stat b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--muted); font-size: 13px; }
+  .chatcol { border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; background: var(--surface); }
+  .chathead { padding: 14px 16px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
+  .chat { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .msg { line-height: 1.4; overflow-wrap: anywhere; animation: rise .2s ease-out; }
+  .msg b { margin-right: 6px; }
+  .msg.host { background: var(--accent-soft); border-left: 3px solid var(--accent); padding: 8px 10px; border-radius: 8px; }
+  .msg.host b { color: var(--accent); }
+  .msg.host.live { opacity: .7; }
+  .msg.q { border-left: 3px solid #a78bfa; padding-left: 8px; }
+  .empty { margin: auto; text-align: center; color: var(--muted); font-size: 14px; display: grid; gap: 10px; }
+  .chatfoot { padding: 12px 16px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+  .copied { color: var(--accent); }
+  @media (max-width: 900px) { .studio { grid-template-columns: 1fr; height: auto; } .chatcol { height: 70vh; border-left: 0; border-top: 1px solid var(--line); } .stats { grid-template-columns: 1fr 1fr 1fr; } }
+</style>
 </head>
-<body class="dark">
-<div id="stage"><video id="video" autoplay playsinline></video><audio id="audio" autoplay></audio><div id="caption"></div></div>
-<div id="side">
-  <div id="status">Not started. The host reads the <a href="livestream-viewer.html" target="_blank">chatroom</a>; it never hears anyone.</div>
-  <button id="start">Start the stream</button>
-  <div id="log"></div>
-</div>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="moon"></span>Nightcap Live <small>Creator studio</small></div>
+  <span class="spacer"></span>
+  <span class="chip" id="state">Offline</span>
+</header>
+<main class="studio">
+  <section class="left">
+    <div class="stage player" id="player">
+      <div class="hud"><span class="chip off" id="liveBadge">OFFLINE</span><span class="chip" id="viewerBadge">👁 0</span></div>
+      <video id="video" autoplay playsinline muted></video><audio id="audio" autoplay></audio>
+      <div class="caption" id="caption"></div>
+      <div class="overlay" id="overlay"></div>
+    </div>
+    <div class="meta">
+      <div class="host-av"></div>
+      <div><h1>Late-night tech talk with your AI co-host</h1><div class="sub">Talking with the chat · Science &amp; Technology</div></div>
+      <div class="actions">
+        <button class="btn ghost" id="share" type="button"></button>
+        <button class="btn primary" id="golive" type="button">Go live</button>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="card stat"><b id="statViewers">0</b><span>Watching now</span></div>
+      <div class="card stat"><b id="statMsgs">0</b><span>Chat messages</span></div>
+      <div class="card stat"><b id="statTime">–</b><span>Stream time left</span></div>
+    </div>
+  </section>
+  <aside class="chatcol">
+    <div class="chathead">Stream chat <span class="chip" id="chatCount">0 in chat</span></div>
+    <div class="chat" id="chat"><div class="empty" id="empty"><div style="font-size:28px">💬</div>Chat is quiet. Share the chat link so viewers can say hi.<br>Messages ending in “?” go straight to the host.</div></div>
+    <div class="chatfoot">The host reads the chat. It can't hear anyone, so viewers type.</div>
+  </aside>
+</main>
 <script src="https://unpkg.com/livekit-client@2.9.5/dist/livekit-client.umd.js"></script>
 <script src="common.js"></script>
+<script src="kit.js"></script>
 <script>
-  const $ = (id) => document.getElementById(id);
-  const log = (cls, text) => { const d = document.createElement('div'); d.className = 'm ' + cls; d.textContent = text; $('log').appendChild(d); $('log').scrollTop = 1e9; };
-  let s;
-  $('start').onclick = async () => {
-    $('start').disabled = true; $('status').textContent = 'Starting the avatar session…';
+  const { $, esc } = UI;
+  $('share').innerHTML = '🔗 Copy chat link';
+  let s, msgs = 0, liveEl = null, stopClock = () => {};
+  const caption = UI.captions($('caption'));
+  const debug = UI.debugLog();
+  const overlay = UI.stage($('overlay'), {
+    starting: ['Starting your stream…', 'Booking your co-host.'],
+    warming: ['Warming up the studio…', 'The first stream of the day takes a minute or two.'],
+    connecting: ['Connecting…', 'Opening the stream.'],
+    arriving: ['Your co-host is taking the stage…', 'Going live in a moment.'],
+  });
+  overlay.idle('<div class="title">You\'re offline</div><div class="detail">Press <b>Go live</b> and your AI co-host starts the show, reading your chat as it comes in.</div>');
+
+  function line(cls, who, text) {
+    $('empty').hidden = true;
+    const d = document.createElement('div'); d.className = `msg ${cls}`; d.innerHTML = `<b>${esc(who)}</b>${esc(text)}`;
+    $('chat').appendChild(d); $('chat').scrollTop = 1e9; return d;
+  }
+  function hostSays(text, final) {
+    if (!liveEl) liveEl = line('host live', 'Host', text);
+    liveEl.innerHTML = `<b>Host</b>${esc(text)}`; $('chat').scrollTop = 1e9;
+    if (final) { liveEl.classList.remove('live'); liveEl = null; }
+  }
+  function viewers(n) { $('viewerBadge').textContent = `👁 ${n}`; $('statViewers').textContent = n; $('chatCount').textContent = `${n} in chat`; }
+
+  $('share').onclick = async () => {
+    const url = new URL('livestream-viewer.html', location.href).href;
+    try { await navigator.clipboard.writeText(url); $('share').innerHTML = '<span class="copied">✓ Link copied</span>'; } catch (e) { window.open(url, '_blank'); }
+    setTimeout(() => { $('share').innerHTML = '🔗 Copy chat link'; }, 2000);
+  };
+  async function goLive() {
+    $('golive').disabled = true; $('state').textContent = 'Starting…';
     try {
       s = await Atmee.join({
-        usecase: 'livestream', video: $('video'), audio: $('audio'), mic: false,
-        onCaption: (text, final) => { $('caption').textContent = text; if (final) log('avatar', `host: ${text}`); },
-        onRelay: (topic, text) => log('relay', `→ ${topic}: ${text.slice(0, 140)}`),
-        onMessage: (m) => { if (m.type === 'chat') log('viewer', `${m.name}: ${m.text}`); if (m.type === 'viewers') $('status').textContent = `Live, room ${s.session.roomName}, ${m.count} viewer(s)`; },
-        onEnd: () => { $('status').textContent = 'Session ended.'; $('start').disabled = false; },
+        usecase: 'livestream', video: $('video'), audio: $('audio'), mic: null,
+        onPhase: (p, d) => overlay.phase(p, d),
+        onCaption: (text, final) => { caption(text, final); hostSays(text, final); },
+        onRelay: debug,
+        onMessage: (m) => {
+          if (m.type === 'chat') { msgs++; $('statMsgs').textContent = msgs; line(/\?\s*$/.test(m.text) ? 'q' : '', m.name, m.text); }
+          if (m.type === 'viewers') viewers(m.count);
+        },
+        onEnd: () => stopped('Stream ended'),
       });
-      $('status').textContent = `Live, room ${s.session.roomName} (max ${s.session.maxSeconds}s)`;
-    } catch (e) { $('status').textContent = `Could not start: ${e.message}`; $('start').disabled = false; }
-  };
-  window.addEventListener('beforeunload', () => navigator.sendBeacon('/api/livestream/session/end'));
+      $('liveBadge').textContent = '● LIVE'; $('liveBadge').className = 'chip live'; $('state').textContent = 'Live';
+      $('golive').textContent = 'End stream'; $('golive').className = 'btn danger'; $('golive').disabled = false;
+      $('golive').onclick = async () => { await s.end(); stopped('Stream ended'); };
+      stopClock = UI.countdown($('statTime'), s.session.maxSeconds, () => line('', 'Nightcap', 'About a minute of stream time left.'));
+    } catch (e) {
+      $('golive').disabled = false; $('state').textContent = 'Offline';
+      overlay.error(e.friendly || 'The stream could not start.', 'Try again', goLive);
+    }
+  }
+  function stopped(text) {
+    stopClock(); $('liveBadge').textContent = 'OFFLINE'; $('liveBadge').className = 'chip off'; $('state').textContent = 'Offline';
+    overlay.ended(`<div class="title">${esc(text)}</div><button class="btn primary" onclick="location.reload()">Go live again</button>`);
+    $('golive').hidden = true;
+  }
+  $('golive').onclick = goLive;
 </script>
 </body>
 </html>

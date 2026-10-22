@@ -1,0 +1,92 @@
+/* Shared components for every app. Each app sets the tokens below in its own
+   <style> (its brand) and lays out its own screens; nothing here picks colors
+   or fonts of its own. */
+:root {
+  --bg: #f7f7f5; --surface: #ffffff; --surface-2: #f1f1ee; --text: #18181b; --muted: #6b6b70;
+  --line: #e4e4df; --accent: #2f5bea; --accent-ink: #ffffff; --accent-soft: #e8eefd;
+  --danger: #d6455d; --ok: #1f9d6b; --stage: #0f1012; --stage-ink: #f5f5f4;
+  --radius: 14px; --radius-sm: 9px; --shadow: 0 1px 2px rgb(0 0 0 / .05), 0 8px 24px rgb(0 0 0 / .06);
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif; --font-display: var(--font);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; margin: 0; text-wrap: balance; }
+button, input, textarea { font: inherit; color: inherit; }
+[hidden] { display: none !important; }
+.muted { color: var(--muted); }
+.eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid transparent; border-radius: 999px;
+  padding: 11px 20px; font-weight: 600; cursor: pointer; transition: transform .08s ease, background .15s ease, opacity .15s; white-space: nowrap; }
+.btn:active { transform: scale(.98); }
+.btn:disabled { opacity: .5; cursor: default; transform: none; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover:not(:disabled) { filter: brightness(1.06); }
+.btn.ghost { background: transparent; border-color: var(--line); color: var(--text); }
+.btn.ghost:hover:not(:disabled) { background: var(--surface-2); }
+.btn.danger { background: var(--danger); color: #fff; }
+.btn.lg { padding: 14px 26px; font-size: 16px; }
+.btn svg, .icon-btn svg { width: 18px; height: 18px; flex: none; }
+.icon-btn { width: 44px; height: 44px; border-radius: 999px; display: inline-grid; place-items: center; border: 1px solid var(--line);
+  background: var(--surface); cursor: pointer; color: var(--text); transition: background .15s; }
+.icon-btn:hover { background: var(--surface-2); }
+.icon-btn.off { background: var(--danger); border-color: var(--danger); color: #fff; }
+.icon-btn.end { background: var(--danger); border-color: var(--danger); color: #fff; }
+.link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font-weight: 600; }
+
+/* The stage: the avatar's video, its overlay states and captions */
+.stage { position: relative; background: var(--stage); color: var(--stage-ink); overflow: hidden; border-radius: var(--radius); isolation: isolate; }
+.stage video { width: 100%; height: 100%; object-fit: cover; display: block; background: var(--stage); }
+.stage .overlay { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px;
+  background: radial-gradient(120% 90% at 50% 40%, rgb(255 255 255 / .06), transparent 60%), var(--stage); z-index: 2; }
+.stage .overlay .inner { display: grid; gap: 14px; justify-items: center; max-width: 340px; }
+.stage .overlay .title { font-family: var(--font-display); font-size: 19px; font-weight: 600; }
+.stage .overlay .detail { font-size: 14px; opacity: .72; }
+.spinner { width: 36px; height: 36px; border-radius: 50%; border: 3px solid rgb(255 255 255 / .18); border-top-color: var(--accent); animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.steps { display: flex; gap: 6px; }
+.steps i { width: 26px; height: 4px; border-radius: 4px; background: rgb(255 255 255 / .18); }
+.steps i.done { background: var(--accent); }
+.steps i.now { background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+.caption { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); width: min(88%, 760px); text-align: center; z-index: 1;
+  font-size: 18px; line-height: 1.4; color: #fff; text-shadow: 0 1px 3px rgb(0 0 0 / .6); pointer-events: none; transition: opacity .3s; }
+.caption span { background: rgb(0 0 0 / .55); padding: 4px 10px; border-radius: 8px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.caption:empty { opacity: 0; }
+.speaking-ring { box-shadow: 0 0 0 3px var(--accent); transition: box-shadow .2s; }
+
+/* Chat-style transcript */
+.transcript { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; scroll-behavior: smooth; }
+.bubble { max-width: 86%; padding: 10px 14px; border-radius: 16px; line-height: 1.45; animation: rise .2s ease-out; overflow-wrap: anywhere; }
+.bubble .who { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 2px; }
+.bubble.them { align-self: flex-start; background: var(--surface-2); border-bottom-left-radius: 5px; }
+.bubble.me { align-self: flex-end; background: var(--accent); color: var(--accent-ink); border-bottom-right-radius: 5px; }
+.bubble.me .who { color: inherit; opacity: .75; }
+.bubble.live { opacity: .7; }
+.system-note { align-self: center; font-size: 12px; color: var(--muted); padding: 2px 10px; border-radius: 99px; background: var(--surface-2); }
+@keyframes rise { from { opacity: 0; transform: translateY(4px); } }
+
+/* Composer */
+.composer { display: flex; gap: 8px; align-items: center; }
+.composer input { flex: 1; min-width: 0; padding: 12px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); outline: none; }
+.composer input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.composer input:disabled { opacity: .6; }
+
+/* Small bits */
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--surface-2); color: var(--muted); }
+.chip .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.chip.live { background: #e5384f; color: #fff; }
+.chip.ok { color: var(--ok); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.notice { padding: 10px 14px; border-radius: var(--radius-sm); background: var(--accent-soft); font-size: 14px; }
+.notice.warn { background: #fdecef; color: #8a1f33; }
+
+/* Debug drawer (?debug): what the app relays into the room */
+.debug { position: fixed; right: 12px; bottom: 12px; width: min(420px, calc(100vw - 24px)); max-height: 40vh; overflow: auto; z-index: 50;
+  background: #111; color: #cbd5e1; font: 12px/1.45 ui-monospace, Menlo, monospace; padding: 10px 12px; border-radius: 10px; opacity: .92; }
+.debug div { white-space: pre-wrap; }
+.debug b { color: #fbbf24; font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

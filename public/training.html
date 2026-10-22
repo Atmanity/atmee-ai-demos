@@ -2,67 +2,288 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Training module</title>
+<title>Incident Response Essentials · Ledger Academy</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="demo.css">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<style>
+  :root {
+    --bg: #f5f3ee; --surface: #fffefb; --surface-2: #efece4; --text: #1d1b26; --muted: #6c6878; --line: #e2ded3;
+    --accent: #4b3fd1; --accent-ink: #fff; --accent-soft: #e9e7fb; --stage: #1b1830;
+    --font: "IBM Plex Sans", system-ui, sans-serif; --font-display: "Source Serif 4", Georgia, serif;
+  }
+  .topbar { display: flex; align-items: center; gap: 18px; padding: 14px max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); border-bottom: 1px solid var(--line); background: var(--surface); }
+  .brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 700; font-size: 18px; }
+  .brand .mark { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 15px; }
+  .crumb { color: var(--muted); font-size: 14px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tracker { display: flex; gap: 4px; align-items: center; font-size: 13px; }
+  .tracker span { padding: 5px 10px; border-radius: 99px; color: var(--muted); white-space: nowrap; }
+  .tracker span.now { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .tracker span.done { color: var(--text); }
+  .tracker span.done::before { content: "✓ "; color: var(--ok); }
+  .timeleft { font-variant-numeric: tabular-nums; }
+
+  /* Lobby */
+  .lobby { max-width: 1040px; margin: 0 auto; padding: 48px max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; grid-template-columns: 1.15fr 1fr; gap: 28px; align-items: start; }
+  .cover { border-radius: 18px; padding: 34px; color: #fff; min-height: 260px; display: flex; flex-direction: column; justify-content: space-between;
+    background: radial-gradient(120% 120% at 100% 0%, #7d70ff 0%, transparent 55%), linear-gradient(150deg, #2c2463, #4b3fd1); }
+  .cover h1 { font-size: 36px; margin-top: 10px; }
+  .cover .meta { display: flex; gap: 16px; font-size: 14px; opacity: .85; flex-wrap: wrap; }
+  .outcomes { padding: 24px; margin-top: 20px; }
+  .outcomes h2 { font-size: 18px; margin-bottom: 12px; }
+  .outcomes li { margin: 8px 0; }
+  .join { padding: 28px; display: grid; gap: 16px; }
+  .join h2 { font-size: 22px; }
+  .choice { display: grid; gap: 4px; text-align: left; padding: 16px 18px; border-radius: var(--radius); border: 1.5px solid var(--line); background: var(--surface); cursor: pointer; transition: border-color .15s, background .15s; }
+  .choice:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .choice b { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+  .choice b svg { width: 18px; height: 18px; color: var(--accent); }
+  .choice span { color: var(--muted); font-size: 14px; }
+  .instructor { display: flex; gap: 12px; align-items: center; padding-top: 4px; font-size: 14px; color: var(--muted); }
+  .instructor .av { width: 40px; height: 40px; border-radius: 50%; background: var(--accent-soft); display: grid; place-items: center; color: var(--accent); font-weight: 700; }
+
+  /* Classroom */
+  .room { height: calc(100vh - 61px); display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 20px; padding: 20px max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .deck { display: flex; flex-direction: column; min-height: 0; }
+  .slide { flex: 1; min-height: 0; padding: clamp(28px, 5vw, 72px); display: flex; flex-direction: column; justify-content: center; overflow: auto; }
+  .slide .num { font-family: var(--font-display); color: var(--accent); font-weight: 700; font-size: 15px; letter-spacing: .04em; }
+  .slide h2 { font-size: clamp(30px, 3.8vw, 52px); margin: 12px 0 32px; }
+  .slide .lede { font-size: 21px; color: var(--muted); max-width: 46ch; }
+  .points { display: grid; gap: 24px; max-width: 64ch; padding: 0; margin: 0; list-style: none; }
+  .points li { display: grid; grid-template-columns: 48px 1fr; gap: 18px; align-items: start; font-size: 21px; }
+  .points li i { font-style: normal; width: 48px; height: 48px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-weight: 700; font-size: 15px; }
+  .points li b { display: block; }
+  .points li small { color: var(--muted); font-size: 17px; display: block; margin-top: 2px; }
+  .timeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 8px; }
+  .timeline div { border-top: 3px solid var(--accent); padding-top: 10px; }
+  .timeline { font-size: 18px; } .timeline b { font-family: var(--font-display); font-size: 34px; color: var(--accent); display: block; }
+  .quizcard { margin-top: 6px; padding: 22px; border-radius: var(--radius); background: var(--surface-2); font-size: 22px; font-family: var(--font-display); }
+  .verdict { margin-top: 14px; display: inline-flex; gap: 8px; align-items: center; font-weight: 600; padding: 6px 12px; border-radius: 99px; }
+  .verdict.right { background: #e3f5ec; color: #17734f; } .verdict.wrong { background: #fdecef; color: #9b2338; }
+  .done-badge { width: 72px; height: 72px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; margin-bottom: 18px; }
+  .done-badge svg { width: 34px; height: 34px; }
+  .decknav { display: flex; align-items: center; justify-content: space-between; padding: 12px 4px 0; gap: 12px; }
+  .dots { display: flex; gap: 6px; }
+  .dots button { width: 9px; height: 9px; border-radius: 50%; border: 0; padding: 0; background: var(--line); cursor: pointer; }
+  .dots button.on { background: var(--accent); width: 22px; border-radius: 99px; }
+  .score { font-size: 14px; color: var(--muted); }
+  .score b { color: var(--text); font-size: 16px; }
+
+  .side { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+  .trainer { aspect-ratio: 1 / 1; flex: none; }
+  .trainer .tag { position: absolute; left: 12px; top: 12px; z-index: 1; display: flex; align-items: center; gap: 6px; background: rgb(0 0 0 / .45); color: #fff; padding: 4px 10px; border-radius: 99px; font-size: 13px; font-weight: 500; }
+  .trainer .tag .dot { width: 7px; height: 7px; border-radius: 50%; background: #9ca3af; }
+  .trainer.talking .tag .dot { background: #4ade80; }
+  .trainer .caption { font-size: 15px; bottom: 12px; }
+  .chat { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .chat .transcript { flex: 1; padding: 16px; }
+  .chat .foot { display: flex; gap: 8px; align-items: center; padding: 12px; border-top: 1px solid var(--line); }
+  .hint { font-size: 12px; color: var(--muted); padding: 0 16px 8px; min-height: 18px; }
+
+  @media (max-width: 900px) {
+    .lobby { grid-template-columns: 1fr; padding-top: 24px; }
+    .room { grid-template-columns: 1fr; height: auto; }
+    .trainer { aspect-ratio: 16 / 10; }
+    .chat { height: 420px; flex: none; }
+    .crumb, .tracker span:not(.now) { display: none; }
+  }
+</style>
 </head>
-<body class="light">
-<div id="stage"><video id="video" autoplay playsinline></video><audio id="audio" autoplay></audio><div id="caption"></div></div>
-<div id="side">
-  <div id="status">Lesson → Q&A → quiz, run by a conductor set through the API. The trainer speaks through the three slides on its own (<code>speak</code> edges), then waits for your questions, then quizzes you. The app sends the slide on screen and your score as <code>atmee.app state</code>.</div>
-  <div id="panel">
-    <div><button id="start">Start the module (microphone)</button><button id="startTyped" class="secondary">Typing only</button></div>
-    <div id="slides"></div>
-    <div>Score: <b id="score">0</b> / 2</div>
-  </div>
-  <div id="log"></div>
-  <form class="typed" id="f"><input id="text" placeholder="Answer or ask by typing…" maxlength="500" autocomplete="off" disabled><button disabled id="send">Send</button></form>
-</div>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="mark">L</span>Ledger Academy</div>
+  <div class="crumb">Engineering onboarding &nbsp;/&nbsp; Incident Response Essentials</div>
+  <nav class="tracker" id="tracker" hidden><span data-k="lesson">Lesson</span><span data-k="qna">Q&amp;A</span><span data-k="quiz">Quiz</span></nav>
+  <span class="chip" id="timechip" hidden>Time left&nbsp;<b class="timeleft" id="timeleft">–</b></span>
+</header>
+
+<main id="lobby" class="lobby">
+  <section>
+    <div class="cover">
+      <div class="eyebrow" style="color:#fff;opacity:.8">Module 1 of 4</div>
+      <div><h1>Incident response, in ten minutes</h1></div>
+      <div class="meta"><span>⏱ 10 min</span><span>3 short lessons</span><span>Live Q&amp;A</span><span>2-question quiz</span></div>
+    </div>
+    <div class="card outcomes">
+      <h2>You'll learn</h2>
+      <ul>
+        <li>Why a rehearsed routine beats heroics when production is down.</li>
+        <li>The three roles on every incident call, and why nobody holds two.</li>
+        <li>Exactly what to do in the first ten minutes.</li>
+      </ul>
+    </div>
+  </section>
+  <section class="card join">
+    <div class="eyebrow">Live session</div>
+    <h2>Your trainer teaches it live and answers your questions.</h2>
+    <button class="choice" id="withMic" type="button"><b><span id="micIcon"></span>Join with microphone</b><span>Ask questions out loud and answer the quiz by voice.</span></button>
+    <button class="choice" id="withKeys" type="button"><b><span id="keyIcon"></span>Join without microphone</b><span>Listen, and type your questions and answers.</span></button>
+    <div class="notice warn" id="lobbyError" hidden></div>
+    <div class="instructor"><div class="av">AI</div><div>Taught by an AI trainer. It follows this module's lesson plan and can't see you.</div></div>
+  </section>
+</main>
+
+<main id="room" class="room" hidden>
+  <section class="deck">
+    <article class="card slide" id="slide" aria-live="polite"></article>
+    <div class="decknav">
+      <button class="btn ghost" id="prev" type="button">← Previous</button>
+      <div class="dots" id="dots"></div>
+      <div class="score">Quiz score <b id="score">0</b> / 2</div>
+      <button class="btn ghost" id="next" type="button">Next →</button>
+    </div>
+  </section>
+  <aside class="side">
+    <div class="stage trainer" id="trainer">
+      <span class="tag"><span class="dot"></span>Your trainer</span>
+      <video id="video" autoplay playsinline muted></video><audio id="audio" autoplay></audio>
+      <div class="caption" id="caption"></div>
+      <div class="overlay" id="overlay"></div>
+    </div>
+    <div class="card chat">
+      <div class="transcript" id="transcript"></div>
+      <div class="hint" id="hint"></div>
+      <form class="foot composer" id="composer">
+        <button class="icon-btn" id="mic" type="button" hidden></button>
+        <input id="text" placeholder="Ask a question or answer the quiz…" maxlength="500" autocomplete="off" disabled>
+        <button class="icon-btn" id="send" type="submit" aria-label="Send" disabled></button>
+        <button class="icon-btn end" id="leave" type="button" title="Leave the lesson" aria-label="Leave the lesson"></button>
+      </form>
+    </div>
+  </aside>
+</main>
+
 <script src="https://unpkg.com/livekit-client@2.9.5/dist/livekit-client.umd.js"></script>
 <script src="common.js"></script>
+<script src="kit.js"></script>
 <script>
-  const $ = (id) => document.getElementById(id);
-  const log = (cls, text) => { const d = document.createElement('div'); d.className = 'm ' + cls; d.textContent = text; $('log').appendChild(d); $('log').scrollTop = 1e9; };
+  const { $, icon } = UI;
+  $('micIcon').innerHTML = icon.mic; $('keyIcon').innerHTML = icon.keyboard;
+  $('send').innerHTML = icon.send; $('leave').innerHTML = icon.end;
+
   const SLIDES = [
-    { id: 1, title: 'Why incident response', body: 'Every minute of an outage costs trust. Incident response is a practiced routine, not heroics.' },
-    { id: 2, title: 'Roles', body: 'Incident commander runs the call. Communications lead updates stakeholders. Operators fix. Nobody does two roles.' },
-    { id: 3, title: 'The first ten minutes', body: 'Declare, assign roles, open the channel, post the first status update within ten minutes.' },
+    null,
+    { title: 'Why incident response', points: [
+      ['1', 'Every minute of an outage costs trust', 'Customers remember how you handled it, not just that it broke.'],
+      ['2', 'A practiced routine, not heroics', 'The same playbook every time means nobody has to improvise under stress.'],
+      ['3', 'Calm is a process', 'Clear roles and a clock turn chaos into a checklist.'] ] },
+    { title: 'Three roles, one person each', points: [
+      ['IC', 'Incident commander', 'Runs the call and makes the decisions, including whether to roll back.'],
+      ['CL', 'Communications lead', 'Keeps stakeholders and customers updated on a steady rhythm.'],
+      ['OP', 'Operators', 'Investigate and fix. Nobody holds two roles at once.'] ] },
+    { title: 'The first ten minutes', timeline: [['0', 'Declare the incident'], ['2', 'Assign the three roles'], ['5', 'Open the incident channel'], ['10', 'Post the first status update, even if it only says "investigating"']] },
   ];
-  let s, current = 0;
-  function showSlide(n) {
-    current = n; const sl = SLIDES[n - 1];
-    $('slides').innerHTML = sl ? `<div class="slide"><h3>Slide ${sl.id}: ${sl.title}</h3>${sl.body}</div>` : '<div class="slide"><h3>Incident response, in ten minutes</h3>Three slides, a Q&A, a two-question quiz.</div>';
-    $('slides').innerHTML += `<div>${SLIDES.map(x => `<button class="secondary" onclick="goto(${x.id})">${x.id}</button>`).join('')}</div>`;
-    if (s) s.user('slide', String(n));
+  const QUIZ = [
+    { q: 'Who is the only person allowed to decide to roll back during an incident?', match: /roll ?back/i },
+    { q: 'By when should the first status update go out?', match: /status update|first update/i },
+  ];
+
+  let s, stage = 'intro', slideNo = 0, score = 0, answered = 0, quizAt = -1, verdicts = [], finished = false, stopClock = () => {};
+  const tr = UI.transcript($('transcript'), { avatar: 'Trainer', user: 'You' });
+  const caption = UI.captions($('caption'));
+  const debug = UI.debugLog();
+  const sender = UI.politeSender(() => s);
+  const overlay = UI.stage($('overlay'), {
+    starting: ['Preparing your lesson…', 'Reserving a trainer for you.'],
+    warming: ['Getting the classroom ready…', 'The trainer is warming up. This takes a minute or two the first time.'],
+    connecting: ['Connecting…', 'Joining the lesson.'],
+    arriving: ['Your trainer is on the way…', 'They will greet you in a moment.'],
+  });
+
+  function setStage(next) {
+    stage = next; $('tracker').hidden = false;
+    const order = ['lesson', 'qna', 'quiz'], at = order.indexOf(next === 'intro' ? 'lesson' : next === 'done' ? 'end' : next);
+    [...$('tracker').children].forEach((el, i) => { el.className = next === 'done' || i < at ? 'done' : i === at ? 'now' : ''; });
   }
-  window.goto = showSlide;
-  async function start(mic) {
-    $('start').disabled = $('startTyped').disabled = true; $('status').textContent = 'Starting the trainer…';
+
+  function renderSlide() {
+    const el = $('slide');
+    if (finished) {
+      el.innerHTML = `<div class="done-badge">${icon.check}</div><div class="num">MODULE COMPLETE</div><h2>Nice work.</h2>
+        <p class="lede">You scored <b>${score} of 2</b> on the quiz. Module 2, <i>Running the incident call</i>, unlocks next.</p>
+        <div style="margin-top:24px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn primary" onclick="location.reload()">Take it again</button><a class="btn ghost" href="/">Back to all apps</a></div>`;
+    } else if (stage === 'quiz' && quizAt >= 0) {
+      const v = verdicts[quizAt];
+      el.innerHTML = `<div class="num">QUIZ · QUESTION ${quizAt + 1} OF 2</div><h2>Check your understanding</h2>
+        <div class="quizcard">${UI.esc(QUIZ[quizAt].q)}</div>
+        ${v === undefined ? '<p class="lede" style="margin-top:16px">Answer out loud, or type it below.</p>' : `<div class="verdict ${v ? 'right' : 'wrong'}">${v ? '✓ Correct' : '✗ Not quite'}</div>`}`;
+    } else if (stage === 'qna') {
+      el.innerHTML = `<div class="num">Q&amp;A</div><h2>Any questions before the quiz?</h2><p class="lede">Ask anything about the three lessons. When you're ready, say "start the quiz".</p>`;
+    } else if (!slideNo) {
+      el.innerHTML = `<div class="num">MODULE 1</div><h2>Incident response, in ten minutes</h2><p class="lede">Three short lessons, a Q&amp;A with your trainer, and a two-question quiz.</p>`;
+    } else {
+      const sl = SLIDES[slideNo];
+      const body = sl.points
+        ? `<ul class="points">${sl.points.map(([n, b, t]) => `<li><i>${n}</i><div><b>${b}</b><small>${t}</small></div></li>`).join('')}</ul>`
+        : `<div class="timeline">${sl.timeline.map(([m, t]) => `<div><b>${m}′</b>${t}</div>`).join('')}</div>`;
+      el.innerHTML = `<div class="num">LESSON ${slideNo} OF 3</div><h2>${sl.title}</h2>${body}`;
+    }
+    $('dots').innerHTML = [1, 2, 3].map((n) => `<button aria-label="Lesson ${n}" class="${n === slideNo && stage !== 'quiz' && stage !== 'qna' ? 'on' : ''}" data-n="${n}"></button>`).join('');
+    $('dots').querySelectorAll('button').forEach((b) => (b.onclick = () => goto(Number(b.dataset.n))));
+    $('prev').disabled = slideNo <= 1 || finished; $('next').disabled = slideNo >= 3 || finished;
+    $('score').textContent = score;
+  }
+  function goto(n, fromTrainer) {
+    if (n < 1 || n > 3) return;
+    slideNo = n; if (!fromTrainer && (stage === 'qna' || stage === 'quiz')) { /* reviewing */ } else if (stage === 'intro') setStage('lesson');
+    renderSlide(); if (s && !fromTrainer) s.user('slide', String(n));
+  }
+  $('prev').onclick = () => goto(slideNo - 1); $('next').onclick = () => goto(slideNo + 1);
+
+  // Follow the trainer: lessons, the Q&A, the quiz and its verdicts come from what it says.
+  const WORDS = { one: 1, two: 2, three: 3, first: 1, second: 2, third: 3 };
+  function follow(text) {
+    const m = text.match(/\b(?:slide|lesson)\s+(\d|one|two|three)\b|\b(first|second|third)\s+(?:slide|lesson)\b/i);
+    if (m && stage !== 'quiz') { const n = Number(m[1]) || WORDS[(m[1] || m[2]).toLowerCase()]; if (n && n !== slideNo) goto(n, true); if (stage === 'intro') setStage('lesson'); }
+    if (stage === 'lesson' && slideNo === 3 && /question/i.test(text) && /\?/.test(text)) { setStage('qna'); renderSlide(); }
+    if (stage !== 'quiz' && /quiz/i.test(text) && QUIZ[0].match.test(text)) { setStage('quiz'); quizAt = 0; renderSlide(); return; }
+    if (stage === 'quiz') {
+      const v = text.match(/^\W*(correct|incorrect|not quite|that'?s right|spot on|exactly)/i);
+      if (v && verdicts[quizAt] === undefined) {
+        const right = !/incorrect|not quite/i.test(v[1]); verdicts[quizAt] = right; answered++; if (right) score++;
+        renderSlide();
+        if (answered >= 2) setTimeout(finish, 9000);
+      }
+      if (quizAt === 0 && verdicts[0] !== undefined && QUIZ[1].match.test(text) && /\?/.test(text)) { quizAt = 1; renderSlide(); }
+    }
+  }
+  function finish() { if (finished) return; finished = true; setStage('done'); renderSlide(); }
+
+  async function begin(withMic) {
+    $('lobbyError').hidden = true;
+    let mic = null;
+    if (withMic) { try { mic = await Atmee.requestMic(); } catch (e) { $('lobbyError').textContent = e.friendly; $('lobbyError').hidden = false; return; } }
+    $('lobby').hidden = true; $('room').hidden = false; setStage('intro'); renderSlide();
+    tr.clear(); tr.note(mic ? 'You joined with your microphone' : 'You joined without a microphone');
+    connect(mic);
+  }
+  async function connect(mic) {
     try {
       s = await Atmee.join({
         usecase: 'training', video: $('video'), audio: $('audio'), mic,
-        onCaption: (text, final) => {
-          $('caption').textContent = text;
-          if (final) {
-            log('avatar', `trainer: ${text}`);
-            // Follow the trainer: when it moves to a slide, show it.
-            const m = text.match(/slide (\d)/i); if (m && Number(m[1]) !== current) showSlide(Number(m[1]));
-            if (/^\W*(correct|spot on|that'?s right|exactly right|well done)/i.test(text)) $('score').textContent = String(Math.min(2, Number($('score').textContent) + 1));
-          }
-        },
-        onRelay: (topic, text) => log('relay', `→ ${topic}: ${text.slice(0, 140)}`),
-        onEnd: () => { $('status').textContent = 'Module ended.'; $('text').disabled = $('send').disabled = true; },
+        onPhase: (p, d) => overlay.phase(p, d),
+        onCaption: (text, final) => { caption(text, final); tr.avatar(text, final); if (final) follow(text); },
+        onSpeaking: (v) => { $('trainer').classList.toggle('talking', v); sender.speaking(v); $('hint').textContent = v && sender.waiting ? 'Your message will be sent when the trainer finishes the sentence.' : ''; },
+        onRelay: debug,
+        onEnd: () => { stopClock(); overlay.ended('<div class="title">The lesson has ended</div><button class="btn primary" onclick="location.reload()">Start again</button>'); lock(true); },
       });
-      $('status').textContent = `Running, room ${s.session.roomName}${mic ? '' : ' (typing only)'}`;
-      $('text').disabled = $('send').disabled = false;
-      showSlide(0);
-    } catch (e) { $('status').textContent = `Could not start: ${e.message}`; $('start').disabled = $('startTyped').disabled = false; }
+      UI.micButton($('mic'), s);
+      lock(false); $('timechip').hidden = false;
+      stopClock = UI.countdown($('timeleft'), s.session.maxSeconds, () => tr.note('About a minute left in this session'));
+    } catch (e) {
+      overlay.error(e.friendly || 'Something went wrong.', 'Try again', async () => connect(mic ? await Atmee.requestMic().catch(() => null) : null));
+    }
   }
-  $('start').onclick = () => start(true);
-  $('startTyped').onclick = () => start(false);
-  $('f').onsubmit = (e) => { e.preventDefault(); const t = $('text').value.trim(); if (!t || !s) return; log('user', `you: ${t}`); s.user('typed', t); $('text').value = ''; };
-  showSlide(0);
-  window.addEventListener('beforeunload', () => navigator.sendBeacon('/api/training/session/end'));
+  function lock(v) { $('text').disabled = $('send').disabled = v; }
+  $('withMic').onclick = () => begin(true);
+  $('withKeys').onclick = () => begin(false);
+  $('composer').onsubmit = (e) => {
+    e.preventDefault(); const t = $('text').value.trim(); if (!t || !s) return;
+    tr.user(t); sender.send('typed', t); $('text').value = '';
+    if (sender.waiting) $('hint').textContent = 'Your message will be sent when the trainer finishes the sentence.';
+  };
+  $('leave').onclick = async () => { if (s) await s.end(); stopClock(); finished = finished || answered >= 2; overlay.ended('<div class="title">You left the lesson</div><button class="btn primary" onclick="location.reload()">Back to the course</button>'); lock(true); };
 </script>
 </body>
 </html>

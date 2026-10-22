@@ -2,27 +2,63 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Atmee use-case demos</title>
+<title>Atmee Showcase</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
 <style>
-  body { font: 15px/1.5 system-ui, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 16px; color: #1f2328; }
-  li { margin: 10px 0; } code { background: #f6f8fa; padding: 1px 5px; border-radius: 4px; }
-  .muted { color: #57606a; }
+  :root { --bg: #f6f5f2; --surface: #fff; --text: #16151a; --muted: #6b6970; --line: #e6e3dd; --font: "Inter", system-ui, sans-serif; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 56px max(16px, env(safe-area-inset-left, 0px)) 64px; padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .hero { display: grid; gap: 14px; max-width: 720px; margin-bottom: 40px; }
+  .hero h1 { font-size: clamp(36px, 5vw, 56px); font-weight: 800; letter-spacing: -.03em; }
+  .hero p { font-size: 19px; color: var(--muted); margin: 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+  .app { display: flex; flex-direction: column; border-radius: 20px; overflow: hidden; background: var(--surface); border: 1px solid var(--line); text-decoration: none; color: inherit; transition: transform .15s, box-shadow .15s; }
+  .app:hover { transform: translateY(-3px); box-shadow: 0 18px 40px rgb(0 0 0 / .08); }
+  .app .art { height: 150px; display: flex; align-items: end; padding: 18px; color: #fff; position: relative; }
+  .app .art .glyph { position: absolute; right: 18px; top: 14px; font-size: 52px; opacity: .9; }
+  .app .art b { font-size: 22px; letter-spacing: -.01em; }
+  .app .body { padding: 18px; display: grid; gap: 10px; flex: 1; }
+  .app .body p { margin: 0; color: var(--muted); }
+  .app .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
+  .app .open { font-weight: 600; }
+  .extra { font-size: 14px; color: var(--muted); }
+  .extra a { color: inherit; }
+  footer { margin-top: 40px; color: var(--muted); font-size: 14px; }
 </style>
 </head>
 <body>
-<h1>Atmee Avatar API: five sample apps</h1>
-<p class="muted">Each page starts a session for its own avatar through this server (the API key never reaches the browser) and talks to the avatar through the room's text streams: <code>lk.chat</code> for a user turn, <code>atmee.app</code> for state, notes, events and mute. Pages marked <em>conductor</em> also set the avatar's agenda through <code>PUT /v1/avatars/{id}/conductor</code>.</p>
-<ol id="list"></ol>
-<script>
-  fetch('/api/usecases').then(r => r.json()).then(u => {
-    const list = document.getElementById('list');
-    for (const [k, v] of Object.entries(u)) {
-      const li = document.createElement('li');
-      li.innerHTML = `<a href="${v.page}"><b>${v.title}</b></a> ${v.conductor ? '<span class="muted">(conductor)</span>' : ''}<br><span class="muted">avatar ${v.avatarId || '<not set>'}${k === 'livestream' ? ' · <a href="livestream-viewer.html">chatroom</a>' : ''}</span>`;
-      list.appendChild(li);
-    }
-  });
-</script>
+<div class="wrap">
+  <header class="hero">
+    <div class="eyebrow">Built on the Atmee Avatar API</div>
+    <h1>Five products, one avatar platform.</h1>
+    <p>Each of these is a complete app with its own brand and flow. Behind every one is the same conversational avatar, steered by what the app knows.</p>
+  </header>
+  <section class="grid">
+    <a class="app" href="training.html">
+      <div class="art" style="background:linear-gradient(150deg,#2c2463,#4b3fd1)"><span class="glyph">🎓</span><b>Ledger Academy</b></div>
+      <div class="body"><p>A live trainer teaches a short incident-response course, takes your questions, and quizzes you at the end.</p><div class="tags"><span class="chip">Training</span><span class="chip">Lesson plan</span><span class="chip">Quiz</span></div><span class="open">Start the course →</span></div>
+    </a>
+    <a class="app" href="recruiter.html">
+      <div class="art" style="background:linear-gradient(150deg,#0b4f43,#0d7c66)"><span class="glyph">💼</span><b>Northwind Talent</b></div>
+      <div class="body"><p>A first-round screening call with a recruiter who follows a structured agenda and answers your questions.</p><div class="tags"><span class="chip">Hiring</span><span class="chip">Interview</span></div><span class="open">Join the call →</span></div>
+    </a>
+    <a class="app" href="presence.html">
+      <div class="art" style="background:linear-gradient(150deg,#f7a072,#e2643f)"><span class="glyph">🫶</span><b>Kin</b></div>
+      <div class="body"><p>A companion that keeps you company while you work, and speaks up when something on your screen deserves a word.</p><div class="tags"><span class="chip">Companion</span><span class="chip">Screen aware</span></div><span class="open">Work with Kin →</span></div>
+    </a>
+    <a class="app" href="game.html">
+      <div class="art" style="background:linear-gradient(150deg,#1b2a3a,#3a2a12)"><span class="glyph">🏝️</span><b style="font-family:Georgia,serif;letter-spacing:.04em">Isle of Whispers</b></div>
+      <div class="body"><p>A treasure hunt told by a narrator who reacts to every step, and an oracle who answers only at the shrine.</p><div class="tags"><span class="chip">Game</span><span class="chip">Story</span></div><span class="open">Begin the tale →</span></div>
+    </a>
+    <a class="app" href="livestream-host.html">
+      <div class="art" style="background:linear-gradient(150deg,#1a0f1f,#ff3d81)"><span class="glyph">🌙</span><b>Nightcap Live</b></div>
+      <div class="body"><p>An AI co-host runs a live show and talks with the chat, answering questions by name.</p><div class="tags"><span class="chip">Live stream</span><span class="chip">Chat</span></div><span class="open">Open the studio →</span></div>
+    </a>
+  </section>
+  <p class="extra" style="margin-top:16px">Viewers of Nightcap Live chat from the <a href="livestream-viewer.html">chat page</a>.</p>
+  <footer>Add <code>?debug</code> to any app's address to see what it sends the avatar.</footer>
+</div>
 </body>
 </html>

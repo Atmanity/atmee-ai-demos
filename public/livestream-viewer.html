@@ -2,37 +2,70 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Chatroom</title>
+<title>Chat · Nightcap Live</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
 <style>
-  body { margin: 0; font: 15px system-ui, sans-serif; background: #f6f8fa; color: #1f2328; display: flex; flex-direction: column; height: 100vh; max-width: 720px; margin-inline: auto; }
-  header { padding: 12px 16px; border-bottom: 1px solid #d0d7de; display: flex; justify-content: space-between; }
-  #log { flex: 1; overflow: auto; padding: 12px 16px; }
-  .m { margin: 6px 0; } .viewer b { color: #0969da; } .avatar { color: #1a7f37; } .avatar.interim { color: #8c959f; }
-  form { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid #d0d7de; background: #fff; }
-  input { flex: 1; padding: 10px; border: 1px solid #d0d7de; border-radius: 6px; font-size: 15px; }
-  #name { flex: 0 0 120px; }
-  button { padding: 10px 14px; border: 0; border-radius: 6px; background: #0969da; color: #fff; font-size: 15px; }
+  :root {
+    --bg: #0c0b10; --surface: #16141d; --surface-2: #211e2b; --text: #f2f0f7; --muted: #9b96ad; --line: #2a2735;
+    --accent: #ff3d81; --accent-ink: #fff; --accent-soft: rgb(255 61 129 / .14);
+    --font: "Space Grotesk", system-ui, sans-serif; color-scheme: dark;
+  }
+  body { display: flex; flex-direction: column; height: 100vh; max-width: 560px; margin: 0 auto; border-left: 1px solid var(--line); border-right: 1px solid var(--line); background: var(--surface); }
+  header { padding: 14px 16px; border-bottom: 1px solid var(--line); display: flex; gap: 12px; align-items: center; }
+  .av { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #ff3d81, #7c3aed); flex: none; }
+  header .t { flex: 1; min-width: 0; }
+  header b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  header span.sub { color: var(--muted); font-size: 13px; }
+  .chip.live { background: #e5384f; color: #fff; }
+  .pinned { margin: 12px 16px 0; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: 13px; color: var(--muted); }
+  #log { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .msg { line-height: 1.4; overflow-wrap: anywhere; animation: rise .2s ease-out; }
+  .msg b { margin-right: 6px; }
+  .msg.me b { color: #a78bfa; }
+  .msg.host { background: var(--accent-soft); border-left: 3px solid var(--accent); padding: 8px 10px; border-radius: 8px; }
+  .msg.host b { color: var(--accent); }
+  .msg.host.live { opacity: .7; }
+  .colors b { color: var(--c); }
+  form { display: grid; gap: 8px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); }
+  .who { font-size: 13px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .who input { background: transparent; border: 0; border-bottom: 1px dashed var(--line); color: var(--text); width: 140px; padding: 2px 0; outline: none; }
 </style>
 </head>
 <body>
-<header><strong>Live chat</strong><span id="viewers">connecting…</span></header>
+<header>
+  <div class="av"></div>
+  <div class="t"><b>Late-night tech talk with your AI co-host</b><span class="sub" id="viewers">Connecting…</span></div>
+  <span class="chip" id="badge">OFFLINE</span>
+</header>
+<div class="pinned">📌 End a message with “?” to ask the host directly. Everything else, the host catches up on every few seconds.</div>
 <div id="log"></div>
-<form id="f"><input id="name" placeholder="name" maxlength="24"><input id="text" placeholder="Say something (end with ? to ask the host)" maxlength="300" autocomplete="off"><button>Send</button></form>
+<form id="f">
+  <div class="composer"><input id="text" placeholder="Send a message" maxlength="300" autocomplete="off"><button class="icon-btn" id="send" aria-label="Send"></button></div>
+  <label class="who">Chatting as <input id="name" maxlength="24"></label>
+</form>
+<script src="kit.js"></script>
 <script>
-  const $ = (id) => document.getElementById(id);
-  const names = ['mika', 'tom', 'aya', 'leo', 'sam', 'jin'];
-  $('name').value = localStorage.getItem('chat-name') || names[Math.floor(Math.random() * names.length)];
-  const log = $('log'); const interim = new Map();
-  function add(cls, html, id) {
-    let d = id && interim.get(id);
-    if (!d) { d = document.createElement('div'); log.appendChild(d); if (id) interim.set(id, d); }
-    d.className = 'm ' + cls; d.innerHTML = html; log.scrollTop = 1e9;
-  }
-  const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const { $, esc, icon } = UI;
+  $('send').innerHTML = icon.send;
+  const NAMES = ['mika', 'tom', 'aya', 'leo', 'sam', 'jin', 'noor', 'kai'];
+  let saved = null; try { saved = localStorage.getItem('nightcap-name'); } catch (e) {}
+  $('name').value = saved || NAMES[Math.floor(Math.random() * NAMES.length)] + Math.floor(Math.random() * 90 + 10);
+  const color = (n) => `hsl(${[...n].reduce((a, c) => a + c.charCodeAt(0), 0) * 47 % 360} 80% 70%)`;
+  const live = new Map();
   function render(m) {
-    if (m.role === 'viewer') add('viewer', `<b>${esc(m.name)}</b> ${esc(m.text)}`);
-    else if (m.role === 'avatar') add('avatar' + (m.final ? '' : ' interim'), `<b>host</b> ${esc(m.text)}`, m.id);
+    if (m.role === 'viewer') {
+      const d = document.createElement('div'); d.className = 'msg' + (m.name === $('name').value ? ' me' : '');
+      d.innerHTML = `<b style="color:${m.name === $('name').value ? '' : color(m.name)}">${esc(m.name)}</b>${esc(m.text)}`; $('log').appendChild(d);
+    } else if (m.role === 'avatar') {
+      let d = m.id && live.get(m.id);
+      if (!d) { d = document.createElement('div'); $('log').appendChild(d); if (m.id) live.set(m.id, d); }
+      d.className = 'msg host' + (m.final ? '' : ' live'); d.innerHTML = `<b>Host</b>${esc(m.text)}`;
+      $('badge').textContent = '● LIVE'; $('badge').className = 'chip live';
+    }
+    $('log').scrollTop = 1e9;
   }
   let ws;
   function connect() {
@@ -43,14 +76,15 @@
       else if (msg.type === 'chat' || msg.type === 'caption') render(msg);
       else if (msg.type === 'viewers') $('viewers').textContent = `${msg.count} watching`;
     };
-    ws.onclose = () => setTimeout(connect, 1500);
+    ws.onclose = () => { $('viewers').textContent = 'Reconnecting…'; setTimeout(connect, 1500); };
   }
   connect();
   $('f').onsubmit = (e) => {
     e.preventDefault();
-    const text = $('text').value.trim(); if (!text) return;
-    localStorage.setItem('chat-name', $('name').value);
-    ws.send(JSON.stringify({ type: 'chat', name: $('name').value || 'viewer', text }));
+    const text = $('text').value.trim(); if (!text || ws.readyState !== 1) return;
+    const name = $('name').value.trim() || 'viewer';
+    try { localStorage.setItem('nightcap-name', name); } catch (e) {}
+    ws.send(JSON.stringify({ type: 'chat', name, text }));
     $('text').value = '';
   };
 </script>

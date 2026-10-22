@@ -2,84 +2,250 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Companion</title>
+<title>Kin · your work companion</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="demo.css">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<style>
+  :root {
+    --bg: #fbf6ef; --surface: #fffdf9; --surface-2: #f4ece1; --text: #2b2420; --muted: #85776c; --line: #ece2d5;
+    --accent: #e2643f; --accent-ink: #fff; --accent-soft: #fde9e1; --stage: #2b2420;
+    --font: "Nunito", system-ui, sans-serif; --font-display: var(--font); --radius: 20px;
+  }
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 14px max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; }
+  .brand .blob { width: 30px; height: 30px; border-radius: 42% 58% 55% 45% / 50% 45% 55% 50%; background: linear-gradient(135deg, #f7a072, #e2643f); }
+  .spacer { flex: 1; }
+
+  /* Welcome */
+  .welcome { max-width: 980px; margin: 0 auto; padding: 28px max(16px, env(safe-area-inset-left, 0px)) 48px; padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; min-height: calc(100vh - 64px); }
+  .welcome h1 { font-size: clamp(36px, 5vw, 54px); font-weight: 800; letter-spacing: -.02em; }
+  .welcome h1 em { font-style: normal; color: var(--accent); }
+  .welcome .lede { font-size: 19px; color: var(--muted); margin: 16px 0 24px; }
+  .how { display: grid; gap: 12px; margin-bottom: 26px; }
+  .how > div { display: flex; gap: 12px; align-items: start; }
+  .how i { font-style: normal; width: 34px; height: 34px; flex: none; border-radius: 12px; background: var(--accent-soft); display: grid; place-items: center; }
+  .setup { padding: 26px; display: grid; gap: 14px; }
+  .setup h2 { font-size: 20px; font-weight: 800; }
+  .opt { display: flex; gap: 12px; padding: 14px 16px; border-radius: 16px; border: 1.5px solid var(--line); cursor: pointer; align-items: start; background: var(--surface); }
+  .opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+  .opt input { margin-top: 4px; accent-color: var(--accent); }
+  .opt b { display: block; } .opt span { color: var(--muted); font-size: 14px; }
+  .privacy { font-size: 13px; color: var(--muted); display: flex; gap: 8px; }
+
+  /* Workspace */
+  .work { height: calc(100vh - 64px); display: grid; grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: minmax(0, 1fr) auto; gap: 16px; padding: 0 max(16px, env(safe-area-inset-left, 0px)) 16px; padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .monitor { position: relative; border-radius: 18px; background: #2b2420; padding: 12px 12px 30px; box-shadow: var(--shadow); display: flex; min-height: 0; }
+  .monitor::after { content: ""; position: absolute; bottom: 10px; left: 50%; width: 10px; height: 10px; border-radius: 50%; background: #4b403a; transform: translateX(-50%); }
+  .screen { flex: 1; min-height: 0; border-radius: 8px; overflow: hidden; background: #fff; display: grid; place-items: center; }
+  .screen canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .screen .empty { text-align: center; color: var(--muted); display: grid; gap: 10px; justify-items: center; padding: 20px; }
+  .seeing { position: absolute; top: 22px; right: 22px; z-index: 2; }
+  .seeing .chip { background: rgb(43 36 32 / .78); color: #fff; }
+  .seeing .chip .dot { color: #6ee7b7; }
+  .feed { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .feed h3 { font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 16px 16px 8px; }
+  .feed .list { flex: 1; overflow: auto; padding: 0 16px 16px; display: grid; gap: 10px; align-content: start; }
+  .obs { padding: 10px 12px; border-radius: 14px; background: var(--surface-2); font-size: 14px; animation: rise .25s ease-out; }
+  .obs time { display: block; color: var(--muted); font-size: 12px; font-weight: 700; }
+  .obs.flag { background: var(--accent-soft); }
+  .obs.flag time { color: var(--accent); }
+  .dock { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; padding: 10px; border-radius: 999px; }
+  .dock .composer { flex: 1; }
+  .dock .icon-btn { flex: none; }
+  .dock .btn { padding: 10px 16px; }
+
+  /* Kin, floating */
+  .kin { position: fixed; right: 360px; bottom: 100px; z-index: 10; display: flex; align-items: end; gap: 12px; }
+  .kin .stage { width: 190px; height: 190px; border-radius: 50%; box-shadow: 0 12px 40px rgb(43 36 32 / .35); border: 4px solid #fff; }
+  .kin .stage .overlay .title { font-size: 14px; } .kin .stage .overlay .detail, .kin .stage .overlay .steps { display: none; }
+  .kin .stage .overlay .inner { gap: 8px; }
+  .kin .stage .overlay .btn { padding: 8px 12px; font-size: 13px; }
+  .kin.talking .stage { border-color: var(--accent); }
+  .speech { max-width: 300px; background: #fff; border-radius: 18px 18px 4px 18px; padding: 12px 16px; box-shadow: var(--shadow); font-size: 16px; margin-bottom: 30px; animation: rise .2s ease-out; }
+  .speech:empty { display: none; }
+
+  @media (max-width: 960px) {
+    .welcome { grid-template-columns: 1fr; }
+    .work { grid-template-columns: 1fr; grid-template-rows: auto; height: auto; }
+    .monitor { aspect-ratio: 16 / 11; }
+    .feed { height: 260px; }
+    .dock { border-radius: 20px; flex-wrap: wrap; }
+    .kin { right: 16px; bottom: 16px; } .kin .stage { width: 120px; height: 120px; } .speech { max-width: 200px; font-size: 14px; }
+  }
+</style>
 </head>
-<body class="light">
-<div id="stage"><video id="video" autoplay playsinline></video><audio id="audio" autoplay></audio><div id="caption"></div></div>
-<div id="side">
-  <div id="status">The companion watches what you are doing through an observer the app runs: the page sends a frame when the screen changes, a vision model describes it, and the description reaches the avatar as <code>atmee.app state</code>; something noteworthy becomes an <code>event</code>. The avatar never sees pixels itself.</div>
-  <div id="panel">
-    <div><button id="start">Start (microphone)</button><button id="startTyped" class="secondary">Typing only</button></div>
-    <div><button id="share" class="secondary" disabled>Share my screen</button><button id="simulate" class="secondary" disabled>Simulate a work session</button></div>
-    <canvas id="screen" width="640" height="400"></canvas>
-    <div id="seen" class="obs">observer: idle</div>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="blob"></span>Kin</div>
+  <span class="spacer"></span>
+  <span class="chip" id="timechip" hidden>Session · <b id="timeleft" style="font-variant-numeric:tabular-nums">–</b> left</span>
+</header>
+
+<main id="welcome" class="welcome">
+  <section>
+    <h1>Work alongside a <em>friend</em>, not alone.</h1>
+    <p class="lede">Kin sits with you while you work. It notices what you're up to, cheers the wins, keeps you honest about the detours, and is there when you want to talk something through.</p>
+    <div class="how">
+      <div><i>👀</i><div><b>It notices, quietly</b><br><span class="muted">Kin speaks up only when something changes that's worth a word.</span></div></div>
+      <div><i>💬</i><div><b>Talk or type anytime</b><br><span class="muted">Ask it to rubber-duck a bug, or just say hi.</span></div></div>
+    </div>
+  </section>
+  <section class="card setup">
+    <h2>Start a session</h2>
+    <label class="opt"><input type="radio" name="src" value="screen" checked><div><b>Share my screen</b><span>Pick a window or screen when you start.</span></div></label>
+    <label class="opt"><input type="radio" name="src" value="sample"><div><b>Try a sample work session</b><span>A short scripted coding session, so you can see how Kin reacts.</span></div></label>
+    <label class="opt"><input type="checkbox" id="useMic" checked><div><b>Use my microphone</b><span>Talk to Kin out loud. Untick to type instead.</span></div></label>
+    <button class="btn primary lg" id="start" type="button">Start working with Kin</button>
+    <div class="notice warn" id="startError" hidden></div>
+    <div class="privacy">🔒 <span>Kin gets a short written description of what changed on your screen, made by a vision model, never the recording itself. Nothing is kept after the session.</span></div>
+  </section>
+</main>
+
+<main id="work" class="work" hidden>
+  <div class="monitor">
+    <div class="seeing" id="seeing" hidden><span class="chip"><span class="dot"></span><span id="seeingText">Kin can see this screen</span></span></div>
+    <div class="screen" id="screenBox"><canvas id="screen" width="960" height="600"></canvas></div>
   </div>
-  <div id="log"></div>
-  <form class="typed" id="f"><input id="text" placeholder="Talk to the companion by typing…" maxlength="500" autocomplete="off" disabled><button disabled id="send">Send</button></form>
+  <aside class="card feed">
+    <h3>What Kin noticed</h3>
+    <div class="list" id="feed"><div class="obs"><time>Just now</time>Kin is getting settled.</div></div>
+  </aside>
+  <div class="card dock">
+    <button class="icon-btn" id="mic" type="button" hidden></button>
+    <button class="btn ghost" id="shareBtn" type="button"></button>
+    <form class="composer" id="composer"><input id="text" placeholder="Say something to Kin…" maxlength="500" autocomplete="off" disabled><button class="icon-btn" id="send" type="submit" aria-label="Send" disabled></button></form>
+    <button class="icon-btn end" id="stop" type="button" title="End the session" aria-label="End the session"></button>
+  </div>
+</main>
+
+<div class="kin" id="kin" hidden>
+  <div class="speech" id="speech" aria-live="polite"></div>
+  <div class="stage" id="kinStage"><video id="video" autoplay playsinline muted></video><audio id="audio" autoplay></audio><div class="overlay" id="overlay"></div></div>
 </div>
+
 <script src="https://unpkg.com/livekit-client@2.9.5/dist/livekit-client.umd.js"></script>
 <script src="common.js"></script>
+<script src="kit.js"></script>
 <script>
-  const $ = (id) => document.getElementById(id);
-  const log = (cls, text) => { const d = document.createElement('div'); d.className = 'm ' + cls; d.textContent = text; $('log').appendChild(d); $('log').scrollTop = 1e9; };
+  const { $, icon, esc } = UI;
+  $('send').innerHTML = icon.send; $('stop').innerHTML = icon.end;
   const canvas = $('screen'), ctx = canvas.getContext('2d');
-  let s, source = null, lastSent = null, timer = null;
+  let s, source = null, lastSent = null, timer = null, mode = 'screen', stopClock = () => {};
+  const debug = UI.debugLog();
+  const sender = UI.politeSender(() => s);
+  const overlay = UI.stage($('overlay'), {
+    starting: ['Waking Kin…', ''], warming: ['Kin is stretching…', ''], connecting: ['Connecting…', ''], arriving: ['Kin is coming…', ''],
+  });
 
-  // --- the observer's input: a frame every few seconds, sent only when it changed
-  function frameData() { return ctx.getImageData(0, 0, canvas.width, canvas.height).data; }
+  // What Kin says, as a speech bubble that fades after a pause.
+  let speechTimer;
+  function speak(text, final) {
+    clearTimeout(speechTimer); $('speech').textContent = text ? UI.tail(text, 170) : '';
+    if (final) speechTimer = setTimeout(() => { $('speech').textContent = ''; }, 7000);
+  }
+  function noticed(text, flag) {
+    const d = document.createElement('div'); d.className = 'obs' + (flag ? ' flag' : '');
+    d.innerHTML = `<time>${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}${flag ? ' · worth a word' : ''}</time>${esc(text)}`;
+    $('feed').prepend(d);
+  }
+
+  // The observer's input: a frame every few seconds, sent only when it changed.
+  const frameData = () => ctx.getImageData(0, 0, canvas.width, canvas.height).data;
   function changed(a, b) { if (!a) return true; let diff = 0; for (let i = 0; i < a.length; i += 64) if (Math.abs(a[i] - b[i]) > 24) diff++; return diff / (a.length / 64) > 0.03; }
   async function observe(hint) {
+    if (!s) return;
     const now = frameData();
     if (!changed(lastSent, now) && Date.now() - (observe.last || 0) < 60000) return;
     lastSent = now; observe.last = Date.now();
-    $('seen').textContent = 'observer: looking…';
-    const res = await fetch('/api/presence/frame', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image: canvas.toDataURL('image/jpeg', 0.6), hint }) });
-    const seen = await res.json();
-    $('seen').textContent = `observer (${seen.model || '?'}): ${seen.description}${seen.noteworthy ? ' — ' + seen.noteworthy : ''}`;
-    log('obs', `observer: ${seen.description}${seen.noteworthy ? ' ‼ ' + seen.noteworthy : ''}`);
+    $('seeingText').textContent = 'Kin is looking…';
+    try {
+      const res = await fetch('/api/presence/frame', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image: canvas.toDataURL('image/jpeg', 0.6), hint }) });
+      const seen = await res.json();
+      if (seen.description) noticed(seen.noteworthy || seen.description, !!seen.noteworthy);
+    } catch (e) {}
+    $('seeingText').textContent = 'Kin can see this screen';
   }
 
-  // --- two frame sources: the real screen, or a simulated work session
-  $('share').onclick = async () => {
-    try { source = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 2 }, audio: false }); } catch (e) { log('relay', 'screen share refused'); return; }
-    const v = document.createElement('video'); v.srcObject = source; await v.play();
+  // Two sources: the real screen, or a scripted work session.
+  async function shareScreen() {
+    try { source = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 2 }, audio: false }); }
+    catch (e) { noticed('Screen sharing was cancelled. You can try again, or run the sample session.'); return false; }
+    const v = document.createElement('video'); v.srcObject = source; v.muted = true; await v.play();
+    source.getVideoTracks()[0].onended = () => { clearInterval(timer); $('seeing').hidden = true; paintIdle(); setShareButton(); };
     clearInterval(timer); timer = setInterval(() => { ctx.drawImage(v, 0, 0, canvas.width, canvas.height); observe(); }, 5000);
-  };
+    $('seeing').hidden = false; setShareButton(); return true;
+  }
+  function chrome(title, bgc) {
+    ctx.fillStyle = bgc; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#2d2d30'; ctx.fillRect(0, 0, canvas.width, 34);
+    ['#ff5f57', '#febc2e', '#28c840'].forEach((c, i) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(20 + i * 20, 17, 6, 0, 7); ctx.fill(); });
+    ctx.fillStyle = '#aaa'; ctx.font = '14px -apple-system, sans-serif'; ctx.fillText(title, 90, 22);
+  }
+  function mono(color, lines, y0 = 70) { ctx.font = '20px Menlo, monospace'; lines.forEach((l, i) => { ctx.fillStyle = Array.isArray(color) ? color[i] || color[0] : color; ctx.fillText(l, 28, y0 + i * 34); }); }
   const SCENES = [
-    { hint: 'code editor', draw: () => { bg('#1e1e1e'); mono('#9cdcfe', ['def normalize_prime(source, output):', '    original = measure_loudness(source)', '    measured_ms = measure_lead_silence_ms(source)', '    target_ms = lead_silence_ms()', '    ...']); } },
-    { hint: 'terminal with a failing test', draw: () => { bg('#000'); mono('#f85149', ['$ pytest tests/unit/v2_build -q', 'F.......... [100%]', 'FAILED test_the_prime_opens_with_exactly_the_target_silence', 'AssertionError: 0.395 != 0.400 ± 0.005', '1 failed, 11 passed in 2.1s']); } },
-    { hint: 'the same code editor, test fixed', draw: () => { bg('#1e1e1e'); mono('#9cdcfe', ['def normalize_prime(source, output):', '    ...', '# all 12 tests pass', '$ git commit -m "fix: pad the prime lead exactly"']); } },
-    { hint: 'a cat video on YouTube', draw: () => { bg('#fff'); ctx.fillStyle = '#f00'; ctx.fillRect(20, 20, 600, 320); ctx.fillStyle = '#fff'; ctx.font = '40px sans-serif'; ctx.fillText('▶  Funny cats compilation #42', 60, 190); ctx.fillStyle = '#333'; ctx.font = '18px sans-serif'; ctx.fillText('12M views · 3 days ago', 20, 370); } },
+    { hint: 'code editor', draw: () => { chrome('prime.py — v2_build', '#1e1e1e'); mono(['#c586c0', '#9cdcfe', '#9cdcfe', '#9cdcfe', '#6a9955'], ['def normalize_prime(source, output):', '    original = measure_loudness(source)', '    measured_ms = measure_lead_silence_ms(source)', '    target_ms = lead_silence_ms()', '    # pad or trim to exactly the target']); } },
+    { hint: 'terminal with a failing test', draw: () => { chrome('Terminal — pytest', '#0c0c0c'); mono(['#d4d4d4', '#d4d4d4', '#f14c4c', '#f14c4c', '#f14c4c'], ['$ pytest tests/unit/v2_build -q', 'F..........                       [100%]', 'FAILED test_prime_opens_with_the_target_silence', 'AssertionError: 0.395 != 0.400 ± 0.005', '1 failed, 11 passed in 2.1s']); } },
+    { hint: 'the same code editor, test fixed and committed', draw: () => { chrome('Terminal — git', '#0c0c0c'); mono(['#d4d4d4', '#23d18b', '#d4d4d4', '#23d18b'], ['$ pytest tests/unit/v2_build -q', '12 passed in 2.0s', '$ git commit -m "fix: pad the prime lead exactly"', '[main 4f2a91c] fix: pad the prime lead exactly']); } },
+    { hint: 'a cat video on YouTube', draw: () => { chrome('YouTube', '#0f0f0f'); ctx.fillStyle = '#272727'; ctx.fillRect(40, 60, 880, 440); ctx.fillStyle = '#fff'; ctx.font = 'bold 44px -apple-system, sans-serif'; ctx.fillText('🐈  Funny cats compilation #42', 120, 290); ctx.fillStyle = '#aaa'; ctx.font = '20px -apple-system, sans-serif'; ctx.fillText('12M views · 3 days ago', 40, 540); } },
   ];
-  function bg(c) { ctx.fillStyle = c; ctx.fillRect(0, 0, canvas.width, canvas.height); }
-  function mono(c, lines) { ctx.fillStyle = c; ctx.font = '18px Menlo, monospace'; lines.forEach((l, i) => ctx.fillText(l, 20, 40 + i * 30)); }
-  $('simulate').onclick = () => {
+  function runSample() {
     if (source) source.getTracks().forEach((t) => t.stop());
-    let i = 0; clearInterval(timer);
-    const step = () => { const sc = SCENES[i % SCENES.length]; sc.draw(); log('user', `(screen now: ${sc.hint})`); observe(sc.hint); i++; };
-    step(); timer = setInterval(step, 25000);
-  };
+    let i = 0; clearInterval(timer); $('seeing').hidden = false;
+    const step = () => { const sc = SCENES[i % SCENES.length]; sc.draw(); observe(sc.hint); i++; };
+    step(); timer = setInterval(step, 25000); setShareButton();
+  }
+  function paintIdle() { ctx.fillStyle = '#fffdf9'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = '#b3a597'; ctx.font = '600 24px Nunito, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('Share a screen so Kin can keep you company', canvas.width / 2, canvas.height / 2); ctx.textAlign = 'start'; }
+  function setShareButton() {
+    if (!$('shareBtn')) return;
+    const sharing = source && source.active;
+    $('shareBtn').innerHTML = `${icon.screen}${sharing ? 'Stop sharing' : mode === 'sample' ? 'Share my real screen' : 'Share screen'}`;
+    $('shareBtn').onclick = async () => {
+      if (sharing) { source.getTracks().forEach((t) => t.stop()); clearInterval(timer); $('seeing').hidden = true; paintIdle(); setShareButton(); return; }
+      mode = 'screen'; await shareScreen();
+    };
+  }
 
-  async function start(mic) {
-    $('start').disabled = $('startTyped').disabled = true; $('status').textContent = 'Starting the companion…';
+  async function start() {
+    $('startError').hidden = true;
+    mode = document.querySelector('input[name=src]:checked').value;
+    let mic = null;
+    if ($('useMic').checked) { try { mic = await Atmee.requestMic(); } catch (e) { $('startError').textContent = e.friendly; $('startError').hidden = false; return; } }
+    if (mode === 'screen' && !(await shareScreen())) { mode = 'sample'; }
+    $('welcome').hidden = true; $('work').hidden = false; $('kin').hidden = false;
+    if (mode !== 'screen') paintIdle();
+    setShareButton();
+    connect(mic);
+  }
+  async function connect(mic) {
     try {
       s = await Atmee.join({
         usecase: 'presence', video: $('video'), audio: $('audio'), mic,
-        onCaption: (text, final) => { $('caption').textContent = text; if (final) log('avatar', `companion: ${text}`); },
-        onRelay: (topic, text) => log('relay', `→ ${topic}: ${text.slice(0, 140)}`),
-        onEnd: () => { $('status').textContent = 'Session ended.'; clearInterval(timer); },
+        onPhase: (p, d) => overlay.phase(p, d),
+        onCaption: speak,
+        onSpeaking: (v) => { $('kin').classList.toggle('talking', v); sender.speaking(v); },
+        onRelay: debug,
+        onEnd: () => end('Kin had to go. The session reached its time limit.'),
       });
-      $('status').textContent = `Companion present, room ${s.session.roomName}`;
-      $('share').disabled = $('simulate').disabled = false; $('text').disabled = $('send').disabled = false;
-    } catch (e) { $('status').textContent = `Could not start: ${e.message}`; $('start').disabled = $('startTyped').disabled = false; }
+      UI.micButton($('mic'), s);
+      $('text').disabled = $('send').disabled = false; $('timechip').hidden = false;
+      stopClock = UI.countdown($('timeleft'), s.session.maxSeconds);
+      if (mode === 'sample') runSample(); else { lastSent = null; observe(); }
+    } catch (e) {
+      overlay.error(e.friendly || "Kin couldn't make it.", 'Try again', async () => connect(mic ? await Atmee.requestMic().catch(() => null) : null));
+    }
   }
-  $('start').onclick = () => start(true);
-  $('startTyped').onclick = () => start(false);
-  $('f').onsubmit = (e) => { e.preventDefault(); const t = $('text').value.trim(); if (!t || !s) return; log('user', `you: ${t}`); s.user('typed', t); $('text').value = ''; };
-  bg('#fff'); ctx.fillStyle = '#999'; ctx.font = '20px sans-serif'; ctx.fillText('(your screen, as the observer sees it)', 150, 200);
-  window.addEventListener('beforeunload', () => navigator.sendBeacon('/api/presence/session/end'));
+  function end(message) {
+    clearInterval(timer); stopClock(); if (source) source.getTracks().forEach((t) => t.stop());
+    $('kin').hidden = true; $('text').disabled = $('send').disabled = true; $('timechip').hidden = true; $('seeing').hidden = true;
+    noticed(message || 'Session ended. See you next time!');
+    $('shareBtn').outerHTML = '<button class="btn primary" onclick="location.reload()">Start a new session</button>';
+  }
+  $('start').onclick = start;
+  $('stop').onclick = async () => { if (s) await s.end(); s = null; end(); };
+  $('composer').onsubmit = (e) => { e.preventDefault(); const t = $('text').value.trim(); if (!t || !s) return; speak(''); noticed(`You: ${t}`); sender.send('typed', t); $('text').value = ''; };
+  paintIdle();
 </script>
 </body>
 </html>

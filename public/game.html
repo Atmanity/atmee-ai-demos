@@ -2,72 +2,239 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Treasure island</title>
+<title>Isle of Whispers</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="demo.css">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Crimson+Pro:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<style>
+  :root {
+    --bg: #0d1117; --surface: #151b24; --surface-2: #1d2531; --text: #ece3cf; --muted: #a59a83; --line: #2c3442;
+    --accent: #d9a441; --accent-ink: #1a1307; --accent-soft: rgb(217 164 65 / .14); --stage: #0a0d12; --danger: #b6475a;
+    --font: "Crimson Pro", Georgia, serif; --font-display: "Cinzel", Georgia, serif; color-scheme: dark;
+  }
+  body { font-size: 17px; background: radial-gradient(90% 60% at 30% 0%, #1b2a3a 0%, transparent 60%), radial-gradient(70% 60% at 100% 100%, #2a1f12 0%, transparent 60%), var(--bg); background-attachment: fixed; }
+  .btn { font-family: var(--font-display); letter-spacing: .06em; border-radius: 6px; }
+  .btn.primary { background: linear-gradient(180deg, #e9bb5c, #c58d2c); box-shadow: 0 0 0 1px #f3d48a inset, 0 6px 20px rgb(217 164 65 / .25); }
+
+  /* Title screen */
+  .title-screen { min-height: 100vh; display: grid; place-items: center; text-align: center; padding: 24px max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .title-screen .inner { display: grid; gap: 20px; justify-items: center; max-width: 620px; }
+  .crest { font-size: 64px; filter: drop-shadow(0 0 24px rgb(217 164 65 / .35)); }
+  .title-screen h1 { font-size: clamp(40px, 7vw, 76px); color: var(--accent); letter-spacing: .06em; text-shadow: 0 2px 30px rgb(217 164 65 / .25); }
+  .title-screen p { font-size: 21px; color: var(--muted); margin: 0; font-style: italic; }
+  .rules { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 8px; text-align: left; }
+  .rules div { padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: rgb(21 27 36 / .7); font-size: 16px; }
+  .rules b { display: block; font-family: var(--font-display); font-size: 13px; letter-spacing: .08em; color: var(--accent); margin-bottom: 4px; }
+
+  /* Play */
+  .play { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 24px; padding: 20px max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); max-width: 1320px; margin: 0 auto; }
+  .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .head h2 { color: var(--accent); font-size: 22px; letter-spacing: .08em; }
+  .board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; aspect-ratio: 1; max-height: calc(100vh - 180px); margin: 0 auto; }
+  .tile { position: relative; border-radius: 12px; border: 1px solid #33404f; cursor: default; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 6px;
+    background: linear-gradient(160deg, #22394a, #142231); transition: transform .12s, box-shadow .2s, border-color .2s; text-align: center; color: var(--text); }
+  .tile .glyph { font-size: clamp(26px, 3.6vw, 44px); line-height: 1; }
+  .tile .label { font-size: 13px; line-height: 1.15; color: #cdbf9f; }
+  .tile.fog { background: repeating-linear-gradient(135deg, #10161e 0 10px, #121a23 10px 20px); border-color: #222a35; }
+  .tile.fog .glyph, .tile.fog .label { visibility: hidden; }
+  .tile.fog::after { content: "?"; position: absolute; font-family: var(--font-display); color: #3a4656; font-size: 28px; }
+  .tile.reach { cursor: pointer; border-color: rgb(217 164 65 / .7); box-shadow: 0 0 0 1px rgb(217 164 65 / .3) inset; }
+  .tile.reach:hover { transform: translateY(-2px); box-shadow: 0 0 18px rgb(217 164 65 / .35); }
+  .tile.here { border: 2px solid var(--accent); box-shadow: 0 0 24px rgb(217 164 65 / .45); }
+  .tile.here::before { content: "🧭"; position: absolute; top: 6px; right: 8px; font-size: 18px; }
+  .tile.shrine:not(.fog) { background: radial-gradient(circle at 50% 40%, #4a3a7a, #1b1636); }
+  .legend { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 15px; margin-top: 12px; flex-wrap: wrap; }
+  kbd { font-family: ui-monospace, Menlo, monospace; font-size: 12px; border: 1px solid var(--line); border-bottom-width: 2px; padding: 1px 6px; border-radius: 5px; }
+
+  .side { display: flex; flex-direction: column; gap: 16px; min-height: 0; max-height: calc(100vh - 40px); position: sticky; top: 20px; }
+  .frame { padding: 8px; border-radius: 16px; background: linear-gradient(160deg, #6b5426, #2c2210 50%, #6b5426); }
+  .narrator { aspect-ratio: 1; border-radius: 10px; }
+  .narrator .tag { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 1; font-family: var(--font-display); font-size: 12px; letter-spacing: .12em; color: #f3d48a; background: rgb(0 0 0 / .45); padding: 3px 12px; border-radius: 99px; }
+  .narrator.talking { box-shadow: 0 0 30px rgb(217 164 65 / .45); }
+  .narrator .caption { font-size: 16px; }
+  .inventory { display: flex; gap: 10px; align-items: center; }
+  .inventory .slot { width: 52px; height: 52px; border-radius: 10px; border: 1px dashed #3c4757; display: grid; place-items: center; font-size: 26px; background: var(--surface); }
+  .inventory .slot.full { border-style: solid; border-color: var(--accent); background: var(--accent-soft); }
+  .chronicle { flex: 1; min-height: 160px; overflow: auto; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: rgb(21 27 36 / .8); }
+  .chronicle h3 { font-size: 13px; letter-spacing: .12em; color: var(--accent); margin-bottom: 10px; }
+  .entry { margin: 0 0 12px; line-height: 1.5; animation: rise .3s ease-out; }
+  .entry.tale { font-style: italic; color: #e9dfc6; }
+  .entry.tale::first-letter { font-family: var(--font-display); color: var(--accent); }
+  .entry.you { color: var(--muted); font-size: 15px; }
+  .entry.you::before { content: "— "; }
+  .oracle { border: 1px solid #5d4aa0; border-radius: 12px; padding: 14px; background: linear-gradient(160deg, rgb(74 58 122 / .5), rgb(27 22 54 / .6)); display: grid; gap: 10px; }
+  .oracle b { font-family: var(--font-display); letter-spacing: .08em; color: #c9b8ff; font-size: 14px; }
+  .oracle .composer input { background: rgb(0 0 0 / .3); border-color: #5d4aa0; }
+  .victory { position: fixed; inset: 0; display: grid; place-items: center; background: rgb(5 7 10 / .82); z-index: 20; text-align: center; padding: 24px; }
+  .victory .inner { display: grid; gap: 16px; justify-items: center; }
+  .victory h2 { font-size: clamp(34px, 6vw, 60px); color: var(--accent); }
+
+  @media (max-width: 960px) {
+    .play { grid-template-columns: 1fr; }
+    .side { position: static; max-height: none; }
+    .narrator { aspect-ratio: 16 / 11; }
+    .rules { grid-template-columns: 1fr; }
+    .board { max-height: none; }
+  }
+</style>
 </head>
-<body class="dark">
-<div id="stage"><video id="video" autoplay playsinline></video><audio id="audio" autoplay></audio><div id="caption"></div></div>
-<div id="side">
-  <div id="status">An event-driven narrator: it speaks only when the game sends an <code>atmee.app event</code>, and the player's audio is muted — except at the oracle's shrine (🔮), where the game unmutes and allows conversation.</div>
-  <div id="panel">
-    <div><button id="start">Start the game</button><button id="leave" class="secondary" disabled>Leave the shrine</button></div>
-    <div class="tiles" id="tiles"></div>
-    <div id="inv" class="obs">inventory: nothing</div>
+<body>
+<main id="titleScreen" class="title-screen">
+  <div class="inner">
+    <div class="crest">🏝️</div>
+    <h1>Isle of Whispers</h1>
+    <p>A castaway, a buried chest, and a narrator who tells your tale as you walk it.</p>
+    <div class="rules">
+      <div><b>Explore</b>Step from tile to tile. Every step is told as it happens.</div>
+      <div><b>Gather</b>Somewhere on the island lies a key. The chest will not open without it.</div>
+      <div><b>Consult</b>Only at the oracle's shrine will the voice answer your questions.</div>
+    </div>
+    <button class="btn primary lg" id="begin" type="button">Begin the tale</button>
+    <a href="/" class="muted" style="font-size:15px">Back to all apps</a>
   </div>
-  <div id="log"></div>
-  <form class="typed" id="f"><input id="text" placeholder="Ask the oracle (only at the shrine)…" maxlength="300" autocomplete="off" disabled><button disabled id="send">Send</button></form>
-</div>
+</main>
+
+<main id="play" class="play" hidden>
+  <section>
+    <div class="head"><h2>The island</h2><span class="muted" id="where">Washed ashore</span></div>
+    <div class="board" id="board"></div>
+    <div class="legend"><span>Click a glowing tile, or use <kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd></span><span id="steps">0 steps</span></div>
+  </section>
+  <aside class="side">
+    <div class="frame"><div class="stage narrator" id="narrator">
+      <span class="tag">THE NARRATOR</span>
+      <video id="video" autoplay playsinline muted></video><audio id="audio" autoplay></audio>
+      <div class="caption" id="caption"></div>
+      <div class="overlay" id="overlay"></div>
+    </div></div>
+    <div class="inventory"><span class="muted" style="font-size:15px">Satchel</span><div class="slot" id="slotKey"></div><div class="slot" id="slotMap"></div><div class="slot" id="slotGold"></div></div>
+    <div class="oracle" id="oracle" hidden>
+      <b>🔮 THE ORACLE LISTENS</b>
+      <form class="composer" id="ask"><input id="question" placeholder="Ask the oracle a question…" maxlength="300" autocomplete="off"><button class="icon-btn" id="send" type="submit" aria-label="Ask"></button></form>
+      <button class="btn ghost" id="leave" type="button">Leave the shrine</button>
+    </div>
+    <div class="chronicle" id="chronicle"><h3>THE CHRONICLE</h3></div>
+  </aside>
+</main>
+
+<div class="victory" id="victory" hidden><div class="inner">
+  <div class="crest">💰</div><h2>The chest is yours</h2>
+  <p class="muted" style="font-size:20px;font-style:italic;margin:0" id="victoryText"></p>
+  <div style="display:flex;gap:10px"><button class="btn primary" onclick="location.reload()">Sail again</button><button class="btn ghost" id="stay" type="button">Keep exploring</button></div>
+</div></div>
+
 <script src="https://unpkg.com/livekit-client@2.9.5/dist/livekit-client.umd.js"></script>
 <script src="common.js"></script>
+<script src="kit.js"></script>
 <script>
-  const $ = (id) => document.getElementById(id);
-  const log = (cls, text) => { const d = document.createElement('div'); d.className = 'm ' + cls; d.textContent = text; $('log').appendChild(d); $('log').scrollTop = 1e9; };
-  // A 4x4 island. Each tile is an event the narrator tells; the shrine opens a conversation.
+  const { $, icon } = UI;
+  $('send').innerHTML = icon.send;
+  // A 4x4 island. Each step is an event the narrator tells; the shrine opens a conversation.
   const MAP = [
-    ['⛵ the landing beach', '🌴 a palm grove', '🦀 crabs on black rocks', '🪨 a cliff with carvings'],
-    ['🐾 strange footprints in the sand', '🗝️ a rusty key half-buried', '🌊 a tidal pool', '🕳️ a dark cave mouth'],
-    ['🔥 an abandoned campfire', '🔮 the oracle\'s shrine', '🌉 a rope bridge', '💀 a skeleton holding a map piece'],
-    ['🌺 a hibiscus meadow', '🏚️ a wrecked hut', '🧭 a compass on a rock', '💰 the treasure chest (locked)'],
+    [['⛵', 'The landing beach'], ['🌴', 'A palm grove'], ['🦀', 'Crabs on black rocks'], ['🪨', 'A cliff of carvings']],
+    [['🐾', 'Strange footprints'], ['🗝️', 'A half-buried key'], ['🌊', 'A tidal pool'], ['🕳️', 'A dark cave mouth']],
+    [['🔥', 'An abandoned campfire'], ['🔮', "The oracle's shrine"], ['🌉', 'A rope bridge'], ['💀', 'A skeleton with a map']],
+    [['🌺', 'A hibiscus meadow'], ['🏚️', 'A wrecked hut'], ['🧭', 'A compass on a rock'], ['🧰', 'The treasure chest']],
   ];
-  let s, here = [0, 0], inv = new Set(), visited = new Set(['0,0']), atShrine = false;
+  let s, here = [0, 0], steps = 0, atShrine = false, won = false;
+  const visited = new Set(['0,0']), inv = new Set();
+  const caption = UI.captions($('caption'));
+  const debug = UI.debugLog();
+  const overlay = UI.stage($('overlay'), {
+    starting: ['The tale is being prepared…', 'Summoning your narrator.'],
+    warming: ['The narrator is clearing their throat…', 'The first tale of the day takes a minute or two.'],
+    connecting: ['Crossing the sea…', 'Almost there.'],
+    arriving: ['The narrator takes their seat…', 'Your tale begins in a moment.'],
+  });
+
+  function chronicle(cls, text) {
+    const p = document.createElement('p'); p.className = `entry ${cls}`; p.textContent = text;
+    $('chronicle').appendChild(p); $('chronicle').scrollTop = 1e9;
+  }
+  let liveEntry = null;
+  function narrate(text, final) {
+    if (!liveEntry) { liveEntry = document.createElement('p'); liveEntry.className = 'entry tale'; $('chronicle').appendChild(liveEntry); }
+    liveEntry.textContent = text; $('chronicle').scrollTop = 1e9;
+    if (final) liveEntry = null;
+  }
+  const near = (r, c) => Math.abs(r - here[0]) + Math.abs(c - here[1]) === 1;
   function render() {
-    $('tiles').innerHTML = '';
-    MAP.forEach((row, r) => row.forEach((cell, c) => {
-      const d = document.createElement('div'); d.className = 'tile' + (visited.has(`${r},${c}`) ? ' visited' : '') + (here[0] === r && here[1] === c ? ' here' : '');
-      d.textContent = cell.slice(0, 2); d.title = cell; d.onclick = () => move(r, c); $('tiles').appendChild(d);
+    $('board').innerHTML = '';
+    MAP.forEach((row, r) => row.forEach(([g, label], c) => {
+      const t = document.createElement('button'); t.type = 'button';
+      const k = `${r},${c}`, isHere = here[0] === r && here[1] === c, reach = !!s && near(r, c) && !won;
+      t.className = 'tile' + (visited.has(k) || isHere ? '' : ' fog') + (isHere ? ' here' : '') + (reach ? ' reach' : '') + (g === '🔮' ? ' shrine' : '');
+      t.innerHTML = `<span class="glyph">${g}</span><span class="label">${label}</span>`;
+      t.setAttribute('aria-label', visited.has(k) || isHere ? label : 'Unexplored');
+      t.disabled = !reach; t.onclick = () => move(r, c);
+      $('board').appendChild(t);
     }));
-    $('inv').textContent = 'inventory: ' + (inv.size ? [...inv].join(', ') : 'nothing');
+    $('slotKey').textContent = inv.has('key') ? '🗝️' : ''; $('slotKey').className = 'slot' + (inv.has('key') ? ' full' : '');
+    $('slotMap').textContent = inv.has('map') ? '📜' : ''; $('slotMap').className = 'slot' + (inv.has('map') ? ' full' : '');
+    $('slotGold').textContent = inv.has('gold') ? '💰' : ''; $('slotGold').className = 'slot' + (inv.has('gold') ? ' full' : '');
+    $('steps').textContent = `${steps} step${steps === 1 ? '' : 's'}`;
+    $('where').textContent = MAP[here[0]][here[1]][1];
   }
   function move(r, c) {
-    if (!s || (Math.abs(r - here[0]) + Math.abs(c - here[1])) !== 1) return; // one step at a time
+    if (!s || !near(r, c)) return;
     if (atShrine) leaveShrine();
-    here = [r, c]; visited.add(`${r},${c}`); const cell = MAP[r][c];
-    let text = `The player walks to ${cell.slice(3)}.`;
-    if (cell.includes('key')) { inv.add('rusty key'); text += ' They pick up the rusty key.'; }
-    if (cell.includes('map piece')) { inv.add('map piece'); text += ' They take the map piece from the skeleton.'; }
-    if (cell.includes('chest')) text += inv.has('rusty key') ? ' The rusty key turns: the chest opens on a heap of gold and a pearl the size of an egg. The hunt is won.' : ' It is locked; the key must be somewhere on the island.';
-    if (cell.includes('shrine')) { atShrine = true; $('leave').disabled = false; $('text').disabled = $('send').disabled = false; log('user', 'you kneel at the shrine'); s.user('enter_shrine', 'The player kneels at the oracle\'s shrine.'); render(); return; }
-    log('user', text); s.user('move', text); render();
+    here = [r, c]; visited.add(`${r},${c}`); steps++;
+    const [g, label] = MAP[r][c];
+    let text = `The player walks to ${label.toLowerCase()}.`;
+    if (g === '🗝️' && !inv.has('key')) { inv.add('key'); text += ' They pull a rusty key from the sand.'; }
+    if (g === '💀' && !inv.has('map')) { inv.add('map'); text += ' They take the map piece from the skeleton.'; }
+    if (g === '🧰') {
+      if (inv.has('key')) { inv.add('gold'); text += ' The rusty key turns: the chest opens on a heap of gold and a pearl the size of an egg. The hunt is won.'; setTimeout(victory, 7000); }
+      else text += ' It is locked; the key must be somewhere on the island.';
+    }
+    if (g === '🔮') { enterShrine(); render(); return; }
+    chronicle('you', `You walk to ${label.toLowerCase()}.`);
+    s.user('move', text); render();
   }
-  function leaveShrine() { atShrine = false; $('leave').disabled = true; $('text').disabled = $('send').disabled = true; log('user', 'you leave the shrine'); s.user('leave_shrine', 'The player leaves the shrine.'); }
+  function enterShrine() {
+    atShrine = true; $('oracle').hidden = false; $('question').focus();
+    chronicle('you', "You kneel at the oracle's shrine.");
+    s.user('enter_shrine', "The player kneels at the oracle's shrine.");
+  }
+  function leaveShrine() {
+    atShrine = false; $('oracle').hidden = true;
+    chronicle('you', 'You rise and leave the shrine.');
+    s.user('leave_shrine', 'The player leaves the shrine.');
+  }
+  function victory() {
+    won = true; render();
+    $('victoryText').textContent = `${steps} steps, ${visited.size} places seen${inv.has('map') ? ', and the skeleton’s map in your satchel' : ''}.`;
+    $('victory').hidden = false;
+  }
+  $('stay').onclick = () => { $('victory').hidden = true; won = false; render(); };
   $('leave').onclick = leaveShrine;
-  $('start').onclick = async () => {
-    $('start').disabled = true; $('status').textContent = 'Waking the narrator…';
+  $('ask').onsubmit = (e) => { e.preventDefault(); const q = $('question').value.trim(); if (!q || !s || !atShrine) return; chronicle('you', `You ask: “${q}”`); sender.send('typed', q); $('question').value = ''; };
+  addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT') return;
+    const d = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[e.key];
+    if (d) { e.preventDefault(); const r = here[0] + d[0], c = here[1] + d[1]; if (r >= 0 && r < 4 && c >= 0 && c < 4) move(r, c); }
+  });
+  const sender = UI.politeSender(() => s);
+
+  async function connect() {
     try {
       s = await Atmee.join({
-        usecase: 'game', video: $('video'), audio: $('audio'), mic: false,
-        onCaption: (text, final) => { $('caption').textContent = text; if (final) log('avatar', `narrator: ${text}`); },
-        onRelay: (topic, text) => log('relay', `→ ${topic}: ${text.slice(0, 140)}`),
-        onEnd: () => { $('status').textContent = 'Game over (session ended).'; },
+        usecase: 'game', video: $('video'), audio: $('audio'), mic: null,
+        onPhase: (p, d) => overlay.phase(p, d),
+        onCaption: (text, final) => { caption(text, final); narrate(text, final); },
+        onSpeaking: (v) => { $('narrator').classList.toggle('talking', v); sender.speaking(v); },
+        onRelay: debug,
+        onEnd: () => { s = null; render(); overlay.ended('<div class="title">The tale has ended</div><button class="btn primary" onclick="location.reload()">Begin anew</button>'); },
       });
-      $('status').textContent = `Playing, room ${s.session.roomName}. Click a neighbouring tile to move.`;
-      setTimeout(() => s.user('move', 'The player lands on the beach of a small island; a 4x4 map, a locked chest somewhere, a key to find.'), 1500);
-    } catch (e) { $('status').textContent = `Could not start: ${e.message}`; $('start').disabled = false; }
-  };
-  $('f').onsubmit = (e) => { e.preventDefault(); const t = $('text').value.trim(); if (!t || !s || !atShrine) return; log('user', `you (to the oracle): ${t}`); s.user('typed', t); $('text').value = ''; };
+      render();
+      setTimeout(() => s && s.user('move', 'The player washes up on the landing beach of a small island: a 4x4 map, a locked chest somewhere, a key to find.'), 1200);
+    } catch (e) {
+      overlay.error(e.friendly || 'The tale could not begin.', 'Try again', connect);
+    }
+  }
+  $('begin').onclick = () => { $('titleScreen').hidden = true; $('play').hidden = false; render(); connect(); };
   render();
-  window.addEventListener('beforeunload', () => navigator.sendBeacon('/api/game/session/end'));
 </script>
 </body>
 </html>

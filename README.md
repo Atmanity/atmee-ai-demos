@@ -31,6 +31,25 @@ case has one (`PUT /v1/avatars/{id}/conductor`), and runs what the app needs aro
 needs an agenda, and three hooks (`onLinked`, `onUser`/`onViewerChat`, `tick`/`onAvatarSaid`)
 that return `say` / `app` messages for the host page to relay.
 
+## The apps as products
+
+Each page is styled as a real product, with its own brand, a lobby, connection and error
+states, and no protocol details on screen. Add `?debug` to any page to see what it relays into
+the room.
+
+| product | page | what the user sees |
+|---|---|---|
+| **Ledger Academy** | `training.html` | a course lobby, a slide deck that follows the trainer, Lesson → Q&A → Quiz progress, live score, completion screen |
+| **Northwind Talent** | `recruiter.html` | a video-call pre-join with the job card, the recruiter on stage, a live agenda, transcript, call controls |
+| **Kin** | `presence.html` | a companion welcome with privacy wording, the shared screen in a monitor frame, a "what Kin noticed" feed, Kin floating in a bubble |
+| **Isle of Whispers** | `game.html` | a title screen, a fogged island map with keyboard moves, a framed narrator, a chronicle, satchel slots, the oracle's shrine, a victory screen |
+| **Nightcap Live** | `livestream-host.html`, `livestream-viewer.html` | a creator studio with LIVE badge, viewer count and stream chat, and a branded chat pop-out for viewers |
+
+Shared pieces: `public/common.js` (session, connection phases, warm-up retries, waiting for the
+avatar's video with a timeout, microphone), `public/kit.js` and `public/kit.css` (stage overlay,
+captions, transcript, countdown, mic button, typed turns held until the avatar finishes a
+sentence).
+
 ## The five apps, as tested on staging (2026-10-22)
 
 | app | page | avatar's job | how | verified |
