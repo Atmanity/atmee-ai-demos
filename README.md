@@ -6,12 +6,12 @@ internals: a server with an API key, a page in a LiveKit room, and the room's
 text streams.
 
 - `apps/`: the mini-apps from `Atmanity/apps` (chess, poker, tutors, advisors,
-  a planetarium, a room planner…), rebuilt on the API. Each has a README with
-  what the API could not do.
+  a planetarium, a room planner…), rebuilt on the API. Each was run live on
+  staging; its README has the run and what the API could not do.
 - `classic/`: the first five apps (a live stream, a recruiter, a training
   module, a companion, a story game). See `classic/README.md`.
 - `docs/API-GAPS.md`: everything the API could not do, found while building
-  these, with what was seen live.
+  these, with what was seen live (a table per app at the top).
 - `docs/PORTING.md`: how an app here is built, and how to add one.
 
 ## Run
