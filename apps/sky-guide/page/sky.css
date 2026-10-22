@@ -1,0 +1,378 @@
+/* Sky Guide, from the original panel's styles.css: a night sky, not a
+   dashboard. Near-black, one warm accent for whatever is selected, and nothing
+   bright enough to ruin dark adaptation. */
+
+:root {
+  --sg-ink: #e8edf8;
+  --sg-dim: #8b97b4;
+  --sg-back: #05070f;
+  --sg-panel: #0b1020;
+  --sg-accent: #ffd479;
+  --sg-line: rgba(150, 180, 230, 0.18);
+
+  /* The kit (avatar stage, composer, transcript) in the same night colours. */
+  --accent: var(--sg-accent);
+  --accent-ink: #1a1405;
+  --stage-bg: #02030a;
+  --ink: var(--sg-ink);
+  --muted: var(--sg-dim);
+  --line: var(--sg-line);
+  --surface: var(--sg-panel);
+  --page: #03050b;
+}
+
+body { font-size: 14px; }
+.kit-btn:hover:not(:disabled) { background: #141b31; }
+.kit-input { color: var(--sg-ink); }
+.kit-input::placeholder { color: var(--sg-dim); }
+.kit-danger { color: #ff8a93; }
+.kit-icon.is-off { background: #3a1820; }
+.kit-transcript { max-height: 38vh; }
+
+.sg-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 10px;
+  height: calc(100vh - 40px);
+  min-height: 640px;
+  padding: 14px 16px 16px;
+  background: var(--sg-back);
+  border: 1px solid var(--sg-line);
+  border-radius: var(--radius);
+  color: var(--sg-ink);
+  min-width: 0;
+}
+
+.sg-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sg-place {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.sg-when {
+  color: var(--sg-dim);
+}
+
+.sg-when-block {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sg-when-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* A chart showing one instant with a clock on it reads as a clock that has
+   stopped. This is the sentence that stops it reading that way. */
+.sg-held {
+  margin: 0;
+  font-size: 11px;
+  color: var(--sg-dim);
+}
+
+.sg-link {
+  padding: 0;
+  font: inherit;
+  color: var(--sg-accent);
+  background: none;
+  border: none;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.sg-count {
+  color: var(--sg-dim);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* The controls: where, and when. */
+.sg-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px 18px;
+  padding: 8px 10px;
+  background: var(--sg-panel);
+  border: 1px solid var(--sg-line);
+  border-radius: 10px;
+}
+
+.sg-label {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sg-dim);
+}
+
+.sg-place-picker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sg-select,
+.sg-input {
+  font: inherit;
+  font-size: 13px;
+  color: var(--sg-ink);
+  background: var(--sg-back);
+  border: 1px solid rgba(140, 160, 200, 0.3);
+  border-radius: 8px;
+  padding: 4px 8px;
+  color-scheme: dark;
+}
+
+.sg-coords {
+  display: flex;
+  gap: 6px;
+}
+
+.sg-coords .sg-input {
+  width: 104px;
+}
+
+.sg-time {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 420px;
+  min-width: 0;
+}
+
+.sg-time-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sg-night {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 6px;
+}
+
+.sg-step {
+  padding: 1px 9px;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.8;
+  cursor: pointer;
+  color: var(--sg-dim);
+  background: transparent;
+  border: 1px solid rgba(140, 160, 200, 0.3);
+  border-radius: 999px;
+}
+
+.sg-step:hover:not(:disabled) {
+  color: var(--sg-ink);
+  border-color: currentColor;
+}
+
+.sg-step:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* The night, noon to noon: drag it and the sky turns. */
+.sg-scrub {
+  position: relative;
+  padding-bottom: 14px;
+}
+
+.sg-scrub input[type="range"] {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--sg-accent);
+}
+
+.sg-ticks {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 0;
+  height: 12px;
+  font-size: 10px;
+  color: var(--sg-dim);
+}
+
+.sg-ticks span {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.sg-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 272px;
+  gap: 14px;
+  min-height: 0;
+}
+
+.sg-dome {
+  position: relative;
+  min-height: 320px;
+}
+
+.sg-canvas {
+  display: block;
+  touch-action: manipulation;
+  cursor: crosshair;
+}
+
+/* The canvas is invisible to a screen reader and unreachable by keyboard, and
+   a tap on it is the whole app. These are the same taps, off screen. */
+.sg-reachable {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.sg-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--sg-line);
+  padding-left: 14px;
+}
+
+.sg-fact__title {
+  margin: 0 0 2px;
+  font-size: 15px;
+  color: var(--sg-accent);
+}
+
+.sg-fact__where {
+  margin: 0 0 6px;
+  color: var(--sg-dim);
+  font-size: 12px;
+  text-transform: lowercase;
+}
+
+.sg-fact__line {
+  margin: 0 0 4px;
+  line-height: 1.4;
+}
+
+.sg-fact--empty {
+  color: var(--sg-dim);
+}
+
+.sg-fact--empty p {
+  margin: 0;
+}
+
+.sg-hint {
+  margin: 6px 0 0 !important;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sg-hint em {
+  color: var(--sg-ink);
+  font-style: normal;
+}
+
+.sg-btn {
+  margin-top: 6px;
+  background: transparent;
+  color: var(--sg-dim);
+  border: 1px solid var(--sg-line);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.sg-btn:hover:not(:disabled) {
+  color: var(--sg-ink);
+}
+
+.sg-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* The figures: lit in the accent, up in ink, down dimmed (still pressable: the
+   chart then says when it rises). */
+.sg-figures {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sg-figure-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.sg-figure {
+  padding: 2px 9px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--sg-ink);
+  background: transparent;
+  border: 1px solid rgba(126, 200, 255, 0.4);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.sg-figure:hover {
+  border-color: rgba(126, 200, 255, 0.8);
+}
+
+.sg-figure.is-down {
+  color: var(--sg-dim);
+  border-color: var(--sg-line);
+  border-style: dashed;
+}
+
+.sg-figure.is-lit {
+  color: var(--accent-ink);
+  background: var(--sg-accent);
+  border-color: var(--sg-accent);
+}
+
+.sg-message {
+  border-left: 2px solid var(--sg-accent);
+  background: var(--sg-panel);
+  padding: 6px 10px;
+  border-radius: 0 6px 6px 0;
+  line-height: 1.4;
+}
+
+@media (max-width: 1180px) {
+  .sg-panel { height: auto; min-height: 0; grid-template-rows: auto auto auto auto; }
+  .sg-body { grid-template-columns: 1fr; }
+  .sg-dome { aspect-ratio: 1 / 1; min-height: 0; }
+  .sg-side { border-left: none; padding-left: 0; border-top: 1px solid var(--sg-line); padding-top: 10px; }
+}
