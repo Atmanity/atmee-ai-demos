@@ -8,8 +8,13 @@ import { endSession, setConductor, startSession } from './atmee.ts';
 const apps = new Map<string, AppServer>();
 for (const dir of readdirSync('apps').sort()) {
   if (!existsSync(`apps/${dir}/server.ts`)) continue;
-  const app: AppServer = (await import(`../apps/${dir}/server.ts`)).default;
-  apps.set(app.id, app);
+  // One app that fails to load (half-written, a missing key) must not take the others down.
+  try {
+    const app: AppServer = (await import(`../apps/${dir}/server.ts`)).default;
+    apps.set(app.id, app);
+  } catch (err) {
+    console.error('[%s] not loaded: %s', dir, (err as Error).message);
+  }
 }
 
 const avatarFor = (id: string) =>

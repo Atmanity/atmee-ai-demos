@@ -28,8 +28,8 @@ export interface Avatar {
   secondsLeft: number | null;
   micOn: boolean;
   audioBlocked: boolean;
-  videoRef: React.RefObject<HTMLVideoElement>;
-  audioRef: React.RefObject<HTMLAudioElement>;
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  audioRef: React.RefObject<HTMLAudioElement | null>;
   start(opts?: { mic?: boolean }): Promise<void>;
   end(): Promise<void>;
   /** A typed user turn: it shows in the transcript and the avatar answers it. */
@@ -71,7 +71,7 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
   const sessionRef = useRef<AvatarSession | null>(null);
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
-  const resumeRef = useRef<() => Promise<void>>();
+  const resumeRef = useRef<(() => Promise<void>) | undefined>(undefined);
   // What the app said before the avatar was live, to deliver on arrival.
   const pending = useRef<{ state?: string; notes: string[]; events: { text: string; ttl?: number }[] }>({ notes: [], events: [] });
   const sentNotes = useRef(new Set<string>());   // notes this session already has
