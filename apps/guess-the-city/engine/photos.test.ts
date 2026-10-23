@@ -55,3 +55,14 @@ test('the store stays bounded: the oldest photos go first', async () => {
 test('the token is the last part of the photo URL the page is given', () => {
   expect(tokenOf('/api/apps/guess-the-city/photo/abc123')).toBe('abc123');
 });
+
+test('a photo whose bytes are kept is still served after its source was evicted', async () => {
+  const f = fakeFetch(async () => jpeg());
+  const store = new PhotoStore(f.fetcher, { sources: 1, bytes: 4 });
+  store.add('a', 'https://x/a');
+  const kept = await store.get('a');
+  store.add('b', 'https://x/b');            // a's source goes; its bytes stay
+  expect(store.has('a')).toBe(true);
+  expect(await store.get('a')).toBe(kept);
+  expect(f.calls).toHaveLength(1);
+});

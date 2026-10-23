@@ -21,7 +21,8 @@ export class PhotoStore {
     if (this.sources.size > this.limits.sources) this.sources.delete(this.sources.keys().next().value!);
   }
 
-  has(token: string) { return this.sources.has(token); }
+  /** Known, or still kept: bytes outlive their source's entry. */
+  has(token: string) { return this.sources.has(token) || this.bytes.has(token) || this.pending.has(token); }
 
   /** The photo's bytes, from the cache, a fetch already under way, or a new one; null when it cannot be had. */
   get(token: string): Promise<PhotoBytes | null> {

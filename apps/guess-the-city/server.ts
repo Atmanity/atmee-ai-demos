@@ -102,12 +102,13 @@ async function run(play: Play, action: string, args: Record<string, unknown> = {
       // Marco says the photo is up, so it must be: wait for it (bounded); one that
       // cannot be had becomes the no-photo card, and he is told so.
       const photo = play.photos[game.index];
+      let got: Awaited<ReturnType<typeof postcards.get>> | 'slow' = null;
       if (!game.over && photo) {
-        const got = await Promise.race([postcards.get(tokenOf(photo)), new Promise<'slow'>((r) => setTimeout(r, PHOTO_WAIT_MS, 'slow'))]);
+        got = await Promise.race([postcards.get(tokenOf(photo)), new Promise<'slow'>((r) => setTimeout(r, PHOTO_WAIT_MS, 'slow'))]);
         if (got === null) play.photos[game.index] = null;
       }
       const view = viewOf(play);
-      return { play, text: game.over ? said.over(view) : said.next(view) };
+      return { play, text: game.over ? said.over(view) : said.next(view, got === 'slow' ? 'coming' : 'shown') };
     }
   }
   throw new Error(`unknown action ${action}`);

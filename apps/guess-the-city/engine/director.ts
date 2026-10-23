@@ -46,11 +46,14 @@ export function boardState(v: View): string {
   return parts.join(' ');
 }
 
-// Whether the round's photo is up: a city whose photo could not be had is
-// played from its clues, and Marco must not say there is a picture.
-const onScreen = (v: View, which: string) => v.photo
-  ? `the ${which} mystery city's photo is on the player's screen`
-  : `there is no photo for the ${which} mystery city, so this one is played from the clues: offer the first clue`;
+// Whether the round's photo is up: one still downloading is "on its way", and
+// a city whose photo could not be had is played from its clues. Marco never
+// says there is a picture the player cannot see.
+const onScreen = (v: View, which: string, coming = false) => !v.photo
+  ? `there is no photo for the ${which} mystery city, so this one is played from the clues: offer the first clue`
+  : coming
+    ? `the ${which} mystery city's photo is on its way and will appear in a moment: say so`
+    : `the ${which} mystery city's photo is on the player's screen`;
 
 /** What a tool call (or a button) did, in words the host speaks from. */
 export const said = {
@@ -60,7 +63,7 @@ export const said = {
   clue: (clue: string, v: View) => `Clue ${v.hints.length} of ${v.hintsTotal}: "${clue}". Give it in your own words, adding nothing. A right guess is now worth ${roundValue(v.hints.length)} points.`,
   noClue: () => `No clues are left for this city. The player can guess again or give up.`,
   reveal: (v: View) => `The player gave up. It was ${v.city!.name}, ${v.city!.country}. Share this fun fact in your own words: ${v.city!.funFact} Then offer the next city.`,
-  next: (v: View) => `Round ${v.round} of ${v.rounds}: ${onScreen(v, 'new')}. Invite a first guess in one line; do not describe or name the city.`,
+  next: (v: View, photo: 'shown' | 'coming' = 'shown') => `Round ${v.round} of ${v.rounds}: ${onScreen(v, 'new', photo === 'coming')}. Invite a first guess in one line; do not describe or name the city.`,
   over: (v: View) => `That was the last city: the player finished with ${v.score} of ${v.rounds * 4} points, and their score card is on screen. Congratulate them in a sentence and ask whether they would like another game; start one only if they say so.`,
   notRevealed: () => `This city is not solved yet: the player can keep guessing, take a clue, or give up to see the answer.`,
   alreadyRevealed: (v: View) => `This round is already over (it was ${v.city!.name}). Offer the next city.`,

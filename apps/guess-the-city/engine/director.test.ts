@@ -68,3 +68,10 @@ test('a round without a photo is announced as one, never as a photo on screen', 
     expect(line).toContain('no photo');
   }
 });
+
+test('a round whose photo is still on its way is announced as coming, not as on screen', () => {
+  const g = fresh();
+  const line = said.next(g.view('/photo/x'), 'coming');
+  expect(line).not.toContain("on the player's screen");
+  expect(line).toContain('on its way');
+});
