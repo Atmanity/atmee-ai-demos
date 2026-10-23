@@ -467,7 +467,9 @@ describe('late work never lands on a newer look', () => {
     await settle(stylist, photo);
     expect(stylist.view().image).toMatchObject({ kind: 'look', url: newLook });
     expect(stylist.view().analysis?.tried_items).toEqual([]);
-    expect([...image.events, ...done.events]).toEqual([]);   // nothing said about a picture that is not on screen
+    // Emery was told it was going on: she hears it was not, and why, never about a picture that is not on screen.
+    expect(image.events.map((e) => e.text)).toEqual([expect.stringMatching(/^Not applied: a new photo came in while the Camel Wool Topcoat was being put on/)]);
+    expect(done.events).toEqual([]);
   });
 
   test('the occasion changed while a piece was being put on: no score change is claimed across occasions', async () => {
@@ -496,7 +498,7 @@ describe('late work never lands on a newer look', () => {
     models.releaseReads();
     const [stale] = await settle(stylist, reread);
     await settle(stylist, photo);
-    expect(stale.events).toEqual([]);
+    expect(stale.events.map((e) => e.text)).toEqual([expect.stringMatching(/^Not yet: a new photo came in while this was being read/)]);
     expect(stylist.view().analysis).toBeNull();   // not the old photo's verdict under the new photo
   });
 
@@ -519,5 +521,31 @@ describe('late work never lands on a newer look', () => {
     expect(items.length).toBeGreaterThan(0);
     for (const item of items) expect(item).toMatch(/^wedding /);
     expect(done.events[0].text).toMatch(/^Not added:/);
+  });
+
+  // More pieces asked for after the occasion changed are for that occasion, whichever lands first.
+  test.each([
+    ['the new rail lands first', [1, 2]],
+    ['the extra pieces land first', [2, 1]],
+  ])('more pieces asked for while a new occasion is being read stay on its rail (%s)', async (_order, order) => {
+    const models = new FakeModels();
+    models.piecesByTarget = true;
+    const { stylist } = await styled(models);
+    models.holdSuggest = true;
+    const retarget = stylist.act({ type: 'retarget', style: 'wedding' });   // its rail: call 2
+    await tick();
+    const more = stylist.act({ type: 'more' });                               // for the wedding: call 3
+    await tick();
+    expect(models.suggestGates).toHaveLength(2);
+    models.holdSuggest = false;
+    const gates = [...models.suggestGates];
+    for (const n of order) { gates[n - 1](); await tick(); await tick(); }
+    await settle(stylist, retarget);
+    const [done] = await settle(stylist, more);
+    const items = stylist.view().analysis!.suggestions.map((p) => p.item);
+    expect(items.filter((i) => /^wedding Layer 3-/.test(i))).toHaveLength(6);   // the extra pieces
+    expect(items.filter((i) => /^wedding Layer 2-/.test(i)).length).toBeGreaterThan(0);   // the new rail
+    expect(items.some((i) => !/^wedding /.test(i))).toBe(false);
+    expect(done.events[0].text).toMatch(/^Done: 6 new pieces/);
   });
 });

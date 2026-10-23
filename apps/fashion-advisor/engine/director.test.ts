@@ -206,12 +206,12 @@ describe('the words Emery speaks from', () => {
     const results = [
       say.styleSet(viewOf({ image: null })), say.styleSet(v), say.photoNeedsStyle(), say.analysis(v), say.analysisFailed(), say.tryOnAck('x'), say.tryOnBusy('x', 'y'),
       say.tryOnOnScreen('x'), say.tryOnHidden('White Sneakers'), say.tryOnSelf(), say.tryOnNeedsPhoto('x'), say.tryOnUnavailable('x'), say.tryOnFailed('x', true),
-      say.moreReady(['a'], false, true), say.moreReady([], false, true), say.moreStale(), say.moreCapped(18), say.needsRead('x'), say.reset(),
+      say.moreReady(['a'], false, true), say.moreReady([], false, true), say.moreReady(['a', 'b'], false, false, true), say.lookChanged(), say.tryOnStale('x'), say.moreStale(), say.moreCapped(18), say.needsRead('x'), say.reset(),
     ].map((e) => e.text).concat([
       said.noOccasion(), said.readRunning(v), said.noVerdictYet(), said.tryOnRunning('x'), said.alreadyOwn(), said.alreadyGoing('x'), said.moreOnTheWay(),
       said.whichPiece(), said.notAPiece('x'), said.steered(v, 'streetwear'), said.stillWorking(), said.lost(), said.photoIn(v, true), said.photoIn(viewOf({ target: '' }), false),
     ]);
-    for (const text of results) expect(text, text).toMatch(/^(Done|Not yet|Not yet rated|Not added|Refused|Failed|Started|Queued|Nothing new|Nothing to add|Nothing to do|Already started|Not clear):/);
+    for (const text of results) expect(text, text).toMatch(/^(Done|Not yet|Not yet rated|Not added|Not applied|Refused|Failed|Started|Queued|Nothing new|Nothing to add|Nothing to do|Already started|Not clear):/);
   });
 
   test('the tool schemas are lenient: the platform rejects a call that does not fit them before the page sees it', () => {
@@ -222,6 +222,12 @@ describe('the words Emery speaks from', () => {
     }
     expect(tools(true).find((t) => t.name === 'try_on')!.parameters.required).toEqual(['piece']);
     expect(tools(true).find((t) => t.name === 'rate_outfit')!.parameters.required).toBeUndefined();
+  });
+
+  test('more pieces found for a verdict still being read say where they go', () => {
+    expect(say.moreReady(['Grey Beanie'], false, false).text).toMatch(/^Done: 1 new piece is on the rail now, among them Grey Beanie/);
+    expect(say.moreReady(['Grey Beanie', 'Gold Chain'], false, false, true).text).toMatch(/^Done: 2 new pieces go on the rail with the new verdict in a moment/);
+    expect(say.moreReady(['Grey Beanie'], false, false, true).text).toMatch(/^Done: 1 new piece goes on the rail with the new verdict/);
   });
 
   test('ttl stays within the API limit', () => {

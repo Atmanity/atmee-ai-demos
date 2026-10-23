@@ -25,8 +25,11 @@ class FakeModels implements Models {
   private gates: (() => void)[] = [];
   holdTryOns = false;
 
+  /** While set, a read waits for the test to let it go. */
+  hold: Promise<void> | null = null;
   async analyze(_image: Img, input: ReadInput): Promise<CleanAnalysis | null> {
     this.reads.push(input);
+    if (this.hold) await this.hold;
     return { target_style: input.target, style_summary: 'Clean base', occasion: 'Dinner', style_score: this.scores.shift() ?? 6, color_palette: ['navy', 'white', 'denim'], what_works: 'The navy layer frames you.', style_tip: 'Ground it with sharper shoes.' };
   }
   async zones(): Promise<Set<Zone>> { return new Set(this.zonesFor); }
@@ -254,4 +257,37 @@ test('only real tools and buttons come in', () => {
   expect(intentOfButton({ button: 'photo', mime: 'image/jpeg' })).toBeNull();
   expect(intentOfButton({ button: 'delete_everything' })).toBeNull();
   expect(intentOfButton({ button: 'photo', mime: 'image/jpeg', data: PHOTO, example: true })?.pressed).toBe('chose the example outfit');
+});
+
+test('pieces leaning a new way, overtaken by a new photo: the result says the look changed, not "nothing came back"', async () => {
+  const { f, models } = await rated();
+  let release!: () => void;
+  models.hold = new Promise<void>((r) => { release = r; });
+  // The new occasion is set at once, so the direction's read (queued first) is a fresh model read, held here.
+  const leaned = tool(f, 'suggest_pieces', { direction: 'more streetwear' });
+  const rerated = tool(f, 'rate_outfit', { occasion: 'gala' });
+  await new Promise((r) => setTimeout(r, 0));
+  const photo = press(f, { button: 'photo', mime: 'image/jpeg', data: PHOTO });
+  models.hold = null;
+  release();
+  const [{ result: lean }, { result: rate }] = [await settle(f, leaned), await settle(f, rerated)];
+  await settle(f, photo);
+  // The direction's read (for the old photo) was overtaken: it says so, not "no pieces came back".
+  expect(lean).toMatch(/^Not yet: a new photo came in while this was being read/);
+  // The gala rating was queued behind it and read the new photo: a real verdict.
+  expect(rate).toMatch(/^Done: the verdict is 6 out of 10 for gala/);
+});
+
+test('a rating overtaken by a new photo is answered as such, not as a failure', async () => {
+  const { f, models } = await rated();
+  let release!: () => void;
+  models.hold = new Promise<void>((r) => { release = r; });
+  const rating = tool(f, 'rate_outfit', { occasion: 'wedding' });
+  await new Promise((r) => setTimeout(r, 0));
+  const photo = press(f, { button: 'photo', mime: 'image/jpeg', data: PHOTO });
+  models.hold = null;
+  release();
+  const { result } = await settle(f, rating);
+  await settle(f, photo);
+  expect(result).toMatch(/^Not yet: a new photo came in while this was being read/);
 });

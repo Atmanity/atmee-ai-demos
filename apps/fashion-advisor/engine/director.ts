@@ -246,14 +246,21 @@ export const say = {
 
   tryOnFailed: (item: string, unusable: boolean) => ev(`Failed: the ${item} ${unusable ? "didn't give a usable picture" : "didn't come through"}; their photo is unchanged. Say so in a few words and ask whether to try it again; only try again if they say yes.`, 30),
 
-  moreReady(names: string[], triedAny: boolean, tryOnAvailable: boolean): SayEvent {
+  /** More pieces found; `withVerdict`: they go on the rail with the new occasion's verdict, which is still being read. */
+  moreReady(names: string[], triedAny: boolean, tryOnAvailable: boolean, withVerdict = false): SayEvent {
     if (!names.length) return ev("Nothing new: no new pieces this time. Say there's no stronger move than what's on the rail, and point to one there.", 30);
     const list = names.slice(0, 3).join(', ');
     const ask = tryOnAvailable
       ? `then ask whether they'd like to try on the ${names[0]}${triedAny ? ' next' : ''}; put it on only if they say yes`
       : `and say why the ${names[0]} is the strongest move`;
-    return ev(`Done: ${names.length} new piece${names.length === 1 ? ' is' : 's are'} on the rail now, among them ${list}. Name one or two in a sentence, ${ask}.`, 45, tryOnAvailable ? { offer: names[0] } : {});
+    const one = names.length === 1;
+    const where = withVerdict ? `${one ? 'goes' : 'go'} on the rail with the new verdict in a moment` : `${one ? 'is' : 'are'} on the rail now`;
+    return ev(`Done: ${names.length} new piece${one ? '' : 's'} ${where}, among them ${list}. Name one or two in a sentence, ${ask}.`, 45, tryOnAvailable ? { offer: names[0] } : {});
   },
+
+  lookChanged: () => ev("Not yet: a new photo came in while this was being read, so that verdict was for the old one and was left off. The new photo's verdict appears on their screen in a moment. Say so in a few words; don't guess it.", 30),
+
+  tryOnStale: (item: string) => ev(`Not applied: a new photo came in while the ${item} was being put on, so it was for the old look and was left off. Ask whether they'd like it on the new photo; put it on only if they say yes.`, 30),
 
   moreStale: () => ev("Not added: the rail changed while more pieces were being found (a new photo or occasion), so they were left off. Ask whether they'd like more pieces for what's on screen now; find them only if they say yes.", 30),
 

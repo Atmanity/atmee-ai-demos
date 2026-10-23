@@ -201,7 +201,8 @@ export class Fitting {
     const lean = normalizeStyleCategory(direction ?? '');
     if (lean) {
       const out = s.act({ type: 'steer', style: direction! });
-      return out.job ? this.awaiting(out, 'done', (o) => said.steered(o.view, lean)) : this.now(words(out.events));
+      // A quiet read says nothing unless the look changed under it; then that is the outcome.
+      return out.job ? this.awaiting(out, 'done', (o) => words(o.events) ?? said.steered(o.view, lean)) : this.now(words(out.events));
     }
     if (s.jobs.more) return this.now(said.moreOnTheWay());
     const out = s.act({ type: 'more' });

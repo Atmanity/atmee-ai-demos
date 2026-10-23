@@ -116,8 +116,14 @@ export class Stylist {
   private readings = new Map<string, CleanAnalysis>();
   /** Which picture and occasion the verdict on screen is for. */
   private readOf = '';
-  /** Moves on whenever the rail is replaced (a new photo, a fresh read): pieces fetched for an older rail are not hung on it. */
-  private railGen = 0;
+  /**
+   * What the rail on screen was picked for: the own photo, the occasion, the
+   * direction. More pieces belong to what they were fetched for, not to
+   * whichever rail happens to be on screen when they land.
+   */
+  private railOf = '';
+  /** Pieces fetched for a rail still being read (asked for right after a change of occasion): hung on it when it lands. */
+  private extras: { key: string; pieces: Suggestion[] } | null = null;
   private lines = 0;   // rotates the example lines the original picked at random
 
   constructor(private models: Models, private opts: StylistOptions) {}
@@ -303,7 +309,7 @@ export class Stylist {
     this.tried = [];
     this.latestItem = '';
     this.analysis = null;
-    this.railGen += 1;
+    this.railOf = '';
     this.photoDeclined = false;   // a photo after a refusal is the answer that counts
     this.wantsPhoto = false;
     this.jobs.photo = true;
@@ -386,7 +392,7 @@ export class Stylist {
       // A new photo came in during the render: this picture is of a look that is gone.
       if (this.current?.token !== source.token) {
         this.touch();
-        mark('image', []);
+        mark('image', [say.tryOnStale(item)]);
         return [];
       }
       // The score change is only meaningful against the same occasion's score.
@@ -418,12 +424,17 @@ export class Stylist {
     this.jobs.more = true;
     this.touch();
     // Not on the serial queue, as in the original: more pieces need no image job to finish first.
-    // So the rail can be replaced meanwhile (another occasion, a new photo): then these are not for it.
-    const rail = this.railGen;
+    // So the photo, the occasion or the direction can change meanwhile: then these are not for it.
+    const key = this.railKey();
     return this.started(['done'], async () => {
       try {
         const fresh = await this.generateMore(this.analysis?.suggestions.map((s) => s.item) ?? []);
-        if (this.railGen !== rail || !this.analysis) return quiet ? [] : [say.moreStale()];
+        if (this.railKey() !== key) return quiet ? [] : [say.moreStale()];
+        // Asked for right after a change of occasion: that rail is still being read. They go on it when it lands.
+        if (!this.analysis || this.railOf !== key) {
+          this.extras = { key, pieces: fresh };
+          return quiet ? [] : [say.moreReady(fresh.map((s) => s.item), this.tried.length > 0, this.models.tryOnAvailable, true)];
+        }
         if (this.analysis) {
           const seen = new Set(this.analysis.suggestions.map((s) => s.item.trim().toLowerCase()));
           const merged = [...this.analysis.suggestions];
@@ -453,7 +464,7 @@ export class Stylist {
       this.tried = [];
       this.latestItem = '';
       this.analysis = null;
-      this.railGen += 1;
+      this.railOf = '';
       this.touch();
       return this.read({ context: 'Initial camera look after reset', refresh: true });
     });
@@ -468,6 +479,7 @@ export class Stylist {
     if (!shown) return [];
     const previous = this.analysis;
     const keepPieces = !opts.refresh && Boolean(previous);
+    const rail = this.railKey();   // what fresh pieces are picked for
     this.jobs.analysing = true;
     this.touch();
     try {
@@ -479,9 +491,10 @@ export class Stylist {
         keepPieces ? Promise.resolve([]) : this.models.suggest({ image: shown.img, zones: this.zones, target: this.targetBrief(), recent: this.tried }).catch(() => []),
       ]);
       // A new photo came in while this read ran: its verdict is for a picture no longer on screen.
+      // Whoever waits on it (a rating, the way back to the own photo) hears that, not a failure.
       if (this.current?.token !== shown.token) {
         if (read && !known) this.readings.set(key, read);
-        return [];
+        return [say.lookChanged()];
       }
       if (!read) {
         this.notice = { kind: 'error', text: 'The verdict didn\'t come through. Tap "Rate it again".' };
@@ -492,8 +505,8 @@ export class Stylist {
         if (this.readings.size > 48) this.readings.delete(this.readings.keys().next().value!);
       }
       // Pieces appended while this read ran are kept too.
-      const suggestions = keepPieces ? (this.analysis ?? previous)!.suggestions : this.enrich(this.assemble(dynamic));
-      if (!keepPieces) this.railGen += 1;
+      const suggestions = keepPieces ? (this.analysis ?? previous)!.suggestions : this.withExtras(this.enrich(this.assemble(dynamic)), rail);
+      if (!keepPieces) this.railOf = rail;
       const same = Boolean(known) && this.readOf === key && Boolean(previous);
       this.analysis = { ...read, suggestions, tried_items: this.tried.map(titleCase) };
       this.readOf = key;
@@ -514,6 +527,25 @@ export class Stylist {
       this.jobs.analysing = false;
       this.touch();
     }
+  }
+
+  /** What a rail is picked for: the own photo, the occasion, the direction. */
+  private railKey(): string {
+    return `${this.base?.token ?? ''}\0${stylePhraseKey(this.target)}\0${normalizeStyleCategory(this.category)}`;
+  }
+
+  /** A fresh rail, with the extra pieces asked for while it was being read (only if they were for it). */
+  private withExtras(rail: Suggestion[], key: string): Suggestion[] {
+    const extras = this.extras;
+    this.extras = null;
+    if (!extras || extras.key !== key) return rail;
+    const seen = new Set(rail.map((s) => s.item.trim().toLowerCase()));
+    const merged = [...rail];
+    for (const s of extras.pieces) {
+      const name = s.item.trim().toLowerCase();
+      if (name && !seen.has(name)) { merged.push(s); seen.add(name); }
+    }
+    return merged.slice(0, MAX_TRACKED_SUGGESTIONS);
   }
 
   /** The original's _assemble_suggestions: the model's pieces, topped up, filtered to what can be tried. */
