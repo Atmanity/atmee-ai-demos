@@ -83,9 +83,20 @@ useAvatar('<id>', { onToolCall: async ({ name, arguments: args }) => (await post
 - `await` holds the host's reply (at most one filler line) until the page
   answers, 1 to 28 s; `notify` sends the call and goes on. Slow work is
   `notify`, or `await` returning "started", then an event when it lands.
-- Results are short facts plus how to say them. A result never asks the host
-  to act on its own initiative: "ask whether they want another game; start one
-  only if they say so". Resetting tools say "only when the user asks".
+- Results are short facts plus how to say them, and they lead with the plain
+  outcome ("Done: …", "Not yet: …", "Refused: …"), any safety sentence first:
+  the platform may say a filler of its own while the tool runs, and the
+  outcome word is what keeps that filler from framing the verdict. A result
+  never asks the host to act on its own initiative: "ask whether they want
+  another game; start one only if they say so". Resetting tools say "only
+  when the user asks".
+- Schemas are lenient: no `enum`, no `additionalProperties: false`, no
+  `pattern` or tight lengths. Causeur checks a call's arguments against the
+  schema before the page sees it, and a call that does not fit never arrives:
+  the model is told "invalid arguments" and often says the action happened
+  anyway. List the accepted words in the description, normalise in the app
+  (case, synonyms, a value under another key), and answer an unusable value
+  with a short question for the host to ask.
 - Instructions (<= 4,000 characters): the host's role, and that the screen
   changes only when it calls a tool; it never invents an outcome, even one it
   thinks it knows.
@@ -124,6 +135,24 @@ one.
 - **The recogniser varies.** "Raise to five" arrived as "Raised to five.",
   "Lob it" as "Lobbied". Phrase matchers (the safety net, safety detection)
   must read the variants.
+- **A strict schema loses calls silently.** Spotter's level enum turned
+  "Beginner, please." into a rejected call in 2 of 2 runs while the host said
+  "I've set you up for a beginner plan"; nothing on the page knew. Lenient
+  schemas fixed it.
+- **One-word answers are calls too.** A host that asked "beginner,
+  intermediate or advanced?" treated the answer as conversation. The
+  instructions say a single word answering the host's own question is a tool
+  call, and that nothing happened unless a result said so.
+- **The host greets on its own.** Each host's avatar already introduces itself
+  in the product; an opening event that greets again doubles it. Openings
+  start "You have just greeted them; do not greet or introduce yourself
+  again."
+- **If you give an avatar a conductor**, a step does not move until the user
+  has heard a turn written under it. Instructions such as "then start the
+  quiz" make the host improvise the next step's content; put the check on the
+  asking step's edges (with an edge back to itself) instead. The last step
+  stays in force, so an idle check-in can say the farewell again: end the
+  session after it.
 
 ## Product standards
 
@@ -132,6 +161,9 @@ one.
 - Its own palette and type (Google Fonts linked in `index.html`), specific to
   the subject. Not the generic looks: cream and serif, near-black and neon,
   purple gradients, emoji icons, every block a rounded card.
+- The host's face (`host/portrait.jpg`, the image its avatar is built from)
+  on the front door beside their name, and as `HostVideo`'s `poster` so it
+  fills the frame while the call connects.
 - A front door (what it is, how it works, voice and typing calls to action),
   the main screen with the host part of the layout, empty, loading, ended and
   failed states, and the product's own "done" moment.
