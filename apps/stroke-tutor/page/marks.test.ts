@@ -11,7 +11,7 @@ const later = (index: number) => ({ index, status: 'hidden' as const, points: []
 function snap(over: Partial<Snapshot>): Snapshot {
   return {
     phase: 'writing', character: { id: 'juu', glyph: '十', meaning: 'ten', reading: 'jū', script: 'kanji', strokes_total: 2 },
-    stroke_index: 0, strokes: [live(0), later(1)], attempts: 0, last_verdict: null, score: { correct: 0, total: 1 }, results: [], grid: 1000, catalog: [], ...over,
+    stroke_index: 0, strokes: [live(0), later(1)], attempts: 0, last_verdict: null, score: { correct: 0, total: 1 }, results: [], take: 1, grid: 1000, catalog: [], ...over,
   };
 }
 const ink: [number, number][] = [[140, 452], [500, 450], [860, 449]];

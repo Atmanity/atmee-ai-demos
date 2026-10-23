@@ -203,7 +203,7 @@ describe('limits', () => {
 describe('cues', () => {
   const view = (verdict: Snapshot['last_verdict'], attempts = 1): Snapshot => ({
     phase: 'writing', character: { id: 'juu', glyph: '十', meaning: 'ten', reading: 'jū', script: 'kanji', strokes_total: 2 },
-    stroke_index: 0, strokes: [], attempts, last_verdict: verdict, score: { correct: 0, total: 1 }, results: [], grid: 1000, catalog: [],
+    stroke_index: 0, strokes: [], attempts, last_verdict: verdict, score: { correct: 0, total: 1 }, results: [], take: 1, grid: 1000, catalog: [],
   });
 
   test('a stroke drawn backwards is told as what they drew, then which way it goes, in that order', () => {

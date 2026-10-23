@@ -68,6 +68,12 @@ export interface Snapshot {
   score: { correct: number; total: number };
   /** The record of this character's resolved strokes, in order. */
   results: StrokeResult[];
+  /**
+   * Which take of the sheet this is: a new one each time a character is put
+   * up or started over. A stroke names the take it was drawn on, so one in
+   * flight across a start over is not graded on the cleared sheet.
+   */
+  take: number;
   /** The width AND height of the coordinate space. */
   grid: number;
   catalog: CatalogEntry[];

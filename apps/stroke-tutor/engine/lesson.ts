@@ -134,13 +134,16 @@ export const SHEET_MOVED = "The sheet moved on before that stroke arrived; draw 
 
 /**
  * A stroke the learner drew, graded only against the stroke they were drawing
- * (`at`: the character and stroke on their screen). A stroke can reach the
+ * (`at`: the take of the sheet, the character and the stroke on their screen).
+ * The take matters on its own: a start over of the same character returns to
+ * the same character and stroke number, on a cleared sheet. A stroke can reach the
  * server after the sheet moved on under it (Ren started the character over, or
  * moved to the next stroke, on a faster connection); graded against whatever
  * is live by then, its verdict would land on a stroke the learner never drew.
  */
-export function drawStroke(tutor: StrokeTutor, points: unknown, at?: { character?: unknown; stroke?: unknown }): Outcome {
-  if (at && (at.character !== (tutor.character?.id ?? null) || at.stroke !== tutor.snapshot().stroke_index)) {
+export function drawStroke(tutor: StrokeTutor, points: unknown, at?: { character?: unknown; stroke?: unknown; take?: unknown }): Outcome {
+  const now = tutor.snapshot();
+  if (at && (at.character !== (now.character?.id ?? null) || at.stroke !== now.stroke_index || (at.take !== undefined && at.take !== now.take))) {
     return { view: tutor.snapshot(), handled: true, kind: 'stroke', refused: SHEET_MOVED, event: say.refused(SHEET_MOVED) };
   }
   return perform(tutor, { kind: 'stroke', points }, 'panel');

@@ -214,6 +214,12 @@ export const say = {
   /** A new call finds the sheet lost (see `relaid`): no greeting again, the menu, an apology. */
   relaidOpening: () => `${GREETED} Since you last spoke, the sheet had been lost and has been set up again, so the character menu is showing. In one short line, apologise briefly and ask which character they would like; put one up only when they choose.`,
 
+  /** The server no longer had their sheet, and a fresh one could not be laid out either. */
+  lost: () => `Refused: their sheet was lost and a new one could not be set up, so nothing changed and the sheet is not available right now. Say that in one calm line and suggest they call again in a moment; do not claim anything happened.`,
+
+  /** A new call finds the sheet lost and none can be laid out (see `lost`). */
+  lostOpening: () => `${GREETED} ${say.lost()}`,
+
   /** The server no longer had their sheet (a restart, or hours idle), so a fresh one was laid out. */
   relaid: () => `Not yet: the sheet had been lost and has been set up again, so nothing changed and the character menu is showing. Tell them in one short line, apologise briefly, and ask which character they would like; put one up only when they choose.`,
 };

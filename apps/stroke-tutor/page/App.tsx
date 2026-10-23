@@ -112,12 +112,18 @@ export function App() {
     }
   }, [land]);
 
-  /** The server lost the lesson: a fresh sheet, and the learner is told why their progress is gone. */
-  const recover = useCallback(async (): Promise<boolean> => {
+  /**
+   * The server lost the lesson: a fresh sheet, and the learner is told why
+   * their progress is gone. Resolves with what Ren should be told: a fresh
+   * sheet, or none at all. A coaching line still waiting is about the lost
+   * sheet, so it goes.
+   */
+  const recover = useCallback(async (): Promise<string> => {
+    coach.clear();
     const laid = (await layOut()) !== null;
     if (laid) setNotice(RELAID);
-    return laid;
-  }, [layOut]);
+    return laid ? say.relaid() : say.lost();
+  }, [coach, layOut]);
 
   // Ren's tool calls: the server acts, the sheet follows, the result is what Ren says.
   const onToolCall = useCallback(async ({ name, arguments: args }: ToolCall) => {
@@ -136,8 +142,7 @@ export function App() {
       return result;
     } catch (err) {
       if (!(err instanceof LessonGone)) throw err;
-      await recover();
-      return say.relaid();
+      return await recover();
     } finally {
       setBusy(false);
     }
@@ -184,7 +189,8 @@ export function App() {
     }, async (err) => {
       if (lesson.current !== id) return;
       if (!(err instanceof LessonGone)) return resume();   // a hiccup: carry on with the sheet on screen
-      if (await recover()) coach.push({ text: say.relaidOpening(), ttlS: TTL.opening });
+      const told = await recover();
+      coach.push({ text: told === say.relaid() ? say.relaidOpening() : say.lostOpening(), ttlS: TTL.opening });
     });
   }, [avatar.phase]);
 
@@ -206,7 +212,7 @@ export function App() {
       if (cue) coach.push(cue);
     } catch (err) {
       if (err instanceof LessonGone) {
-        if (await recover()) coach.push({ text: say.relaid(), ttlS: TTL.cue });
+        coach.push({ text: await recover(), ttlS: TTL.cue });
         return;
       }
       console.warn(err);
@@ -223,7 +229,7 @@ export function App() {
     try {
       // The stroke it was drawn on: the server grades it only against that one.
       const on = viewRef.current;
-      const at = on?.character ? { character: on.character.id, stroke: on.stroke_index } : undefined;
+      const at = on?.character ? { character: on.character.id, stroke: on.stroke_index, take: on.take } : undefined;
       const out = await post<Acted>(`/lessons/${lesson.current}/stroke`, { points, at });
       if (!isNewest(out.seq)) return;
       const graded = !out.refused;
@@ -234,7 +240,7 @@ export function App() {
       if (cue) coach.push(cue);
     } catch (err) {
       if (err instanceof LessonGone) {
-        if (await recover()) coach.push({ text: say.relaid(), ttlS: TTL.cue });
+        coach.push({ text: await recover(), ttlS: TTL.cue });
         return;
       }
       console.warn(err);

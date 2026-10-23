@@ -63,6 +63,8 @@ export class StrokeTutor {
   private _phase: Phase = 'intro';
   /** How each resolved stroke was earned, for a summary that praises from facts. */
   private results: StrokeResult[] = [];
+  /** Bumped by every start of a character (a new one, the next one, or the same one over). */
+  private take = 0;
 
   // ----------------------------------------------------------------- reads
 
@@ -185,6 +187,7 @@ export class StrokeTutor {
     this.total = 1;
     this.lastVerdict = null;
     this.results = [];
+    this.take += 1;
     this._phase = 'writing';
   }
 
@@ -216,6 +219,7 @@ export class StrokeTutor {
       last_verdict: this.lastVerdict ? { ...this.lastVerdict } : null,
       score: { correct: this.correct, total: this.total },
       results: this.results.map((r) => ({ ...r })),
+      take: this.take,
       grid: GRID,
       catalog: catalog(),
     };

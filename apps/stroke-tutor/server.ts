@@ -90,7 +90,7 @@ const app: AppServer = {
     router.post('/lessons/:id/stroke', (req, res) => {
       const lesson = lessonOf(req.params.id);
       if (!lesson) return void res.status(404).json({ error: 'no_lesson' });
-      const { points, at } = (req.body ?? {}) as { points?: unknown; at?: { character?: unknown; stroke?: unknown } };
+      const { points, at } = (req.body ?? {}) as { points?: unknown; at?: { character?: unknown; stroke?: unknown; take?: unknown } };
       if (!Array.isArray(points)) return void res.status(400).json({ error: 'no_points' });
       if (points.length > MAX_POINTS_ACCEPTED) return void res.status(413).json({ error: 'too_many_points' });
       const outcome = drawStroke(lesson.tutor, points, at && typeof at === 'object' ? at : undefined);

@@ -69,12 +69,18 @@ const arriveLate = (match: (path: string) => boolean) => lateRequests.push(match
 const arrive = () => act(async () => { arrivals.shift()?.(); });
 // Lessons the server no longer has (a deploy, a restart, the idle sweep).
 const gone = new Set<string>();
+// Lay-outs that fail once (the server cannot set up a new sheet).
+let failLayouts = 0;
 const lessonId = () => requests.map((r) => r.path.match(/^\/lessons\/([^/]+)/)?.[1]).filter(Boolean).pop()!;
 async function fakeFetch(url: string, init?: { method?: string; body?: string }) {
   const path = url.replace('/api/apps/stroke-tutor', '');
   const body = init?.body ? JSON.parse(init.body) : undefined;
   requests.push({ path, body });
   if ([...gone].some((id) => path.startsWith(`/lessons/${id}`))) return { ok: false, status: 404, json: async () => ({ error: 'no_lesson' }) };
+  if (path === '/lessons' && failLayouts > 0) {
+    failLayouts -= 1;
+    return { ok: false, status: 502, json: async () => ({}) };
+  }
   const late = lateRequests.findIndex((m) => m(path));
   if (late >= 0) {
     lateRequests.splice(late, 1);
@@ -115,6 +121,7 @@ beforeEach(() => {
   lateRequests.length = 0;
   arrivals.length = 0;
   gone.clear();
+  failLayouts = 0;
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
@@ -412,6 +419,73 @@ describe('a stroke in flight while the sheet moves on', () => {
     await settle();
     expect(screen.getByText(/Write stroke/).textContent).toContain('1 of 2');
     expect(screen.queryByText('Correct')).toBeNull();                                // not graded against stroke 1
+    expect(screen.getByRole('alert').textContent).toContain('The sheet moved on before that stroke arrived');
+  });
+});
+
+describe("Ren's tool on a lost sheet says what really happened", () => {
+  /** A coaching line waiting for Ren to finish speaking, about the sheet that is about to be lost. */
+  async function lineWaiting() {
+    const view = await live();
+    await tool('choose_character', { character: 'ten' });
+    fake.speaking = true;
+    view.rerender(<App />);
+    await act(async () => { draw([[150, 450], [850, 450]], { samples: 40 }); });   // right: its line waits for Ren's quiet
+    await settle();
+    gone.add(lessonId());
+    return view;
+  }
+  async function quietNow(view: ReturnType<typeof render>) {
+    fake.events.length = 0;
+    fake.speaking = false;
+    view.rerender(<App />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+  }
+
+  it('a fresh sheet: Ren is told so, and the old sheet\'s waiting line is dropped', async () => {
+    const view = await lineWaiting();
+    expect(await tool('next_stroke')).toMatch(/^Not yet: the sheet had been lost and has been set up again/);
+    await quietNow(view);
+    expect(fake.events.map((e) => e.text).join(' ')).not.toContain('Right: the stroke they drew was correct');
+  });
+
+  it('no fresh sheet either: Ren is not told there is one, and the old line is dropped', async () => {
+    const view = await lineWaiting();
+    failLayouts = 1;
+    const result = await tool('next_stroke');
+    expect(result).toMatch(/^Refused: their sheet was lost and a new one could not be set up/);
+    expect(result).not.toContain('has been set up again');
+    expect(screen.getByText("Your sheet couldn't be laid out.")).toBeTruthy();
+    await quietNow(view);
+    expect(fake.events.map((e) => e.text).join(' ')).not.toContain('Right: the stroke they drew was correct');
+  });
+
+  it('a button on a lost sheet with no fresh one either: Ren hears that, not a fresh sheet', async () => {
+    await live();
+    await tool('choose_character', { character: 'ten' });
+    gone.add(lessonId());
+    failLayouts = 1;
+    fake.events.length = 0;
+    fireEvent.click(button('Show me'));
+    await settle();
+    const said = fake.events.map((e) => e.text).join(' ');
+    expect(said).not.toContain('has been set up again');
+    expect(said).toContain('their sheet was lost and a new one could not be set up');
+  });
+});
+
+describe('a stroke in flight for stroke 1 when Ren starts the same character over', () => {
+  it('is not graded on the cleared sheet', async () => {
+    await live();
+    await tool('choose_character', { character: 'ten' });
+    arriveLate((p) => p.endsWith('/stroke'));
+    await act(async () => { draw([[150, 450], [850, 450]], { samples: 40 }); });   // stroke 1, right, slow to arrive
+    await settle();
+    await tool('start_over');                                                        // back to stroke 1 of the same character, first
+    await arrive();
+    await settle();
+    expect(screen.getByText(/Write stroke/).textContent).toContain('1 of 2');
+    expect(screen.queryByText('Correct')).toBeNull();
     expect(screen.getByRole('alert').textContent).toContain('The sheet moved on before that stroke arrived');
   });
 });

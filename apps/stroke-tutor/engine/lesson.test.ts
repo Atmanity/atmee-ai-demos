@@ -266,7 +266,9 @@ describe("Ren's tools", () => {
     const once = tool(tutor, 'start_over');
     expect(once.text).toContain('back at the beginning of 十');
     const twice = tool(tutor, 'start_over');
-    expect(JSON.stringify(twice.view)).toBe(JSON.stringify(once.view));
+    // The same sheet, as a new take: a stroke drawn between the two belongs to the first.
+    expect({ ...twice.view, take: 0 }).toEqual({ ...once.view, take: 0 });
+    expect(twice.view.take).toBeGreaterThan(once.view.take);
     expect(twice.view.strokes.every((s) => s.points.length === 0)).toBe(true);
   });
 
@@ -352,5 +354,32 @@ describe('a stroke is graded only against the stroke the learner was drawing', (
     const done = drawStroke(tutor, drawing(JUU, 0), { character: 'juu', stroke: 0 });
     expect(done.refused).toBeUndefined();
     expect(done.view.last_verdict?.ok).toBe(true);
+  });
+});
+
+describe('a stroke belongs to one take of the sheet', () => {
+  test('in flight for stroke 1 when the same character is started over: refused, not graded on the cleared sheet', () => {
+    const tutor = new StrokeTutor();
+    runTool(tutor, 'choose_character', { character: 'ten' });
+    const before = tutor.snapshot();
+    runTool(tutor, 'start_over');
+    const late = drawStroke(tutor, drawing(JUU, 0), { character: 'juu', stroke: 0, take: before.take });
+    expect(late.refused).toBe(SHEET_MOVED);
+    expect(late.view.score.correct).toBe(0);
+    expect(drawStroke(tutor, drawing(JUU, 0), { character: 'juu', stroke: 0, take: tutor.snapshot().take }).view.last_verdict?.ok).toBe(true);
+  });
+
+  test('each start, start over or next character is a new take; moving through strokes is not', () => {
+    const tutor = new StrokeTutor();
+    runTool(tutor, 'choose_character', { character: 'ten' });
+    const first = tutor.snapshot().take;
+    runTool(tutor, 'show_stroke');
+    runTool(tutor, 'next_stroke');
+    expect(tutor.snapshot().take).toBe(first);
+    runTool(tutor, 'start_over');
+    const second = tutor.snapshot().take;
+    expect(second).not.toBe(first);
+    runTool(tutor, 'next_character');
+    expect(tutor.snapshot().take).not.toBe(second);
   });
 });

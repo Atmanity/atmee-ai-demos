@@ -43,6 +43,7 @@ function snapshot(over: Partial<Snapshot> = {}): Snapshot {
     last_verdict: null,
     score: { correct: 1, total: 2 },
     results: [{ index: 0, how: 'drawn', tries: 1 }],
+    take: 1,
     grid: 1000,
     catalog: CATALOG,
     ...over,
