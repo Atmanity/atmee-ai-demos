@@ -459,41 +459,6 @@ describe('the drill must not teach the wrong thing', () => {
     for (const answer of ['start CPR', 'give two minutes of CPR', 'CPR for 2 minutes then call']) expect(grade(step, answer).ok, answer).toBe(true);
   });
 
-  // Short expected substrings ("2", "30", "five", "call", "help", "breath")
-  // let a wrong action, or another step's action, score as right: keeping
-  // 30:2 when two rescuers make it 15:2, "2 inches" for the breaths cycle,
-  // "five more back blows" for thrusts. Each step is pinned with the wrong
-  // answers people give and the right ones it must still take.
-  const step = (id: string, key: string) => scenarios.find(id)!.steps.find((s) => s.key === key)!;
-  test.each([
-    ['child_cardiac_arrest', 'ratio_child', ['no, it stays 30 to 2', 'keep going at thirty to two', 'nothing changes', 'the ratio stays the same'], ['yes, 15 to 2 with two rescuers', 'it becomes fifteen to two', '15:2']],
-    ['adult_cardiac_arrest', 'breaths', ['push 2 inches deep', '100 to 120 a minute', 'two minutes then swap', 'look in his mouth'], ['30 compressions to 2 breaths', 'thirty to two', '30:2', 'thirty compressions then two breaths']],
-    ['choking_adult', 'abdominal_thrusts', ['five more back blows', 'give her five more'], ['abdominal thrusts', 'five abdominal thrusts', 'the heimlich', 'fist just above the navel and pull in and up']],
-    ['adult_cardiac_arrest', 'check_response', ['give him rescue breaths', 'two rescue breaths'], ['tap his shoulders and shout', 'check if he is breathing', 'see if he breathes normally']],
-    ['adult_cardiac_arrest', 'call_911', ['call out to him', 'keep going until help takes over'], ['call 911', 'call nine one one and get an AED', 'call an ambulance', 'shout for help and send someone for the defib']],
-    ['adult_cardiac_arrest', 'aed', ['call 911 and send for an AED'], ['turn it on and do what it says', 'pads on his chest', 'switch it on and follow the prompts']],
-    ['adult_cardiac_arrest', 'continue_until', ['until my arms are tired', 'until I get tired', 'add rescue breaths', 'check for response and normal breathing', 'use the AED as soon as it arrives'], ['until the paramedics take over', 'until EMS takes over', 'until he starts breathing normally', 'swap every two minutes until help arrives']],
-    ['child_cardiac_arrest', 'scene_safe', ['jump in the pool'], ['check the scene is safe', 'make sure the poolside is not slippery', 'move her away from the water edge']],
-    ['child_cardiac_arrest', 'cpr_first', ['check for response and normal breathing'], ['start CPR', 'two minutes of CPR first', 'give rescue breaths first']],
-    ['child_cardiac_arrest', 'aed_pediatric', ['go back to compressions', 'turn it on'], ['use the child pads', 'paediatric pads if it has them', 'adult pads if there are no child ones', 'pads front and back']],
-    ['choking_adult', 'if_unresponsive', ['do a finger sweep of her mouth'], ['lower her to the floor and start CPR', 'call 911 and start compressions']],
-    ['recovery_position', 'call_911', ['keep checking his breathing until help arrives'], ['call 911', 'call an ambulance', 'phone for an ambulance']],
-    ['recovery_position', 'open_airway', ['lay him down'], ['tilt his head back', 'keep his airway open', 'mouth pointing down so it drains']],
-  ] as const)('%s / %s: wrong actions are not right, the right ones still are', (id, key, wrong, right) => {
-    const s = step(id, key);
-    for (const answer of wrong) expect(grade(s, answer).ok, `wrong: ${answer}`).toBe(false);
-    for (const answer of right) expect(grade(s, answer).ok, `right: ${answer}`).toBe(true);
-  });
-
-  test('every step still takes its own label as right', () => {
-    for (const scenario of SCENARIOS) for (const s of scenario.steps) expect(grade(s, s.label).ok, `${scenario.id}/${s.key}`).toBe(true);
-  });
-
-  test('a wrong order or a dangerous move gets its own correction, not a generic nudge', () => {
-    expect(grade(step('child_cardiac_arrest', 'ratio_child'), 'it stays 30 to 2').note).toContain('15 to 2');
-    expect(grade(step('choking_adult', 'if_unresponsive'), 'finger sweep her mouth').note).toContain('blind finger sweep');
-  });
-
   test('no step grades its own forbidden answer as correct', () => {
     // A LOOSE expected token that happens to match a forbidden phrase is the
     // trap; forbidden is checked first, and this keeps it so.

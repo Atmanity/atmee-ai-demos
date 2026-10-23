@@ -309,9 +309,47 @@ export class BlsTutor {
  * teach them nothing. The note is the step's own sentence either way.
  */
 export function grade(step: Step, text: string): Verdict {
-  const normalized = (text ?? '').trim().toLowerCase().split(/\s+/).filter(Boolean).join(' ');
-  if (!normalized) return { ok: false, note: step.hint };
-  for (const phrase of step.forbidden) if (normalized.includes(phrase)) return { ok: false, note: step.forbiddenNote || step.hint };
-  for (const phrase of step.expected) if (normalized.includes(phrase)) return { ok: true, note: step.teach };
+  const said = ` ${answerForm(text)} `;
+  if (!said.trim()) return { ok: false, note: step.hint };
+  const has = (phrase: string) => said.includes(answerForm(phrase));
+  if (step.forbidden.some(has)) return { ok: false, note: step.forbiddenNote || step.hint };
+  if (step.expected.some(has)) return { ok: true, note: step.teach };
   return { ok: false, note: step.hint };
+}
+
+const NUMBERS: Record<string, string> = {
+  zero: '0', one: '1', two: '2', three: '3', four: '4', five: '5', six: '6', seven: '7', eight: '8', nine: '9', ten: '10',
+  eleven: '11', twelve: '12', thirteen: '13', fourteen: '14', fifteen: '15', sixteen: '16', seventeen: '17', eighteen: '18', nineteen: '19',
+  twenty: '20', thirty: '30', forty: '40', fifty: '50', sixty: '60',
+};
+const PRONOUNS: Record<string, string> = {
+  i: 'you', me: 'you', we: 'you', us: 'you', my: 'your', our: 'your', myself: 'yourself',
+  he: 'they', she: 'they', him: 'them', her: 'them', his: 'their', hers: 'their',
+};
+
+/**
+ * One form for an answer and for every phrase it is matched against, so a
+ * step's phrases say the action once and every way of saying it lands on
+ * them: numbers in words become digits; a ratio said any way ("30:2",
+ * "thirty two", "30 to two", "thirty-two", "32") becomes "30:2"; 9-1-1 and
+ * "nine one one" become 911; contractions are expanded, possessives and
+ * articles dropped, punctuation gone; first and second person become one
+ * ("tells me to stop" is "tells you to stop"), and so do he, she, him, her;
+ * giving breaths ("rescue breathing", "mouth to mouth") becomes "rescue
+ * breaths", which a breathing check does not contain.
+ */
+export function answerForm(text: string): string {
+  let t = (text ?? '').toLowerCase().replace(/[‘’ʼ`]/g, "'");
+  t = t.replace(/\bcan't\b/g, 'cannot').replace(/\bwon't\b/g, 'will not').replace(/n't\b/g, ' not')
+    .replace(/\b(he|she|it|that|there|what|who|where|here)'s\b/g, '$1 is').replace(/'s\b/g, '')
+    .replace(/'re\b/g, ' are').replace(/'ll\b/g, ' will').replace(/'ve\b/g, ' have').replace(/'d\b/g, ' would').replace(/'m\b/g, ' am');
+  t = t.replace(/(\d)\s*[:/]\s*(\d)/g, '$1 to $2').replace(/[^a-z0-9 ]+/g, ' ');
+  t = t.split(/\s+/).filter(Boolean).map((w) => NUMBERS[w] ?? w).join(' ');
+  t = ` ${t} `
+    .replace(/ 9 1 1 /g, ' 911 ').replace(/ 1 1 2 /g, ' 112 ').replace(/ 9 9 9 /g, ' 999 ')
+    .replace(/ 32 /g, ' 30:2 ').replace(/ 152 /g, ' 15:2 ')
+    .replace(/ (15|30) (?:to |and |for |by )?2 /g, ' $1:2 ')
+    .replace(/ rescue breathing /g, ' rescue breaths ').replace(/ mouth to mouth /g, ' rescue breaths ')
+    .replace(/ (a|an|the) /g, ' ').replace(/ (a|an|the) /g, ' ');
+  return t.split(' ').filter(Boolean).map((w) => PRONOUNS[w] ?? w).join(' ');
 }

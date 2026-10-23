@@ -61,20 +61,26 @@ type StepInput = Omit<Step, 'forbidden' | 'forbiddenNote' | 'visual' | 'metronom
 
 const step = (s: StepInput): Step => Object.freeze({ forbidden: [], forbiddenNote: '', visual: 'scene', metronomeBpm: null, ...s });
 
-// Expected phrases are matched as substrings, so they say the action, not a
-// word that also turns up in a wrong one: a bare "2" took "push 2 inches" as
-// the breaths cycle, "five" took "five more back blows" as thrusts, "call"
-// took "call out to him" as calling 911, "breath" took "give rescue breaths"
-// as checking for breathing. tutor.test.ts pins the wrong answers per step.
+// Expected phrases are matched as substrings of the answer, both put through
+// one normaliser first (tutor.ts answerForm: digits for numbers, one form for
+// "30:2", "you" for I and me, "they" for he and she, no articles), so each
+// phrase says the action once, and never as a word that also turns up in a
+// wrong one: a bare "2" took "push 2 inches" as the breaths cycle, "five"
+// took "five more back blows" as thrusts, "call" took "call out to him" as
+// calling 911. answers.test.ts holds, for every step, the answers people
+// give, right and wrong, and grading must take the whole table.
 
 /** Calling for help, as people say it (not "call out to him", which is checking for a response). */
 const CALL_FOR_HELP = [
-  '911', 'nine one one', '112', '999', 'emergency', 'ambulance', 'paramedic', 'call for help', 'call someone', 'call an', 'call the',
-  'call 9', 'call nine', 'call 1', 'call one', 'phone', 'dial', 'get help', 'send for help', 'send someone', 'shout for help',
+  '911', '112', '999', 'emergency', 'ambulance', 'paramedic', 'call for help', 'call someone', 'call police',
+  'phone', 'dial', 'get help', 'send for help', 'send someone', 'shout for help',
 ] as const;
 
 /** Finding out whether someone responds and breathes (not giving rescue breaths). */
-const CHECK_RESPONSE = ['respon', 'shout', 'tap', 'shake', 'wake', 'breathing', 'breathes', 'for breath'] as const;
+const CHECK_RESPONSE = ['respon', 'shout', 'tap', 'shake', 'wake', 'breathing', 'breathes', 'breathe', 'for breath', 'chest ris', 'chest move', 'is ok', 'you ok', 'you alright', 'ask them'] as const;
+
+/** Lay rescuers do not check a pulse: the same correction wherever it comes up. */
+const NO_PULSE = { forbidden: ['pulse', 'carotid', 'wrist'], forbiddenNote: 'Lay rescuers do not check for a pulse — it wastes time and is unreliable. Check response and normal breathing.' } as const;
 
 export const ADULT_CARDIAC_ARREST: Scenario = {
   id: 'adult_cardiac_arrest',
@@ -145,7 +151,12 @@ export const ADULT_CARDIAC_ARREST: Scenario = {
       key: 'continue_until',
       label: 'Keep going until help takes over',
       prompt: 'Two minutes in and your arms are burning. When do you stop?',
-      expected: ['takes over', 'take over', 'paramedic', 'ems takes', 'ems arrive', 'until ems', 'swap', 'switch', 'wakes', 'breathing normally', 'breathes normally', 'starts breathing', 'breathing on his own', 'help arrives', 'ambulance arrives', 'until help', 'until the ambulance', 'tells you to stop', 'says to stop'],
+      expected: [
+        'takes over', 'take over', 'paramedic', 'ems arriv', 'ems come', 'ems get', 'until ems', 'swap', 'switch', 'wakes', 'wake up',
+        'breathing normally', 'breathes normally', 'breathe normally', 'starts breathing', 'start breathing', 'breathing on his own',
+        'help arriv', 'help come', 'help get', 'ambulance arriv', 'ambulance come', 'ambulance get', 'until help', 'until the ambulance',
+        'tells you to stop', 'tell you to stop', 'says to stop', 'say to stop',
+      ],
       teach: 'Keep going until EMS takes over, the AED tells you to stop, or he starts breathing normally. Swap rescuers about every 2 minutes — tired hands push shallow.',
       hint: 'There are three things that let you stop, and one that lets you rest.',
       visual: 'handover',
@@ -163,7 +174,7 @@ export const CHILD_CARDIAC_ARREST: Scenario = {
       key: 'scene_safe',
       label: 'Check the scene is safe',
       prompt: 'What is your first move as you reach her?',
-      expected: ['safe', 'danger', 'hazard', 'scene', 'wet', 'slip', 'water edge', 'away from the water', 'away from the edge', 'clear of the water'],
+      expected: ['safe', 'danger', 'hazard', 'scene', 'wet', 'slip', 'water edge', 'away from the water', 'away from the pool', 'away from the edge', 'clear of the water', 'clear of the pool', 'back from the edge'],
       teach: 'Check the scene: slippery poolside, deep water, anything that could put you in the pool too. Move her clear of the water edge.',
       hint: 'Before anything else, what about where you both are?',
       visual: 'scene',
@@ -318,7 +329,8 @@ export const RECOVERY_POSITION: Scenario = {
       key: 'check_response_breathing',
       label: 'Confirm no response but normal breathing',
       prompt: 'He does not answer you. What do you establish before anything else?',
-      expected: ['respon', 'breath', 'tap', 'shout', 'check', 'normal', '10 second'],
+      expected: [...CHECK_RESPONSE, 'normal', '10 second'],
+      ...NO_PULSE,
       teach: 'Tap and shout, then look and listen for up to 10 seconds. No response but normal, quiet breathing is a very different problem from cardiac arrest.',
       hint: 'Two findings decide everything that follows here.',
       visual: 'victim_face',
@@ -347,7 +359,7 @@ export const RECOVERY_POSITION: Scenario = {
       key: 'open_airway',
       label: 'Tilt the head to keep the airway open',
       prompt: 'He is on his side. What do you do with his head?',
-      expected: ['tilt', 'head back', 'chin', 'airway', 'mouth', 'drain'],
+      expected: ['tilt', 'head back', 'chin', 'airway', 'mouth down', 'mouth pointing down', 'mouth facing down', 'mouth downward', 'drain'],
       teach: 'Tilt the head back gently and keep the mouth pointing slightly down, so the airway stays open and anything that comes up drains out rather than in.',
       hint: 'The airway has to stay open, and anything that comes up has to go somewhere.',
       visual: 'airway',
@@ -356,7 +368,7 @@ export const RECOVERY_POSITION: Scenario = {
       key: 'monitor_breathing',
       label: 'Keep checking his breathing until help arrives',
       prompt: 'He is stable on his side. What are you doing for the next ten minutes?',
-      expected: ['watch', 'monitor', 'check', 'breath', 'stay', 'until', 'warm', 'swap'],
+      expected: ['watch', 'monitor', 'keep checking', 'check on', 'check his breathing', 'check breathing', 'breathing', 'breathes', 'stay', 'until', 'warm', 'other side', 'swap'],
       teach: 'Stay with him and re-check his breathing continuously. Keep him warm, and if he is on one side more than about 30 minutes, roll him to the other. If normal breathing stops, roll him onto his back and start CPR.',
       hint: 'He can deteriorate — what would make you change everything?',
       visual: 'handover',
