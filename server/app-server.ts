@@ -6,6 +6,8 @@ export interface AppServer {
   id: string;
   title: string;
   tagline: string;
+  /** The product's brand colour and the ink that reads on it, for the index page. */
+  brand?: { color: string; ink: string };
   /** A conductor graph, or null to make sure the avatar runs none. */
   conductor?: { graph: unknown; speakAfterS?: number } | null;
   /** Longest session to ask for. */

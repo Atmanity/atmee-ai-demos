@@ -43,7 +43,7 @@ function caught(router: Router): Router {
 export const api = caught(Router());
 
 api.get('/apps', (_req, res) => {
-  res.json([...apps.values()].map(({ id, title, tagline }) => ({ id, title, tagline, avatar: Boolean(avatarFor(id)) })));
+  res.json([...apps.values()].map(({ id, title, tagline, brand }) => ({ id, title, tagline, brand, avatar: Boolean(avatarFor(id)) })));
 });
 
 api.post('/apps/:app/session', async (req, res) => {

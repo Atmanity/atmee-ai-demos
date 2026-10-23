@@ -125,6 +125,7 @@ const app: AppServer = {
   id: ID,
   title: 'Postmark',
   tagline: 'One photo, three clues: guess the city with Marco.',
+  brand: { color: '#17224a', ink: '#ffffff' },
   maxSeconds: 600,
   appTools: { instructions: INSTRUCTIONS, tools: TOOLS },
   routes(router) {
