@@ -49,14 +49,16 @@
   const norm = (t) => String(t).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
   function transcript(el, names) {
     let live = null, typed = [];
-    const spoken = new Map(); // segment -> its live bubble
-    const isEcho = (text, final) => {
+    // segment -> { d: its bubble (none for an echo), done }. A segment is
+    // remembered after its final, so a stream that lands late (the streams of
+    // one segment are read concurrently) updates nothing and adds no bubble.
+    const spoken = new Map();
+    const echoOf = (text) => {
       const n = norm(text), at = Date.now();
       typed = typed.filter((x) => at - x.at < ECHO_MS);
-      const i = typed.findIndex((x) => (final ? x.n === n : x.n.startsWith(n)));
-      if (i < 0) return false;
-      if (final) typed.splice(i, 1);
-      return true;
+      const i = typed.findIndex((x) => x.n === n);
+      if (i >= 0) typed.splice(i, 1);
+      return i >= 0;
     };
     const stick = () => { el.scrollTop = el.scrollHeight; };
     function bubble(cls, who, text) {
@@ -73,16 +75,24 @@
       },
       user(text, who) { typed.push({ n: norm(text), at: Date.now() }); bubble('me', who || names.user || 'You', text); },
       heard(text, final, segment) {
-        let d = spoken.get(segment);
-        if (!d && isEcho(text, final)) return;
-        if (!text) { if (d) d.remove(); spoken.delete(segment); return; }
-        if (!d) {
-          // A new utterance settles one whose final never came.
-          spoken.forEach((x) => x.classList.remove('live')); spoken.clear();
-          d = bubble('me live', names.user || 'You', text); spoken.set(segment, d);
+        let seg = spoken.get(segment);
+        if (seg && seg.done) return;
+        if (!seg) {
+          seg = { d: null, done: false, echo: false };
+          spoken.set(segment, seg);
+          if (spoken.size > 200) spoken.delete(spoken.keys().next().value);
         }
-        d.querySelector('.t').textContent = text;
-        if (final) { d.classList.remove('live'); spoken.delete(segment); }
+        if (final) seg.done = true;
+        // Checked before its bubble is made, and again on its final.
+        if (!seg.echo && text && (!seg.d || final) && echoOf(text)) seg.echo = true;
+        if (seg.echo || !text) { if (seg.d) seg.d.remove(); seg.d = null; return; }
+        if (!seg.d) {
+          // A new utterance settles any whose final never came.
+          spoken.forEach((x) => x.d && x.d.classList.remove('live'));
+          seg.d = bubble('me live', names.user || 'You', text);
+        }
+        seg.d.querySelector('.t').textContent = text;
+        if (final) seg.d.classList.remove('live');
         stick();
       },
       other(text, who) { bubble('them', who, text); },
