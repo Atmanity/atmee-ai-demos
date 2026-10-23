@@ -1,12 +1,12 @@
 // Outcry's front door: what it is, how it works, and the way in.
 
-/** The mark: a pit trader's badge, clipped on, with the tape's tick across it. */
+/** The mark: a pit trader's badge in oxblood, clipped on, with a brass tick across it. */
 export function Mark({ size = 34 }: { size?: number }) {
   return (
     <svg viewBox="0 0 40 40" width={size} height={size} aria-hidden="true" className="oc-mark">
       <rect x="15" y="2.5" width="10" height="7" rx="2" fill="none" stroke="currentColor" strokeWidth="2.4" />
       <rect x="3" y="8" width="34" height="29" rx="4" fill="currentColor" />
-      <path d="M9 28.5l6-6.5 5 4 7.5-10 4.5 3.5" fill="none" stroke="var(--oc-jacket)" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9 28.5l6-6.5 5 4 7.5-10 4.5 3.5" fill="none" stroke="var(--oc-brass-lit)" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
