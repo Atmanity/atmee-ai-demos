@@ -310,6 +310,28 @@ describe('the clearance hold, as parsed', () => {
     }
   });
 
+  it('holds for a real injury: a break or fracture of a body part, or a dislocation', () => {
+    const cases: [string, string][] = [
+      ['I broke my wrist last month', 'a fracture'], ['I fractured my ankle in June', 'a fracture'], ['she broke her collarbone', 'a fracture'],
+      ['broken ribs', 'a fracture'], ['two fractures', 'a fracture'], ['a stress fracture in my foot', 'a fracture'],
+      ['my wrist is broken', 'a fracture'], ['my left ankle was fractured', 'a fracture'], ['I broke a bone in my hand', 'a fracture'],
+      ['I fractured a vertebra', 'a fracture'], ['I dislocated my shoulder', 'a dislocation'], ['a dislocation last year', 'a dislocation'],
+    ];
+    for (const [said, label] of cases) expect(parse(said).clearance, said).toContain(label);
+  });
+
+  it('does not hold for a stretch, a figure of speech or a near miss', () => {
+    // Bugbot: "I cracked my back" paused the workout, and the pause has no way back.
+    for (const said of [
+      'I cracked my back this morning', 'I cracked my neck', 'I crack my knuckles a lot', 'this is breaking my back',
+      'my back is killing me', 'I broke a sweat', 'I broke my back moving furniture all weekend', 'that nearly broke my neck',
+      'I almost broke my ankle on the stairs', 'break a leg', 'it broke my heart', "I'm breaking in new shoes", 'my neck is cracking',
+      'the team feels fractured', 'a fractured relationship', 'I felt dislocated after the move',
+    ]) {
+      expect(parse(said).clearance, said).toEqual([]);
+    }
+  });
+
   it('does not freeze a session on ordinary sentences', () => {
     // A match halts everything with no way back, so a false positive costs
     // the whole workout. "cooperation" contains "operation"; "broken" is what

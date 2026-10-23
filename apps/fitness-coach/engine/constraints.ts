@@ -89,7 +89,14 @@ const NAMED_INJURIES: [string, string][] = [
  * to modify exercises for your safety" and returned the identical six moves,
  * deadlifts and lateral lunges included, and never suggested seeing anyone.
  */
-const BROKEN_PARTS = 'bones?|ankles?|wrists?|arms?|legs?|ribs?|foot|feet|hands?|collarbones?|toes?|fingers?|elbows?|hips?|knees?|shoulders?|pelvis|femur|tibia|fibula|jaw|neck|back|vertebrae?';
+/**
+ * Body parts a person says they broke when they mean a fracture. Not "back"
+ * or "neck": "I broke my back moving furniture", "that nearly broke my neck"
+ * are figures of speech, and a pause has no way back. A literal broken back
+ * reaches the host's stop_for_safety, and "fractured" or a vertebra holds here.
+ */
+const BROKEN_PARTS = 'bones?|ankles?|wrists?|arms?|legs?|ribs?|foot|feet|hands?|collarbones?|toes?|fingers?|elbows?|hips?|knees?|shoulders?|pelvis|femur|tibia|fibula|jaw|skull|vertebrae?|vertebra';
+const PART = `(?:(?:left|right|lower|upper)\\s+)?(?:${BROKEN_PARTS})`;
 
 /**
  * Each condition as people report it: a verb as well as a noun, any tense, a
@@ -116,8 +123,18 @@ const CLEARANCE_PATTERNS: [RegExp, string][] = [
   // whole session with no un-halt path, so a false positive costs the user
   // their entire workout.
   [/\b(?:had|having|have had|getting|got) (?:an? )?operations?\b|\boperated on\b/, 'recent surgery'],
-  [/\bfractur(?:e|es|ed|ing)\b/, 'a fracture'],
-  [new RegExp(`\\b(?:broke|broken|breaking|cracked)\\s+(?:(?:my|a|her|his|their|the|both)\\s+)?(?:(?:left|right|lower|upper)\\s+)?(?:${BROKEN_PARTS})\\b`), 'a fracture'],
+  // The noun holds on its own ("a stress fracture"); the verb only with a body
+  // part ("I fractured my ankle"), not "the team feels fractured".
+  [/\bfractures?\b/, 'a fracture'],
+  [new RegExp(`\\bfractur(?:ed|ing)\\s+(?:(?:my|a|her|his|their|the|both)\\s+)?${PART}\\b`), 'a fracture'],
+  // A break said about a body part: "I broke my wrist", "a broken rib", "my
+  // ankle is broken", "broke a bone in my hand". Only "broke"/"broken": "cracked
+  // my back/neck/knuckles" is a stretch and "breaking my back" an idiom, and a
+  // near miss ("nearly broke my ankle") is no injury.
+  [new RegExp(`(?<!\\b(?:nearly|almost)\\s)\\b(?:broke|broken)\\s+(?:(?:my|a|her|his|their|the|both)\\s+)?${PART}\\b`), 'a fracture'],
+  [new RegExp(`\\b(?:my|her|his|their|the)\\s+${PART}\\s+(?:is|was|got|has been|had been)\\s+(?:broken|fractured)\\b`), 'a fracture'],
+  [/\bdislocations?\b/, 'a dislocation'],
+  [new RegExp(`\\bdislocat(?:ed|ing)\\s+(?:(?:my|a|her|his|their|the|both)\\s+)?${PART}\\b`), 'a dislocation'],
   // Not "a dizzying number of reps".
   [/\bdizz(?:y|iness)\b/, 'dizziness'],
   // The past tense, because that is how anyone reports it: "I fainted at the
