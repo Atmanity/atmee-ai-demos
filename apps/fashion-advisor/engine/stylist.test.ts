@@ -549,3 +549,73 @@ describe('late work never lands on a newer look', () => {
     expect(done.events[0].text).toMatch(/^Done: 6 new pieces/);
   });
 });
+
+// Pieces found while their occasion's verdict is still being read wait for that read: only a
+// read for the same photo, occasion and direction takes them (Bugbot, PR #14, third round).
+describe('waiting pieces belong to their rail', () => {
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+  /** The extra pieces (the third call for pieces) that made it onto the rail. */
+  const extrasOnRail = (stylist: Stylist) => stylist.view().analysis!.suggestions.filter((p) => / Layer 3-/.test(p.item));
+  const railIsFor = (stylist: Stylist, target: string) => { for (const p of stylist.view().analysis!.suggestions) expect(p.item).toMatch(new RegExp(`^${target} Layer`)); };
+
+  /** A rated fitting; a new occasion whose rail is held (call 2); more pieces for it (call 3) that arrive first and wait. */
+  async function waiting(opts: { failRead?: boolean; thenRetarget?: string } = {}) {
+    const models = new FakeModels();
+    models.piecesByTarget = true;
+    const { stylist } = await styled(models);
+    models.holdSuggest = true;
+    if (opts.failRead) models.readFails = true;
+    const reads = [stylist.act({ type: 'retarget', style: 'wedding' })];
+    await tick();
+    if (opts.thenRetarget) reads.push(stylist.act({ type: 'retarget', style: opts.thenRetarget }));
+    const more = stylist.act({ type: 'more' });
+    await tick();
+    const [railGate, moreGate] = models.suggestGates;
+    models.holdSuggest = false;
+    moreGate();
+    const [found] = await settle(stylist, more);
+    return { models, stylist, reads, railGate, found };
+  }
+
+  test.each([
+    ['matching: the read for their occasion takes them', async () => {
+      const { stylist, reads, railGate, found } = await waiting();
+      expect(found.events[0].text).toMatch(/go on the rail with the new verdict/);
+      railGate();
+      await settle(stylist, reads[0]);
+      expect(extrasOnRail(stylist)).toHaveLength(6);
+      railIsFor(stylist, 'wedding');
+    }],
+    ['older: a read for an earlier occasion lands first and leaves them for theirs', async () => {
+      // The wedding read started before the gala was picked; the pieces were found for the gala.
+      const { stylist, reads, railGate, found } = await waiting({ thenRetarget: 'gala' });
+      expect(found.events[0].text).toMatch(/go on the rail with the new verdict/);
+      railGate();
+      await settle(stylist, reads[0]);
+      expect(extrasOnRail(stylist)).toHaveLength(0);   // not on the wedding rail
+      await settle(stylist, reads[1]);
+      expect(extrasOnRail(stylist)).toHaveLength(6);   // on the gala rail, as promised
+      railIsFor(stylist, 'gala');
+    }],
+    ['newer: a read for a later occasion does not take them', async () => {
+      // The wedding read fails, so the wedding's pieces still wait when the gala is picked and read.
+      const { models, stylist, reads, railGate } = await waiting({ failRead: true });
+      railGate();
+      await settle(stylist, reads[0]);
+      models.readFails = false;
+      await settle(stylist, stylist.act({ type: 'retarget', style: 'gala' }));
+      expect(extrasOnRail(stylist)).toHaveLength(0);
+      railIsFor(stylist, 'gala');
+    }],
+    ['failed: their read fails; Emery hears they wait, and the next read for their occasion takes them', async () => {
+      const { models, stylist, reads, railGate } = await waiting({ failRead: true });
+      railGate();
+      const [failed] = await settle(stylist, reads[0]);
+      expect(failed.events[0].text).toMatch(/^Failed: the verdict didn't come through.*extra pieces .*waiting/);
+      models.readFails = false;
+      await settle(stylist, stylist.act({ type: 'rerate' }));
+      expect(extrasOnRail(stylist)).toHaveLength(6);
+      railIsFor(stylist, 'wedding');   // and the rest of the rail is for the wedding too, not the old occasion's
+    }],
+  ] as const)('%s', async (_name, run) => { await run(); });
+});

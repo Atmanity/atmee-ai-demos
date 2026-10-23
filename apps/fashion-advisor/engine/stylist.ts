@@ -310,6 +310,7 @@ export class Stylist {
     this.latestItem = '';
     this.analysis = null;
     this.railOf = '';
+    this.extras = null;   // pieces waiting for the old photo's rail will never be read for
     this.photoDeclined = false;   // a photo after a refusal is the answer that counts
     this.wantsPhoto = false;
     this.jobs.photo = true;
@@ -478,8 +479,10 @@ export class Stylist {
     const shown = this.current;
     if (!shown) return [];
     const previous = this.analysis;
-    const keepPieces = !opts.refresh && Boolean(previous);
     const rail = this.railKey();   // what fresh pieces are picked for
+    // The rail on screen is kept only when it is this read's: after a failed read for a new occasion
+    // the old occasion's rail is still up, and a fresh rail is due.
+    const keepPieces = !opts.refresh && Boolean(previous) && this.railOf === rail;
     this.jobs.analysing = true;
     this.touch();
     try {
@@ -498,7 +501,8 @@ export class Stylist {
       }
       if (!read) {
         this.notice = { kind: 'error', text: 'The verdict didn\'t come through. Tap "Rate it again".' };
-        return opts.narrate === false ? [] : [say.analysisFailed()];
+        // Pieces waiting for this rail stay waiting (the next read for it takes them); Emery was told they'd land with this verdict.
+        return opts.narrate === false ? [] : [say.analysisFailed(this.extras?.key === rail)];
       }
       if (!known) {
         this.readings.set(key, read);
@@ -534,11 +538,11 @@ export class Stylist {
     return `${this.base?.token ?? ''}\0${stylePhraseKey(this.target)}\0${normalizeStyleCategory(this.category)}`;
   }
 
-  /** A fresh rail, with the extra pieces asked for while it was being read (only if they were for it). */
+  /** A fresh rail, with the extra pieces asked for while it was being read. Only a rail for their key takes them; any other leaves them waiting. */
   private withExtras(rail: Suggestion[], key: string): Suggestion[] {
     const extras = this.extras;
-    this.extras = null;
     if (!extras || extras.key !== key) return rail;
+    this.extras = null;
     const seen = new Set(rail.map((s) => s.item.trim().toLowerCase()));
     const merged = [...rail];
     for (const s of extras.pieces) {

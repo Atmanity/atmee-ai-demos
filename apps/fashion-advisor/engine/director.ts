@@ -228,7 +228,7 @@ export const say = {
     return ev(lines.join(' '), 60, offer ? { offer } : {});
   },
 
-  analysisFailed: () => ev("Failed: the verdict didn't come through this time. Say so in a few words and offer to rate it again; never make up a score.", 30),
+  analysisFailed: (piecesWaiting = false) => ev(`Failed: the verdict didn't come through this time.${piecesWaiting ? ' The extra pieces found for it are waiting too: they go on the rail with the verdict once it comes through.' : ''} Say so in a few words and offer to rate it again; never make up a score.`, 30),
 
   tryOnAck: (item: string, n = 0) => ev(`Started: putting the ${item} on their photo now. It takes about 20 seconds and it is not on yet. Say so in a few words, like "${fill(pick(TRY_ON_ACK_LINES, n), { item: `the ${item}` })}", and don't describe it; you'll be told when it's on their screen.`, 20),
 
