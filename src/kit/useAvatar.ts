@@ -85,8 +85,10 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
   const lineId = useRef(0);
   const addLine = useCallback((line: Omit<Line, 'id'>) => setLines((ls) => [...ls.slice(-80), { ...line, id: ++lineId.current }]), []);
 
+  const starting = useRef(false);   // set before the first await: a second click while the mic prompt is up starts nothing
   const start = useCallback(async ({ mic = false }: { mic?: boolean } = {}) => {
-    if (sessionRef.current) return;
+    if (sessionRef.current || starting.current) return;
+    starting.current = true;
     setErrorCode(undefined); setDetail(''); setLines([]); setCaption(''); setHeard('');
     sentNotes.current.clear();
     let stream: MediaStream | null = null;
@@ -149,6 +151,8 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
       setDetail(ERRORS[code] ?? `The session could not start (${code}).`);
       setPhase('failed');
       stream?.getTracks().forEach((t) => t.stop());
+    } finally {
+      starting.current = false;
     }
   }, [app, addLine]);
 
@@ -187,7 +191,12 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
     },
     mute() { void sessionRef.current?.send({ type: 'mute' }); },
     unmute() { void sessionRef.current?.send({ type: 'unmute' }); },
-    setMic(on) { setMicOn(on); void sessionRef.current?.setMicMuted(!on); },
+    setMic(on) {
+      const session = sessionRef.current;
+      if (!session) return setMicOn(on);   // before a session: the choice for start()
+      // A typing-only session gets a real microphone here; the toggle shows on only once it is.
+      session.setMicMuted(!on).then(() => setMicOn(on), () => setDetail('Microphone unavailable: you can type instead.'));
+    },
     resumeAudio() { void resumeRef.current?.().then(() => setAudioBlocked(false)); },
   }), [phase, detail, errorCode, speaking, caption, heard, lines, secondsLeft, micOn, audioBlocked, start, end, addLine]);
 }

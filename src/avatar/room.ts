@@ -73,7 +73,8 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
   const debug = (...args: unknown[]) => console.debug(`[avatar #${join}]`, ...args);
   debug('join', app);
   const api = `/api/apps/${app}`;
-  const stopMic = () => mic?.getTracks().forEach((t) => t.stop());
+  let lateMic: MediaStream | undefined;   // a microphone turned on mid-session (typing first)
+  const stopMic = () => [mic, lateMic].forEach((m) => m?.getTracks().forEach((t) => t.stop()));
   opts.onPhase?.('starting');
   const session = await startSession(api, opts.onPhase).catch((err) => { stopMic(); throw err; });
   // From here the avatar is waiting in the room: a closed tab must end the session.
@@ -87,7 +88,7 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
   let linked = false;
   let lastState: string | undefined;
   let micTrack: { mute(): Promise<unknown>; unmute(): Promise<unknown> } | undefined;
-  let silence: AudioContext | undefined;
+  let silence: { ctx: AudioContext; track: MediaStreamTrack } | undefined;
   const outbox: [string, string][] = [];   // sent before the agent links the user
   const sendText = async (topic: string, text: string) => {
     if (!linked) {
@@ -103,7 +104,7 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
     removeEventListener('pagehide', onPageHide);
     floor.close();
     stopMic();
-    void silence?.close();
+    void silence?.ctx.close();
   };
   const finish = (reason: unknown) => {
     if (ended) return;
@@ -217,6 +218,19 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
     note: (text) => send({ type: 'note', text }),
     event: (text, ttlS) => send({ type: 'event', text, ...(ttlS ? { ttl_s: ttlS } : {}) }),
     async setMicMuted(muted) {
+      if (!micTrack && !muted) {
+        // A typing-only session turning the mic on: a real microphone in place of the silence.
+        lateMic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+        if (ended) return void lateMic.getTracks().forEach((t) => t.stop());
+        const published = await room.localParticipant.publishTrack(lateMic.getAudioTracks()[0], { source: Track.Source.Microphone });
+        micTrack = published.track as typeof micTrack;
+        if (silence) {
+          await room.localParticipant.unpublishTrack(silence.track);
+          void silence.ctx.close();
+          silence = undefined;
+        }
+        return;
+      }
       if (micTrack) await (muted ? micTrack.mute() : micTrack.unmute());
     },
     async end() {
@@ -253,7 +267,7 @@ async function startSession(api: string, onPhase?: JoinOptions['onPhase']): Prom
 // reconnect, and the platform ends a session whose user reconnects.
 async function publishSilence(room: Room) {
   const ctx = new AudioContext();
-  const out = ctx.createMediaStreamDestination();
-  await room.localParticipant.publishTrack(out.stream.getAudioTracks()[0], { name: 'silence', dtx: false });
-  return ctx;
+  const track = ctx.createMediaStreamDestination().stream.getAudioTracks()[0];
+  await room.localParticipant.publishTrack(track, { name: 'silence', dtx: false });
+  return { ctx, track };
 }

@@ -47,6 +47,8 @@ async function photoFor(city: City): Promise<string | null> {
       if (!source) continue;
       const token = randomBytes(12).toString('hex');
       photoSources.set(token, data.thumbnail?.source && data.originalimage?.width > 2400 ? data.thumbnail.source.replace(/\/\d+px-/, '/1280px-') : source);
+      // Bounded like the bytes: the oldest go first (a game 200 decks back loses its photos).
+      if (photoSources.size > 600) photoSources.delete(photoSources.keys().next().value!);
       return `/api/apps/${ID}/photo/${token}`;
     } catch {
       // the next title, or no photo

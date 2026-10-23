@@ -1,7 +1,7 @@
 // /api: the apps (discovered from apps/<id>/server.ts), their sessions, and
 // each app's own routes under /api/apps/<id>/.
 import { existsSync, readdirSync } from 'node:fs';
-import { Router } from 'express';
+import { Router, type NextFunction, type Request, type Response } from 'express';
 import type { AppServer } from './app-server.ts';
 import { endSession, setConductor, startSession } from './atmee.ts';
 
@@ -26,7 +26,21 @@ const conductorOf = new Map<string, string>();
 // Sessions this server started, forgotten once they can no longer run.
 const started = new Map<string, string>();
 
-export const api = Router();
+// Express 4 does not catch a rejected async handler: the request hangs and the
+// rejection can end the process (the Avatar API unreachable, a model call that
+// throws). Every route here and in the apps goes through this.
+function caught(router: Router): Router {
+  for (const method of ['get', 'post', 'put', 'patch', 'delete'] as const) {
+    const register = router[method].bind(router) as (...args: unknown[]) => Router;
+    (router as unknown as Record<string, unknown>)[method] = (path: unknown, ...handlers: unknown[]) =>
+      register(path, ...handlers.map((h) => (typeof h === 'function'
+        ? (req: Request, res: Response, next: NextFunction) => Promise.resolve(h(req, res, next)).catch(next)
+        : h)));
+  }
+  return router;
+}
+
+export const api = caught(Router());
 
 api.get('/apps', (_req, res) => {
   res.json([...apps.values()].map(({ id, title, tagline }) => ({ id, title, tagline, avatar: Boolean(avatarFor(id)) })));
@@ -70,7 +84,13 @@ api.post('/apps/:app/session/:id/end', async (req, res) => {
 
 for (const app of apps.values()) {
   if (!app.routes) continue;
-  const router = Router();
+  const router = caught(Router());
   app.routes(router);
   api.use(`/apps/${app.id}`, router);
 }
+
+api.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
+  console.error('[api] %s %s failed: %s', req.method, req.path, err.message);
+  if (!res.headersSent) res.status(502).json({ error: 'upstream_failed' });
+  else res.end();
+});
