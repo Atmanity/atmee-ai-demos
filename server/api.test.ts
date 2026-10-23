@@ -48,3 +48,13 @@ test('on shutdown every session still live is ended, once; one the page already 
   await endLiveSessions();
   expect(calls).toEqual([]);
 });
+
+test('the app list carries what the home page counts: each host\'s tools and whether it keeps to an agenda', async () => {
+  const list = (await (await fetch(`http://127.0.0.1:${port}/api/apps`)).json()) as { id: string; tools: number; agenda: boolean }[];
+  expect(list.length).toBeGreaterThan(0);
+  for (const a of list) {
+    expect(Number.isInteger(a.tools) && a.tools >= 0).toBe(true);
+    expect(typeof a.agenda).toBe('boolean');
+  }
+  expect(list.find((a) => a.id === 'sky-guide')?.tools).toBeGreaterThan(0);
+});
