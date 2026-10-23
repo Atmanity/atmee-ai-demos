@@ -1,41 +1,50 @@
 import { expect, test } from 'vitest';
 import { FALLBACK_CITIES } from './deck.ts';
-import { boardState, NOTES, say } from './director.ts';
+import { boardState, INSTRUCTIONS, said, TOOLS } from './director.ts';
 import { Game } from './game.ts';
 
 const fresh = () => new Game(structuredClone(FALLBACK_CITIES));
 
-test('the board never names the city before the reveal, whatever was asked', () => {
+test('the board never names the city before the reveal, and never stages a clue', () => {
   const g = fresh();
   g.hint(); g.hint();
   const hidden = boardState(g.view('/photo/x'));
   for (const word of [g.city.name, g.city.country]) expect(hidden).not.toContain(word);
   expect(hidden).toContain(g.city.hints[1]);
+  expect(hidden).not.toContain(g.city.hints[2]);   // the next clue comes only from get_clue
   expect(hidden).toContain('worth 2 points');
   g.win();
   expect(boardState(g.view(null))).toContain(g.city.name);
 });
 
-test('every standing note fits the 2,000-character limit, and the state stays under 3,858', () => {
-  for (const note of NOTES) expect(note.length).toBeLessThanOrEqual(2000);
+test('the instructions and the state fit the API limits', () => {
+  expect(INSTRUCTIONS.length).toBeLessThanOrEqual(4000);
   const g = fresh();
   g.hint(); g.hint(); g.hint();
   expect(boardState(g.view(null)).length).toBeLessThan(3858);
 });
 
-test('the round-intro line never names the next city', () => {
-  const g = fresh();
-  g.skip(); g.next();
-  const line = say.next(g.view(null));
-  expect(line).not.toContain(g.city.name);
+test('the tools fit the API: names, descriptions, schemas, all await', () => {
+  expect(TOOLS.length).toBeLessThanOrEqual(30);
+  const names = TOOLS.map((t) => t.name);
+  expect(new Set(names).size).toBe(names.length);
+  for (const tool of TOOLS) {
+    expect(tool.name).toMatch(/^[a-z][a-z0-9_]{0,47}$/);
+    expect(['web_search', 'lookup']).not.toContain(tool.name);
+    expect(tool.description.length).toBeGreaterThan(0);
+    expect(tool.description.length).toBeLessThanOrEqual(500);
+    expect(tool.parameters.type).toBe('object');
+    expect(JSON.stringify(tool.parameters).length).toBeLessThanOrEqual(4096);
+    expect(tool['x-atmee']?.mode).toBe('await');
+    expect(tool['x-atmee']!.timeoutSeconds!).toBeLessThanOrEqual(28);
+  }
+  expect(JSON.stringify(TOOLS).length).toBeLessThanOrEqual(24576);
+  for (const name of names) expect(INSTRUCTIONS).toContain(name);
 });
 
-test('the next clue is staged in the state while the round is open, and only then', () => {
+test('the round-intro result never names the next city; a wrong guess never names this one', () => {
   const g = fresh();
-  expect(boardState(g.view(null))).toContain(g.city.hints[0]);
-  g.hint();
-  expect(boardState(g.view(null))).toContain(g.city.hints[1]);
-  g.skip();
-  const after = boardState(g.view(null));
-  expect(after).not.toContain('give them this one');
+  expect(said.wrong('Paris', g.view(null))).not.toContain(g.city.name);
+  g.skip(); g.next();
+  expect(said.next(g.view(null))).not.toContain(g.city.name);
 });

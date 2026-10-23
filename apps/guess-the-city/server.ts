@@ -1,14 +1,15 @@
 // Guess the City's server side: it owns the game (the page never learns the
 // city before the reveal), builds each deck with a model call, serves the
-// photos behind opaque URLs, and judges everything the player says or types.
+// photos behind opaque URLs, and answers the host's tool calls and the
+// player's buttons with one set of actions.
 import { randomBytes } from 'node:crypto';
 import type { AppServer } from '../../server/app-server.ts';
 import { llmAvailable, structured } from '../../server/llm.ts';
 import { DECK_SCHEMA, deckFrom, deckPrompt, shuffledFallback } from './engine/deck.ts';
-import { say } from './engine/director.ts';
+import { INSTRUCTIONS, pressed, said, TOOLS } from './engine/director.ts';
 import { Game } from './engine/game.ts';
-import { commandIn, GUESS_SCHEMA, guessPrompt, namesCity, type Command } from './engine/judge.ts';
-import type { City, Outcome } from './engine/types.ts';
+import { MATCH_SCHEMA, matchPrompt, namesCity, type Command } from './engine/judge.ts';
+import type { City, View } from './engine/types.ts';
 
 const ID = 'guess-the-city';
 // Wikimedia refuses requests without a descriptive User-Agent with contact details.
@@ -66,61 +67,66 @@ async function newPlay(): Promise<Play> {
 
 const viewOf = (play: Play) => play.game.view(play.photos[Math.min(play.game.index, play.photos.length - 1)] ?? null);
 
-function apply(play: Play, command: Command): Outcome {
+/** The game's actions: what each did, as the words the host speaks from. */
+async function run(play: Play, action: string, args: Record<string, unknown> = {}): Promise<{ play: Play; text: string }> {
   const { game } = play;
-  if (command === 'hint') {
-    const clue = game.hint();
-    const view = viewOf(play);
-    if (clue) return { view, handled: true, kind: 'hint', event: say.hint(clue, view) };
-    if (game.over) return { view, handled: true, event: say.finished() };
-    return { view, handled: true, event: game.revealed ? say.solved() : say.noHint() };
+  if (action === 'new_game') {
+    // A fresh deck: the same three cities again would be no game.
+    const fresh = await newPlay();
+    return { play: fresh, text: said.start(viewOf(fresh)) };
   }
-  if (command === 'skip') {
-    if (game.over) return { view: viewOf(play), handled: true, event: say.finished() };
-    if (!game.skip()) return { view: viewOf(play), handled: true };
-    return { view: viewOf(play), handled: true, kind: 'skip', event: say.skip(viewOf(play)) };
+  if (game.over) return { play, text: said.finished() };
+  switch (action) {
+    case 'check_guess': {
+      if (game.revealed) return { play, text: said.alreadyRevealed(viewOf(play)) };
+      const place = String(args.place ?? '').trim().slice(0, 80);
+      if (!place) return { play, text: 'No place was given: ask the player which city they mean.' };
+      if (await isTheCity(game.city, place)) {
+        const points = game.win();
+        return { play, text: said.right(viewOf(play), points) };
+      }
+      return { play, text: said.wrong(place, viewOf(play)) };
+    }
+    case 'get_clue': {
+      if (game.revealed) return { play, text: said.alreadyRevealed(viewOf(play)) };
+      const clue = game.hint();
+      return { play, text: clue ? said.clue(clue, viewOf(play)) : said.noClue() };
+    }
+    case 'reveal_answer':
+      if (!game.skip()) return { play, text: said.alreadyRevealed(viewOf(play)) };
+      return { play, text: said.reveal(viewOf(play)) };
+    case 'next_city': {
+      if (!game.next()) return { play, text: said.notRevealed() };
+      const view = viewOf(play);
+      return { play, text: game.over ? said.over(view) : said.next(view) };
+    }
   }
-  if (command === 'next') {
-    if (game.over) return { view: viewOf(play), handled: true, event: say.finished() };
-    if (!game.next()) return { view: viewOf(play), handled: true, event: say.notRevealed() };
-    const view = viewOf(play);
-    return { view, handled: true, kind: 'next', event: game.over ? say.over(view) : say.next(view) };
-  }
-  return { view: viewOf(play), handled: false };
+  throw new Error(`unknown action ${action}`);
 }
 
-/** A spoken or typed line that is not a command: a guess, or something for the avatar alone. */
-async function judge(play: Play, text: string): Promise<Outcome> {
-  const { game } = play;
-  // Between rounds or after the game a city name is not a guess; the avatar answers it.
-  if (game.revealed || game.over) return { view: viewOf(play), handled: false };
-  let verdict: { isGuess: boolean; place: string; correct: boolean };
-  if (llmAvailable()) {
-    try {
-      verdict = await structured({ system: 'You judge one utterance in a city-guessing game.', user: guessPrompt(game.city, text), schema: GUESS_SCHEMA, temperature: 0 });
-    } catch (err) {
-      console.warn('[%s] judging failed (%s); matching the name instead', ID, (err as Error).message);
-      verdict = { isGuess: namesCity(text, game.city), place: game.city.name, correct: namesCity(text, game.city) };
-    }
-  } else {
-    const right = namesCity(text, game.city);
-    const asked = /^\s*(is it|it'?s|it is|maybe|i think it'?s|i guess)\b\s*(.+?)[?.!]*\s*$/i.exec(text);
-    verdict = { isGuess: right || Boolean(asked), place: right ? game.city.name : asked?.[2] ?? text, correct: right };
+async function isTheCity(city: City, place: string): Promise<boolean> {
+  if (namesCity(place, city)) return true;
+  if (!llmAvailable()) return false;
+  try {
+    const verdict = await structured<{ correct: boolean }>({ system: 'You judge one answer in a city-guessing game.', user: matchPrompt(city, place), schema: MATCH_SCHEMA, temperature: 0 });
+    return verdict.correct === true;
+  } catch (err) {
+    console.warn('[%s] judging failed (%s); matching the name only', ID, (err as Error).message);
+    return false;
   }
-  if (!verdict.isGuess) return { view: viewOf(play), handled: false };
-  if (verdict.correct) {
-    const points = game.win();
-    const view = viewOf(play);
-    return { view, handled: true, kind: 'guess', event: say.right(view, points) };
-  }
-  return { view: viewOf(play), handled: true, kind: 'guess', event: say.wrong(verdict.place || text) };
 }
+
+const BUTTONS: Record<Command, [string, string]> = {
+  hint: ['get_clue', 'Get a clue'], skip: ['reveal_answer', 'I give up'], next: ['next_city', 'Next city'], new: ['new_game', 'Play again'],
+};
+const ACTIONS = new Set(TOOLS.map((t) => t.name));
 
 const app: AppServer = {
   id: ID,
   title: 'Guess the City',
   tagline: 'A photo of a mystery city, three clues, and a host who never knows the answer.',
   maxSeconds: 600,
+  appTools: { instructions: INSTRUCTIONS, tools: TOOLS },
   routes(router) {
     router.post('/games', async (_req, res) => {
       const id = randomBytes(9).toString('hex');
@@ -128,25 +134,29 @@ const app: AppServer = {
       plays.set(id, play);
       for (const [key, p] of plays) if (Date.now() - p.at > 3 * 3600_000) plays.delete(key);
       const view = viewOf(play);
-      res.json({ id, outcome: { view, handled: true, event: say.start(view) } satisfies Outcome });
+      res.json({ id, view, opening: said.start(view) });
     });
 
+    // The host's tool calls: the result is what it says next.
+    router.post('/games/:id/tool', async (req, res) => {
+      const play = plays.get(req.params.id);
+      if (!play) return void res.status(404).json({ error: 'no_game' });
+      const { name, arguments: args } = req.body as { name?: string; arguments?: Record<string, unknown> };
+      if (!name || !ACTIONS.has(name)) return void res.status(400).json({ error: 'unknown_tool' });
+      const done = await run(play, name, args ?? {});
+      plays.set(req.params.id, done.play);
+      res.json({ view: viewOf(done.play), result: done.text } satisfies { view: View; result: string });
+    });
+
+    // The player's buttons: the host cannot see them, so it is told.
     router.post('/games/:id/act', async (req, res) => {
       const play = plays.get(req.params.id);
       if (!play) return void res.status(404).json({ error: 'no_game' });
-      const { command, text } = req.body as { command?: Command; text?: string };
-      const said = typeof text === 'string' ? text.trim() : '';
-      const action = command ?? (said ? commandIn(said) : null);
-      if (action === 'new') {
-        // A fresh deck: the same three cities again would be no game.
-        const fresh = await newPlay();
-        plays.set(req.params.id, fresh);
-        const view = viewOf(fresh);
-        return void res.json({ view, handled: true, event: say.start(view) } satisfies Outcome);
-      }
-      if (action) return void res.json(apply(play, action));
-      if (said) return void res.json(await judge(play, said));
-      res.status(400).json({ error: 'nothing_to_do' });
+      const button = BUTTONS[(req.body as { command?: Command }).command as Command];
+      if (!button) return void res.status(400).json({ error: 'unknown_command' });
+      const done = await run(play, button[0]);
+      plays.set(req.params.id, done.play);
+      res.json({ view: viewOf(done.play), event: pressed(button[1], done.text) });
     });
 
     router.get('/photo/:token', async (req, res) => {

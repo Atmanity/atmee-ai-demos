@@ -63,7 +63,6 @@ export class Game {
       score: this.score,
       over: this.over,
       hints: city.hints.slice(0, this.hintsGiven),
-      nextHint: this.revealed || this.over ? null : city.hints[this.hintsGiven] ?? null,
       hintsTotal: city.hints.length,
       revealed: this.revealed,
       correct: this.correct,

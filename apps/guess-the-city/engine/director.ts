@@ -1,44 +1,62 @@
-// What the avatar is told, and when. The game decides everything; the avatar
-// hosts. It never knows the city before the reveal, so these texts are the
-// only way the answer reaches it, and only once the round is over.
+// What the avatar is told, and how it acts. The game decides everything; the
+// avatar hosts. It never knows the city before the reveal: it calls the
+// game's tools, and every verdict, clue and reveal comes back as a tool
+// result it speaks from.
+import type { AppTool } from '../../../server/app-server.ts';
 import { hintCost, roundValue } from './game.ts';
 import type { View } from './types.ts';
 
-/** Standing rules, sent once as notes (each note at most 2,000 characters). */
-export const NOTES = [
-  `You are hosting "Guess the City" for one player. A photo of a mystery city is on the player's screen. You cannot see it and you are never told which city it is until the round is over. Never describe it, guess at it, or mention any landmark, feature or region: a made-up detail is a false clue. Clues come only from the game, which hands them to you word for word. Keep every reply to one or two short sentences, spoken aloud: no lists.`,
-  `The game, not you, judges everything. You do not know the city, so when the player names one, any verdict from you is a guess: never say right, wrong, close, "not quite" or "correct". Say only a few words like "Ooh, let's see!" and stop; the game tells you the verdict a moment later. If the game has already told you the verdict for that guess, just carry on from it. The same goes for asking for a clue, giving up, the next city or a new game: acknowledge briefly and wait for the game. Scoring, if asked: a city guessed with no clues is worth 4 points, each clue costs one point, never below 1; a game is three cities.`,
+/** The host's rules: the session's tool instructions (at most 4,000 characters). */
+export const INSTRUCTIONS = `You are hosting "Guess the City" for one player. A photo of a mystery city is on the player's screen. You cannot see it and you do not know which city it is: the game does, and you reach it only through its tools.
+- When the player names a place as their answer ("is it Lisbon?", "Paris!", "maybe Osaka"), call check_guess with that place before saying anything about it, and answer only from the result. Never say right, wrong, close or "not quite" on your own.
+- When they ask for a clue or a hint, call get_clue and give that clue in your own words, adding nothing. Never make up a clue, describe the photo, or mention a landmark, feature or region yourself.
+- "I give up", "tell me", "skip": call reveal_answer. "Next", "next city", "go on": call next_city. "New game", "play again": call new_game.
+- Questions about the score, the round or the rules: answer from the live board in your context, no tool needed.
+- If the player presses a button on screen, the game tells you what happened; carry on from that.
+Scoring: a city guessed with no clues is worth 4 points, each clue costs one point, never below 1; a game is three cities. Keep every reply to one or two short spoken sentences: no lists.`;
+
+const noArgs = { type: 'object', properties: {}, additionalProperties: false };
+const awaits = { mode: 'await' as const, timeoutSeconds: 12 };
+
+/** The game's tools. Each is answered by the server, which owns the city. */
+export const TOOLS: AppTool[] = [
+  { type: 'function', name: 'check_guess', description: 'Judges the player\'s answer against the mystery city. Call it whenever the player names a place as their guess, before reacting to it.',
+    parameters: { type: 'object', properties: { place: { type: 'string', minLength: 1, maxLength: 80, description: 'The place the player named, as they said it.' } }, required: ['place'], additionalProperties: false },
+    'x-atmee': awaits },
+  { type: 'function', name: 'get_clue', description: 'Gives the next clue for the mystery city (it costs the player a point). Call it when the player asks for a clue or a hint.', parameters: noArgs, 'x-atmee': awaits },
+  { type: 'function', name: 'reveal_answer', description: 'Reveals the city when the player gives up.', parameters: noArgs, 'x-atmee': awaits },
+  { type: 'function', name: 'next_city', description: 'Moves on to the next mystery city once the current one is solved or revealed.', parameters: noArgs, 'x-atmee': awaits },
+  { type: 'function', name: 'new_game', description: 'Starts a new game of three new cities.', parameters: noArgs, 'x-atmee': awaits },
 ];
 
 /** The live board, as the avatar's state. Never the answer before the reveal. */
 export function boardState(v: View): string {
   const parts = [`Guess the City, live board. Round ${Math.min(v.round, v.rounds)} of ${v.rounds}. Score ${v.score}.`];
   if (v.over) {
-    parts.push(`The game is over: the player finished with ${v.score} of ${v.rounds * 4} points. Offer a new game.`);
+    parts.push(`The game is over: the player finished with ${v.score} of ${v.rounds * 4} points.`);
   } else if (v.revealed && v.city) {
-    parts.push(`This round is over: the city was ${v.city.name}, ${v.city.country}${v.correct ? ', and the player guessed it' : ', the player gave up'}. Fun fact: ${v.city.funFact} Next: the player can ask for the next city.`);
+    parts.push(`This round is over: the city was ${v.city.name}, ${v.city.country}${v.correct ? ', and the player guessed it' : ', the player gave up'}. Next: the next city.`);
   } else {
     const clues = v.hints.length ? ` They are: ${v.hints.map((h, i) => `(${i + 1}) ${h}`).join(' ')}` : '';
-    parts.push(`The city is still hidden from you. Clues given: ${v.hints.length} of ${v.hintsTotal}.${clues} A right guess now is worth ${roundValue(v.hints.length)} points${v.hints.length < v.hintsTotal ? `; the next clue costs ${hintCost(v.hints.length)}` : '; no clues are left'}.`);
-    // The next clue is staged here so that the avatar's own, immediate answer to
-    // "give me a clue" is the real one: the app's event would come too late.
-    parts.push(v.nextHint
-      ? `If the player asks for a clue, give them this one, in your own words and adding nothing: "${v.nextHint}". Never give it unasked, and never make up a clue of your own.`
-      : `If the player asks for a clue, there are none left: say so. Never make up a clue of your own.`);
+    parts.push(`The city is hidden, from you too. Clues given: ${v.hints.length} of ${v.hintsTotal}.${clues} A right guess now is worth ${roundValue(v.hints.length)} points${v.hints.length < v.hintsTotal ? `; the next clue costs ${hintCost(v.hints.length)}` : '; no clues are left'}.`);
   }
   return parts.join(' ');
 }
 
-export const say = {
-  start: (v: View) => `A new game of Guess the City starts: the first mystery city's photo is on the player's screen (round 1 of ${v.rounds}). Welcome them in one or two sentences and invite a first guess; they can ask for a clue any time.`,
-  hint: (clue: string, v: View) => `The player asked for a clue. Give them exactly this clue in your own words, adding nothing: "${clue}". That is clue ${v.hints.length} of ${v.hintsTotal}; the city is now worth ${roundValue(v.hints.length)} points.`,
-  noHint: () => `The player asked for another clue, but all of them are used. Say so briefly: they can guess or give up.`,
-  wrong: (place: string) => `The player guessed ${place}, and that is not the city. Tell them kindly it isn't, and offer a clue if they would like one.`,
-  right: (v: View, points: number) => `The player guessed right: it is ${v.city!.name}, ${v.city!.country}! They win ${points} point${points === 1 ? '' : 's'} (score ${v.score}). Celebrate briefly, share this fun fact in your own words: ${v.city!.funFact} Then offer the next city.`,
-  skip: (v: View) => `The player gave up. Reveal that it was ${v.city!.name}, ${v.city!.country}, share this fun fact in your own words: ${v.city!.funFact} Then offer the next city.`,
-  solved: () => `The player asked for a clue, but this city is already solved. Offer the next city.`,
-  notRevealed: () => `The player asked for the next city, but this one is not solved yet. Say they can keep guessing, take a clue, or give up to see the answer.`,
-  next: (v: View) => `Round ${v.round} of ${v.rounds}: a new mystery city's photo is on the player's screen. Invite a first guess in one line. Do not describe or name the city.`,
-  over: (v: View) => `That was the last city: the player finished with ${v.score} of ${v.rounds * 4} points. Congratulate them warmly in a sentence and offer a new game.`,
+/** What a tool call (or a button) did, in words the host speaks from. */
+export const said = {
+  start: (v: View) => `A new game starts: round 1 of ${v.rounds}, the first mystery city's photo is on the player's screen. Welcome them in one or two sentences and invite a first guess; they can ask for a clue any time.`,
+  right: (v: View, points: number) => `Correct: it is ${v.city!.name}, ${v.city!.country}. The player wins ${points} point${points === 1 ? '' : 's'} (score ${v.score}). Celebrate briefly, share this fun fact in your own words: ${v.city!.funFact} Then offer the next city.`,
+  wrong: (place: string, v: View) => `${place} is not the city. Tell them kindly; ${v.hints.length < v.hintsTotal ? 'they can guess again or ask for a clue' : 'no clues are left: they can guess again or give up'}.`,
+  clue: (clue: string, v: View) => `Clue ${v.hints.length} of ${v.hintsTotal}: "${clue}". Give it in your own words, adding nothing. A right guess is now worth ${roundValue(v.hints.length)} points.`,
+  noClue: () => `No clues are left for this city. The player can guess again or give up.`,
+  reveal: (v: View) => `The player gave up. It was ${v.city!.name}, ${v.city!.country}. Share this fun fact in your own words: ${v.city!.funFact} Then offer the next city.`,
+  next: (v: View) => `Round ${v.round} of ${v.rounds}: a new mystery city's photo is on the player's screen. Invite a first guess in one line; do not describe or name the city.`,
+  over: (v: View) => `That was the last city: the player finished with ${v.score} of ${v.rounds * 4} points. Congratulate them in a sentence and offer a new game.`,
+  notRevealed: () => `This city is not solved yet: the player can keep guessing, take a clue, or give up to see the answer.`,
+  alreadyRevealed: (v: View) => `This round is already over (it was ${v.city!.name}). Offer the next city.`,
   finished: () => `The game is over. Offer a new game.`,
 };
+
+/** A button press, told to the host: it cannot see the screen. */
+export const pressed = (button: string, outcome: string) => `The player pressed "${button}" on screen. ${outcome}`;

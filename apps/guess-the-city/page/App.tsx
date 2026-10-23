@@ -1,11 +1,12 @@
-// Guess the City: the avatar hosts; the server owns the game and judges every
-// guess. The page shows the board, keeps the avatar's state in step with it,
-// and passes on what happened as events.
+// Guess the City: the avatar hosts; the server owns the game. The host calls
+// the game's tools (a guess, a clue, the next city) and speaks from the
+// results; the page answers those calls, shows the board, keeps the host's
+// picture of it current, and tells the host about button presses.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AvatarStage, Composer, Transcript, useAvatar } from '../../../src/kit/index.ts';
-import { boardState, NOTES } from '../engine/director.ts';
+import { AvatarStage, Composer, Transcript, useAvatar, type ToolCall } from '../../../src/kit/index.ts';
+import { boardState } from '../engine/director.ts';
 import type { Command } from '../engine/judge.ts';
-import type { Outcome, View } from '../engine/types.ts';
+import type { View } from '../engine/types.ts';
 import { Board } from './Board.tsx';
 import './board.css';
 
@@ -22,30 +23,31 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const game = useRef<string | null>(null);
 
-  const avatar = useAvatar('guess-the-city', {
-    // The avatar hears the player too, and answers at once; the game's verdict
-    // follows as an event (the standing notes tell it to wait for that).
-    onUserSaid: (text, how) => { if (how === 'spoken') void act({ text }, 'spoken'); },
-  });
-
-  const show = useCallback((outcome: Outcome, from: 'spoken' | 'other' = 'other') => {
-    setView(outcome.view);
-    // A clue asked for out loud was already given from the staged one in the
-    // avatar's state; telling it again would repeat it.
-    const alreadySaid = from === 'spoken' && outcome.kind === 'hint';
-    if (outcome.event && !alreadySaid) avatar.event(outcome.event, 30);
-  }, [avatar.event]);
-
-  async function act(input: { command?: Command; text?: string }, from: 'spoken' | 'other' = 'other'): Promise<Outcome | null> {
-    if (!game.current) return null;
+  // The host's tool calls: the server acts, the board follows, the result is what the host says.
+  const onToolCall = useCallback(async ({ name, arguments: args }: ToolCall) => {
+    if (!game.current) throw new Error('the game is still being dealt; try again in a moment');
     setBusy(true);
     try {
-      const outcome = await post<Outcome>(`/games/${game.current}/act`, input);
-      show(outcome, from);
-      return outcome;
+      const { view: next, result } = await post<{ view: View; result: string }>(`/games/${game.current}/tool`, { name, arguments: args });
+      setView(next);
+      return result;
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  const avatar = useAvatar('guess-the-city', { onToolCall });
+
+  // A button acts at once; the host cannot see it, so it is told.
+  async function press(command: Command) {
+    if (!game.current) return;
+    setBusy(true);
+    try {
+      const { view: next, event } = await post<{ view: View; event: string }>(`/games/${game.current}/act`, { command });
+      setView(next);
+      avatar.event(event, 30);
     } catch (err) {
       console.warn(err);
-      return null;
     } finally {
       setBusy(false);
     }
@@ -54,23 +56,15 @@ export function App() {
   // The game is dealt while the avatar is on its way (both take a while).
   useEffect(() => {
     if (avatar.phase !== 'starting' || game.current) return;
-    for (const note of NOTES) avatar.note(note);
-    void post<{ id: string; outcome: Outcome }>('/games').then(({ id, outcome }) => {
+    void post<{ id: string; view: View; opening: string }>('/games').then(({ id, view: first, opening }) => {
       game.current = id;
-      show(outcome);
+      setView(first);
+      avatar.event(opening, 60);
     });
   }, [avatar.phase]);
 
-  // The avatar's picture of the board follows the board.
+  // The host's picture of the board follows the board.
   useEffect(() => { if (view) avatar.state(boardState(view)); }, [view]);
-
-  // A typed line is judged first; only what isn't a game action goes to the avatar.
-  const onTyped = (text: string) => {
-    void act({ text }).then((outcome) => {
-      if (outcome?.handled) avatar.record(text);
-      else avatar.say(text);
-    });
-  };
 
   return (
     <div className="kit-layout">
@@ -79,10 +73,10 @@ export function App() {
           avatar={avatar} name="Your host" startLabel="Start the game"
           lobby={<><div className="kit-title">Guess the City</div><div className="kit-detail">A mystery city appears on the right. Guess it out loud or type it; ask for a clue whenever you like. Three cities a game.</div></>}
         />
-        <Composer avatar={avatar} placeholder="Type a guess, or ask for a clue…" onSubmit={(t) => { onTyped(t); }} />
+        <Composer avatar={avatar} placeholder="Type a guess, or ask for a clue…" />
         <Transcript avatar={avatar} names={{ avatar: 'Host' }} />
       </div>
-      <Board view={view} busy={busy} live={avatar.phase === 'live'} onCommand={(command) => void act({ command })} />
+      <Board view={view} busy={busy} live={avatar.phase === 'live'} onCommand={(command) => void press(command)} />
     </div>
   );
 }
