@@ -41,6 +41,18 @@ open http://localhost:3333/
   fail with `ETIMEDOUT` while curl works; add `--network-family-autoselection-attempt-timeout=2000`
   to the node command.
 
+## Deployment
+
+Staging runs the apps on the tailnet only, at https://atmee-demos.taild36ab5.ts.net (GKE
+`gcp-us-central1`, manifests in argocd-app-config `apps/atmee-ai-demos`). A push to `main` builds the `Dockerfile`, pushes it
+to Artifact Registry and bumps the tag there (`.github/workflows/publish.yml`).
+
+- The container takes its settings from the environment, the same names as `.env.example`.
+- **`DEMO_PASSWORD`**, when set, puts every page, `/api` route and WebSocket behind one shared
+  password (the browser's basic-auth prompt, any user name); after that a cookie carries it.
+  Unset, as locally, nothing asks for it.
+- `GET /healthz` answers without the password, for the probes.
+
 ## How every app talks to the avatar
 
 `server.js` holds the API key. Per app it:

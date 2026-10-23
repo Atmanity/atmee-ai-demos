@@ -1,0 +1,12 @@
+# Secrets and host state never go into the image.
+.env
+.env.*
+!.env.example
+node_modules
+*.log
+.git
+.github
+apps
+README.md
+Dockerfile
+.dockerignore
