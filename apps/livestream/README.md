@@ -4,16 +4,18 @@ A late-night tech stream. The AI host talks with the chat: it answers questions 
 to the rest of the chat every few seconds, pins what matters, and runs polls that viewers vote
 in.
 
-- Pages: [`public/livestream-host.html`](../../public/livestream-host.html) (the creator studio, the session's user) and [`public/livestream-viewer.html`](../../public/livestream-viewer.html) (the viewers' chat)
+- Pages: [`public/livestream-host.html`](../../public/livestream-host.html) (the creator studio, the session's user) and [`public/livestream-viewer.html`](../../public/livestream-viewer.html) (the viewers: the stream and its chat). A **Streamer / Viewer** switch at the top of both pages moves between them (the studio hides it once live); `?role=viewer` / `?role=streamer` on either URL does the same.
+- Video relay: [`public/livestream-relay.js`](../../public/livestream-relay.js) (the studio forwards the avatar to each viewer, browser to browser)
 - Behaviour: the `livestream` section of [`usecases/index.js`](../../usecases/index.js) (about lines 28–97)
-- Shared: [`server.js`](../../server.js) (API key, sessions, the chatroom over WebSocket, votes, the 5 s tick), [`public/common.js`](../../public/common.js) (room, tools, relay hold)
+- Shared: [`server.js`](../../server.js) (API key, sessions, the chatroom over WebSocket, the video relay's signaling, votes, the 5 s tick), [`public/common.js`](../../public/common.js) (room, tools, relay hold)
 
 ## Use case
 
 For creators and brands that want a host that keeps a chat going.
 
 1. The creator opens the studio and presses **Go live**. The host introduces the show.
-2. Viewers open the chat link (the viewer page) and type. A message with a "?" in it (or starting
+2. Viewers open the viewer link (or pick **Viewer** on the switch). They see and hear the host
+   (the video starts muted; one tap unmutes it), and they type. A message with a "?" in it (or starting
    with "host") goes to the host as a question, and it answers by name. Everything else is
    batched into a digest every 20 s that the host reacts to.
 3. Asked to pin something, or when a line deserves it, the host pins it to the top of the chat
@@ -26,19 +28,35 @@ For creators and brands that want a host that keeps a chat going.
 
 ```mermaid
 flowchart LR
-  V["livestream-viewer.html<br/>(viewers, no room access)"] <-- "WebSocket: chat, votes, captions, pin, poll" --> S["server.js<br/>holds ATMEE_API_KEY<br/>chatroom, votes, 5 s tick"]
-  H["livestream-host.html<br/>(the session's user)"] <-- "WebSocket: relays, tool calls, chat" --> S
+  V["livestream-viewer.html<br/>(viewers, no room access)"] <-- "WebSocket: chat, votes, captions, pin, poll<br/>+ watch, offer/answer/ICE" --> S["server.js<br/>holds ATMEE_API_KEY<br/>chatroom, votes, 5 s tick,<br/>relay signaling (max 8 watching)"]
+  H["livestream-host.html<br/>(the session's user)"] <-- "WebSocket role=host: relays, tool calls, chat<br/>WebSocket role=streamer: watchers, offer/answer/ICE" --> S
   S -- "POST /v1/session (+appTools)<br/>POST /v1/session/{id}/end" --> A["Atmee Avatar API"]
   A --> R["LiveKit room + host avatar"]
-  H <-- "atmee.app mute/state/event · lk.chat ➜<br/>⬅ lk.transcription · RPC atmee.tool" --> R
+  H <-- "atmee.app mute/state/event · lk.chat ➜<br/>⬅ lk.transcription · RPC atmee.tool<br/>⬅ the avatar's video + audio" --> R
+  H == "RTCPeerConnection per viewer:<br/>the avatar's video + audio (sendonly)" ==> V
 ```
 
 Viewers never join the LiveKit room. The API gives one user token per session, so the server
-keeps the chatroom itself and echoes the host's captions to the viewers.
+keeps the chatroom itself and echoes the host's captions to the viewers, and the studio page
+forwards what it receives to them:
+
+1. Once live, the studio opens a second socket (`role=streamer`). The server sends it the
+   viewers already waiting (`watchers`), and tells every viewer the stream is on.
+2. A viewer asks to watch (`watch`) when its socket opens. Past `LIVESTREAM_MAX_WATCHERS`
+   (default 8) it gets `watch-full`: it keeps chatting and asks again every 10 s.
+3. For each watcher the studio makes an `RTCPeerConnection` with a send-only video and audio
+   transceiver and sends the offer; the server passes `rtc` messages (offer, answer, ICE) between
+   the two pages by the viewer's connection id. The avatar's LiveKit tracks go onto the senders
+   with `replaceTrack`, so a face that arrives later, or a track LiveKit swaps, reaches viewers
+   without a new offer.
+4. A viewer that reloads or leaves frees its connection (`watcher-left`); a fresh one gets a
+   fresh offer. When the studio ends, reloads or loses its socket, the server tells the viewers
+   the stream is offline and they drop the connection; going live again re-offers to everyone
+   still there. A viewer whose connection fails, or plays nothing in 15 s, asks to watch again.
 
 ## How it uses the Atmee API
 
-**Session with app tools** ([`server.js`](../../server.js) `startSession`, about line 94). No conductor.
+**Session with app tools** ([`server.js`](../../server.js) `startSession`, about line 99). No conductor.
 
 ```http
 POST /v1/session
@@ -60,7 +78,7 @@ POST /v1/session
 
 ## App tools
 
-The studio's handlers (`const tools` in `livestream-host.html`, about line 119) acknowledge
+The studio's handlers (`const tools` in `livestream-host.html`, about line 127) acknowledge
 each call. The page passes the call on to the server, and the server's `livestream.onTool`
 does the work, because viewers have to see the result too.
 
@@ -87,6 +105,21 @@ Each app has its own avatar; the host's name and style are its persona.
 
 ## Tested (staging, testuser account, 2026-10-23, avatar "Nico Vale")
 
+The video relay (headless Chromium, fake media devices, microphone permission only):
+
+- A viewer opened before going live showed "The stream is offline"; once live it played the
+  relayed stream (256×256 at first, 512×512 after about 20 s, `currentTime` advancing, inbound
+  video and audio bytes growing in `getStats`, one audio track). A second viewer opened after
+  going live played too; the studio's badge read `📡 2/2 watching` (cap set to 2 for the test).
+- "Host, what are you building tonight?" from a viewer was answered by name ("Absolutely nothing,
+  leo48, …").
+- A third viewer saw "The stream is full", then got in about 10 s after a watcher left. A
+  reloaded viewer reconnected and played again in about 3 s.
+- Ending the stream, and reloading the studio, put every viewer on "The stream is offline" at
+  once; going live again re-offered to the waiting viewer and it played. Every session ended 200.
+
+The chat and tools:
+
 One confirming pass, with one viewer:
 
 - Went live with the face showing; the host introduced the show.
@@ -104,8 +137,21 @@ landing mid-sentence cut the host off, and the host once offered a poll instead 
 ## Limitations
 
 - **No audience in the room.** `POST /v1/session` gives exactly one user token, with no viewer
-  tokens and no egress. Viewers see captions and chat here, not the avatar. A real stream must
-  re-stream the studio's video (OBS, or re-publishing into your own LiveKit room).
+  tokens and no egress. This demo relays the studio's copy of the avatar to each viewer from the
+  studio's browser. A real stream must re-stream the studio's video (OBS, or re-publishing into
+  your own LiveKit room or a media server).
+- **The relay is browser to browser, with STUN only and no TURN** (`stun:stun.l.google.com:19302`).
+  It works where the studio and the viewers can reach each other directly: one LAN, a tailnet,
+  most home networks. Behind symmetric NATs or strict firewalls the viewer stays on
+  "Tuning in…" and keeps the chat.
+- **Each viewer costs the studio its upload** (one encode and one stream per viewer), so at most
+  8 watch at once (`LIVESTREAM_MAX_WATCHERS`); the rest see "The stream is full" and get in when
+  a spot opens. The video starts small and sharpens over a few seconds as the connection ramps.
+- **The studio must stay open and in view.** Viewers watch through it: closing or reloading it
+  ends the stream, and LiveKit's adaptive stream may pause the avatar's video while the studio
+  tab is hidden.
+- **Sound needs a tap.** Browsers block audio that starts on its own, so the viewer's video
+  starts muted with a "Tap to unmute" button.
 - **Session length.** Capped by the plan (900 s here). A longer show chains sessions, with a
   visible cut, and only one live session per avatar is allowed at a time.
 - **Mid-turn messages are dropped.** `common.js` holds viewer questions and digests until the
