@@ -72,8 +72,9 @@ server's `onTool` hook.
 
 Every app still works when its tools are never called: the trainer's slides and verdicts and
 the recruiter's agenda fall back to following the captions (a caption verdict counts only if no
-`grade_answer` for that question arrives within 4 s; once a tool call has come, slide and agenda
-parsing stop). Tools are described in the avatar's own role: in testing the persona outweighed
+`grade_answer` for that question arrives within 4 s; once a tool call has come, slide parsing
+stops, while the agenda keeps moving forward on captions too, for a step the recruiter forgot to
+mark). Tools are described in the avatar's own role: in testing the persona outweighed
 the tool instructions.
 
 Tools need session_service #182 and Causeur #121, **not yet on staging**: a deployment without
@@ -93,6 +94,14 @@ filled 12 screening notes; the oracle called `reveal_clue` (await) and spoke fro
 ("iron buried just north of these ancient stones") while the key's tile glowed, then gave the
 lantern; the host pinned the topic, started a Rust-vs-Go poll that showed in the studio and the
 viewer page, counted a viewer's vote, and announced the result when it closed.
+
+Tested again on staging (2026-10-23, conductors set, the staging avatars' own personas, face
+on): the same four flows passed with the agendas running. The trainer taught through the
+conductor and graded both answers, and the quiz card followed it to question 2. The recruiter
+filled the notes without mentioning them, but closed the call without marking "Next steps"
+(the captions now catch that). The oracle once described handing over the lantern without
+calling `give_item`, which is why its description now says that saying so is not enough. No
+typed turn was lost.
 
 ## The five apps, as tested on staging (2026-10-22)
 

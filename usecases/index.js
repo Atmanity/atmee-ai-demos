@@ -221,10 +221,10 @@ const game = {
   // Only the oracle at the shrine uses them: the island's secrets are the
   // game's, so the oracle asks the game (await) instead of guessing.
   appTools: {
-    instructions: "These are the oracle's powers, used only while the player kneels at the oracle's shrine. The oracle does not know the island's layout by heart: when the player asks where something lies (the key, the chest, the map), always consult the island with reveal_clue first and answer from what it tells you, cryptic but true; the place then glows on the player's map. When the player asks for help, light or a blessing, you may grant one gift with give_item: the lantern lights the tiles around them, the charm brings luck. Never use these powers away from the shrine.",
+    instructions: "These are the oracle's powers, used only while the player kneels at the oracle's shrine. The oracle does not know the island's layout by heart: when the player asks where something lies (the key, the chest, the map), always consult the island with reveal_clue first and answer from what it tells you, cryptic but true; the place then glows on the player's map. When the player asks for help, light or a blessing, you may grant one gift with give_item: the lantern lights the tiles around them, the charm brings luck. A gift is real only once give_item has put it in the satchel: call it before you speak of giving anything. Never use these powers away from the shrine.",
     tools: [
       tool("reveal_clue", "As the oracle, ask the island where something lies; it is marked on the player's map and you are told where it is.", { seek: { type: "string", enum: ["key", "chest", "map"] } }, ["seek"], { mode: "await", timeoutSeconds: 5 }),
-      tool("give_item", "As the oracle, place a gift in the player's satchel: the lantern (lights the tiles around them) or the charm (luck).", { item: { type: "string", enum: ["lantern", "charm"] } }, ["item"]),
+      tool("give_item", "As the oracle, put a gift in the player's satchel: the lantern (lights the tiles around them) or the charm (luck). Saying you give it is not enough: call this whenever you hand the player anything.", { item: { type: "string", enum: ["lantern", "charm"] } }, ["item"]),
     ],
   },
   onLinked(h) { h.memo.talking = false; return [mute(), state("You are the narrator of a short treasure-hunt game on a 4x4 island map. You speak ONLY when the game tells you something happened, in one or two vivid sentences, and never ask the player questions, except at the oracle's shrine where the player may talk to you.")]; },

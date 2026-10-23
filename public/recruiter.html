@@ -166,15 +166,16 @@
     ['questions', 'Your questions', /any questions|questions for me|anything you'?d like to ask/i],
     ['wrap', 'Next steps', /next step|technical interview|thanks? (you )?for (your|taking)/i],
   ];
-  let at = 0, s, stopClock = () => {}, name = 'Alex Chen', toolsLive = false;
+  let at = 0, s, stopClock = () => {}, name = 'Alex Chen';
   const initials = (n) => n.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'You';
   $('name').oninput = () => { $('initials').textContent = initials($('name').value); };
   function paintAgenda() { $('agenda').innerHTML = AGENDA.map(([, label], i) => `<li class="${i < at ? 'done' : i === at ? 'now' : ''}"><i></i>${label}</li>`).join(''); }
   // The recruiter marks the agenda (set_agenda_step) and writes the screening
-  // notes (record_answer) itself. Without tools the page follows its captions:
-  // what it asks next marks the next topic, one item at a time (an echo of an
-  // earlier answer must not skip ahead).
-  function follow(text) { if (toolsLive) return; const next = AGENDA[at + 1]; if (next && next[2].test(text)) { at++; paintAgenda(); } }
+  // notes (record_answer) itself. Its captions move the agenda too, one item
+  // forward at a time (an echo of an earlier answer must not skip ahead): the
+  // whole agenda without tools, and a step the recruiter forgot to mark with
+  // them (on staging it closed the call without marking "Next steps").
+  function follow(text) { const next = AGENDA[at + 1]; if (next && next[2].test(text)) { at++; paintAgenda(); } }
   const TOPICS = { current_role: 'Current role', project: 'Project', years_experience: 'Experience', production_go: 'Go', postgresql: 'PostgreSQL', on_call: 'On-call', notice_period: 'Notice', location: 'Location', salary: 'Salary', candidate_questions: 'Asked about', other: 'Note' };
   const notes = new Map();
   function paintNotes() {
@@ -183,13 +184,11 @@
   }
   const tools = {
     set_agenda_step: ({ step }) => {
-      toolsLive = true;
       const i = AGENDA.findIndex(([id]) => id === step);
       if (i < 0) throw new Error(`no agenda step ${step}`);
-      at = i; paintAgenda();
+      if (i > at) { at = i; paintAgenda(); } // the agenda only moves forward
     },
     record_answer: ({ topic, summary }) => {
-      toolsLive = true;
       // One line per topic; a later answer on the same topic adds to it.
       const before = topic !== 'other' && notes.get(topic);
       notes.set(topic === 'other' ? `other-${notes.size}` : topic, before && before !== summary ? `${before}; ${summary}` : summary);
