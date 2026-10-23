@@ -9,7 +9,7 @@
 // reads like that, the red card covers the screen. Alex's stop_for_emergency
 // is a second way to the same card, never the only one.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
+import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, BackToApps, useCaptionToggle, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
 import { drillState, said } from '../engine/director.ts';
 import { emergencySnapshot, SAFETY_LINE } from '../engine/lines.ts';
 import { clearedBy, mustDo } from '../engine/net.ts';
@@ -176,6 +176,9 @@ export function App() {
     avatar: () => avatarRef.current!,
   });
 
+  // The host's words over the video: off by default, since the chat carries them.
+  const cc = useCaptionToggle('bls-tutor', false);
+
   const avatar = useAvatar('bls-tutor', {
     onToolCall: net.watch(onToolCall),
     onUserSaid: (text, how) => {
@@ -275,14 +278,14 @@ export function App() {
   return (
     <div className="by-app">
       <header className="by-top">
-        <Logo />
+        <BackToApps avatar={avatar} name={HOST} /><Logo />
         {scoring && <Progress view={scoring} />}
         {scoring && <p className="by-score" aria-live="polite"><b>{scoring.score.correct}</b>/{scoring.steps?.length ?? 0} <span>on your own</span></p>}
       </header>
 
       <main className="by-main">
         <section className="by-host" aria-label={`${HOST}, your instructor`}>
-          <HostVideo avatar={avatar} name={HOST} poster={portrait} className="by-host-video" />
+          <HostVideo avatar={avatar} captions={cc.on} onToggleCaptions={cc.toggle} name={HOST} poster={portrait} className="by-host-video" />
           <div className="by-nameplate">
             <p className="by-who"><b>{HOST}</b> <span>Paramedic instructor</span></p>
             {live && <p className="by-oncall">On call</p>}

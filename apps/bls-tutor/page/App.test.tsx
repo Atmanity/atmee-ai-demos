@@ -28,6 +28,7 @@ const fake = vi.hoisted(() => ({
 vi.mock('../../../src/kit/index.ts', async () => {
   const { useToolNet } = await vi.importActual<typeof import('../../../src/kit/useToolNet.ts')>('../../../src/kit/useToolNet.ts');
   return {
+    ...(await vi.importActual<typeof import('../../../src/kit/nav.tsx')>('../../../src/kit/nav.tsx')),
     useToolNet,
     useAvatar: (_app: string, handlers: Handlers) => {
       fake.handlers = handlers;

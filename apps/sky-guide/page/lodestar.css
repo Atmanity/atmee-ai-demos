@@ -268,7 +268,7 @@ em { font-style: normal; color: var(--ls-star); }
   html:not([data-call="live"]) .ls-host { grid-template-columns: minmax(0, 1fr); }
   html:not([data-call="live"]) .ls-host-video { aspect-ratio: 16 / 10; max-width: 520px; }
   /* Live, the frame is small: her words sit beside it rather than over it. */
-  html[data-call="live"] .ls-host .call-caption { display: none; }
+  html[data-call="live"] .ls-host .call-caption, html[data-call="live"] .ls-host .call-cc { display: none; }
   html[data-call="live"] .ls-nameplate .ls-caption-line { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin: 0; font-size: 14px; line-height: 1.45; color: var(--ls-star); }
 }
 

@@ -1,6 +1,7 @@
 // Spotter's front door: who coaches you, what it is, how a workout goes, the
 // promise that sets it apart (every limit is enforced, and it knows when to
 // stop), and the way in.
+import { BackToApps } from '../../../src/kit/index.ts';
 import portrait from '../host/portrait.jpg';
 
 /** The mark: a floor spot on rubber matting, the marker you stand on in a gym. */
@@ -33,7 +34,7 @@ const STEPS: [string, string][] = [
 export function Lobby({ host, onStart }: { host: string; onStart: (mic: boolean) => void }) {
   return (
     <div className="sp-lobby">
-      <header className="sp-top is-lobby"><Logo /></header>
+      <header className="sp-top is-lobby"><BackToApps /><Logo /></header>
       <main className="sp-hero">
         <div className="sp-hero-copy">
           {/* Who you will talk to, before the call: a gym name badge. The name sits beside the photo, so the photo is decorative. */}

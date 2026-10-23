@@ -198,7 +198,7 @@ q { font-family: var(--kb-mono); font-size: .92em; quotes: "“" "”"; }
   :root:not([data-call="live"]) .kb-host, .kb-host.is-blocked { grid-template-columns: minmax(0, 1fr); }
   :root:not([data-call="live"]) .kb-host-video, .kb-host.is-blocked .kb-host-video { aspect-ratio: 16 / 10; }
   /* A small tile has no room for captions: the conversation below carries her words. */
-  .kb-host:not(.is-blocked) .call-caption { display: none; }
+  .kb-host:not(.is-blocked) .call-caption, .kb-host:not(.is-blocked) .call-cc { display: none; }
 }
 @media (max-width: 640px) {
   .kb-app, .kb-lobby { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }

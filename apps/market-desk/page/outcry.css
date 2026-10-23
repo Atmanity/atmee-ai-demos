@@ -111,7 +111,7 @@ button, input { font: inherit; }
 
 /* ── the desk ───────────────────────────────────────────────────────────── */
 .oc-app { max-width: 1320px; margin: 0 auto; padding: 10px max(20px, env(safe-area-inset-right)) 28px max(20px, env(safe-area-inset-left)); min-height: 100vh; box-sizing: border-box; }
-.oc-top { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 20px; padding: 6px 0 12px; border-bottom: 3px double var(--oc-brass); }
+.oc-top { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 20px; padding: 6px 0 12px; border-bottom: 3px double var(--oc-brass); }
 .oc-controls { justify-self: end; }
 
 /* the tape */
@@ -285,7 +285,8 @@ button, input { font: inherit; }
 }
 @media (max-width: 760px) {
   .oc-app { padding: 0 16px 24px; }
-  .oc-top { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "logo controls" "tape tape"; gap: 10px; padding-top: 10px; }
+  .oc-top { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "back logo controls" "tape tape tape"; gap: 10px; padding-top: 10px; }
+  .oc-top > .call-back-wrap { grid-area: back; }
   .oc-top .oc-logo { grid-area: logo; font-size: 26px; }
   .oc-controls { grid-area: controls; }
   .oc-tape { grid-area: tape; }
@@ -293,7 +294,7 @@ button, input { font: inherit; }
   /* Reese rides along at the top while the board scrolls. */
   .oc-booth { position: sticky; top: 0; z-index: 5; grid-template-columns: 88px minmax(0, 1fr); align-items: start; gap: 4px 12px; margin: 0 -16px; padding: 10px 16px; background: var(--oc-cream); border-bottom: 1px solid var(--oc-rule); }
   .oc-video { grid-row: span 2; aspect-ratio: 4 / 5; box-shadow: 0 0 0 2px var(--oc-oxblood), 0 0 0 3px var(--oc-brass); }
-  .oc-video .call-caption { display: none; }
+  .oc-video .call-caption, .oc-video .call-cc { display: none; }
   .oc-video .call-status { padding: 6px; gap: 4px; }
   .oc-video .call-status strong { font-size: 11px; }
   .oc-video .call-status span:not(.call-spinner) { display: none; }

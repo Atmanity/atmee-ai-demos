@@ -48,6 +48,8 @@
   .stage.talking .nameplate .bars i:nth-child(2) { animation-delay: .15s; } .stage.talking .nameplate .bars i:nth-child(3) { animation-delay: .3s; }
   @keyframes eq { 50% { height: 12px; } }
   .selfie { position: absolute; right: 16px; top: 16px; z-index: 1; width: 132px; aspect-ratio: 4 / 3; border-radius: 12px; background: #23302c; color: #e8efec; display: grid; place-items: center; font-weight: 700; font-size: 22px; border: 2px solid rgb(255 255 255 / .12); }
+  /* The selfie has the top right; CC sits top left. */
+  #stage .cc-btn { right: auto; left: 16px; top: 16px; }
   .selfie small { position: absolute; bottom: 6px; left: 8px; font-size: 11px; font-weight: 500; opacity: .8; }
   .controls { display: flex; justify-content: center; gap: 12px; }
   .controls .icon-btn { width: 52px; height: 52px; }
@@ -193,6 +195,9 @@
   paintAgenda();
 
   const tr = UI.transcript($('transcript'), { avatar: 'Recruiter', user: 'You' });
+  // The transcript carries the recruiter's words, so the overlay on the video starts off (CC turns it on).
+  const caption = UI.captionOverlay($('stage'), { id: 'recruiter', defaultOn: false });
+  UI.backLink(document.querySelector('.topbar'), { getSession: () => s, what: 'call' });
   const debug = UI.debugLog();
   const sender = UI.politeSender(() => s);
   const overlay = UI.stage($('overlay'), {
@@ -223,7 +228,7 @@
       s = await Atmee.join({
         usecase: 'recruiter', video: $('video'), audio: $('audio'), mic, tools,
         onPhase: (p, d) => overlay.phase(p, d),
-        onCaption: tr.avatar,
+        onCaption: (text, final) => { caption(text, final); tr.avatar(text, final); },
         onUserCaption: tr.heard,
         onSpeaking: (v) => { $('stage').classList.toggle('talking', v); sender.speaking(v); },
         onRelay: debug,

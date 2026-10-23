@@ -1,4 +1,5 @@
 // Chalkline's front door: what it is, how a lesson goes, and the way in.
+import { BackToApps } from '../../../src/kit/index.ts';
 import portrait from '../host/portrait.jpg';
 import { HOST, Logo } from './brand.tsx';
 
@@ -17,7 +18,7 @@ const PROMISES: [string, string][] = [
 export function Lobby({ onStart }: { onStart: (mic: boolean) => void }) {
   return (
     <div className="cl-lobby">
-      <header className="cl-top is-lobby"><Logo /></header>
+      <header className="cl-top is-lobby"><BackToApps /><Logo /></header>
       <main>
         <section className="cl-hero">
           <div className="cl-hero-copy">

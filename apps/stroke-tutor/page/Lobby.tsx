@@ -1,4 +1,5 @@
 // Hanshi's front door: what it is, how a lesson goes, and the way in.
+import { BackToApps } from '../../../src/kit/index.ts';
 import ren from '../host/portrait.jpg';
 import { HOST } from './Desk.tsx';
 
@@ -56,7 +57,7 @@ function Showcase() {
 export function Lobby({ onStart }: { onStart: (mic: boolean) => void }) {
   return (
     <div className="hs-lobby">
-      <header className="hs-top is-lobby"><Logo /></header>
+      <header className="hs-top is-lobby"><BackToApps /><Logo /></header>
       <main>
         <section className="hs-hero">
           <div className="hs-hero-copy">

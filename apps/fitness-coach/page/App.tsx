@@ -15,7 +15,7 @@
 //   tool is done by the page. Live, she answered "Beginner, please." with
 //   "I've set you up for a beginner plan" and called nothing, twice.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
+import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, BackToApps, useCaptionToggle, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
 import { parseConstraints } from '../engine/constraints.ts';
 import { boardState, say } from '../engine/director.ts';
 import { limitWords, mustDo, mustSetLevel, mustStartMove, mustStop, type NetCall, type NetContext } from '../engine/judge.ts';
@@ -127,6 +127,9 @@ export function App() {
     moveNet.heard(text);
   };
 
+  // The host's words over the video: off by default, since the chat carries them.
+  const cc = useCaptionToggle(ID, false);
+
   const avatar = useAvatar(ID, { onToolCall: safety.watch(net.watch(levelNet.watch(moveNet.watch(onToolCall)))), onUserSaid: (text) => heard(text) });
   avatarRef.current = avatar;
   const live = avatar.phase === 'live';
@@ -224,7 +227,7 @@ export function App() {
   return (
     <div className={`sp-app${stopped ? ' is-stopped' : ''}`}>
       <header className="sp-top">
-        <Logo />
+        <BackToApps avatar={avatar} name={HOST} /><Logo />
         <Steps stage={stopped ? 'hold' : view?.stage ?? 'goal'} />
         {live && avatar.secondsLeft !== null && <p className="sp-clock" aria-label="Call time left">{clock(avatar.secondsLeft)}</p>}
         <CallControls avatar={avatar} className="sp-controls" />
@@ -233,7 +236,7 @@ export function App() {
       <main className="sp-main">
         <aside className={`sp-coach${live ? ' is-live' : ''}`} aria-label={`${HOST}, your coach`}>
           {/* Sammy's face fills the frame while the call connects, instead of a dark box. */}
-          <HostVideo avatar={avatar} name={HOST} poster={portrait} className="sp-coach-video">
+          <HostVideo avatar={avatar} captions={cc.on} onToggleCaptions={cc.toggle} name={HOST} poster={portrait} className="sp-coach-video">
             <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} />
           </HostVideo>
           <div className="sp-nameplate">

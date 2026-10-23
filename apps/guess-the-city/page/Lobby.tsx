@@ -1,4 +1,5 @@
 // Postmark's front door: what the game is, how to play, and the way in.
+import { BackToApps } from '../../../src/kit/index.ts';
 import marco from '../host/portrait.jpg';
 
 export function Logo() {
@@ -23,7 +24,7 @@ const STEPS: [string, string][] = [
 export function Lobby({ onPlay }: { onPlay: (mic: boolean) => void }) {
   return (
     <div className="pm-lobby">
-      <header className="pm-top is-lobby"><Logo /></header>
+      <header className="pm-top is-lobby"><BackToApps /><Logo /></header>
       <main className="pm-hero">
         <div className="pm-hero-copy">
           <p className="pm-host-chip"><img src={marco} alt="" /><span>Hosted by <b>Marco</b></span></p>

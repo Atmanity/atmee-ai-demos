@@ -5,7 +5,7 @@
 // The page answers Ada's calls, draws the board, keeps Ada's picture of it
 // current, tells Ada about the teacher's own keys, and keeps the lesson notes.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CallControls, CallStatus, ChatPanel, HostVideo, clock, useAvatar, useToolNet, type ToolCall } from '../../../src/kit/index.ts';
+import { CallControls, CallStatus, ChatPanel, HostVideo, clock, useAvatar, useToolNet, BackToApps, useCaptionToggle, type ToolCall } from '../../../src/kit/index.ts';
 import { boardState, said } from '../engine/director.ts';
 import { mustDo } from '../engine/judge.ts';
 import type { Intent } from '../engine/table.ts';
@@ -97,6 +97,8 @@ export function App() {
   };
   const spokenNet = useToolNet(netOptions);
   const typedNet = useToolNet({ ...netOptions, waitMs: TYPED_NET_MS });
+  // The host's words over the video: off by default, since the chat carries them.
+  const cc = useCaptionToggle('quadratic-whiteboard', false);
   const avatar = useAvatar('quadratic-whiteboard', {
     onToolCall: typedNet.watch(spokenNet.watch(onToolCall)),
     onUserSaid: (text, how) => (how === 'typed' ? typedNet : spokenNet).heard(text),
@@ -192,7 +194,7 @@ export function App() {
   return (
     <div className="cl-app">
       <header className="cl-top">
-        <Logo />
+        <BackToApps avatar={avatar} name={HOST} /><Logo />
         <div className="cl-top-end">
           {left !== null && <p className="cl-left" role="timer">{clock(left)} left on this call</p>}
           {notes.length > 0 && !over && <button type="button" className="cl-quiet" onClick={download}>Save lesson notes</button>}
@@ -212,7 +214,7 @@ export function App() {
         </div>
 
         <aside className="cl-host" aria-label={`${HOST}, the board’s voice`}>
-          <HostVideo avatar={avatar} name={HOST} poster={portrait} className="cl-host-video">
+          <HostVideo avatar={avatar} captions={cc.on} onToggleCaptions={cc.toggle} name={HOST} poster={portrait} className="cl-host-video">
             <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} />
           </HostVideo>
           <p className="cl-nameplate">

@@ -148,7 +148,17 @@ Shared pieces:
 - `public/common.js`: session, connection phases, warm-up retries, tool dispatch, the relay
   hold, the microphone.
 - `public/kit.js` and `public/kit.css`: stage overlay, captions, transcript, countdown, mic
-  button, poll card.
+  button, poll card, the "All apps" link and the CC button.
+
+Every page, the mini-apps' too, has two more things in common:
+
+- **"← All apps"**, first in its header, back to the home page. With a session live it asks in
+  the page first ("End the lesson and go to all apps?") and ends the session before it goes.
+- **CC** on the avatar's video shows or hides the captions over it. It starts off where the page
+  already has a chat, transcript or log of the avatar's words, and on where the overlay is the
+  only place they appear (Kin's speech bubble). The choice is kept per app in the browser
+  (`localStorage` `atmee-captions:<app>`). It changes only what is on screen: the relay hold
+  reads the caption streams themselves.
 
 ## The fourteen mini-apps
 
@@ -202,7 +212,8 @@ server/              the site's server: the API key, sessions, each app's own ro
 src/avatar/          the room, framework-free: join, the app's messages, both sides' words,
                      the app-tool RPC
 src/kit/             React: useAvatar(), the call parts (HostVideo, CallStatus, ChatPanel),
-                     useToolNet() (the safety net for actions the host narrates)
+                     useToolNet() (the safety net for actions the host narrates),
+                     BackToApps and useCaptionToggle() (the "All apps" link, the CC button)
 apps/<app>/
   server.ts          the app's server side: its tools' instructions, secrets, model calls
   engine/            its rules and its "director" (tools, results, instructions), with tests

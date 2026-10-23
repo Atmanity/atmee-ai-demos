@@ -5,7 +5,7 @@
 // that needs a model, itself for the recipe's place), updates the table and
 // returns the words she speaks from. Buttons act at once and she is told.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, type ToolCall } from '../../../src/kit/index.ts';
+import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, BackToApps, useCaptionToggle, type ToolCall } from '../../../src/kit/index.ts';
 import { recipeKey } from '../engine/advisor.ts';
 import { nextBatch, pick, started, unstarted, type Cook } from '../engine/cook.ts';
 import { boardState, NOTES, pressed, said, SERVER_TOOLS, type Screen } from '../engine/director.ts';
@@ -206,6 +206,9 @@ export function App() {
     }
   }
 
+  // The host's words over the video: off by default, since the chat carries them.
+  const cc = useCaptionToggle(ID, false);
+
   const avatar = useAvatar(ID, {
     onToolCall: handle,
     onUserSaid: (text) => {
@@ -378,7 +381,7 @@ export function App() {
   return (
     <div className="ms-app">
       <header className="ms-top">
-        <Logo />
+        <BackToApps avatar={avatar} name={HOST} /><Logo />
         <div className="ms-top-actions">
           <button type="button" className="ms-tool" onClick={() => picker.current?.click()} disabled={!ready}>
             <CameraIcon /><span>Add a photo</span>
@@ -401,7 +404,7 @@ export function App() {
         <div className="ms-side">
           <aside className="ms-host" aria-label={`${HOST}, your nutritionist`}>
             {/* Rachel's face fills the frame while the call connects, instead of a dark box. */}
-            <HostVideo avatar={avatar} name={HOST} poster={portrait} className="ms-host-video">
+            <HostVideo avatar={avatar} captions={cc.on} onToggleCaptions={cc.toggle} name={HOST} poster={portrait} className="ms-host-video">
               <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} />
             </HostVideo>
             <div className="ms-nameplate">

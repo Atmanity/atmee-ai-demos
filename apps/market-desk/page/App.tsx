@@ -4,7 +4,7 @@
 // those calls through the server, draws the board, keeps Reese's picture of
 // it current, and tells Reese about button presses and the desk's own news.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CallControls, callCopy, CallStatus, ChatPanel, clock, HostVideo, useAvatar, useToolNet, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
+import { CallControls, callCopy, CallStatus, ChatPanel, clock, HostVideo, useAvatar, useCaptionToggle, useToolNet, BackToApps, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
 import { boardState, netNote, say } from '../engine/director.ts';
 import { mustDo } from '../engine/judge.ts';
 import type { Board, Kind } from '../engine/types.ts';
@@ -124,7 +124,7 @@ export function App() {
   return (
     <div className="oc-app">
       <header className="oc-top">
-        <Logo />
+        <BackToApps avatar={avatar} name={HOST} /><Logo />
         <Tape board={desk.board} />
         <CallControls avatar={avatar} className="oc-controls" />
       </header>
@@ -148,13 +148,15 @@ export function App() {
 
 /** Reese's booth: the video with a nameplate, and on a phone the last thing Reese said beside it. */
 function Booth({ avatar, live, wantMic }: { avatar: Avatar; live: boolean; wantMic: boolean }) {
+  // Reese's words over the video: off by default, since the chat carries them.
+  const cc = useCaptionToggle('market-desk', false);
   const lastLine = [...avatar.lines].reverse().find((line) => line.who === 'avatar')?.text ?? '';
   const words = avatar.speaking && avatar.caption ? avatar.caption : lastLine;
   // On a phone the video is too small to carry the call's status, so it is said beside it.
   const status = avatar.phase === 'idle' ? { title: `Calling ${HOST}…`, detail: '' } : callCopy(avatar, HOST);
   return (
     <aside className="oc-booth" aria-label={`${HOST}, your analyst`}>
-      <HostVideo avatar={avatar} name={HOST} poster={portrait} className="oc-video">
+      <HostVideo avatar={avatar} name={HOST} poster={portrait} captions={cc.on} onToggleCaptions={cc.toggle} className="oc-video">
         {avatar.phase === 'idle' ? (
           // Before the call is placed (the browser may be asking for the microphone).
           <div className="call-status" role="status">

@@ -264,7 +264,7 @@ img { max-width: 100%; }
   .nt-room { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); grid-template-areas: "host host" "mirror verdict" "rail rail" "chat chat"; gap: 22px 24px; }
   .nt-host { grid-template-columns: 120px minmax(0, 1fr); align-items: stretch; }
   .nt-host-video { width: 120px; }
-  .nt-host-video .call-caption { display: none; }
+  .nt-host-video .call-caption, .nt-host-video .call-cc { display: none; }
   .nt-host-video .call-status { padding: 8px; gap: 4px; }
   .nt-host-video .call-status strong { font-size: 13px; }
   .nt-host-video .call-status span { display: none; }

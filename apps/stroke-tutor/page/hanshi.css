@@ -211,7 +211,7 @@ h1, h2 { text-wrap: balance; }
   .hs-video { aspect-ratio: 16 / 9; }
   :root[data-call="live"] .hs-teacher { grid-template-columns: 112px minmax(0, 1fr); align-items: center; gap: 14px; }
   :root[data-call="live"] .hs-video { aspect-ratio: 4 / 5; }
-  :root[data-call="live"] .hs-video .call-caption { display: none; }
+  :root[data-call="live"] .hs-video .call-caption, :root[data-call="live"] .hs-video .call-cc { display: none; }
   .hs-saying { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .hs-chat { max-height: 320px; }
   .hs-hero { grid-template-columns: minmax(0, 1fr); padding: 32px 0 40px; gap: 32px; }

@@ -1,4 +1,5 @@
 // Outcry's front door: what it is, who you will talk to, how it works, and the way in.
+import { BackToApps } from '../../../src/kit/index.ts';
 import reese from '../host/portrait.jpg';
 
 /** The mark: a pit trader's badge in oxblood, clipped on, with a brass tick across it. */
@@ -54,7 +55,7 @@ function Preview() {
 export function Lobby({ onStart }: { onStart: (mic: boolean) => void }) {
   return (
     <div className="oc-lobby">
-      <header className="oc-top is-lobby"><Logo /></header>
+      <header className="oc-top is-lobby"><BackToApps /><Logo /></header>
       <main className="oc-hero">
         <div className="oc-hero-copy">
           {/* Who picks up: Reese's face, pinned like a floor badge. The name sits beside it, so the photo is decorative. */}

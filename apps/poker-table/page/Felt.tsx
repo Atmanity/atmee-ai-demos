@@ -3,7 +3,7 @@
 // draws the server's masked view and nothing else, so it can never show
 // Dex's cards before a real showdown.
 import { useEffect, useState } from 'react';
-import { CallStatus, HostVideo, type Avatar } from '../../../src/kit/index.ts';
+import { CallStatus, HostVideo, useCaptionToggle, type Avatar } from '../../../src/kit/index.ts';
 import { HOST } from '../engine/director.ts';
 import { handRankLabel } from '../engine/evaluator.ts';
 import type { TableView } from '../engine/types.ts';
@@ -38,6 +38,8 @@ export function yourHand(view: TableView | null): string | null {
 const sentence = (text: string) => (text ? text[0].toUpperCase() + text.slice(1) + (/[.!?]$/.test(text) ? '' : '.') : '');
 
 export function Felt({ view, avatar, message }: { view: TableView | null; avatar: Avatar; message?: string }) {
+  // Dex's words over the video: off by default, since the table talk beside him carries them.
+  const cc = useCaptionToggle('poker-table', false);
   const live = avatar.phase === 'live';
   const user = view?.players.user;
   const agent = view?.players.agent;
@@ -54,7 +56,7 @@ export function Felt({ view, avatar, message }: { view: TableView | null; avatar
             {dealt ? (dexCards ? dexCards.map((c) => <CardView key={c} card={c} size="sm" />) : <><CardView faceDown size="sm" /><CardView faceDown size="sm" /></>) : null}
           </div>
           <figure className="bs-dex" aria-label={`${HOST}, your opponent`}>
-            <HostVideo avatar={avatar} name={HOST} poster={portrait} captions={false} className="bs-dex-video">
+            <HostVideo avatar={avatar} name={HOST} poster={portrait} captions={cc.on} onToggleCaptions={cc.toggle} className="bs-dex-video">
               <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} />
             </HostVideo>
             <figcaption className="bs-plate">

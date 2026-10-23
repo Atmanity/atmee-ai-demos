@@ -61,6 +61,13 @@ button, input, textarea { font: inherit; color: inherit; }
   font-size: 18px; line-height: 1.4; color: #fff; text-shadow: 0 1px 3px rgb(0 0 0 / .6); pointer-events: none; transition: opacity .3s; }
 .caption span { background: rgb(0 0 0 / .55); padding: 4px 10px; border-radius: 8px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .caption:empty { opacity: 0; }
+/* CC: shows or hides the caption overlay; on the stage under its overlay, so only while the avatar is on screen */
+.stage .cc-btn { position: absolute; top: 12px; right: 12px; z-index: 1; }
+.cc-btn { min-width: 34px; height: 24px; padding: 0 7px; border-radius: 6px; border: 1.5px solid rgb(255 255 255 / .7); background: rgb(0 0 0 / .45); color: rgb(255 255 255 / .85);
+  font: 700 11px/1 system-ui, -apple-system, "Segoe UI", sans-serif; letter-spacing: .04em; cursor: pointer; transition: background .15s, color .15s; }
+.cc-btn:hover { background: rgb(0 0 0 / .65); color: #fff; }
+.cc-btn.on { background: rgb(255 255 255 / .92); border-color: transparent; color: #111; }
+.cc-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .speaking-ring { box-shadow: 0 0 0 3px var(--accent); transition: box-shadow .2s; }
 
 /* Chat-style transcript */
@@ -107,3 +114,18 @@ button, input, textarea { font: inherit; color: inherit; }
 .poll .opt i { position: absolute; inset: 0 auto 0 0; background: var(--accent-soft); transition: width .3s; }
 .poll .opt span, .poll .opt b { position: relative; } .poll .opt.mine { border-color: var(--accent); }
 .poll.closed { opacity: .85; }
+
+/* "← All apps", first in every app's header, in the header's own colors */
+.back-wrap { position: relative; display: inline-flex; flex: none; }
+.back-link { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px 6px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted);
+  font: 600 13px/1 var(--font); text-decoration: none; white-space: nowrap; transition: color .15s, background .15s; }
+.back-link:hover, .back-link[aria-expanded] { color: var(--text); background: var(--surface-2); }
+.back-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.back-link svg { width: 16px; height: 16px; flex: none; }
+@media (max-width: 560px) { .back-link { padding: 6px 7px; } .back-link .label { display: none; } }
+.back-ask { position: absolute; left: 0; top: calc(100% + 8px); z-index: 60; width: max-content; max-width: min(300px, calc(100vw - 32px)); display: grid; gap: 10px; padding: 12px 14px;
+  border-radius: 12px; background: var(--surface); color: var(--text); border: 1px solid var(--line); box-shadow: var(--shadow), 0 12px 32px rgb(0 0 0 / .18); font: 500 14px/1.4 var(--font); }
+.back-ask .row { display: flex; gap: 8px; justify-content: flex-end; }
+.back-ask button { border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 999px; padding: 7px 14px; font: 600 13px var(--font); cursor: pointer; }
+.back-ask button.go { background: var(--danger); border-color: var(--danger); color: #fff; }
+.back-ask button:disabled { opacity: .6; cursor: default; }

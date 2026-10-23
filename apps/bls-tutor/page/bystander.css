@@ -257,7 +257,7 @@ button, input { font: inherit; }
   /* Alex stays in view: a call bar pinned to the top while the sheet scrolls under it */
   .by-host { position: sticky; top: 0; z-index: 10; grid-template-columns: 88px minmax(0, 1fr); margin: 0 -16px; border-width: 0 0 1px; border-radius: 0; box-shadow: 0 6px 16px rgba(11, 46, 34, .08); }
   .by-host-video { aspect-ratio: 4 / 5; }
-  .by-host-video .call-caption { display: none; }
+  .by-host-video .call-caption, .by-host-video .call-cc { display: none; }
   .by-nameplate { align-content: center; border-top: 0; border-left: 4px solid var(--by-green); padding: 8px 12px; }
   .by-who b { font-size: 21px; }
   .by-oncall { display: none; }

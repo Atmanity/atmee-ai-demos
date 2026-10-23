@@ -3,7 +3,7 @@
 // answers those calls from the planner it runs, shows the plan, keeps Iris's
 // picture of it current, and tells her what the client does by hand.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CallControls, CallStatus, ChatPanel, clock, HostVideo, useAvatar, useToolNet, type ToolCall } from '../../../src/kit/index.ts';
+import { CallControls, CallStatus, ChatPanel, clock, HostVideo, useAvatar, useToolNet, BackToApps, useCaptionToggle, type ToolCall } from '../../../src/kit/index.ts';
 import { MAX_SIDE_CM, MIN_SIDE_CM, snap as toGrid } from '../engine/home.ts';
 import { contextOf, mustDo, roomSideCm } from '../engine/judge.ts';
 import type { PlanSnapshot } from '../engine/types.ts';
@@ -94,6 +94,8 @@ export function App() {
     run: async (call) => session.tool(call.name, call.arguments),
     avatar: () => avatarRef.current!,
   });
+  // The host's words over the video: off by default, since the chat carries them.
+  const cc = useCaptionToggle('room-planner', false);
   const avatar = useAvatar('room-planner', { onToolCall: net.watch(onToolCall), onUserSaid: (text) => net.heard(text) });
   avatarRef.current = avatar;
   const live = avatar.phase === 'live';
@@ -140,7 +142,7 @@ export function App() {
 
   const host = (
     <section className="pw-host">
-      <HostVideo avatar={avatar} name={HOST} poster={portrait} className="pw-host-video">
+      <HostVideo avatar={avatar} captions={cc.on} onToggleCaptions={cc.toggle} name={HOST} poster={portrait} className="pw-host-video">
         <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} />
       </HostVideo>
       <div className="pw-nameplate">
@@ -179,7 +181,7 @@ export function App() {
   return (
     <div className="pw-app">
       <header className="pw-top">
-        <Logo />
+        <BackToApps avatar={avatar} name={HOST} /><Logo />
         <CallControls avatar={avatar} className="pw-controls" />
       </header>
       <Studio

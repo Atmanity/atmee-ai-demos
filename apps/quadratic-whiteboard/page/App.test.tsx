@@ -26,6 +26,7 @@ const fake = vi.hoisted(() => ({
 vi.mock('../../../src/kit/index.ts', async () => {
   const { useToolNet } = await vi.importActual<typeof import('../../../src/kit/useToolNet.ts')>('../../../src/kit/useToolNet.ts');
   return {
+    ...(await vi.importActual<typeof import('../../../src/kit/nav.tsx')>('../../../src/kit/nav.tsx')),
     useToolNet,
     clock: (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`,
     useAvatar: (_app: string, handlers: { onToolCall: (call: Call) => Promise<unknown>; onUserSaid: (text: string, how: 'spoken' | 'typed') => void }) => {

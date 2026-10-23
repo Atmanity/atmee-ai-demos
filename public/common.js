@@ -15,6 +15,7 @@
 // late can be told from a newer one.
 //   s.user(kind, text)  tell the server what the user did (the use case decides)
 //   s.setMuted(bool)    mute or unmute the user's microphone
+//   s.isLive()          false once the session has ended (by the page, the room or its time limit)
 //   s.end()
 //
 // tools: one function per app tool the use case declares (usecases/index.js),
@@ -118,6 +119,7 @@
       user: (kind, text) => { if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'user', kind, text })); },
       setMuted: async (muted) => { if (micTrack) { if (muted) await micTrack.mute(); else await micTrack.unmute(); } },
       hasMic: () => !!micTrack,
+      isLive: () => !ended,
       end: async () => { ended = true; floor.close(); clearInterval(floorTimer); releaseMic(); await endOnServer(); ws.close(); room.disconnect(); },
     };
 

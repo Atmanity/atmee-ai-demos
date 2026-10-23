@@ -274,7 +274,7 @@ select.pw-input { flex: 1 1 140px; cursor: pointer; }
   .pw-host { grid-area: host; grid-template-columns: 104px minmax(0, 1fr); align-items: center; gap: 4px 12px; padding: 8px 0; background: var(--pw-board); }
   html[data-call="live"] .pw-host { position: sticky; top: 0; z-index: 5; box-shadow: 0 10px 14px -14px rgba(10, 22, 44, .6); }
   .pw-host-video { width: 104px; grid-row: span 2; }
-  .pw-host-video .call-caption { display: none; }
+  .pw-host-video .call-caption, .pw-host-video .call-cc { display: none; }
   .pw-nameplate { border-bottom: 0; padding-bottom: 0; }
   .pw-host-line { display: block; margin: 0; font-size: 13.5px; line-height: 1.4; color: #323a46; max-height: 3.9em; overflow: hidden; }
   .pw-host > .pw-done, .pw-host > .pw-hint { grid-column: 1 / -1; }
