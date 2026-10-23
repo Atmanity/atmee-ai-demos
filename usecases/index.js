@@ -19,6 +19,11 @@ const note = (text) => ({ type: "app", message: { type: "note", text } });
 const event = (text, ttl_s = 20) => ({ type: "app", message: { type: "event", text, ttl_s } });
 const mute = () => ({ type: "app", message: { type: "mute" } });
 const unmute = () => ({ type: "app", message: { type: "unmute" } });
+// The page holds relays until the avatar's turn ends. Messages that only make
+// sense together can share a scope, and cancel(scope) drops the ones still
+// held: leaving the shrine before its greeting went out drops the greeting.
+const inScope = (scope, messages) => messages.map((m) => ({ ...m, scope }));
+const cancel = (scope) => ({ type: "cancel", scope });
 // An app tool in OpenAI's function shape; mode notify (the avatar goes on at
 // once) or await (it waits for the page's answer, within timeoutSeconds).
 const tool = (name, description, properties, required = [], atmee = { mode: "notify" }) =>
@@ -241,9 +246,9 @@ const game = {
   onLinked(h) { h.memo.talking = false; return [mute(), state("You are the narrator of a short treasure-hunt game on a 4x4 island map. You speak ONLY when the game tells you something happened, in one or two vivid sentences, and never ask the player questions, except at the oracle's shrine where the player may talk to you.")]; },
   onUser(h, msg) {
     if (msg.kind === "move") return [event(msg.text, 12)];
-    if (msg.kind === "enter_shrine") { h.memo.talking = true; return [unmute(), state("The player is at the oracle's shrine and may now talk to you. Answer as the oracle: cryptic but helpful, two sentences at most. You can reveal where the key, the chest or the map lies (reveal_clue), and grant the lantern or the charm (give_item). When they leave, you go back to narrating only."), event("The player kneels at the oracle's shrine. Greet them as the oracle and invite one question.", 10)]; }
-    if (msg.kind === "leave_shrine") { h.memo.talking = false; return [mute(), state("The player left the shrine. Back to narrating only: speak only when the game tells you something happened.")]; }
-    if (msg.kind === "typed" && h.memo.talking) return [say(msg.text)];
+    if (msg.kind === "enter_shrine") { h.memo.talking = true; return inScope("shrine", [unmute(), state("The player is at the oracle's shrine and may now talk to you. Answer as the oracle: cryptic but helpful, two sentences at most. You can reveal where the key, the chest or the map lies (reveal_clue), and grant the lantern or the charm (give_item). When they leave, you go back to narrating only."), event("The player kneels at the oracle's shrine. Greet them as the oracle and invite one question.", 10)]); }
+    if (msg.kind === "leave_shrine") { h.memo.talking = false; return [cancel("shrine"), mute(), state("The player left the shrine. Back to narrating only: speak only when the game tells you something happened.")]; }
+    if (msg.kind === "typed" && h.memo.talking) return inScope("shrine", [say(msg.text)]);
     return [];
   },
 };
