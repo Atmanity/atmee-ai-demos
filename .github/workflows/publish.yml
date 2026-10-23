@@ -3,14 +3,13 @@ name: Build, Push and Deploy
 # Build the image, push it to Artifact Registry, then bump the tag in
 # argocd-app-config (apps/atmee-ai-demos/kustomization.yaml). Staging
 # (gcp-us-central1) tracks argocd main, so that commit deploys it at
-# https://demo-apps.staging.atmanity.us.
+# https://atmee-demos.taild36ab5.ts.net (tailnet only).
 #
-# Repo settings this needs (one-time, by a GCP/GitHub admin), the same ones
-# social_live and livekit_demos use:
-#   vars.GCP_WORKLOAD_IDENTITY_PROVIDER  projects/111441421656/locations/global/workloadIdentityPools/github-pool/providers/github-provider
-#   vars.GCP_SERVICE_ACCOUNT             github-actions@gold-setup-467400-f3.iam.gserviceaccount.com
+# The variables and secret below are the Atmanity organization's, as for
+# social_live and livekit_demos; the repository needs none of its own:
+#   vars.GCP_WORKLOAD_IDENTITY_PROVIDER, vars.GCP_SERVICE_ACCOUNT
 #   vars.BOT_APP_ID, secrets.BOT_APP_PRIVATE_KEY  the bot that commits to argocd-app-config
-# and the Artifact Registry repository `atmee-ai-demos` (location us).
+# The image goes to the Artifact Registry repository `atmee-ai-demos` (us).
 
 on:
   workflow_dispatch:

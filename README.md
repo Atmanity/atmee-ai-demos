@@ -43,8 +43,8 @@ open http://localhost:3333/
 
 ## Deployment
 
-Staging runs the apps at https://demo-apps.staging.atmanity.us (GKE `gcp-us-central1`, manifests
-in argocd-app-config `apps/atmee-ai-demos`). A push to `main` builds the `Dockerfile`, pushes it
+Staging runs the apps on the tailnet only, at https://atmee-demos.taild36ab5.ts.net (GKE
+`gcp-us-central1`, manifests in argocd-app-config `apps/atmee-ai-demos`). A push to `main` builds the `Dockerfile`, pushes it
 to Artifact Registry and bumps the tag there (`.github/workflows/publish.yml`).
 
 - The container takes its settings from the environment, the same names as `.env.example`.
