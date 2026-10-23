@@ -235,8 +235,10 @@
 
   // The trainer drives the deck, the quiz and the score with its tools. The
   // deck opens on slide 1; show_slide puts up slides 2-3 and the closing
-  // "Questions?" slide (4), ask_quiz_question shows a quiz question, and
-  // grade_answer records the verdict that counts toward the score.
+  // "Questions?" slide (4). The quiz is the page's: ask_quiz_question and
+  // grade_answer are await tools, answered with what is on the screen now and
+  // what the trainer does next, so the page keeps the question order (a graded
+  // question is never asked again) and ends the module after the last grade.
   const tools = {
     show_slide: ({ n }) => {
       if (stage === 'quiz' || finished) return 'the quiz has started; the slides stay down';
@@ -244,20 +246,36 @@
       goto(n, true);
     },
     ask_quiz_question: ({ n }) => {
-      if (finished) return 'the module is complete';
-      setStage('quiz'); quizAt = n - 1; renderSlide();
+      const next = nextQuestion();
+      if (finished || next < 0) return 'The quiz is over: both questions are graded. Do not ask anything more.';
+      const i = verdicts[n - 1] === undefined ? n - 1 : next;
+      showQuestion(i);
+      return `${i !== n - 1 ? `Question ${n} is already graded. ` : ''}Question ${i + 1} of 2 is on the trainee's screen: "${QUIZ[i]}" Ask it in these words, then wait for their answer.`;
     },
     grade_answer: ({ question, correct, feedback: line }) => grade(question, correct, line),
   };
+  const nextQuestion = () => [0, 1].find((i) => verdicts[i] === undefined) ?? -1;
+  function reportQuiz() { if (s) s.user('quiz', `${quizAt + 1}/${answered}`); }
+  function showQuestion(i) { setStage('quiz'); quizAt = i; renderSlide(); reportQuiz(); }
   function grade(question, right, line) {
-    const i = question - 1; if (i < 0 || i > 1 || finished) return;
-    if (stage !== 'quiz') setStage('quiz');
+    const i = question - 1, next = nextQuestion();
+    if (finished || next < 0) return 'Both questions are already graded and the quiz is over. Do not grade or ask anything again.';
+    if (verdicts[i] !== undefined) return `Question ${question} is already graded. The question on screen is question ${next + 1}: "${QUIZ[next]}" If your verdict was on the answer to it, record it with grade_answer as question ${next + 1}; otherwise wait for the trainee's answer.`;
     verdicts[i] = !!right; feedback[i] = line || ''; quizAt = i;
     const before = score;
     score = verdicts.filter(Boolean).length; answered = verdicts.filter((v) => v !== undefined).length;
-    renderSlide();
+    setStage('quiz'); renderSlide();
     if (s && score !== before) s.user('score', String(score));
-    if (answered >= 2) setTimeout(finish, 9000);
+    reportQuiz();
+    const verdict = `Recorded: question ${question} ${right ? 'right' : 'wrong'}; score ${score} of 2.`;
+    const after = nextQuestion();
+    if (after < 0) {
+      setTimeout(finish, 9000);
+      return `${verdict} The quiz is over: the final score is ${score} of 2, and the app shows the completion screen. Tell the trainee whether they were right, give them the score, add one sentence of encouragement and close the module. Ask nothing more.`;
+    }
+    // The verdict stays up for a moment, then the next question.
+    setTimeout(() => { if (!finished && quizAt === i) showQuestion(after); }, 3500);
+    return `${verdict} Tell the trainee in one sentence whether they were right and why, then ask question ${after + 1}, which the app is putting on their screen: "${QUIZ[after]}" Then wait for their answer.`;
   }
   function finish() { if (finished) return; finished = true; setStage('done'); renderSlide(); }
 
