@@ -165,7 +165,9 @@ function moveInClause(clause: string): ParsedMove | null {
 
 /** What the player asked for, read off the text alone. Never touches the table. */
 export function parseTurn(text: string): ParsedTurn {
-  const lowered = (text ?? '').trim().toLowerCase().replace(/[’]/g, "'");
+  // "1,000" is one number: the felt prints amounts with a thousands comma, and
+  // read as words it was "1" and "000", a raise to 1.
+  const lowered = (text ?? '').trim().toLowerCase().replace(/[’]/g, "'").replace(/(\d),(?=\d{3}(?!\d))/g, '$1');
   const parsed: ParsedTurn = { move: null, wantsNewHand: false, asksOwnCards: false, unclear: null };
   if (!lowered) return parsed;
 

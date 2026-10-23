@@ -3,7 +3,7 @@
 // original bug was a model that answered in prose and a table that was never
 // told, so these cover the two ways an answer can be useless: absent, and illegal.
 import { describe, expect, test } from 'vitest';
-import { decide, DECISION_TIMEOUT_MS, decisionPrompt, decisionSchema, normalizeDecision, safeAction } from './decide.ts';
+import { decide, DECISION_TIMEOUT_MS, decisionPrompt, decisionSchema, normalizeDecision, safeAction, type Ask } from './decide.ts';
 import type { DecisionRequest } from './match.ts';
 
 describe('safeAction', () => {
@@ -80,4 +80,20 @@ test('a fallback says why, so a live log can tell a slow model from a broken one
 
 test('the budget is the one measured live, not the original 4.5 s', () => {
   expect(DECISION_TIMEOUT_MS).toBe(8000);
+});
+
+test("a model call that fails after the budget ran out is handled, not left to crash the server", async () => {
+  // Review: the race returned the timeout and left the model's promise with no
+  // handler; its later rejection was unhandled.
+  const unhandled: unknown[] = [];
+  const listen = (reason: unknown) => { unhandled.push(reason); };
+  process.on('unhandledRejection', listen);
+  try {
+    const late: Ask = () => new Promise((_, reject) => setTimeout(reject, 30, new Error('late failure')));
+    expect(await decide(REQUEST, late, 5)).toMatchObject({ source: 'fallback', reason: 'no answer within 5 ms' });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(unhandled).toEqual([]);
+  } finally {
+    process.off('unhandledRejection', listen);
+  }
 });

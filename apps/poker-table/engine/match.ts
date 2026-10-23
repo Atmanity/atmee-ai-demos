@@ -380,7 +380,8 @@ export class PokerMatch {
       pot: this.pot(),
       your_stack: stacks.agent,
       opponent_stack: stacks.user,
-      to_call: high - bets.agent,
+      // What Dex can actually put in: a short stack calls all in for less, as the table's own view says.
+      to_call: Math.min(high - bets.agent, stacks.agent),
       current_bet: high,
       min_raise_to: this.minRaiseTo(),
       max_raise_to: this.maxRaiseTo('agent'),

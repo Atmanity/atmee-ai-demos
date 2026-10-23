@@ -47,7 +47,8 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
 export function moveWords(args: Record<string, unknown> | undefined): string {
   const a = args ?? {};
   const words = [a.words, a.move, a.text, a.action, a.said].find((v): v is string => typeof v === 'string' && v.trim() !== '') ?? '';
-  const amount = typeof a.amount === 'number' || (typeof a.amount === 'string' && /^\d+$/.test(a.amount.trim())) ? String(a.amount).trim() : '';
+  const given = typeof a.amount === 'number' ? String(a.amount) : typeof a.amount === 'string' ? a.amount.replace(/,/g, '').trim() : '';
+  const amount = /^\d+$/.test(given) ? given : '';
   return amount && !/\d/.test(words) && /\b(raise|bet)\b/i.test(words) ? `${words.trim()} to ${amount}` : words.trim();
 }
 
@@ -366,7 +367,7 @@ export function App() {
 }
 
 /** The table's sounds, from what changed between two views. They are off until the player turns them on. */
-function useTableSounds(view: TableView | null) {
+export function useTableSounds(view: TableView | null) {
   const prevRef = useRef<TableView | null>(null);
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
   const later = (ms: number, play: () => void) => {
@@ -390,6 +391,10 @@ function useTableSounds(view: TableView | null) {
       const delay = action?.kind === 'fold' ? 80 : 280;
       for (let i = 0; i < Math.min(3, view.board.length - prev.board.length); i++) later(delay + i * 140, () => sounds.cardFlip());
     }
-    if (view.winner && !prev.winner) later(400, () => (view.winner?.who === 'user' ? sounds.win() : sounds.lose()));
+    // A chopped pot is nobody's win or loss.
+    if (view.winner && !prev.winner) {
+      const who = view.winner.who;
+      later(400, () => (who === 'user' ? sounds.win() : who === 'agent' ? sounds.lose() : sounds.chip()));
+    }
   }, [view]);
 }

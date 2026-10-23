@@ -15,6 +15,9 @@ describe('real moves', () => {
     ['Raised to five.', { kind: 'raise', amount: 5 }],
     ['bet one hundred and twenty', { kind: 'raise', amount: 120 }],
     ['raise to two thousand', { kind: 'raise', amount: 2000 }],
+    // Review: the felt prints amounts with a thousands comma, so players type them that way.
+    ['raise to 1,000', { kind: 'raise', amount: 1000 }],
+    ['Bet 1,250.', { kind: 'raise', amount: 1250 }],
     ['all in', { kind: 'all_in' }],
     ['I shove', { kind: 'all_in' }],
     ["I'm out", { kind: 'fold' }],

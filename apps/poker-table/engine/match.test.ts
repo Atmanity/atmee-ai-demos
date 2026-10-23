@@ -321,3 +321,18 @@ test('a random deal uses 52 distinct cards', () => {
   const cards = [...match.holeCards('user'), ...match.holeCards('agent')];
   expect(new Set(cards).size).toBe(4);
 });
+
+test("a short stack's price to call is what it can put in, for Dex's decision as on the table", () => {
+  // Review: the decision was told the raw bet gap, so a short Dex weighed a
+  // fold against a call he could never make in full.
+  const match = new PokerMatch({ startingStack: 100 });
+  match.deal();
+  match.applyMove('user', 'raise', 60);
+  match.applyMove('agent', 'fold');          // Dex 80, the player 120
+  match.deal();                              // Dex on the button: small blind, first to act
+  match.applyMove('agent', 'call');
+  match.applyMove('user', 'all in');         // a raise to 120; Dex has 60 behind
+  expect(match.actionTo()).toBe('agent');
+  expect(match.view().to_call).toBe(60);
+  expect(match.decisionRequest().to_call).toBe(60);
+});

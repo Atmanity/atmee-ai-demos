@@ -128,7 +128,7 @@ moves take the same path as spoken ones.
 
 ## Tested
 
-- `npx vitest run apps/poker-table`: 198 tests.
+- `npx vitest run apps/poker-table`: 204 tests.
   - The engine, kept from the port: the seven golden hands and parity cases,
     the hand evaluator, all-ins, split pots, the decider, the parser's live
     phrasings and the rules text.

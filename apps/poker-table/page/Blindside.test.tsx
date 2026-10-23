@@ -2,7 +2,7 @@
 // The screens, rendered from the server's view: the front door, the felt
 // (which can never show Dex's cards early), the moves under it, the paused
 // table and the match's end. Ported in part from the panel's PokerGame tests.
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Avatar } from '../../../src/kit/index.ts';
 import type { AvatarPhase } from '../../../src/kit/useAvatar.ts';
@@ -218,4 +218,34 @@ it('puts the rules one click away, hand rankings first, and Escape closes them',
   expect(sheet.textContent).toContain('Blinds');
   fireEvent.keyDown(window, { key: 'Escape' });
   expect(onClose).toHaveBeenCalled();
+});
+
+describe('the table sounds', () => {
+  it('a split pot is neither a win nor a loss', async () => {
+    // Review: any winner but the player played the losing sound, a chop included.
+    vi.useFakeTimers();
+    try {
+      const { sounds } = await import('./sounds.ts');
+      const { useTableSounds } = await import('./App.tsx');
+      const win = vi.spyOn(sounds, 'win');
+      const lose = vi.spyOn(sounds, 'lose');
+      const split = vi.spyOn(sounds, 'chip');
+      const { rerender } = renderHook(({ v }) => useTableSounds(v), { initialProps: { v: view() } });
+      rerender({ v: view({ seq: 2, phase: 'hand-over', action_to: null, valid_actions: [], winner: { who: 'split', amount: 40, hand_rank: 'One Pair' } }) });
+      await vi.advanceTimersByTimeAsync(500);
+      expect(lose).not.toHaveBeenCalled();
+      expect(win).not.toHaveBeenCalled();
+      expect(split).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
+});
+
+it("a separate amount with a thousands comma still reaches the move", async () => {
+  const { moveWords } = await import('./App.tsx');
+  expect(moveWords({ move: 'raise', amount: '1,000' })).toBe('raise to 1000');
+  expect(moveWords({ words: 'bet', amount: 60 })).toBe('bet to 60');
+  expect(moveWords({ words: 'raise to 1,000', amount: '1,000' })).toBe('raise to 1,000');
 });
