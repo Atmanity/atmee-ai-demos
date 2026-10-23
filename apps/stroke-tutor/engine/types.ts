@@ -49,6 +49,14 @@ export interface CatalogEntry {
   strokes_total: number;
 }
 
+/** How a resolved stroke was earned: drawn right on try N, or shown after N tries. Stroke numbers and counts only, never a shape. */
+export interface StrokeResult {
+  index: number;
+  how: 'drawn' | 'shown';
+  /** Graded attempts on it, the right one included. */
+  tries: number;
+}
+
 export interface Snapshot {
   phase: Phase;
   character: CharacterView | null;
@@ -56,7 +64,10 @@ export interface Snapshot {
   strokes: StrokeView[];
   attempts: number;
   last_verdict: Verdict | null;
+  /** Drawn right (on any try) of the strokes reached. Not a first-try count: that is `results`. */
   score: { correct: number; total: number };
+  /** The record of this character's resolved strokes, in order. */
+  results: StrokeResult[];
   /** The width AND height of the coordinate space. */
   grid: number;
   catalog: CatalogEntry[];

@@ -29,7 +29,7 @@ Open it at `/apps/trajectory-coach/`; add `?challenge=moonshot` (or `wall40`,
 | The physics and the marking | `engine/flight.ts`, `engine/challenges.ts`: the original's closed-form model (no drag), ported line for line; `engine/golden.test.ts` pins every number and sentence to the Python engine's own output (`engine/golden/`). |
 | The launcher and the range | `engine/launcher.ts` validates before it mutates, so a refused request leaves the range as it was and carries a sentence with the numbers. `engine/range.ts` is the one writer and owns the clock that lands each shot `play_s + 0.15 s` after it is fired. While a shot flies, the snapshot has its curve and no result, so nothing built from it (the screen, Theo's picture of the range) can announce one early. It runs in the page: nothing in it is secret. |
 | Theo's actions | Four `await` tools (`engine/director.ts`): `aim(angle_deg, speed_ms, request, then_fire)`, `fire`, `choose_challenge(challenge)`, `start_over`. The page answers each `atmee.tool` call through `engine/controls.ts`, which acts on the range and returns the words Theo speaks from. `fire` resolves when the ball is down, with the range's verdict, so his first reply to "fire" is where it landed. Every result opens with its plain outcome ("Done:", "Refused:", "Landed, missed:"), so the platform's filler line cannot pre-judge it. |
-| Lenient arguments | The schemas have no enums, closed objects or tight lengths: the platform rejects a misfit before the page sees it. The page reads loose values itself: a challenge by id, name in any case or nickname ("the Moon", "the windy one", "next one"), numbers as strings, with units or in words ("forty-five"), `then_fire` as "true". Anything unusable comes back as a question for Theo to ask. |
+| Lenient arguments | The schemas have no enums, closed objects or tight lengths: the platform rejects a misfit before the page sees it. The page reads loose values itself: a challenge by id, name in any case or nickname ("the Moon", "the windy one", "next one"), numbers as strings, with units or in words ("forty-five"), `then_fire` as "true". In an aim the numbers come first and words fill what is still missing; words that cannot be read refuse the whole call rather than half-apply it. Anything unusable comes back as a question for Theo to ask. |
 | Aims in words | `aim` takes the numbers Theo heard, never clamped (the launcher refuses "ninety" with its limits). A change with no number ("a bit steeper", "more power") goes in `request` and through the range's own steps (`engine/judge.ts`: a bit = 3° or 1 m/s, plain = 5° or 2 m/s, a lot = 10° or 5 m/s); what the rules cannot read ("lob it like a mortar") goes to `POST /api/apps/trajectory-coach/interpret`, a validated model call. Without `GEMINI_API_KEY` Theo asks for a number instead. |
 | Theo's rules | The tool `instructions`: every request that changes the screen is a call, even a one-word answer; never say an action happened unless a result said so; numbers exactly as given; never guess or predict a shot; never "aim first", never repeat the student's numbers, never ask whether to fire, never give away the answer. After an aim from words ("a bit steeper"), the result has him name the new angle once. |
 | The opening | An event naming the challenge up, which tells Theo not to greet again: his host's own greeting has introduced him. |
@@ -45,8 +45,9 @@ read). No other key is used.
 
 ## What the API could not do
 
-Status after the live runs of 2026-10-23 on staging (the shared test avatar
-`2cd3ec08`, then Theo's own host `98bac537`). **Seen**: observed live.
+Status after the live runs of 2026-10-23 on staging (round 1: the shared test
+avatar `2cd3ec08`, then Theo's host `98bac537`; round 2, after the fixes:
+Theo's new host). **Seen**: observed live.
 **Expected**: not observed yet.
 
 1. **Tools are called when the host decides.** *Seen.* Eight of nine requests
@@ -55,7 +56,9 @@ Status after the live runs of 2026-10-23 on staging (the shared test avatar
    Theo's host, "Fire!" said during his welcome got "go ahead and hit fire".
    The safety net did both 7 s later and the host carried on from its event.
    The instructions now say every screen-changing request is a call, "fire"
-   counts even mid-sentence, and no action is claimed without a result.
+   counts even mid-sentence, and no action is claimed without a result. In
+   round 2 both called their tools: "Fire!" during the greeting and "Start
+   over.".
 2. **Exact numbers cannot be forced.** *Seen kept, not guaranteed.* Every
    landing line kept its figures ("0.76 m going past 40 m, 2.24 m below the
    top", "Over with 9.75 m to spare, landing at 58.72 m after 3.46 s"). The
@@ -78,9 +81,10 @@ Status after the live runs of 2026-10-23 on staging (the shared test avatar
 8. **No speech hints.** *Seen:* "Lob it like a mortar" arrived as "Lobbied
    like a mortar"; Theo passed "lobbed like a mortar" as words and the range
    aimed from them.
-9. **Theo's host's idle video.** *Seen once:* large orange 3-D letters across
-   his face for a few seconds, then a dark frame. A renderer issue of that
-   avatar's idle clip, not the page.
+9. **Theo's host's idle video.** *Seen once* on `98bac537`: large orange 3-D
+   letters across his face for a few seconds, then a dark frame. A renderer
+   issue of that avatar's idle clip, not the page; not seen on the new host
+   in 20 s of idle.
 
 Fixed by tools, compared with the first port: the reply to "fire" is the
 landing; the reply to "make it steeper" knows the new angle; a request the
@@ -107,14 +111,15 @@ degrees"). The range screen now opens scrolled to its top.
 
 ## Tested
 
-- `npx vitest run apps/trajectory-coach` (283 tests): the physics against
+- `npx vitest run apps/trajectory-coach` (286 tests): the physics against
   hand-worked numbers and the marking; the launcher's refusals and projection;
   the golden test against the Python engine (273 graded shots, the curves and
   trails, a scripted session's every snapshot and refusal); the range's
   landing clock; the judge's ~100 phrasings and the safety net's phrases; the
   tools and instructions against the API limits, the lenient schemas and the
   original's rules; loose arguments (capitals, nicknames, numbers in words,
-  extra fields); every result opening with its outcome; the
+  a number and words in one call, extra fields); every result opening with
+  its outcome; the
   state's size and that it leaks no result in flight and no lesson early; every
   tool's result, the one-account-per-landing rule and the net's guards; the
   logbook; the board and the whole page with the call replaced by a recorder.
@@ -129,3 +134,8 @@ degrees"). The range screen now opens scrolled to its top.
   6 cleared". On Theo's host `98bac537` (session `051ff9c1`, 129 s), "Make it a
   bit steeper." and "Start over." called their tools; "Fire!" during the
   welcome was done by the safety net.
+- Round 2, after the fixes, on Theo's new host: "Fire!" said during his
+  greeting and "Start over." both called their tools (the safety net had
+  nothing to do); "Make it a bit steeper." was answered with the new angle,
+  "forty-eight degrees", and no prediction; no video defect in 20 s of
+  idle.

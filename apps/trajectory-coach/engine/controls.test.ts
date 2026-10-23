@@ -216,6 +216,38 @@ describe('loose arguments: the schemas are lenient, so the range reads what arri
     expect(fired.out.text).toMatch(/^Landed, cleared: /);
   });
 
+  test('a number and words in one call: the numbers first, the words fill what is still missing', async () => {
+    // Found in review: { angle_deg: 30, speed_ms: "twenty four" } set the angle and silently dropped the speed.
+    const { range, call } = setup();
+    const mixed = call('aim', { angle_deg: 30, speed_ms: 'twenty four' });
+    await mixed.done;
+    expect(range.snapshot().aim).toEqual({ angle_deg: 30, speed_ms: 24 });
+    expect(mixed.out.text).toMatch(/^Done: moved the angle from 45 to 30 degrees and the speed from 20 to 24 metres a second\./);
+
+    await call('aim', { speed_ms: 25, request: 'a bit steeper' }).done;
+    expect(range.snapshot().aim).toEqual({ angle_deg: 33, speed_ms: 25 });
+
+    await call('aim', { angle_deg: 40, request: 'a bit steeper' }).done;   // the number wins over the words for the same value
+    expect(range.snapshot().aim).toEqual({ angle_deg: 40, speed_ms: 25 });
+  });
+
+  test('a number with words that cannot be read is refused whole, never half-applied', async () => {
+    const { range, call } = setup();
+    const r = call('aim', { angle_deg: 30, speed_ms: 'loads' });
+    await r.done;
+    expect(r.out.text).toMatch(/^Nothing moved: the range could not read "loads metres a second"/);
+    expect(range.snapshot().aim).toEqual({ angle_deg: 45, speed_ms: 20 });
+  });
+
+  test('a number with "fire" as its words aims, then fires', async () => {
+    const { range, land, call } = setup();
+    const r = call('aim', { angle_deg: 45, speed_ms: 24, request: 'fire' });
+    land();
+    await r.done;
+    expect(r.out.text).toMatch(/^Landed, cleared: /);
+    expect(range.snapshot().last_shot?.speed_ms).toBe(24);
+  });
+
   test('extra fields on the tools with no arguments are ignored too', async () => {
     const { range, land, call } = setup();
     const r = call('fire', { reason: 'they said fire' });

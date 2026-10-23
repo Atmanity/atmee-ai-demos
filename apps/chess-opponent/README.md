@@ -107,3 +107,14 @@ her own move is in her first reply rather than an event that could be dropped.
   Fixed after it: a typed move the board cannot play is now refused on screen
   (it went to Sasha, who called it played), and a refusal no longer stays
   under the board after a resignation.
+- Round 2, 2026-10-23, on Sasha's new host (`9a4c30ed`, 118 s): one greeting
+  only, then the opening line with no second hello. A typed "Ra5" at the start
+  was refused under the board by the page, and Sasha gave the reason ("your
+  rooks are trapped behind that wall of pawns"). "E four." called `play_move`
+  (2.8 s; 1.e4 Nf6, Alekhine's Defence named). "Black, please." called
+  `choose_side` (2.6 s): the board flipped and her first move (1.Nf3, Réti)
+  was in the same reply. The safety net was not needed. One flaw, on the
+  platform side: the filler said "That's actually not right, we're flipping
+  the board now!" before a result that said the switch was done. Results
+  already open with the outcome ("Done: …"); the filler is spoken before the
+  result arrives, so the app cannot stop it contradicting.

@@ -4,7 +4,7 @@
 // holds; every control is a button press the page passes to the server.
 import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { HOST } from '../engine/director.ts';
-import { inferItemBodyZone, itemsMatch } from '../engine/items.ts';
+import { extractColorFromItem, inferItemBodyZone, inferItemCategory, itemsMatch } from '../engine/items.ts';
 import type { Analysis, Suggestion, View, Zone } from '../engine/types.ts';
 import { useRetryableImageSrc } from './useRetryableImageSrc.ts';
 
@@ -33,6 +33,37 @@ export function ZoneGlyph({ zone }: { zone: Zone }) {
     feet: <><path d="M6 34v-9l10 2 7 5h12a6 6 0 0 1 6 6v1H6z" /><path d="M6 38h35" /></>,
   };
   return <svg className="nt-glyph" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[zone]}</svg>;
+}
+
+/** Fabric tones for the colours a piece's name can carry, muted to sit with the page. */
+const SWATCH: Record<string, string> = {
+  black: '#2b2828', white: '#f1ece4', grey: '#9a9592', gray: '#9a9592', navy: '#2c3550', blue: '#4b6a93', red: '#9c3b36', pink: '#d8a3a3',
+  green: '#5d6f56', olive: '#6d6b3f', beige: '#d6c3a5', brown: '#6e4e3a', tan: '#b8936a', camel: '#b58a59', cream: '#ebe0c9',
+  burgundy: '#6d2a35', purple: '#6a4c74', yellow: '#d8b24a', orange: '#c47640', gold: '#c6a04a', silver: '#b8bbbe',
+};
+const ZONE_KIND: Record<Zone, string> = { head: 'Headwear', neck: 'Neckline', upper_body: 'Layer', lower_body: 'Bottoms', wrist: 'Wrist', feet: 'Footwear' };
+
+/** Light or dark ink for a fill, so the drawing reads on any swatch. */
+const inkOn = (hex: string) => {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.5 ? '#2e2725' : '#fffaf8';
+};
+
+/**
+ * A piece without a catalogue shot (they need an image model): a fabric
+ * swatch in the colour its name carries, a drawing of where it goes, and its
+ * kind on a label, like a sample card in a fitting room.
+ */
+export function Swatch({ item }: { item: string }) {
+  const zone = inferItemBodyZone(item);
+  const fill = SWATCH[extractColorFromItem(item)];
+  const kind = inferItemCategory(item);
+  return (
+    <div className={`nt-swatch-card${fill ? '' : ' is-plain'}`} style={fill ? ({ '--sw': fill, '--sw-ink': inkOn(fill) } as CSSProperties) : undefined}>
+      <ZoneGlyph zone={zone} />
+      <span className="nt-swatch-kind">{kind ? kind[0].toUpperCase() + kind.slice(1) : ZONE_KIND[zone]}</span>
+    </div>
+  );
 }
 
 // -- the mirror ----------------------------------------------------------------------
@@ -312,7 +343,7 @@ export function Rail({ view, ready, onTry, onMore }: {
           return (
             <li key={`${s.item}-${i}`} className={`nt-piece is-${state}`}>
               <span className="nt-piece-n">{String(i + 1).padStart(2, '0')}</span>
-              <div className="nt-piece-shot">{s.image_url ? <img src={s.image_url} alt="" loading="lazy" /> : <ZoneGlyph zone={inferItemBodyZone(s.item)} />}</div>
+              <div className="nt-piece-shot">{s.image_url ? <img src={s.image_url} alt="" loading="lazy" /> : <Swatch item={s.item} />}</div>
               <h3>{s.item}</h3>
               <p>{s.text}</p>
               <div className="nt-piece-actions">

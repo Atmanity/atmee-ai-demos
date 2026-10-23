@@ -72,7 +72,7 @@ export function createModels(env: NodeJS.ProcessEnv = process.env): FashionModel
     async analyze(image, input) {
       try {
         const raw = await retryTransient(
-          () => structured<RawAnalysis>({ system: SYSTEM, user: analysisPrompt(input), schema: ANALYSIS_SCHEMA, images: [{ mimeType: image.mime, base64: b64(image) }], temperature: 0.4 }),
+          () => structured<RawAnalysis>({ system: SYSTEM, user: analysisPrompt(input), schema: ANALYSIS_SCHEMA, images: [{ mimeType: image.mime, base64: b64(image) }], temperature: 0 }),
           { onRetry: onRetry('style read') },
         );
         return analysisFrom(raw, input.target);

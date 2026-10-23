@@ -14,10 +14,24 @@
 import type { DecisionRequest } from './match.ts';
 import type { PokerActionKind } from './types.ts';
 
-/** The original's budget: a decision that arrives later than this is not worth waiting for. */
-export const DECISION_TIMEOUT_MS = 4500;
+/**
+ * How long Dex's move may take. The original's 4.5 s was too tight live: the
+ * first decision of a run (a cold connection, the model thinking) fell back
+ * while the next one, same prompt and schema, answered. Two decisions in a row
+ * still fit play_move's await (see director.ts).
+ */
+export const DECISION_TIMEOUT_MS = 8000;
 
 export interface Decision { kind: PokerActionKind; amount: number | null }
+
+/** A decision and how it was made: the model's, or the safe action and why. */
+export interface Decided extends Decision {
+  source: 'model' | 'fallback';
+  /** How long it took. */
+  ms: number;
+  /** Why the safe action was played instead of the model's answer. */
+  reason?: string;
+}
 
 export const DECISION_SYSTEM_PROMPT = `You are a heads-up Texas Hold'em player deciding one action.
 Answer with the action and, for a raise, its amount. Never write prose.
@@ -113,19 +127,23 @@ export type Ask = (request: DecisionRequest) => Promise<{ action?: unknown; amou
  * Decide the opponent's move: the model's answer, normalized, or the safe
  * action when there is no model, it fails, or it is too slow.
  */
-export async function decide(request: DecisionRequest, ask: Ask | null, timeoutMs = DECISION_TIMEOUT_MS): Promise<Decision & { source: 'model' | 'fallback' }> {
-  const fallback = { ...safeAction(request.valid_actions, request.to_call), source: 'fallback' as const };
-  if (!ask) return fallback;
+export async function decide(request: DecisionRequest, ask: Ask | null, timeoutMs = DECISION_TIMEOUT_MS): Promise<Decided> {
+  const started = Date.now();
+  const fallback = (reason: string): Decided => ({ ...safeAction(request.valid_actions, request.to_call), source: 'fallback', ms: Date.now() - started, reason });
+  if (!ask) return fallback('no model key');
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const answer = await Promise.race([
       ask(request),
       new Promise<'timeout'>((resolve) => { timer = setTimeout(resolve, timeoutMs, 'timeout'); }),
     ]);
-    if (answer === 'timeout' || !answer) return fallback;
-    return { ...normalizeDecision(answer.action, answer.amount, request), source: 'model' };
-  } catch {
-    return fallback;
+    if (answer === 'timeout') return fallback(`no answer within ${timeoutMs} ms`);
+    if (!answer) return fallback('an empty answer');
+    const action = String(answer.action ?? '').trim().toLowerCase();
+    if (!request.valid_actions.includes(action as PokerActionKind)) return fallback(`the model answered "${action.slice(0, 40)}", not one of ${request.valid_actions.join('/')}`);
+    return { ...normalizeDecision(answer.action, answer.amount, request), source: 'model', ms: Date.now() - started };
+  } catch (err) {
+    return fallback(`the model call failed: ${String((err as Error)?.message ?? err).slice(0, 200)}`);
   } finally {
     clearTimeout(timer);
   }

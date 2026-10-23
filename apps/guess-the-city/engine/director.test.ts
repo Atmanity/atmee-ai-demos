@@ -59,3 +59,12 @@ test('the opening does not greet a second time', () => {
   const g = fresh();
   expect(said.start(g.view(null))).toMatch(/^You have just greeted them; do not greet/);
 });
+
+test('a round without a photo is announced as one, never as a photo on screen', () => {
+  const g = fresh();
+  expect(said.next(g.view('/photo/x'))).toContain("photo is on the player's screen");
+  for (const line of [said.next(g.view(null)), said.start(g.view(null))]) {
+    expect(line).not.toContain('photo is on');
+    expect(line).toContain('no photo');
+  }
+});

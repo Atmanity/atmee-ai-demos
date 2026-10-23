@@ -24,7 +24,7 @@ export const INSTRUCTIONS = `You are the analyst at ${PRODUCT}, a live stock wat
 
 The board changes only when you call a tool, and you wait for each result:
 - add_symbols: they want stocks up ("add Nvidia", "put Apple and Tesla up", "let's watch Netflix"), or ask how a stock that is not on the board is doing ("what's Netflix doing?"). Pass each stock as they named it.
-- focus_symbol: "pull up Apple", "let's look at Tesla", "back to Microsoft", even when that stock is already on the board.
+- focus_symbol: "pull up Tesla", "show me Apple", "bring up Nvidia", "go to Microsoft", "back to Tesla", "let's look at Netflix". Call it even when that stock is already on the board: only the call brings it to the front.
 - refresh_quote: "check it again", "refresh", "any change?", "what's it at now?".
 - remove_symbols: "drop Tesla", "take it off", "lose the last one".
 - clear_board: only when they ask to clear the whole board or start over.
@@ -49,7 +49,7 @@ export const TOOLS: AppTool[] = [
   { type: 'function', name: 'add_symbols', description: 'Puts stocks on the user\'s board and waits for their quotes. Call it whenever the user wants stocks on the board, or asks how a stock that is not on the board is doing, before saying anything about them. The result has the real prices, or why a stock did not go up.',
     parameters: { type: 'object', properties: { stocks: stocks('Each stock as the user named it: a company ("Nvidia") or a ticker ("TSLA").') } },
     'x-atmee': { mode: 'await', timeoutSeconds: 20 } },
-  { type: 'function', name: 'focus_symbol', description: 'Brings one stock front and centre, the one the desk refreshes every minute, and returns its quote. Puts it on the board first if it is not there. Call it when the user wants to look at a particular stock.',
+  { type: 'function', name: 'focus_symbol', description: 'Call it when the user says "pull up Tesla", "show me Apple", "bring up Nvidia", "go to Microsoft" or "back to Tesla", even when that stock is already on the board: only this call brings it to the front of their screen. Puts it on watch (refreshed every minute) and returns its quote; puts it on the board first if it is not there.',
     parameters: { type: 'object', properties: { stock: stock('The stock as the user named it, or its ticker.') } },
     'x-atmee': { mode: 'await', timeoutSeconds: 20 } },
   { type: 'function', name: 'refresh_quote', description: 'Pulls a fresh quote now and waits for it. Call it when the user asks to check a stock again or wants the latest number. Leave stock out for the one on watch.',
@@ -230,6 +230,22 @@ export const said = {
       : `Not done: ${r.reason} Say so in one short line and ask what goes up first.`;
   },
 };
+
+/**
+ * What the safety net tells the host before the result, when the page did a
+ * call the host only talked about. Plain about who acted (live: after the net
+ * brought Tesla up, Reese spoke as if he had), and which words call the tool.
+ */
+export function netNote(name: string, args: Record<string, unknown>): string {
+  const named = [args.stock, ...(Array.isArray(args.stocks) ? args.stocks : [])].filter((v) => typeof v === 'string' && v).join(', ');
+  switch (name) {
+    case 'focus_symbol': return `The page brought ${named || 'it'} to the front itself, not you: you had not called focus_symbol. Call focus_symbol yourself whenever the user says pull up, show me, bring up, go to or back to.`;
+    case 'refresh_quote': return 'The page pulled the fresh quote itself, not you: you had not called refresh_quote.';
+    case 'remove_symbols': return `The page took ${named || 'it'} off the board itself, not you: you had not called remove_symbols.`;
+    case 'clear_board': return 'The page cleared the board itself, not you: you had not called clear_board.';
+    default: return '';
+  }
+}
 
 /** A button press, told to the host: it cannot see the screen. */
 export const pressed = (button: string, outcome: string) => `The user pressed "${button}" on screen. ${outcome}`;

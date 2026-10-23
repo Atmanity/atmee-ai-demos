@@ -13,7 +13,7 @@
 // * a deal or a rematch, asked for by the host's tools or a button;
 // * Dex's turn: a structured decision (decide.ts), applied, and Dex is told
 //   the move "he" made.
-import { decide, DECISION_TIMEOUT_MS, safeAction, type Ask } from './decide.ts';
+import { decide, DECISION_TIMEOUT_MS, safeAction, type Ask, type Decided } from './decide.ts';
 import { said, type Line } from './director.ts';
 import { backs, parseTurn, sameMove, type ParsedMove } from './judge.ts';
 import { ACTION_KINDS, IllegalMove, normalizeKind, PokerMatch, type MatchOptions } from './match.ts';
@@ -43,7 +43,7 @@ function asMove(intent: Intent): ParsedMove | null {
 export class Table {
   readonly match: PokerMatch;
   /** How Dex's last move was chosen, for the server's log. */
-  lastDecision: { kind: string; amount: number | null; source: 'model' | 'fallback' } | null = null;
+  lastDecision: Decided | null = null;
   private deciding: Promise<Result> | null = null;
   private readonly decisionTimeoutMs: number;
   /** The player's last move the table played, and the table's seq once it had: to name a repeat. */
@@ -202,7 +202,7 @@ export class Table {
       // Only reachable if a normalized decision is still illegal; never stall the table on it.
       const safe = safeAction(request.valid_actions, request.to_call);
       this.reduce(safe, 'agent');
-      this.lastDecision = { ...safe, source: 'fallback' };
+      this.lastDecision = { ...safe, source: 'fallback', ms: decision.ms, reason: `the table refused the model's ${decision.kind}: ${(err as Error).message}` };
     }
     const after = this.view();
     return { view: after, changed: true, line: said.yours(before, after, again) };

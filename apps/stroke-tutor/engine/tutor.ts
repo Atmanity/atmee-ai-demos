@@ -29,7 +29,7 @@ import {
 } from './characters.ts';
 import { clean, decimate, grade, isDegenerate } from './strokes.ts';
 import { travelPair } from './travel.ts';
-import type { CharacterView, Phase, Snapshot, StrokeView, Verdict } from './types.ts';
+import type { CharacterView, Phase, Snapshot, StrokeResult, StrokeView, Verdict } from './types.ts';
 
 /** A refusal whose message is shown (and said) to the learner verbatim. */
 export class TutorRefusal extends Error {
@@ -61,6 +61,8 @@ export class StrokeTutor {
   private total = 0;
   private lastVerdict: Verdict | null = null;
   private _phase: Phase = 'intro';
+  /** How each resolved stroke was earned, for a summary that praises from facts. */
+  private results: StrokeResult[] = [];
 
   // ----------------------------------------------------------------- reads
 
@@ -114,6 +116,7 @@ export class StrokeTutor {
     this.lastVerdict = verdict;
     if (verdict.ok) {
       this.correct += 1;
+      this.results.push({ index: this.strokeIndex, how: 'drawn', tries: this.attempts });
       this.resolve();
     }
     return verdict;
@@ -131,6 +134,7 @@ export class StrokeTutor {
     const stroke = this.currentStroke()!;
     const verdict: Verdict = { ok: false, kind: 'reveal', note: stroke.teach, revealed: true };
     this.lastVerdict = verdict;
+    this.results.push({ index: this.strokeIndex, how: 'shown', tries: this.attempts });
     this.resolve();
     return verdict;
   }
@@ -180,6 +184,7 @@ export class StrokeTutor {
     this.correct = 0;
     this.total = 1;
     this.lastVerdict = null;
+    this.results = [];
     this._phase = 'writing';
   }
 
@@ -210,6 +215,7 @@ export class StrokeTutor {
       attempts: this.attempts,
       last_verdict: this.lastVerdict ? { ...this.lastVerdict } : null,
       score: { correct: this.correct, total: this.total },
+      results: this.results.map((r) => ({ ...r })),
       grid: GRID,
       catalog: catalog(),
     };

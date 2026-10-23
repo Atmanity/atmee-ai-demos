@@ -160,6 +160,20 @@ export const mustStartMove = (text: string, ctx: NetContext): NetCall | null => 
   return move ? { name: 'start_move', arguments: { move } } : null;
 };
 
+const hasOrdinaryLimit = (text: string) => {
+  const c = parseConstraints(text);
+  return Boolean(c.minutes || c.equipment || c.injuries.length || c.avoid.length);
+};
+
+/**
+ * The user's own recent words that carry a limit, for the page to attach to an
+ * add_limits call: the host's words can drop one ("only twenty minutes"
+ * went missing live while Sammy said it was locked in).
+ */
+export function limitWords(lines: readonly { text: string; at: number }[], now: number, windowMs = 30_000): string {
+  return lines.filter((l) => now - l.at <= windowMs && hasOrdinaryLimit(l.text)).map((l) => l.text.trim()).join(' ').slice(-1000);
+}
+
 /**
  * A condition no exercise swap makes safe (pregnancy, a cardiac history,
  * recent surgery…), detected by the page itself from the user's own words:

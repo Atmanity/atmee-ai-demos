@@ -282,6 +282,31 @@ describe('the transport half, against scripted responses', () => {
     expect(await geo.nearbySpots(0, 0, http)).toEqual([]);
   });
 
+  test('Overpass keeps to its budget: a mirror gets only the time that is left, and none when too little is', async () => {
+    // Codex review: every mirror got the full 12 s, so after one 12 s timeout the 14 s budget still started a
+    // second request and the wait reached ~24 s. A fake clock, and mirrors that hang until their own timeout.
+    vi.useFakeTimers();
+    try {
+      const posts: { url: string; timeoutMs: number }[] = [];
+      const http: geo.Http = (url, init) => {
+        if (init?.method !== 'POST') return Promise.resolve(new Response('null', { status: 500 })); // Wikipedia down
+        const timeoutMs = init.timeoutMs ?? geo.HTTP_TIMEOUT_MS;
+        posts.push({ url, timeoutMs });
+        return new Promise((_, reject) => setTimeout(() => reject(new Error('The operation was aborted due to timeout')), timeoutMs));
+      };
+      const started = Date.now();
+      let doneAt = 0;
+      const result = geo.nearbySpots(38.7, -9.13, http).then((r) => { doneAt = Date.now(); return r; });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(await result).toBeNull();
+      expect(posts[0].timeoutMs).toBe(geo.HTTP_TIMEOUT_MS);
+      for (const later of posts.slice(1)) expect(later.timeoutMs).toBeLessThanOrEqual(geo.OVERPASS_BUDGET_MS - geo.HTTP_TIMEOUT_MS);
+      expect(doneAt - started).toBeLessThanOrEqual(geo.OVERPASS_BUDGET_MS);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test('Overpass moves on to the next mirror', async () => {
     const { http, calls } = fakeHttp({ 'overpass-api.de': { status: 504 }, 'kumi.systems': { body: OVERPASS } });
     const spots = await geo.nearbySpots(35.0, 135.7, http);

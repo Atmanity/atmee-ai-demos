@@ -3,7 +3,7 @@
 // finished character. Everything here is drawn from the server's snapshot and
 // the page's own marks: there is no character data in the page, so nothing
 // here can show a stroke before it is earned.
-import { travelSentences } from '../engine/director.ts';
+import { firstTries, travelSentences } from '../engine/director.ts';
 import { VERDICT_LABEL, type CatalogEntry, type Command, type Snapshot, type Verdict } from '../engine/types.ts';
 import type { GridPoint } from './ink.ts';
 import { markKey, markLabel, type Marks } from './marks.ts';
@@ -55,8 +55,8 @@ export function StrokeDots({ view, marks }: { view: Snapshot; marks: Marks }) {
   return (
     <ol className="hs-dots" aria-label={view.phase === 'debrief' ? `All ${strokes(c.strokes_total)} written` : `Stroke ${Math.min(view.stroke_index + 1, c.strokes_total)} of ${c.strokes_total}`}>
       {view.strokes.map((s) => {
-        const mark = marks[markKey(c.id, s.index)];
-        const state = s.status === 'done' ? (mark?.how === 'shown' ? 'is-shown' : 'is-drawn') : s.status === 'current' ? 'is-now' : '';
+        const how = view.results.find((r) => r.index === s.index)?.how ?? marks[markKey(c.id, s.index)]?.how;
+        const state = s.status === 'done' ? (how === 'shown' ? 'is-shown' : 'is-drawn') : s.status === 'current' ? 'is-now' : '';
         return <li key={s.index} className={state}><span>{s.index + 1}</span></li>;
       })}
     </ol>
@@ -198,7 +198,9 @@ export function Finished({ view, marks, busy, notice = '', onCommand, onPick, on
 }) {
   const c = view.character!;
   const next = nextOnMenu(view);
-  const { correct, total } = view.score;
+  // The first-try record from the sheet, not the score: a stroke right on its second try is not a first try.
+  const correct = firstTries(view);
+  const total = view.results.length || c.strokes_total;
   return (
     <section className="hs-desk is-done" aria-label={`${titleOf(c)}, finished`}>
       <Head view={view} marks={marks} eyebrow="Character complete" title={`${titleOf(c)}, written`} />
@@ -214,7 +216,7 @@ export function Finished({ view, marks, busy, notice = '', onCommand, onPick, on
         <p className="hs-total"><b>{correct}</b> of {strokes(total)} right first try</p>
         <ol className="hs-summary">
           {view.strokes.map((s) => {
-            const mark = marks[markKey(c.id, s.index)];
+            const mark = view.results.find((r) => r.index === s.index) ?? marks[markKey(c.id, s.index)];
             return (
               <li key={s.index} className={mark?.how === 'shown' ? 'is-shown' : 'is-drawn'}>
                 <span className="hs-summary-n">{s.index + 1}</span>

@@ -31,14 +31,18 @@ Open it at `/apps/bls-tutor/`.
 
 ## What the API could not do
 
-Status after the live runs of 2026-10-23 (shared host, then Alex's own).
+Status after the live runs of 2026-10-23 (shared host, then Alex's own host
+twice).
 **Seen**: observed live. **Expected**: not observed yet.
 
-1. **The emergency line cannot be forced word for word.** *Seen.* While a tool
-   runs the platform has the host say a filler of its own, and it lands first:
-   "Heavy stuff, ok I know, but stop — if this is happening now…". The line
-   now opens the `stop_for_emergency` result so nothing else of Alex's comes
-   before it; the filler cannot be removed by the app. The
+1. **The emergency line cannot be forced word for word.** *Seen, a platform
+   gap.* While an `await` tool runs, the platform has the host speak a filler
+   of its own, and it is spoken before the result arrives, so no wording of the
+   result can remove it: round 1 "Heavy stuff, ok I know, but stop — if this is
+   happening now…", round 2 (after the line was moved to the very start of the
+   result) still "Oh, that's difficult, Stop — if this is happening now…". The
+   sentence itself was word for word both times. Needed from the API: a
+   per-tool "no filler" switch, or a way to have a line spoken verbatim. The
    original spoke it through text-to-speech with no model in the path. Here
    `stop_for_emergency` returns it with "word for word, and nothing else", and
    the page's event says the same, but Alex words results himself and an event
@@ -50,11 +54,14 @@ Status after the live runs of 2026-10-23 (shared host, then Alex's own).
    page reads the recogniser's text about a second after the learner stops; a
    misheard "he's not breathing" is not caught by the rules. Alex's own
    judgement (`stop_for_emergency`) is the second chance. Typed text is certain.
-3. **Tools are called when Alex decides, and the filler speaks first.** *Seen.*
-   Every verdict came from `check_answer`, but the filler said "Good choice"
-   before a Not-yet verdict; each result now opens with its outcome word
-   ("Not yet:", "Right:", "Refused:") and the instructions forbid judging while
-   a tool runs. "This is too hard, can we do the one where someone collapsed
+3. **Tools are called when Alex decides, and the filler speaks first.** *Seen,
+   the filler a platform gap.* Every verdict came from `check_answer`, but the
+   platform's filler praised a wrong answer before the verdict: round 1 "Good
+   choice, okay but…", round 2 (with outcome-first results and a rule against
+   judging while a tool runs) still "Yeah, good call, but find out how bad it
+   is first…". The filler is spoken before the result exists, so the app cannot
+   reach it; the verdict itself was always the drill's, and the sheet shows
+   "Not yet" with the nudge at once. "This is too hard, can we do the one where someone collapsed
    instead?" called `leave_scenario`, not `start_scenario`; the instructions now
    say to start a named drill, and the safety net does. He may narrate ("let's
    move on") without the call, or judge an answer aloud before `check_answer`.
@@ -85,7 +92,7 @@ answer; and a spoken "show me" or scenario choice is no longer narrated twice.
 
 ## Tested
 
-- `npx vitest run apps/bls-tutor`: 273 tests. The engine's own, unchanged
+- `npx vitest run apps/bls-tutor`: 274 tests. The engine's own, unchanged
   (scenarios, grading, phases, the review, the emergency watch and its
   suppressions; only the staging tests went, with staging); `run()` for every
   tool and refusal; the tools and
@@ -103,3 +110,13 @@ answer; and a spoken "show me" or scenario choice is no longer narrated twice.
   card up from the page's own watch before Alex's `stop_for_emergency`, the line
   was said once, and practice resumed only after "false alarm, nobody's hurt".
   Since then: outcome-first results, lenient tool schemas, no second greeting.
+- Round 2 on Alex's new host (`ea5aab54`, 119 s): one greeting, then the
+  safety line and the choking scene; Alex's face on the front door badge and in
+  his frame. A wrong answer, "my dad just collapsed and he's not breathing" and
+  "false alarm, nobody's hurt" went through `check_answer`, `stop_for_emergency`
+  and `resume_practice`: the Not-yet card, the red card, the 911 sentence word
+  for word, and back to the same step. The platform's filler still came first
+  ("Yeah, good call, but…", "Oh, that's difficult, Stop —"; gaps 1 and 3). What
+  the app does about it: the red card is the guarantee. It goes up from the
+  page's own watch the moment the words arrive, with the exact sentence and
+  tap-to-call numbers, whatever the host says before it.

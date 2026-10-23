@@ -3,6 +3,7 @@
 // of test_table.py and test_user_turn_moves.py; the tool checks are new).
 import { expect, test } from 'vitest';
 import { spokenCard } from './cards.ts';
+import { DECISION_TIMEOUT_MS } from './decide.ts';
 import { chipFacts, INSTRUCTIONS, RULES_NOTE, said, speak, tableState, TOOLS } from './director.ts';
 import { PokerMatch } from './match.ts';
 import { Table } from './table.ts';
@@ -40,8 +41,11 @@ test('the tools fit the API: names, descriptions, schemas, modes and timeouts', 
 test('every tool waits for the table, the chart included, so Dex speaks from what happened', () => {
   const modes = Object.fromEntries(TOOLS.map((t) => [t.name, t['x-atmee']?.mode]));
   expect(modes).toEqual({ play_move: 'await', deal_hand: 'await', new_match: 'await', read_my_cards: 'await', show_hand_rankings: 'await' });
-  // The move's result can carry Dex's own move too: the decider's 4.5 s budget, twice, fits.
-  expect(TOOLS.find((t) => t.name === 'play_move')!['x-atmee']!.timeoutSeconds).toBeGreaterThanOrEqual(15);
+  // The move's result can carry two of Dex's own moves: the page's 4 s wait for
+  // the player's words, then two decisions with their beats, must fit the await.
+  const budget = 4 + 2 * (0.7 + DECISION_TIMEOUT_MS / 1000) + 2;
+  expect(TOOLS.find((t) => t.name === 'play_move')!['x-atmee']!.timeoutSeconds).toBeGreaterThanOrEqual(budget);
+  expect(TOOLS.find((t) => t.name === 'deal_hand')!['x-atmee']!.timeoutSeconds).toBeGreaterThanOrEqual(0.7 + DECISION_TIMEOUT_MS / 1000 + 2);
 });
 
 test('the schemas are lenient: a call that misses a tight schema never reaches the page', () => {
@@ -90,6 +94,8 @@ test('the hard-won rules survive the move to tools', () => {
     'never add up, estimate', 'never ask them to deal', 'ai, made by atmee', 'a question about a move', 'call the tool even when you think you know',
     'changes only when a tool runs', 'new_match, only when they ask', 'even a single word answering your own question',
     'never say an action happened', 'never offer to open it instead',
+    // Round 2, live: "Check." facing a bet got a needle and no call; "new match" mid-hand was refused by Dex himself.
+    'legal or not', 'never judge a move yourself', 'call it even mid-hand', 'never refuse or allow it yourself',
   ]) {
     expect(all, rule).toContain(rule.toLowerCase());
   }

@@ -41,8 +41,9 @@ somewhere else.
 
 ## What the API could not do
 
-Status after the live run of 2026-10-23 on staging (shared avatar `2cd3ec08`,
-then Mira's own `53e7e3f4`). **Seen**: observed live. **Expected**: not observed yet.
+Status after two live runs on staging on 2026-10-23: round 1 on the shared
+avatar `2cd3ec08` then Mira's first host `53e7e3f4`; round 2, after the fixes,
+on Mira's host `6ab2102c`. **Seen**: observed live. **Expected**: not observed yet.
 
 1. **Tools are called when the host decides.** *Seen working.* Every chart
    request called the right tool once, 2.5 to 4.2 s after the words began, and
@@ -54,6 +55,9 @@ then Mira's own `53e7e3f4`). **Seen**: observed live. **Expected**: not observed
    the host said "What do you mean?" or "Could you repeat that?" and then gave
    the chart's answer, which reads as if she misheard. The app cannot remove
    it; each result now starts with its outcome so her next words are the chart's.
+   Still there in round 2 ("What does that mean, then? That would be Vega…"),
+   and a refusal can open with a "yes" ("Sure thing, ok though I don't have
+   Kyoto listed directly…") before the verdict.
 3. **The facts-only rule is only an instruction.** *Expected* (the facts said
    live were the catalogue's: Vega "was our pole star twelve thousand years ago"). Nothing gates the
    model's memory, and a result is paraphrased: "eight and a half light years"
@@ -79,7 +83,7 @@ first reply.
 
 ## Tested
 
-- `npx vitest run apps/sky-guide`: 309 tests. The engine as ported (the
+- `npx vitest run apps/sky-guide`: 311 tests. The engine as ported (the
   closed-form astronomy, the catalogue, the chart's refusals and settling, the
   judge's phrasings, the narrator, the projection); the tools against the API
   limits, lenient schemas and the instructions naming each; the state's worst
@@ -87,10 +91,20 @@ first reply.
   synonym and stray-field arguments (`actions.test.ts`); the safety net's phrases and that its
   calls are safe to repeat; "when is it up"; the night list and its file; the
   chart's screen (taps, the keyboard list, the strip, the picker, the figures,
-  refusals); and the app's screens with the call stood in for (front door,
-  tool calls moving the screen, a control told to the host, the night card).
+  refusals); and the app's screens with the call stood in for (front door with
+  Mira's face, her portrait in the frame while connecting, tool calls moving
+  the screen, a control told to the host, the night card).
 - `npx tsc --noEmit`: clean for this app.
-- Live on staging, 2026-10-23, spoken through `tools/live-test/harness.js`: the
-  steps above, then hang-up to the night card (Vega, Taipei 9:00 pm, "Download
-  the list"). The night card keeps what was marked or drawn, not every star
-  named in a move.
+- Live on staging, 2026-10-23, spoken through `tools/live-test/harness.js`.
+  Round 1: the steps above, then hang-up to the night card (Vega, Taipei
+  9:00 pm, "Download the list"). The night card keeps what was marked or drawn,
+  not every star named in a move.
+- Round 2, after the fixes (host `6ab2102c`, `?place=Taipei`, 122 s): one
+  greeting, then straight to "Taipei around nine tonight" with no second
+  welcome. "Show me Kyoto." called `move_chart` and was refused with the
+  chart's offer ("We could shift over to Tokyo, or you can give me its latitude
+  and longitude"); "What's that bright one?" marked Vega (halfway up in the
+  north-west, the catalogue's pole-star line); "Show me Cygnus." drew it (by
+  Deneb); "Two hours later." moved the clock to 11 pm with Orion and Rigel
+  rising. Each called its tool once, 2.5 to 2.8 s after the words began; the
+  safety net never fired.

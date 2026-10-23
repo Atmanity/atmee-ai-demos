@@ -297,7 +297,9 @@ describe('an accepted try-on', () => {
     const [done] = await settle(stylist, reset);
     expect(done.view.image?.kind).toBe('look');
     expect(done.view.analysis?.tried_items).toEqual([]);
-    expect(models.reads.at(-1)?.context).toBe('Initial camera look after reset');
+    // The own photo for the same occasion: its first verdict comes back, not a new reading.
+    expect(models.reads.map((r) => r.context)).toEqual(['Initial camera look', 'After adding: Camel Wool Topcoat']);
+    expect(done.events[0].text).toMatch(/^Done: the verdict is 6 out of 10/);
   });
 });
 
@@ -313,12 +315,31 @@ describe('the read and the pieces', () => {
     expect(done.events[0].text).toContain('for wedding');
   });
 
-  test('a fresh rating keeps the pieces on screen', async () => {
-    const { stylist, models } = await styled();
+  test('rated again with nothing changed: the same verdict, said as such, and the pieces stay', async () => {
+    const models = new FakeModels();
+    models.scores = [7, 5];   // a second model read would have said 5 (live: 7, then 5, for the same outfit)
+    const { stylist } = await styled(models);
+    const reads = models.reads.length;
     const calls = models.suggestCalls;
-    await settle(stylist, stylist.act({ type: 'rerate' }));
+    const [done] = await settle(stylist, stylist.act({ type: 'rerate' }));
+    expect(models.reads).toHaveLength(reads);
     expect(models.suggestCalls).toBe(calls);
-    expect(models.reads.at(-1)?.context).toBe('Manual refresh requested by user');
+    expect(done.view.analysis?.style_score).toBe(7);
+    expect(done.events[0].text).toMatch(/^Done: the same verdict as before, 7 out of 10 for smart casual/);
+  });
+
+  test('the same outfit for the same occasion keeps its score through a new direction and back from another occasion', async () => {
+    const models = new FakeModels();
+    models.scores = [7, 3, 5, 5];
+    const { stylist } = await styled(models);
+    await settle(stylist, stylist.act({ type: 'steer', style: 'streetwear' }));
+    expect(stylist.view().analysis?.style_score).toBe(7);   // pieces lean another way; the verdict stands
+    await settle(stylist, stylist.act({ type: 'retarget', style: 'wedding' }));
+    expect(stylist.view().analysis?.style_score).toBe(3);
+    const [back] = await settle(stylist, stylist.act({ type: 'retarget', style: 'Smart Casual' }));
+    expect(back.view.analysis?.style_score).toBe(7);
+    expect(back.events[0].text).toMatch(/^Done: the verdict is 7 out of 10/);   // a change of occasion, not "the same verdict"
+    expect(models.reads).toHaveLength(2);
   });
 
   test('a new direction refreshes the pieces quietly', async () => {

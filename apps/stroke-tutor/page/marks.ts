@@ -45,9 +45,9 @@ export function nextMarks(marks: Marks, next: Snapshot, drawn?: GridPoint[]): Ma
   return kept;
 }
 
-/** One line of the summary for a stroke. */
-export function markLabel(mark: Mark | undefined): string {
+/** One line of the summary for a stroke: from the sheet's record (`Snapshot.results`) or the page's mark. */
+export function markLabel(mark: { how: 'drawn' | 'shown'; tries: number; asked?: boolean } | undefined): string {
   if (!mark) return 'Done';
-  if (mark.how === 'shown') return mark.asked ? 'Shown when you asked' : 'Shown after two misses';
+  if (mark.how === 'shown') return (mark.asked ?? mark.tries < 2) ? 'Shown when you asked' : 'Shown after two misses';
   return mark.tries <= 1 ? 'Right first try' : `Right on try ${mark.tries}`;
 }

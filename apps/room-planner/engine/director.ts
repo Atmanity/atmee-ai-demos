@@ -24,9 +24,9 @@ export const INSTRUCTIONS_LIMIT = 4000;
 
 /** The architect's rules: the session's tool instructions (at most 4,000 characters). */
 export const INSTRUCTIONS = `You are the architect in Planwright, planning a client's home with them at a drawing board, up to two floors. The plan is on their screen. You cannot see it; the live plan in your context describes it exactly (rooms by area and compass direction, neighbours, doors, windows, furniture, schemes, checks) and is ground truth. Never describe a room, door or piece that is not in it.
-- The plan changes only when you call a tool. Every request that changes the screen is a tool call, even a single word answering your own question (a size, a number of bedrooms, a yes). Saying "done" without the call changes nothing and misleads a client who is looking at the drawing: never say a change happened unless the tool's result said so. Call the tool before saying anything about the result, then speak only from what it returns: its numbers, or its refusal and the reason. Never invent or estimate a size or an outcome, never confirm a refused change, and if part of a request failed say which part. Call the tool even when you think you know, and even for a piece or room you think the plan lacks (a piano, a gym): only the plan knows whether it fits, and a refusal must come from it.
+- The plan changes only when you call a tool. Every request that changes the screen is a tool call, even a single word answering your own question (a size, a number of bedrooms, a yes). Saying "done" without the call changes nothing and misleads a client who is looking at the drawing: never say a change happened unless the tool's result said so. Call the tool FIRST and say nothing about the request until it returns: no size, no fit, no "shall I try…", only a few words that claim nothing ("let me look"). Then speak only from the result: its numbers, or its refusal and the reason. Never invent or estimate a size or an outcome, never confirm a refused change, and if part of a request failed say which part. Call the tool even when you think you know, and even for a piece or room you think the plan lacks (a piano, a gym): only the plan knows whether it fits, and a refusal must come from it.
 - The tools. Whole floor: lay_out_floor (a whole floor from a brief, with the size if they gave it), set_floor_size, add_upper_floor, go_to_floor. Rooms: add_room, remove_room, rename_room, divide_room, swap_rooms, knock_together. Sizes: trade_area (take_from gets SMALLER, give_to gets BIGGER: in "give the study two metres off the kitchen" the study is give_to), grow_room (free floor), move_wall (exact centimetres), mark_load_bearing. Openings: add_door_or_window, remove_door_or_window. Furniture: add_furniture, move_furniture (also turns), remove_furniture. Schemes: save_scheme, use_scheme. Also switch_units, undo_change, draw_sheet, clear_floor.
-- Name rooms, pieces and schemes as the live plan names them. Tools act on the floor on screen. Several requests in one sentence are several calls, in order. While a call runs, a few words at most ("let me draw that").
+- Name rooms, pieces and schemes as the live plan names them. Tools act on the floor on screen. Several requests in one sentence are several calls, in order. Asked again for something already done (the drawing, a floor), call the tool again: it redoes it with the plan as it is now. Never offer to do it later.
 - Questions about the plan (sizes, what is where, what undo would take back): answer from the live plan, no tool. When the client changes something by hand you are told; carry on from that.
 - Only when the client asks: lay_out_floor over a floor that has rooms, clear_floor, remove_room, opening or dropping a scheme. You may suggest a change ("shall I give bedroom two a metre off the hall?"); make it only if they say yes.
 - Never choose or ask for coordinates: say roughly where (by the window, the north wall, next to the kitchen) and the plan finds the spot. Furniture comes from the kit at real sizes; never invent a dimension or guess one from a photo. You never place the stairs: a second floor comes with them, lined up.
@@ -166,7 +166,7 @@ export const TOOLS: AppTool[] = [
   // ----------------------------------------------------------- furniture
   {
     type: 'function', name: 'add_furniture',
-    description: 'Puts a new piece in at its real size from the kit. Call it for ANY piece the client asks for, even one you think the kit lacks (a piano, a hot tub): the plan says what it has. The kit: single, double, queen or king bed, bedside table, 2-seat, 3-seat or corner sofa, armchair, chair, stool, desk, dining, coffee or side table, wardrobe, dresser, bookshelf, TV unit, rug, plant, floor lamp.',
+    description: 'Puts a new piece in at its real size from the kit. Call it FIRST for ANY piece the client asks for, before saying anything about it (its size, whether it fits), even one you think the kit lacks (a piano, a hot tub): the plan answers with its own numbers. The kit: single, double, queen or king bed, bedside table, 2-seat, 3-seat or corner sofa, armchair, chair, stool, desk, dining, coffee or side table, wardrobe, dresser, bookshelf, TV unit, rug, plant, floor lamp.',
     parameters: params({ piece: text('What it is, as the client said it.'), room: ROOM, near: WHERE_PIECE, next_to: text('A piece already on the plan to stand it beside.') }),
     'x-atmee': awaits,
   },
@@ -206,7 +206,7 @@ export const TOOLS: AppTool[] = [
   },
   {
     type: 'function', name: 'draw_sheet',
-    description: 'Draws up the sheet (the plan, the area schedule and the notes for every floor that has rooms) on the client\'s screen, ready to download. When they want something to keep or print.',
+    description: 'Draws up the sheet (the plan, the area schedule and the notes for every floor that has rooms) on the client\'s screen, ready to download. Call it every time they ask for the drawing, something to keep or print, even if a sheet is already up: it redraws the plan as it is now.',
     parameters: params({}), 'x-atmee': awaits,
   },
   {
@@ -263,6 +263,7 @@ export function planState(snap: PlanSnapshot): string {
 
   const nameOf = new Map(level.rooms.map((r) => [r.id, r.name]));
   const byArea = [...table.rows].sort((a, b) => b.area_m2 - a.area_m2);
+  const arrangement = level.name === 'ground' ? snap.typologies?.find((t) => t.key === level.style)?.label : undefined;
   const fact = (id: string) => {
     const room = level.rooms.find((r) => r.id === id)!;
     const next = level.walls.filter((w) => w.a === id || w.b === id).map((w) => nameOf.get(w.a === id ? w.b : w.a)!);
@@ -277,7 +278,7 @@ export function planState(snap: PlanSnapshot): string {
   const way = level.name !== 'ground' ? 'the way up is the stairs' : front.length ? `the front door opens into the ${spoken(front)}` : 'no front door yet';
   const openings = `Doors and windows: ${doors.length} doors, ${level.openings.length - doors.length} windows; ${way}.`;
 
-  const sections: string[] = [head, rooms, totals];
+  const sections: string[] = [arrangement ? `${head} Laid out as "${arrangement}".` : head, rooms, totals];
   const found = snap.issues;
   sections.push(found.length
     ? `Worth knowing (the app's own checks: good practice, not regulations; raise one at a time): ${clip(found.map((i) => noteIn(i.note, unit)), 700)}.`
@@ -496,6 +497,25 @@ export function asked(intent: Intent, snap: PlanSnapshot): string {
   }
 }
 
+/**
+ * For a piece that was refused, the room's own numbers, so the architect has
+ * nothing to estimate (live, she guessed "nearly four square metres" for a
+ * grand piano before the refusal arrived).
+ */
+function roomNumbers(intent: Intent, snap: PlanSnapshot): string {
+  if (intent.kind !== 'add_item' && intent.kind !== 'place_item') return '';
+  const level = snap.level;
+  const inRoom = (room: { rects: number[][] }, x: number, y: number) => room.rects.some(([x0, y0, x1, y1]) => x >= x0 && x < x1 && y >= y0 && y < y1);
+  const ref = String(intent.room ?? '').trim().toLowerCase();
+  const item = intent.kind === 'place_item' ? level.items.find((i) => i.id === intent.id) : undefined;
+  const room = level.rooms.find((r) => ref && (r.id.toLowerCase() === ref || r.name.toLowerCase() === ref))
+    ?? (item ? level.rooms.find((r) => inRoom(r, item.x_cm + item.w_cm / 2, item.y_cm + item.h_cm / 2)) : undefined);
+  if (!room) return '';
+  const pieces = level.items.filter((i) => inRoom(room, i.x_cm + i.w_cm / 2, i.y_cm + i.h_cm / 2));
+  const clear = Math.max(0, Math.round((room.area_m2 - pieces.reduce((sum, i) => sum + i.w_cm * i.h_cm, 0) / 10_000) * 10) / 10);
+  return ` The plan's own numbers, if they help: the ${room.name.toLowerCase()} is ${areaIn(room.area_m2, snap.unit)}, ${pieces.length ? `${pieces.length} piece${pieces.length === 1 ? '' : 's'} in it, ` : ''}about ${areaIn(clear, snap.unit)} of it clear. Give no other size.`;
+}
+
 /** One step the planner took, and how it went. */
 export interface Step { intent: Intent; result: ApplyResult }
 
@@ -512,7 +532,7 @@ export function resultFor(steps: Step[], fresh: Issue[], snap: PlanSnapshot): st
     const what = asked(refused.intent, snap);
     out = facts.length
       ? `Done: ${facts.map((f) => f.fact).join('; ')}. The rest was refused and has NOT changed: they asked to ${what}, and the plan says: "${refused.result.reason}" Say in one or two short lines which part worked and which did not, and suggest a fix for the refused part; make it only if they agree.`
-      : `Refused: nothing has changed. They asked to ${what}, and the plan says: "${refused.result.reason}" Tell them so in one short line in your own words and suggest a fix; make it only if they agree. Never describe it as done.`;
+      : `Refused: nothing has changed. They asked to ${what}, and the plan says: "${refused.result.reason}"${roomNumbers(refused.intent, snap)} Tell them so in one short line in your own words and suggest a fix; make it only if they agree. Never describe it as done.`;
   } else if (facts.length) {
     out = `Done: ${facts.map((f) => f.fact).join('; ')}. ${facts[facts.length - 1].say}`;
   } else {

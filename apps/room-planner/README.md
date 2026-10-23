@@ -71,6 +71,26 @@ says which room they came from; the drawing sheet has a page for every floor
 that has rooms (it drew the empty upstairs); the opening no longer greets a
 second time; room names sit above the furniture.
 
+Round two (2026-10-23, Iris's new host `80c26960`, two lines typed): open plan
+gave one 21.4 m² kitchen and living room; "add a grand piano" reached
+`add_furniture` and the plan's refusal, shown on the plan; "add an upstairs"
+(typed; spoken it was heard as "At an upstairs" and got a question) kept every
+ground-floor room, the stairs taking 3.6 m² off the hall with a door into it;
+the first "the drawing to keep" opened the ground floor's sheet. Still wrong,
+and fixed since:
+- Before the piano's refusal Iris said "a grand piano takes up nearly four
+  square metres… Shall I try squeezing it into the west corner?". The
+  instructions and `add_furniture` now say to call first and say nothing about
+  the piece until the result, and a refused piece's result carries the room's
+  own numbers (its area, how much of it is clear), so there is nothing to
+  estimate.
+- A second "the drawing to keep" got "whenever you are ready" and no call. The
+  instructions and `draw_sheet` now say to call it again whenever asked; it
+  redraws the plan as it is now.
+- The arrangement picker said "Day end, night end" over the open plan. Each
+  floor now remembers its arrangement (through undo, schemes and clearing), and
+  the picker, the bar above the plan and Iris's picture of the plan all name it.
+
 Fixed by tools, compared with the first port: Iris no longer answers before the
 plan changes ("eight point three square metres" before the real 8.4); there is
 no second model judging the client's words (the server's `/judge` route is
@@ -93,7 +113,7 @@ is kept where it shows (halves round to even, `round(x, 1)`, `:g`).
 
 ## Tested
 
-- `npx vitest run apps/room-planner`: 299 tests. The engine suites ported from
+- `npx vitest run apps/room-planner`: 303 tests. The engine suites ported from
   the Python (geometry, home, layouts, checks, planner, sheet) and the original
   phrase rules; the tools against the real planner (real numbers, refusals with
   the plan's reasons, "the second bedroom", square feet, questions for missing
@@ -105,7 +125,7 @@ is kept where it shows (halves round to even, `round(x, 1)`, `:g`).
   sheet, a typed line, the safety net firing and holding back, the end of the
   call).
 - `npx tsc --noEmit`: clean for this folder.
-- Live: one run on staging (above), before the fixes; the plan below is what it followed.
+- Live: two runs on staging (above); the plan below is what they followed. Round two's three faults are fixed but not yet re-run.
 
 ### Live test plan
 

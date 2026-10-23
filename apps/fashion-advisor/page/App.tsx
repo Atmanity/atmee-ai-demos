@@ -127,7 +127,8 @@ export function App() {
       if (!v) return void (openingOwed.current = true);
       const back = lastArrival.current === studio.current;
       lastArrival.current = studio.current;
-      avatarRef.current?.event(said.opening(v, back), 60);
+      const opening = said.opening(v, back);
+      if (opening) avatarRef.current?.event(opening, 60);
     },
     // The fitting's ending: the notes, once there is a verdict to keep.
     onEnded: () => { if (viewRef.current?.analysis) setNotes(true); },
@@ -152,10 +153,16 @@ export function App() {
       const { id, view: first } = await request<{ id: string; view: View }>('/studios', {});
       studio.current = id;
       apply(first);
-      if (openingOwed.current || avatarRef.current.phase === 'live') {
+      if (openingOwed.current) {
+        // Emery arrived before the room opened: her opening, now (none for an empty room).
         openingOwed.current = false;
         lastArrival.current = id;
-        avatarRef.current.event(said.opening(first), 60);
+        const opening = said.opening(first);
+        if (opening) avatarRef.current.event(opening, 60);
+      } else if (avatarRef.current.phase === 'live') {
+        // A new fitting while she is in the call.
+        lastArrival.current = id;
+        avatarRef.current.event(said.newFitting(), 30);
       }
     } catch (err) {
       console.warn('[notch] could not open a fitting room', err);

@@ -2,8 +2,8 @@
 // state only once it is earned, tools that fit the API, and every text within
 // the API's limits.
 import { describe, expect, test } from 'vitest';
-import { CHARACTERS, JUU, type Character } from './characters.ts';
-import { boardState, INSTRUCTIONS, say, TOOLS } from './director.ts';
+import { CHARACTERS, JUU, KI, type Character } from './characters.ts';
+import { boardState, firstTryRecord, INSTRUCTIONS, say, TOOLS } from './director.ts';
 import { perform } from './lesson.ts';
 import { resample } from './strokes.ts';
 import { StrokeTutor } from './tutor.ts';
@@ -114,7 +114,7 @@ describe('staging', () => {
     tutor.startCharacter('ichi');
     tutor.reveal();
     tutor.nextStroke();
-    expect(boardState(tutor.snapshot())).toContain('The character is finished: 0 of 1');
+    expect(boardState(tutor.snapshot())).toContain('The character is finished. Their record: 0 of 1 stroke right on the first try; stroke 1 was shown to them because they asked.');
   });
 });
 
@@ -203,7 +203,7 @@ describe('limits', () => {
 describe('cues', () => {
   const view = (verdict: Snapshot['last_verdict'], attempts = 1): Snapshot => ({
     phase: 'writing', character: { id: 'juu', glyph: '十', meaning: 'ten', reading: 'jū', script: 'kanji', strokes_total: 2 },
-    stroke_index: 0, strokes: [], attempts, last_verdict: verdict, score: { correct: 0, total: 1 }, grid: 1000, catalog: [],
+    stroke_index: 0, strokes: [], attempts, last_verdict: verdict, score: { correct: 0, total: 1 }, results: [], grid: 1000, catalog: [],
   });
 
   test('a stroke drawn backwards is told as what they drew, then which way it goes, in that order', () => {
@@ -263,5 +263,58 @@ describe('cues', () => {
     expect(debrief).toContain('ask which character they would like next');
     expect(debrief).toContain('only when they choose');
     expect(say.opening()).toContain('only when they choose');
+  });
+});
+
+describe('the first-try record', () => {
+  /** 木 as the live run played it: stroke 1 drawn backwards, then right; the rest right first time. */
+  function tree() {
+    const tutor = new StrokeTutor();
+    tutor.startCharacter('ki');
+    tutor.stroke(drawing(KI, 0).reverse());
+    tutor.stroke(drawing(KI, 0));
+    for (let i = 1; i < 4; i += 1) { tutor.nextStroke(); tutor.stroke(drawing(KI, i)); }
+    tutor.nextStroke();
+    return tutor;
+  }
+
+  test('the debrief states the record plainly: a stroke right on its second try is not a first try', () => {
+    const view = tree().snapshot();
+    expect(view.score.correct).toBe(4);   // the engine's score: drawn right, on any try
+    const debrief = say.debrief(view);
+    expect(debrief).toContain('3 of 4 strokes right on the first try; stroke 1 took two tries.');
+    expect(debrief).toContain('do NOT say every stroke was right first time');
+    expect(boardState(view)).toContain('3 of 4 strokes right on the first try; stroke 1 took two tries.');
+  });
+
+  test('all right first time is said as such, with no warning', () => {
+    const tutor = new StrokeTutor();
+    tutor.startCharacter('juu');
+    tutor.stroke(drawing(JUU, 0));
+    tutor.nextStroke();
+    tutor.stroke(drawing(JUU, 1));
+    tutor.nextStroke();
+    const debrief = say.debrief(tutor.snapshot());
+    expect(debrief).toContain('2 of 2 strokes right on the first try.');
+    expect(debrief).not.toContain('do NOT');
+  });
+
+  test('shown strokes say how: when they asked, or after two misses', () => {
+    const tutor = new StrokeTutor();
+    tutor.startCharacter('juu');
+    tutor.reveal();
+    tutor.nextStroke();
+    tutor.stroke(drawing(JUU, 0));
+    tutor.stroke(drawing(JUU, 0));
+    tutor.reveal();   // the rescue, as lesson.ts makes it
+    expect(firstTryRecord(tutor.snapshot())).toBe('0 of 2 strokes right on the first try; stroke 1 was shown to them because they asked; stroke 2 was shown to them after two misses.');
+  });
+
+  test('mid-character, the state carries the record so far, and nothing about strokes not reached', () => {
+    const tutor = new StrokeTutor();
+    tutor.startCharacter('ki');
+    expect(boardState(tutor.snapshot())).toContain('No stroke of this character is finished yet.');
+    tutor.stroke(drawing(KI, 0));
+    expect(boardState(tutor.snapshot())).toContain('Their record on this character so far: 1 of 1 stroke right on the first try.');
   });
 });

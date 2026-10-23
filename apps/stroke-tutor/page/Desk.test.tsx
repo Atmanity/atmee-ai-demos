@@ -42,6 +42,7 @@ function snapshot(over: Partial<Snapshot> = {}): Snapshot {
     attempts: 0,
     last_verdict: null,
     score: { correct: 1, total: 2 },
+    results: [{ index: 0, how: 'drawn', tries: 1 }],
     grid: 1000,
     catalog: CATALOG,
     ...over,
@@ -156,7 +157,7 @@ describe('the lesson', () => {
   });
 
   it('marks each stroke on the progress dots: drawn, shown, now', () => {
-    lesson(snapshot({ strokes: [snapshot().strokes[0], { index: 1, status: 'current', points: [] }] }), { marks: { [markKey('juu', 0)]: { how: 'shown', tries: 0, asked: true } } });
+    lesson(snapshot({ strokes: [snapshot().strokes[0], { index: 1, status: 'current', points: [] }], results: [{ index: 0, how: 'shown', tries: 0 }] }));
     const dots = screen.getByRole('list', { name: 'Stroke 2 of 2' }).querySelectorAll('li');
     expect([...dots].map((d) => d.className)).toEqual(['is-shown', 'is-now']);
   });
@@ -189,7 +190,7 @@ describe('the menu', () => {
 
 describe('the finished character', () => {
   const finished = () => snapshot({
-    phase: 'debrief', stroke_index: 2, score: { correct: 1, total: 2 },
+    phase: 'debrief', stroke_index: 2, score: { correct: 1, total: 2 }, results: [{ index: 0, how: 'drawn', tries: 1 }, { index: 1, how: 'shown', tries: 2 }],
     strokes: [snapshot().strokes[0], { index: 1, status: 'done', points: [[500, 120], [500, 880]], name: 'the vertical', teach: 'T' }],
   });
 
@@ -207,6 +208,20 @@ describe('the finished character', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save your sheet' }));
     expect(commands).toEqual(['another', 'over']);
     expect(saved).toEqual([1]);
+  });
+});
+
+describe('the first-try record on the finished sheet', () => {
+  it('a stroke right on its second try is not counted as a first try', () => {
+    const view = snapshot({
+      phase: 'debrief', stroke_index: 2, score: { correct: 2, total: 2 }, results: [{ index: 0, how: 'drawn', tries: 2 }, { index: 1, how: 'drawn', tries: 1 }],
+      strokes: [snapshot().strokes[0], { index: 1, status: 'done', points: [[500, 120], [500, 880]], name: 'the vertical', teach: 'T' }],
+    });
+    render(<Finished view={view} marks={{}} busy={false} onCommand={() => {}} onPick={() => {}} onSave={() => {}} />);
+    expect(screen.getByText(/right first try/).textContent).toBe('1 of 2 strokes right first try');
+    expect(screen.getByText('Right on try 2')).toBeTruthy();
+    expect(screen.getByText('Right first try')).toBeTruthy();
+    expect(document.querySelector('.hs-seal')!.textContent).toBe('1/2first try');
   });
 });
 

@@ -33,9 +33,9 @@ cannot read your photos or write recipes, and Rachel says so.
 
 ## What the API could not do
 
-Status: the rebuilt app has not been run live yet. **Expected**: not observed
-on this version. Notes from the previous port's live run (2026-10-23) are
-marked as such.
+Status after the two live runs of this version (2026-10-23, below).
+**Expected**: not observed on this version. Notes from the previous port's
+live run are marked as such.
 
 1. **Tools are called when the host decides.** *Expected.* Rachel may say
    "let me pull that up" without calling `look_up_food`; the safety net puts
@@ -85,4 +85,31 @@ judge of every spoken and typed line, the staged recipes in the board and the
   with the model faked (`server.test.ts`); and the screens rendered (front
   door, empty table, lookup in flight, label, side by side, recipe, notices,
   notes), none of them saying "session", "avatar", "sample" or the like.
-- Live: not yet run on this version.
+### Live runs (staging, 2026-10-23)
+
+Spoken through `tools/live-test/harness.js`, one typed line.
+
+- **Round 1** (shared test avatar `26cbe079`, then a smoke pass on Rachel's own
+  host `0c52a66c`): all ten steps went through the right tool, or none, on the
+  first try. "What's in a banana?" called `look_up_food` about 2.5 s after the
+  words and the reply carried the card's 105 calories. "Compare it with an
+  apple." called `compare_foods` and the table showed both foods. "Which one
+  has more sugar?" was answered from the board (18.9 g against 14.4 g). The
+  first recipe opened with `open_recipe`, and "Done, what's next?" called
+  `next_steps`. "Go back to the card." called `close_recipe`. "200 grams of
+  chicken breast" gave a stated-portion card with 62 g protein. A typed Big
+  Mac went through `look_up_food`, and "Let's start over." through
+  `start_over`. "I have diabetes…" called no tool: the health note appeared at
+  once and Rachel declined and offered the numbers. Found: the banana reply
+  added "potassium", which is not on the label (on both hosts); the
+  instructions and every card result now say to speak only of what is on the
+  card.
+- **Round 2** (Rachel's host `c075f5ff`, after the fixes): one greeting, no
+  second welcome. "What's in a banana?" called `look_up_food` (2.7 s), with no
+  safety net needed. "How much potassium is in it?" got "potassium actually
+  isn't listed with a specific number on this card", with no number: fixed.
+  "Which one has more sugar?" with one food up got a fair "which food are you
+  comparing the banana to?". Still seen: the platform's filler before the
+  first result was said twice ("Sure, I can, let me pull up the info for a
+  banana for you right now!" twice), and a filler opener "What do you mean?".
+  Both are platform-side.

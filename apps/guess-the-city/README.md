@@ -57,3 +57,13 @@ the runs was the game's).
   called `check_guess`; "I give up", "next city" and a typed "Is it Tokyo?"
   each went through their tools; "What is my score?" was answered from the
   board. A full three-city game reached the score card.
+- Round 2, on Marco's own host in the testuser account (`efcd4a84`): one
+  greeting; a guess, a clue, a reveal and the next city each went through
+  their tools. Round 2's photo stayed an empty card for more than 8 s while
+  Marco said it had "popped up": the photo was fetched only when the page
+  first asked for it. Since then every round's photo starts downloading when
+  the game is dealt, `next_city` waits up to 6 s for its photo before Marco
+  announces it, and a photo that cannot be had becomes the no-photo card,
+  with Marco told to start from the clues (not yet run live). Round 2's city
+  was Paris, just guessed in round 1: a coincidence a three-city deck cannot
+  rule out.

@@ -53,10 +53,18 @@ Status after the live run of 2026-10-23 on staging (Outcry's own host).
    Reese said "Tesla is front and centre now" (a typed "Pull up Microsoft."
    did call it). The instructions now say every change is a call and nothing
    happened unless a result said so, and the safety net now does a focus of a
-   stock already on the board. An add is never redone by the page.
-2. **The no-advice rule is the host's to keep.** *Seen holding.* "Should I buy
-   Nvidia?" got "I read the tape, I don't give advice." and a board fact (its
-   move and "sixty-four percent up its 52-week range"). The app does not
+   stock already on the board. An add is never redone by the page. Round 2,
+   on Reese's new host: "Pull up Tesla." again got no call (2 of 2 by voice);
+   the net brought Tesla up, and Reese spoke as if he had. Since then
+   `focus_symbol`'s description opens with the user's words ("pull up",
+   "show me", "bring up", "go to", "back to") and says to call it for a stock
+   already on the board, and the net's note to Reese says plainly the page
+   did it, not him.
+2. **The no-advice rule is the host's to keep.** *Seen holding,* twice.
+   "Should I buy Nvidia?" got "I read the tape, I don't give advice." and a
+   board fact (its move and "sixty-four percent up its 52-week range"). In
+   round 2 the platform's filler came first ("Let's examine the numbers,
+   but…"); the refusal itself held. The app does not
    detect advice or stage a decline; nothing can verify the reply first.
 3. **The persona and the greeting belong to the avatar.** *Seen.* Reese's own
    greeting introduces him, so the opening no longer greets again.
@@ -116,3 +124,10 @@ longer need a judge in the page.
   answered in 1–650 ms); the closing sheet showed the board. Missed: the
   spoken "Pull up Tesla" (gap 1). Fixed since: the closing sheet's time was
   in the browser's language ("下午4:43"); it is now English like the rest.
+- Round 2 on Reese's new host (2026-10-23, session `2485af18`, 100 s): one
+  greeting, then straight to "Which stock would you like to put on the board
+  first?"; Reese's face on the front door; "Put Nvidia and Tesla up" read
+  both real moves in the first reply (3.5 s); "Pull up Tesla" missed by Reese
+  and done by the safety net (gap 1); the advice refusal held; the closing
+  sheet read "5:45 PM". Seen and not the app's: the live video was framed on
+  Reese's eyes and brow (the stream itself, 512×512, not the page's crop).

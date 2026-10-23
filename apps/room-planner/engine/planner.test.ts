@@ -148,6 +148,24 @@ describe('the reducer', () => {
   });
 });
 
+describe('the arrangement', () => {
+  test('a floor remembers the arrangement it was laid out in, through undo, schemes and clearing', () => {
+    // Round two: the page's picker said "Day end, night end" over an open-plan floor.
+    const p = new Planner();
+    applied(p.apply({ kind: 'generate', bedrooms: 2, style: 'open_plan' }));
+    expect(p.snapshot().level.style).toBe('open_plan');
+    applied(p.apply({ kind: 'save_scheme', name: 'Open' }));
+    applied(p.apply({ kind: 'generate', bedrooms: 2, style: 'compact' }));
+    expect(p.snapshot().level.style).toBe('compact');
+    applied(p.apply({ kind: 'undo' }));
+    expect(p.snapshot().level.style).toBe('open_plan');
+    applied(p.apply({ kind: 'clear' }));
+    expect(p.snapshot().level.style).toBeNull();
+    applied(p.apply({ kind: 'load_scheme', name: 'Open' }));
+    expect(p.snapshot().level.style).toBe('open_plan');
+  });
+});
+
 describe('schemes', () => {
   test('a saved scheme survives the plan changing under it', () => {
     const p = new Planner();

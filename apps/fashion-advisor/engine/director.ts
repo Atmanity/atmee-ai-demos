@@ -194,11 +194,14 @@ export const say = {
   photoNeedsStyle: () => ev("Not yet rated: their photo is in, but you don't know what they're dressing for, so it can't be scored. Ask them; it's rated as soon as they tell you.", 30),
 
   /** The verdict is in: the score (and its change after a try-on), what works, the one fix, the next piece. */
-  analysis(v: View, ctx: { previousScore?: number; added?: string; wish?: string } = {}): SayEvent {
+  analysis(v: View, ctx: { previousScore?: number; added?: string; wish?: string; same?: boolean } = {}): SayEvent {
     const a = v.analysis!;
     const occasion = occasionOf(v.target) || 'their occasion';
     const score = a.style_score;
     const reaction = score >= 8 ? 'it works' : score >= 5 ? 'a good base that needs one edit' : 'it needs a clearer point of view';
+    if (ctx.same) {
+      return ev(`Done: the same verdict as before, ${score} out of 10 for ${occasion} ("${a.style_summary}"): the photo and the occasion haven't changed, so the reading stands. A new photo, a piece on or another occasion would change it. Say so in a sentence and remind them of the one fix: ${a.style_tip}`, 45);
+    }
     const lines = [ctx.added
       ? `Done: with the ${ctx.added} on, the outfit scores ${score} out of 10 for ${occasion}.`
       : `Done: the verdict is ${score} out of 10 for ${occasion} ("${a.style_summary}").`];
@@ -268,15 +271,23 @@ export const say = {
 // -- the fitting's own words ----------------------------------------------------------
 
 export const said = {
-  /** The first thing Emery hears once she is in: where the fitting stands (called back: the same fitting, carried on). */
-  opening(v: View, back = false): string {
+  /**
+   * The first thing Emery hears once she is in: where the fitting stands (called
+   * back: the same fitting, carried on). Null for an empty fitting room: her own
+   * greeting already asks where they're headed, and asking again right after it
+   * (live, back to back) is the one thing the opening must not do.
+   */
+  opening(v: View, back = false): string | null {
     const hello = `You have just greeted them; do not greet or introduce yourself again. ${back ? 'They called you back to carry on the same fitting:' : 'A fitting on Notch starts:'} go straight on and`;
     if (v.analysis && !v.jobs.analysing) return `${hello} give them the verdict on their screen. ${say.analysis(v).text}`;
     if (v.jobs.photo || v.jobs.analysing) return `${hello} say their photo is being read for ${occasionOf(v.target)} right now; you'll be told the verdict. Don't guess it.`;
-    if (v.image && !v.target) return `${hello} say you have their photo and ask what they're dressing for.`;
-    if (v.target) return `${hello} confirm they're dressing for ${occasionOf(v.target)} and ${askForPhoto}.`;
-    return `${hello} ask what they're dressing for today. They can add a photo of their outfit ${WHERE_PHOTOS_GO}, whenever they like.`;
+    if (v.image && !v.target) return `${hello} say in a few words that you have their photo. Your greeting already asked where they're headed: don't ask again, wait for their answer.`;
+    if (v.target) return `${hello} confirm in a few words that they're dressing for ${occasionOf(v.target)} (they picked it on screen) and ${askForPhoto}.`;
+    return null;
   },
+
+  /** The user started over while Emery is in the call. */
+  newFitting: () => "The user started a new fitting on screen: the mirror and the occasion are empty again. In a sentence, ask what they're dressing for next.",
 
   /** A button press, told to Emery: she cannot see the screen. */
   pressed: (what: string, outcome: string) => `The user ${what} on screen. ${outcome}`,
@@ -305,7 +316,7 @@ export const said = {
     const names = v.analysis?.suggestions.slice(0, 3).map((s) => s.item) ?? [];
     if (!names.length) return `Nothing new: no pieces came back leaning ${direction}. Say so and give one styling idea in words.`;
     const ask = v.tryOnAvailable ? `; ask whether they'd like to try on the ${names[0]}, and put it on only if they say yes` : '';
-    return `Done: the rail now leans ${direction}: ${names.join(', ')} first. Name one or two in a sentence${ask}.${v.analysis ? ` The verdict was refreshed with it: ${v.analysis.style_score} out of 10 for ${occasionOf(v.target)}.` : ''}`;
+    return `Done: the rail now leans ${direction}: ${names.join(', ')} first. Name one or two in a sentence${ask}.${v.analysis ? ` The verdict is unchanged: ${v.analysis.style_score} out of 10 for ${occasionOf(v.target)}.` : ''}`;
   },
 
   /** A tool's result that outlived the call. */

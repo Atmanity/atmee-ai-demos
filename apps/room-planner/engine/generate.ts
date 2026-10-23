@@ -238,6 +238,7 @@ export function generate(level: Level, slots: Slot[], { style = 'day_night', ent
     level.restore(before);
     throw err;
   }
+  level.style = shape.key;
   return shape;
 }
 

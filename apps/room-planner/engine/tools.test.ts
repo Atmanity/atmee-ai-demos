@@ -297,10 +297,23 @@ describe('what the host passes, its own way', () => {
 });
 
 describe('found live', () => {
-  test('a piano is refused by the plan, in its own words', () => {
+  test('a piano is refused by the plan, in its own words and with its own numbers', () => {
     const { call } = plan();
-    const out = call('add_furniture', { piece: 'grand piano', room: 'Living room' });
+    call('lay_out_floor', { bedrooms: 2, study: true, style: 'open_plan' });
+    const out = call('add_furniture', { piece: 'grand piano', room: 'Kitchen and living room', near: 'west' });
     expect(out.text).toMatch(/^Refused: nothing has changed\..*I don't have a grand piano in my kit/);
+    // Round two: with no numbers to hand she guessed "nearly four square metres".
+    expect(out.text).toMatch(/the kitchen and living room is [\d.]+ square metres, about [\d.]+ square metres of it clear\. Give no other size\./);
+  });
+
+  test('the drawing can be asked for again, and is redrawn as the plan now is', () => {
+    const { planner, call } = plan();
+    expect(call('draw_sheet').drew).toBe(true);
+    call('add_upper_floor');
+    const again = call('draw_sheet');
+    expect(again.drew).toBe(true);
+    expect(again.refusal).toBeNull();
+    expect(planner.snapshot().sheet!.svg).toContain('Stairs');
   });
 
   test('open plan is one room for kitchen and living, as the architect says it is', () => {

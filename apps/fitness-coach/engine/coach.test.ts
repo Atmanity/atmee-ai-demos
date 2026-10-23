@@ -398,7 +398,7 @@ describe('a limit reshapes the plan, and is acknowledged once', () => {
     expect(landed.view.flow.start_move).toBe('');
     expect(landed.view.video).toBeNull();
     expect(landed.view.stage).toBe('move');
-    expect(texts(landed)).toContain('The demo of Walking lunges was taken off the screen');
+    expect(texts(landed)).toContain('Walking lunges is not on the new plan, so it has been taken off the screen');
   });
 });
 

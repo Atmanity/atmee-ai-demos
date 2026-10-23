@@ -121,11 +121,22 @@ afterEach(() => {
 });
 
 describe('a fitting', () => {
-  test('opens while Emery is on her way; she arrives to an opening that fits the empty room', async () => {
+  test('opens while Emery is on her way; in an empty room her own greeting is the opening (no second question)', async () => {
     await inTheRoom();
     expect(fake.starts).toEqual([{ mic: true }]);
-    expect(fake.events.at(-1)).toMatch(/^You have just greeted them; do not greet or introduce yourself again\..*ask what they're dressing for today/);
+    expect(fake.events).toEqual([]);
     expect(lastState()).toContain('The mirror is empty');
+  });
+
+  test('an occasion picked while she connects: her opening confirms it and asks for the photo, without greeting again', async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: /Talk to Emery/ }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Dinner out' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Dinner out' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Dressing for Dinner out/ })).toBeTruthy());
+    expect(fake.events).toEqual([]);   // not in the call yet: nothing is told
+    act(() => { fake.setPhase!('live'); fake.handlers.onLive!(); });
+    expect(fake.events.at(-1)).toMatch(/^You have just greeted them; do not greet or introduce yourself again\..*confirm in a few words that they're dressing for Dinner out/);
   });
 
   test("Emery's rate_outfit: the occasion is set on screen and her result asks for the photo", async () => {

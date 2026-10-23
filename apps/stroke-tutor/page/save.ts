@@ -1,6 +1,7 @@
 // "Save your sheet": the finished character as an image the learner keeps,
 // in their own ink with Ren's vermilion where Ren showed a stroke, titled and
 // dated like a practice sheet handed in.
+import { firstTries } from '../engine/director.ts';
 import type { Snapshot } from '../engine/types.ts';
 import type { Marks } from './marks.ts';
 import { INK, paintSheet, paintStroke } from './paint.ts';
@@ -27,7 +28,7 @@ export function sheetImage(view: Snapshot, marks: Marks, date = new Date()): HTM
   ctx.fillText(character.script === 'latin' ? `The letter ${character.glyph}` : `${character.glyph}  ${character.meaning}`, 90, 140);
   ctx.font = '400 28px "Zen Kaku Gothic New", system-ui, sans-serif';
   ctx.fillStyle = '#5d6669';
-  const tries = `${view.score.correct} of ${view.score.total} strokes right first try`;
+  const tries = `${firstTries(view)} of ${view.results.length} strokes right first try`;
   ctx.fillText(character.script === 'latin' ? tries : `Read ${character.reading} · ${tries}`, 90, 190);
 
   const square = { x: 90, y: 250, size: W - 180 };

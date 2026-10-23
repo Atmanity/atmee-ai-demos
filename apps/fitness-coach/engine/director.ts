@@ -25,7 +25,7 @@ export const INSTRUCTIONS = `You are the coach on Spotter, coaching one person t
 - Every request that changes the screen is a tool call, even a single word answering your own question. Never say an action happened (a level set, a plan built, a limit added, a move started) unless the tool's result said so.
 - They say what they want to train ("glutes", "full body", "core and cardio, I'm a beginner"): call set_goal, with the level too if they said one.
 - They give their level, even one word after you asked ("Beginner, please", "intermediate"), or ask for an easier or harder plan ("a bit harder"): call set_level. It builds or rebuilds the plan.
-- They mention a limit at any point (only so many minutes, no or only some equipment, a bad or sore knee, back, shoulder, wrist, ankle, hip, neck or elbow, an injury like a torn ACL, a move to avoid): call add_limits with their words. Never say the plan works around something until the result says so.
+- They mention a limit at any point (only so many minutes, no or only some equipment, a bad or sore knee, back, shoulder, wrist, ankle, hip, neck or elbow, an injury like a torn ACL, a move to avoid): call add_limits once with ALL of their words about it ("my left knee is bad and I only have twenty minutes"), never just one of the limits. Never say the plan works around something until the result names it.
 - They pick a move to start with or switch to ("the plank", "let's start with the first warm-up move"): call start_move.
 - "Start over", "something else entirely": call start_over, only when they ask; never on your own.
 - STOP RULE, from a real failure: if they mention pregnancy or a recent birth, chest pain, a heart condition or heart attack, high blood pressure, recent surgery or an operation, a fracture or broken bone, a concussion, dizziness or fainting, or anything else a doctor should clear first, call stop_for_safety at once, before you say anything else, and say what it returns. From then on never coach, suggest or name any exercise, warm-up, stretch or modification, never resume the plan, and never soften the stop. A sore or injured joint is a limit (add_limits), not a stop.
@@ -76,10 +76,10 @@ export const TOOLS: AppTool[] = [
   },
   {
     type: 'function', name: 'add_limits',
-    description: 'Records something the user has to work around (a time limit, the equipment they have, a sore or injured joint, a move to avoid) and rebuilds any plan on the screen to obey it. Call it whenever they mention one, at any step.',
+    description: 'Records what the user has to work around (a time limit, the equipment they have, a sore or injured joint, a move to avoid) and rebuilds any plan on the screen to obey it. Call it whenever they mention one, at any step, with every limit they said in one call.',
     parameters: {
       type: 'object',
-      properties: { words: text('Their words about it, e.g. "only twenty minutes", "no equipment", "my left knee is bad", "no jumping".') },
+      properties: { words: text('All of their words about their limits, every one they said, e.g. "my left knee is bad and I only have twenty minutes", "no equipment", "no jumping".') },
       required: ['words'],
     },
     'x-atmee': awaits(20),
@@ -224,6 +224,12 @@ const describe = (intent: Intent | string) => {
   }
 };
 
+/**
+ * A started move the rebuilt plan no longer has. Live, "make it harder" put the
+ * screen back on "Pick your first move" while Sammy said nothing about it.
+ */
+const droppedNote = (move: string) => `${move} is not on the new plan, so it has been taken off the screen (with any video of it) and the screen is back to choosing a first move. Tell them the plan was rebuilt and that ${move} is no longer in it, then ask which move they want to start with now.`;
+
 /** What the host says first when asked for anything under the pause. */
 export const HOLD_LINE = 'I can\'t coach any exercise until your doctor or a qualified health professional has cleared you.';
 
@@ -252,8 +258,8 @@ export const say = {
   levelOnly: (level: string) => `Done: Recorded their level (${level.toLowerCase()}). Not yet: They have not said what they want to train. Say "got it on the level" in your own words and ask what they want to train today.`,
   level: (goal: string, level: string) => `Done: Recorded ${level.toLowerCase()} for ${spokenGoal(goal)}. Not yet: Their plan is being put together and is NOT on the screen yet. Say you are putting together their ${level.toLowerCase()} ${spokenGoal(goal)} plan. Do not list or invent any moves.`,
   planReady: (plan: FitnessPlan, around: string) => `Done: The plan is on the screen now: ${quoted(plan.plan_title)}, ${plan.level.toLowerCase()}, ${plan.duration_minutes} minutes${around ? `, built around ${around}` : ''}. Warm-up ${names(plan.warmup_steps) || 'none'}. Workout ${names(plan.workout_steps) || 'none'}. Tell them it is up in one short sentence without reading every move, then ask which move they want to start with; they can tap one.`,
-  replanned: (plan: FitnessPlan, droppedMove: string) => `Done: The plan was rebuilt at ${plan.level.toLowerCase()} level and is on the screen now: ${quoted(plan.plan_title)}, ${plan.duration_minutes} minutes. Workout ${names(plan.workout_steps) || 'none'}. Tell them in one short sentence.${droppedMove ? ` The video of ${droppedMove} is off the screen because the moves changed; ask which move they want to start with now.` : ''}`,
-  rebuilt: (line: string, plan: FitnessPlan, droppedMove: string) => `Done: The plan was rebuilt around the limits they gave. ${line} Tell them that in your own words in one sentence. The moves on the screen now are ${names([...plan.warmup_steps, ...plan.workout_steps]) || 'none'}; name no others.${droppedMove ? ` The demo of ${droppedMove} was taken off the screen because it is no longer on the plan; ask which move they want to start with now.` : ''}`,
+  replanned: (plan: FitnessPlan, droppedMove: string) => `Done: The plan was rebuilt at ${plan.level.toLowerCase()} level and is on the screen now: ${quoted(plan.plan_title)}, ${plan.duration_minutes} minutes. Workout ${names(plan.workout_steps) || 'none'}. ${droppedMove ? droppedNote(droppedMove) : 'Tell them in one short sentence.'}`,
+  rebuilt: (line: string, plan: FitnessPlan, droppedMove: string) => `Done: The plan was rebuilt around the limits they gave. ${line} Tell them that in your own words in one sentence. The moves on the screen now are ${names([...plan.warmup_steps, ...plan.workout_steps]) || 'none'}; name no others.${droppedMove ? ` ${droppedNote(droppedMove)}` : ''}`,
   moveNoDemo: (move: string) => `Done: Starting ${move}; it is highlighted on the screen. Talk them through it in three or four short sentences, the setup and two or three form cues they can act on. There is no video for it, so do not mention one.`,
   moveRendering: (move: string) => `Done: Starting ${move}. Not yet: A short video of it is being made; it takes a minute or two and is NOT on the screen yet. Tell them, then talk them through the setup meanwhile. Do not say it is ready.`,
   switchMove: (move: string) => `Done: Switched to ${move}; it is highlighted on the screen. Talk them through it in three or four short sentences, the setup and two or three form cues they can act on.`,

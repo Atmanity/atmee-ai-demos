@@ -238,8 +238,13 @@ export async function runTool(coach: Coach, relay: Relay, name: string, args: Re
     }
 
     case 'add_limits': {
-      const words = arg(args, 'words', 500);
-      const heard = cons.parseConstraints(words);
+      const words = arg(args, 'words', 500, ['heard']);
+      // The page attaches the user's own recent words: live, "my left knee is bad,
+      // and I only have twenty minutes" reached here as "my left knee is bad".
+      // A stop is never taken from them here (the page has its own check for that).
+      const own = cons.parseConstraints(str(args.heard, 1000));
+      // The host's words win where both name the same thing.
+      const heard = cons.mergeConstraints({ ...own, clearance: [] }, cons.parseConstraints(words));
       // A condition passed as a limit is still a stop.
       if (heard.clearance.length) return done(stopFor(coach, words)!);
       if (!cons.hasAny(heard)) return done(say.limitUnread());

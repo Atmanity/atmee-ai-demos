@@ -159,6 +159,23 @@ describe('the rail', () => {
     expect(shown()).not.toMatch(BANNED);
   });
 
+  test('without catalogue shots each piece is a swatch in its colour, labelled with its kind', () => {
+    const { container } = render(<Rail view={view({ tryOnAvailable: false })} ready onTry={vi.fn()} onMore={vi.fn()} />);
+    expect(container.querySelectorAll('.nt-piece-shot img')).toHaveLength(0);
+    const swatches = [...container.querySelectorAll<HTMLElement>('.nt-swatch-card')];
+    expect(swatches).toHaveLength(2);
+    expect(swatches[0].textContent).toBe('Neckline');                    // a tie: no shop category, so where it goes
+    expect(swatches[0].style.getPropertyValue('--sw')).toBe('#2c3550');  // navy
+    expect(swatches[1].textContent).toBe('Jacket');                      // a topcoat
+    expect(swatches[1].style.getPropertyValue('--sw')).toBe('#b58a59');  // camel
+  });
+
+  test('a catalogue shot, once rendered, replaces the swatch', () => {
+    const { container } = render(<Rail view={view({ analysis: analysis({ suggestions: [{ item: 'Camel Wool Topcoat', text: 'x', image_url: '/thumbs/camel' }] }) })} ready onTry={vi.fn()} onMore={vi.fn()} />);
+    expect(container.querySelector('.nt-piece-shot img')?.getAttribute('src')).toBe('/thumbs/camel');
+    expect(container.querySelector('.nt-swatch-card')).toBeNull();
+  });
+
   test('empty until the first verdict, and says so', () => {
     render(<Rail view={view({ analysis: null })} ready onTry={vi.fn()} onMore={vi.fn()} />);
     expect(screen.getByText(/hang here after the first verdict/)).toBeTruthy();

@@ -39,42 +39,52 @@ sweeps every stroke of every character).
 
 ## What the API could not do
 
-Status before a live run of this version: every item is **Expected**. Where
-the first port's live run (2026-10-23, staging) saw it, that is noted.
+Status after the live runs of 2026-10-23 on staging (round 1 on the shared
+test avatar, then on Ren's own host; round 2 on Ren's host). **Seen**: observed
+live. **Expected**: not observed yet.
 
-1. **Tools are called when the host decides.** *Expected.* Ren may narrate
-   "let me show you" without calling `show_stroke` (the net shows the stroke
-   7 s later), or describe the stroke from its own knowledge of stroke order:
-   the leak this app exists to prevent, which nothing can take back once said.
-   The instructions forbid it; the first port did not see it in one run.
-2. **The persona and the greeting belong to the avatar.** *Expected* (seen in
-   the first port: the shared test avatar greeted as "Emily, just a college
-   student" first). `avatar.json` is the teacher Hanshi was designed for.
-3. **The ~10 s check-in interrupts drawing.** *Expected* (seen twice in the
-   first port: "Whenever you're ready, try stroke two!"). The instructions ask
-   for silence while the learner writes; the check-in cannot be tuned.
-4. **A drawn stroke's verdict can be reworded, even flipped.** *Seen* (live,
-   2026-10-23): after an upward stroke the sheet said "Top to bottom." and Ren
-   said "that one went top to bottom!". A stroke drawn backwards is now told as
-   two plain sentences, in order, computed from the lines (`engine/travel.ts`):
-   "You drew it from the bottom up. This stroke goes from the top down." The
-   same sentences are on the sheet and in the state.
-5. **Coaching can lag the drawing.** *Expected.* An event cannot be withdrawn
+1. **Tools are called when the host decides.** *Seen.* A spoken "Next." got no
+   `next_stroke` 2 of 5 times in round 1 ("I'll get that final stroke ready")
+   and 1 of 5 in round 2; the safety net moved the sheet 7 s later each time.
+   Every other request went through its tool in 2.4 to 3.9 s. The leak probe
+   ("Is it the long one down the middle?") called `show_stroke`; Ren described
+   the stroke only once it was on the sheet.
+2. **The persona and the greeting belong to the avatar.** *Seen* on the shared
+   test avatar ("Emily, a college student"). Fixed by Ren's own host: one
+   greeting, his, then the opening without a second one.
+3. **The ~10 s check-in interrupts drawing.** *Seen* ("Whenever you're ready,
+   take your time with that first stroke!", "No rush at all."). The
+   instructions ask for silence while the learner writes; the check-in cannot
+   be tuned.
+4. **A drawn stroke's verdict can be reworded, even flipped.** *Seen* in round
+   1: after an upward stroke the sheet said "Top to bottom." and Ren said "that
+   one went top to bottom!". Fixed: a stroke drawn backwards is told as two
+   plain sentences, in order, computed from the lines (`engine/travel.ts`); in
+   round 2 Ren said them as written ("You drew it from right to left. This
+   stroke goes from left to right.").
+5. **Praise beyond the record.** *Seen* in round 2: "every single stroke right
+   on your first try" after stroke 1 had first been drawn backwards. The sheet
+   itself was wrong too: its score counts strokes drawn right on any try, and
+   the page and the debrief called that "first try". Now each finished stroke
+   carries its record (drawn right on try N, or shown), and the debrief, the
+   state, the seal and the summary all say it plainly: "3 of 4 strokes right
+   on the first try; stroke 1 took two tries", with "do NOT say every stroke
+   was right first time" when it was not. *Expected* to hold.
+6. **Coaching can lag the drawing.** *Expected.* An event cannot be withdrawn
    once sent. The page holds cues while Ren speaks and keeps the newest, and a
-   tool result drops any cue still waiting.
-6. **No per-session speech hints.** *Expected.* The readings (ichi, jū, kawa,
+   tool result drops any cue still waiting. (In round 1 Ren's apology for a
+   missed "Next." overlapped the next stroke.)
+7. **No per-session speech hints.** *Expected.* The readings (ichi, jū, kawa,
    ki, ei) are likely misheard; `choose_character` takes meanings, glyphs and
    readings, and the net reads the meanings.
-7. **The host can misread the state.** *Expected* (seen in the first port:
+8. **The host can misread the state.** *Expected* (seen in the first port:
    "How am I doing?" after a stroke was shown got "We've got the first two
-   down… give stroke three a try!").
-8. **A spoken "Next." was not always a call.** *Seen* (2 of 5 across two runs:
-   "I'll get that final stroke ready" with no `next_stroke`; the safety net
-   moved the sheet 7 s later). The platform rejects a call whose arguments do
-   not fit the schema before the page sees it, so every schema is now lenient
-   (no `additionalProperties: false`, enums, patterns or tight lengths; the
-   app normalises), `next_stroke` asks to be called for the one word, and the
-   instructions say a single word that changes the sheet is a tool call.
+   down… give stroke three a try!"; in round 1 it was answered correctly).
+9. **A call whose arguments miss the schema never reaches the page.**
+   *Expected* (seen in other apps). The platform rejects it before the page and
+   the host may say the action happened, so every schema here is lenient (no
+   `additionalProperties: false`, enums, patterns or tight lengths) and the app
+   normalises what it is given.
 
 Fixed by tools, compared with the first port: a spoken "which way does it
 go?" no longer gets a holding line ("Let me show you; watch the board") with
@@ -85,7 +95,7 @@ notes are gone: Ren calls the tools for spoken and typed lines alike.
 
 ## Tested
 
-- `npx vitest run apps/stroke-tutor`: 264 tests in 13 files.
+- `npx vitest run apps/stroke-tutor`: 269 tests in 13 files.
   - The engine, as ported: the grader and its parity with the Python
     original, the tutor's rules and refusals, the lesson.
   - The tools: each one's result and refusal, choosing by meaning, glyph or
@@ -95,6 +105,8 @@ notes are gone: Ren calls the tools for spoken and typed lines alike.
     reserved names, no drawing tool), the instructions name every tool and
     keep the hard-won rules, the state stays under 3,858 characters and never
     carries a stroke ahead of time.
+  - The first-try record: a stroke right on its second try is not a first
+    try, in the debrief, the state and the summary (the live round 2 case).
   - The safety net's phrases, with the recogniser's variants ("im stuck",
     "Next.", "OK, next one."), and what it leaves to Ren.
   - The page: one stroke per gesture in grid units, taps ignored, the menu,
@@ -102,7 +114,7 @@ notes are gone: Ren calls the tools for spoken and typed lines alike.
     page wired to the real server routes in memory (the opening, tool calls,
     strokes graded and told, buttons told, the net stepping in and staying out).
 - `npx tsc --noEmit`: clean for this app.
-- Live: not yet run. The plan:
+- Live: two runs on staging, below. The plan:
 
 ### Live test
 
@@ -135,3 +147,26 @@ Reference strokes for 木: 1 `[[130,380],[870,380]]`, 2 `[[500,120],[500,900]]`
 | 11 | press Next stroke | none; a press event | stroke 2 of 5, asked by number only |
 | 12 | leak: "Is it the long one down the middle?" | `show_stroke`, or no description | never a description of stroke 2 |
 | 13 | over: "Let's start over." | `start_over` | Eternity, stroke 1 of 5 |
+
+### Live runs (staging, 2026-10-23)
+
+Spoken lines through `tools/live-test/harness.js`, strokes through
+`page/live-draw.ts`.
+
+**Round 1**, on the shared test avatar (session `226f1742`, 324 s) and a short
+pass on Ren's own host (session `e8763618`, 114 s). The 13 steps above:
+`choose_character` for "Let's do the tree one." (2.9 s) and "Can we do
+eternity next?"; `show_stroke` for "Which way does this one go?" with the
+lesson in the first reply ("Horizontal first, left to right, the branches
+before the trunk"), for "I'm stuck." and for the leak probe; `start_over` for
+"Let's start over."; a typed "next" through `next_stroke`; "How am I doing?"
+answered from the sheet. Seen: the flipped direction verdict (gap 4) and
+"Next." without a call 2 of 5 times (gap 1).
+
+**Round 2**, on Ren's host (session `a8e1f99f`, 277 s), after the fixes. One
+greeting, then "You can tap a character on the menu, or just tell me which one
+you would like to try." 木 with stroke 1 drawn right to left first: "You drew
+it from right to left. This stroke goes from left to right. Please try drawing
+stroke one again." Every stroke's verdict was the sheet's. "Next." called
+`next_stroke` 4 of 5 times (2.4 to 2.5 s); the net took the fifth. Seen: the
+debrief's "every single stroke right on your first try" (gap 5, now fixed).

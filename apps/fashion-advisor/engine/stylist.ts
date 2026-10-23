@@ -13,7 +13,7 @@ import {
 } from './items.ts';
 import { looksLikeNonName, MAX_NAME_ATTEMPTS, MAX_PHOTO_CONSENT_ASKS } from './judge.ts';
 import { FALLBACK_SUGGESTIONS, tryOnPrompt, type CleanAnalysis } from './prompts.ts';
-import { normalizeStyleCategory, targetStyleBrief } from './style.ts';
+import { normalizeStyleCategory, stylePhraseKey, targetStyleBrief } from './style.ts';
 import type { Analysis, Command, Img, Jobs, Milestone, Outcome, SayEvent, ShopLink, Step, Suggestion, View, Zone } from './types.ts';
 
 /**
@@ -107,6 +107,15 @@ export class Stylist {
   private queue: Promise<unknown> = Promise.resolve();
   private jobRecords = new Map<string, JobRecord>();
   private tryOnEpoch = 0;
+  /**
+   * Each picture's verdict per occasion. The same outfit for the same occasion
+   * always gets the same score: live, "rate it again" on an unchanged photo
+   * moved it from 7 to 5 with a different fix. A new photo, a piece put on or
+   * another occasion is a new reading; a pieces direction is not.
+   */
+  private readings = new Map<string, CleanAnalysis>();
+  /** Which picture and occasion the verdict on screen is for. */
+  private readOf = '';
   private lines = 0;   // rotates the example lines the original picked at random
 
   constructor(private models: Models, private opts: StylistOptions) {}
@@ -448,17 +457,25 @@ export class Stylist {
     this.touch();
     try {
       // The read and the pieces are independent calls: run together, as the original did.
+      const key = `${shown.token}\0${stylePhraseKey(this.target)}`;
+      const known = this.readings.get(key);
       const [read, dynamic] = await Promise.all([
-        this.models.analyze(shown.img, { userName: this.name, target: this.targetBrief(), context: opts.context }).catch(() => null),
+        known ?? this.models.analyze(shown.img, { userName: this.name, target: this.targetBrief(), context: opts.context }).catch(() => null),
         keepPieces ? Promise.resolve([]) : this.models.suggest({ image: shown.img, zones: this.zones, target: this.targetBrief(), recent: this.tried }).catch(() => []),
       ]);
       if (!read) {
         this.notice = { kind: 'error', text: 'The verdict didn\'t come through. Tap "Rate it again".' };
         return opts.narrate === false ? [] : [say.analysisFailed()];
       }
+      if (!known) {
+        this.readings.set(key, read);
+        if (this.readings.size > 48) this.readings.delete(this.readings.keys().next().value!);
+      }
       // Pieces appended while this read ran are kept too.
       const suggestions = keepPieces ? (this.analysis ?? previous)!.suggestions : this.enrich(this.assemble(dynamic));
+      const same = Boolean(known) && this.readOf === key && Boolean(previous);
       this.analysis = { ...read, suggestions, tried_items: this.tried.map(titleCase) };
+      this.readOf = key;
       this.opts.thumbnails?.ensure(suggestions.map((s) => s.item));
       if (opts.narrate === false) return [];
       const wish = this.wish;
@@ -466,6 +483,8 @@ export class Stylist {
         previousScore: opts.added ? opts.previousScore ?? previous?.style_score : undefined,
         added: opts.added,
         wish,
+        // Asked again with nothing changed: the same reading, said as such.
+        same,
       });
       if (wish && event.offer && itemsMatch(event.offer, wish)) this.wish = '';
       return [event];

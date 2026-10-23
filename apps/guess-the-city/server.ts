@@ -9,6 +9,7 @@ import { DECK_SCHEMA, deckFrom, deckPrompt, shuffledFallback } from './engine/de
 import { INSTRUCTIONS, pressed, said, TOOLS } from './engine/director.ts';
 import { Game } from './engine/game.ts';
 import { MATCH_SCHEMA, matchPrompt, namesCity, type Command } from './engine/judge.ts';
+import { PhotoStore, tokenOf } from './engine/photos.ts';
 import type { City, View } from './engine/types.ts';
 
 const ID = 'guess-the-city';
@@ -17,8 +18,9 @@ const USER_AGENT = process.env.WIKIMEDIA_USER_AGENT || 'atmee-usecase-demos/0.2 
 
 interface Play { game: Game; photos: (string | null)[]; at: number }
 const plays = new Map<string, Play>();
-const photoSources = new Map<string, string>();     // token -> image URL (never sent to the page)
-const photoBytes = new Map<string, { type: string; body: Buffer }>();
+const postcards = new PhotoStore((url) => fetch(url, { headers: { 'User-Agent': USER_AGENT } }));
+// How long a new round waits for its photo before Marco announces it anyway.
+const PHOTO_WAIT_MS = 6000;
 const recentCities: string[] = [];   // the last few decks' cities, for the next deck to avoid
 
 async function newDeck(): Promise<City[]> {
@@ -47,9 +49,7 @@ async function photoFor(city: City): Promise<string | null> {
       const source = data.originalimage?.source || data.thumbnail?.source;
       if (!source) continue;
       const token = randomBytes(12).toString('hex');
-      photoSources.set(token, data.thumbnail?.source && data.originalimage?.width > 2400 ? data.thumbnail.source.replace(/\/\d+px-/, '/1280px-') : source);
-      // Bounded like the bytes: the oldest go first (a game 200 decks back loses its photos).
-      if (photoSources.size > 600) photoSources.delete(photoSources.keys().next().value!);
+      postcards.add(token, data.thumbnail?.source && data.originalimage?.width > 2400 ? data.thumbnail.source.replace(/\/\d+px-/, '/1280px-') : source);
       return `/api/apps/${ID}/photo/${token}`;
     } catch {
       // the next title, or no photo
@@ -62,6 +62,8 @@ async function newPlay(): Promise<Play> {
   const deck = await newDeck();
   // Photos are best-effort and never hold the game up for long.
   const photos = await Promise.all(deck.map((city) => Promise.race([photoFor(city), new Promise<null>((r) => setTimeout(r, 8000, null))])));
+  // Every round's photo starts downloading now, so a round never opens on an empty card.
+  for (const photo of photos) if (photo) void postcards.get(tokenOf(photo));
   return { game: new Game(deck), photos, at: Date.now() };
 }
 
@@ -97,6 +99,13 @@ async function run(play: Play, action: string, args: Record<string, unknown> = {
       return { play, text: said.reveal(viewOf(play)) };
     case 'next_city': {
       if (!game.next()) return { play, text: said.notRevealed() };
+      // Marco says the photo is up, so it must be: wait for it (bounded); one that
+      // cannot be had becomes the no-photo card, and he is told so.
+      const photo = play.photos[game.index];
+      if (!game.over && photo) {
+        const got = await Promise.race([postcards.get(tokenOf(photo)), new Promise<'slow'>((r) => setTimeout(r, PHOTO_WAIT_MS, 'slow'))]);
+        if (got === null) play.photos[game.index] = null;
+      }
       const view = viewOf(play);
       return { play, text: game.over ? said.over(view) : said.next(view) };
     }
@@ -162,19 +171,12 @@ const app: AppServer = {
 
     router.get('/photo/:token', async (req, res) => {
       const token = req.params.token;
-      let cached = photoBytes.get(token);
-      if (!cached) {
-        const source = photoSources.get(token);
-        if (!source) return void res.status(404).end();
-        const upstream = await fetch(source, { headers: { 'User-Agent': USER_AGENT } }).catch(() => null);
-        if (!upstream?.ok) return void res.status(502).end();
-        cached = { type: upstream.headers.get('content-type') || 'image/jpeg', body: Buffer.from(await upstream.arrayBuffer()) };
-        photoBytes.set(token, cached);
-        if (photoBytes.size > 64) photoBytes.delete(photoBytes.keys().next().value!);
-      }
-      res.setHeader('Content-Type', cached.type);
+      if (!postcards.has(token)) return void res.status(404).end();
+      const photo = await postcards.get(token);
+      if (!photo) return void res.status(502).end();
+      res.setHeader('Content-Type', photo.type);
       res.setHeader('Cache-Control', 'private, max-age=3600');
-      res.end(cached.body);
+      res.end(photo.body);
     });
   },
 };

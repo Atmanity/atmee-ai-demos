@@ -5,7 +5,7 @@
 // it current, and tells Reese about button presses and the desk's own news.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CallControls, callCopy, CallStatus, ChatPanel, clock, HostVideo, useAvatar, useToolNet, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
-import { boardState, say } from '../engine/director.ts';
+import { boardState, netNote, say } from '../engine/director.ts';
 import { mustDo } from '../engine/judge.ts';
 import type { Board, Kind } from '../engine/types.ts';
 import { DeskBoard, type IntentResult } from './Board.tsx';
@@ -44,7 +44,8 @@ export function App() {
       const call = boardRef.current ? mustDo(text, boardRef.current) : null;
       return call ? { id: `net-${Date.now()}`, ...call } : null;
     },
-    run: async (call) => String(await onToolCall(call)),
+    // Said plainly: the page acted, not Reese (live, Reese spoke as if he had brought Tesla up).
+    run: async (call) => `${netNote(call.name, call.arguments)} ${String(await onToolCall(call))}`.trim(),
     avatar: () => avatarRef.current!,
   });
 

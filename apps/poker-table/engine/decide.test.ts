@@ -3,7 +3,7 @@
 // original bug was a model that answered in prose and a table that was never
 // told, so these cover the two ways an answer can be useless: absent, and illegal.
 import { describe, expect, test } from 'vitest';
-import { decide, decisionPrompt, decisionSchema, normalizeDecision, safeAction } from './decide.ts';
+import { decide, DECISION_TIMEOUT_MS, decisionPrompt, decisionSchema, normalizeDecision, safeAction } from './decide.ts';
 import type { DecisionRequest } from './match.ts';
 
 describe('safeAction', () => {
@@ -59,8 +59,25 @@ test('the schema only offers the legal actions', () => {
 });
 
 test('decide: the model answer, normalized; or the safe action', async () => {
-  expect(await decide(REQUEST, async () => ({ action: 'raise', amount: 60 }))).toEqual({ kind: 'raise', amount: 60, source: 'model' });
-  expect(await decide(REQUEST, null)).toEqual({ kind: 'check', amount: null, source: 'fallback' });
+  expect(await decide(REQUEST, async () => ({ action: 'raise', amount: 60 }))).toMatchObject({ kind: 'raise', amount: 60, source: 'model' });
+  expect(await decide(REQUEST, null)).toMatchObject({ kind: 'check', amount: null, source: 'fallback' });
   expect(await decide(REQUEST, async () => null)).toMatchObject({ kind: 'check', source: 'fallback' });
   expect(await decide(REQUEST, () => new Promise(() => undefined), 20)).toMatchObject({ kind: 'check', source: 'fallback' });
+});
+
+test('a fallback says why, so a live log can tell a slow model from a broken one', async () => {
+  // Live: "Dex played check (fallback)" with no reason; the next decision, same
+  // prompt and schema, came from the model.
+  expect((await decide(REQUEST, null)).reason).toBe('no model key');
+  expect((await decide(REQUEST, () => new Promise(() => undefined), 20)).reason).toBe('no answer within 20 ms');
+  expect((await decide(REQUEST, async () => { throw new Error('400 bad schema'); })).reason).toBe('the model call failed: 400 bad schema');
+  expect((await decide(REQUEST, async () => null)).reason).toBe('an empty answer');
+  expect((await decide(REQUEST, async () => ({ action: 'shove', amount: 0 }))).reason).toMatch(/answered "shove", not one of/);
+  const model = await decide(REQUEST, async () => ({ action: 'check', amount: 0 }));
+  expect(model.reason).toBeUndefined();
+  expect(model.ms).toBeGreaterThanOrEqual(0);
+});
+
+test('the budget is the one measured live, not the original 4.5 s', () => {
+  expect(DECISION_TIMEOUT_MS).toBe(8000);
 });

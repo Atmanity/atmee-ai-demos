@@ -203,11 +203,53 @@ describe('limits', () => {
     expect(streamed.flatMap((o) => o.events)).toEqual([]);
   });
 
+  it('keeps every limit the user said, even when the host passed only one of them', async () => {
+    // Live: the user said the knee and twenty minutes; Sammy's call carried only the knee.
+    const { tool } = setup();
+    const run = await tool('add_limits', { words: 'my left knee is bad', heard: 'Oh, and my left knee is bad, and I only have twenty minutes.' });
+    expect(run.view.constraints.injuries).toEqual(['knee']);
+    expect(run.view.constraints.minutes).toBe(20);
+    expect(run.text).toMatch(/^Done: Noted on your knee and 20 minutes/);
+  });
+
+  it('lets the host’s own words win over older ones, and never stops on the attached words', async () => {
+    const { tool } = setup();
+    const run = await tool('add_limits', { words: 'only fifteen minutes', heard: "I'm 7 months pregnant and I have twenty minutes" });
+    expect(run.view.constraints.minutes).toBe(15);
+    expect(run.view.stage).toBe('goal');
+  });
+
   it('says plainly when the words hold no limit it can use, and when a limit is already in', async () => {
     const { tool } = setup();
     expect((await tool('add_limits', { words: 'I am a bit tired today' })).text).toContain('Nothing in those words is a limit');
     await tool('add_limits', { words: 'only 20 minutes' });
     expect((await tool('add_limits', { words: 'twenty minutes max' })).text).toMatch(/^Done already: 20 minutes was noted/);
+  });
+});
+
+describe('a rebuild that drops the started move', () => {
+  it('says the move is gone and the screen is back to choosing one', async () => {
+    const byLevel = (level: string): FitnessPlan => (level === 'Beginner'
+      ? lungePlan('Glutes', level)
+      : { ...lungePlan('Glutes', level), workout_steps: ['Glute bridge march, 12 reps', 'Hip thrust hold, 30 seconds'] });
+    const { tool } = setup({ generatePlan: async (req) => byLevel(req.level) });
+    await tool('set_goal', { goal: 'glutes', level: 'beginner' });
+    expect((await tool('start_move', { move: 'push-ups' })).view.flow.start_move).toBe('Push-ups');
+    const run = await tool('set_level', { level: 'harder' });
+    expect(run.view.stage).toBe('move');
+    expect(run.view.flow.start_move).toBe('');
+    expect(run.text).toMatch(/^Done: The plan was rebuilt at intermediate level/);
+    expect(run.text).toContain('Push-ups is not on the new plan');
+    expect(run.text).toContain('ask which move they want to start with now');
+  });
+
+  it('keeps a started move the new plan still has', async () => {
+    const { tool } = setup();
+    await tool('set_goal', { goal: 'full body', level: 'beginner' });
+    await tool('start_move', { move: 'the plank' });
+    const run = await tool('set_level', { level: 'harder' });
+    expect(run.view.flow.start_move).toBe('Plank hold');
+    expect(run.view.stage).toBe('coach');
   });
 });
 

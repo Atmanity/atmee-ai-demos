@@ -153,11 +153,13 @@ export interface WallView { a: string; b: string; axis: 'v' | 'h'; line_cm: numb
 export interface LevelView {
   name: string; w_cm: number; h_cm: number; rooms: RoomView[]; unassigned: Rect[]; unassigned_m2: number;
   openings: OpeningView[]; items: ItemView[]; walls: WallView[];
+  /** The arrangement the floor was last laid out in (a typology key), or null. */
+  style: string | null;
 }
 
 export interface LevelCapture {
   name: string; w_cm: number; h_cm: number; owner: Map<Cell, string>; rooms: Map<string, Room>;
-  openings: Opening[]; items: Item[]; structural: Set<string>;
+  openings: Opening[]; items: Item[]; structural: Set<string>; style?: string | null;
 }
 
 // ----------------------------------------------------------------- a level
@@ -175,6 +177,12 @@ export class Level {
    * every collinear wall on the plan the moment one was marked load-bearing.
    */
   structural = new Set<string>();
+  /**
+   * The arrangement the floor was last laid out in. Kept with the floor (and
+   * so with undo and schemes): the page showed "Day end, night end" in its
+   * arrangement picker over an open-plan floor, seen live.
+   */
+  style: string | null = null;
 
   constructor(public name: string, public w_cm: number, public h_cm: number, public ids: Ids) {
     this.w_cm = Math.trunc(w_cm);
@@ -1045,6 +1053,7 @@ export class Level {
       openings: this.openings.map((o) => o.copy()),
       items: this.items.map((i) => i.copy()),
       structural: new Set(this.structural),
+      style: this.style,
     };
   }
 
@@ -1062,6 +1071,7 @@ export class Level {
     this.openings = snap.openings.map((o) => o.copy());
     this.items = snap.items.map((i) => i.copy());
     this.structural = new Set(snap.structural);
+    this.style = snap.style ?? null;
   }
 
   // ------------------------------------------------------------- snapshot
@@ -1098,6 +1108,7 @@ export class Level {
       name: this.name, w_cm: this.w_cm, h_cm: this.h_cm, rooms,
       unassigned: strips(unassigned), unassigned_m2: areaM2(unassigned),
       openings: this.openings.map((o) => o.asDict()), items: this.items.map((i) => i.asDict()), walls: this.sharedWalls(),
+      style: this.style,
     };
   }
 }
@@ -1235,6 +1246,7 @@ export class Home {
     level.openings = [];
     level.items = [];
     level.structural.clear();
+    level.style = null;
     this.selected = null;
   }
 

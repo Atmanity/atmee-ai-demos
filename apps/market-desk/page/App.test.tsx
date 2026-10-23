@@ -158,7 +158,7 @@ describe('the page', () => {
     act(() => call.handlers.onUserSaid?.('Clear the board, please', 'spoken'));
     await act(async () => { await vi.advanceTimersByTimeAsync(7100); });
     expect(posts.at(-1)).toEqual({ path: '/desks/d1/tool', body: { name: 'clear_board', arguments: {} } });
-    expect(call.events.at(-1)).toMatch(/^You did not call clear_board, so the app did it for the player just now: The board is clear\./);
+    expect(call.events.at(-1)).toMatch(/^You did not call clear_board, so the app did it for the player just now: The page cleared the board itself, not you: you had not called clear_board\. The board is clear\./);
   });
 
   it('the safety net brings a stock on the board to the front when Reese only said so', async () => {
@@ -173,6 +173,7 @@ describe('the page', () => {
     act(() => call.handlers.onUserSaid?.('Pull up Tesla.', 'spoken'));
     await act(async () => { await vi.advanceTimersByTimeAsync(7100); });
     expect(posts.at(-1)).toEqual({ path: '/desks/d1/tool', body: { name: 'focus_symbol', arguments: { stock: 'TSLA' } } });
+    expect(call.events.at(-1)).toContain('The page brought TSLA to the front itself, not you: you had not called focus_symbol. Call focus_symbol yourself whenever the user says pull up, show me, bring up, go to or back to. Done: TSLA is front and centre now.');
   });
 
   it('the safety net stays out of it when Reese called the tool', async () => {

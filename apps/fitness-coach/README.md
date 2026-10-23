@@ -36,9 +36,9 @@ Open it at `/apps/fitness-coach/`.
 
 ## What the API could not do
 
-Status after the live runs of 2026-10-23 on staging (own host, avatar
-`06e55d2b`, two sessions). **Seen**: observed live. **Expected**: not observed
-yet.
+Status after the live runs of 2026-10-23 on staging: round 1 (avatar
+`06e55d2b`, two sessions) and round 2 after the fixes (avatar `85581db7`,
+one session). **Seen**: observed live. **Expected**: not observed yet.
 
 1. **A call whose arguments do not fit the schema never reaches the page.**
    *Seen*, 2 of 2 runs: "Beginner, please." (and the limits and the first
@@ -46,7 +46,9 @@ yet.
    beginner glute plan"; the screen stayed on the level step and only the
    Beginner card built the plan. "Harder" (a value the enum allowed) did
    arrive. The schemas are now lenient and the server normalises, and the
-   safety net takes a lone level and a move request. *Expected* to be fixed.
+   safety net takes a lone level and a move request. *Fixed, seen in round
+   2*: every step reached its tool in 2.9 to 4.9 s, and the plan was built,
+   started and made harder by voice.
 2. **The host's own reply to a disclosure cannot be gated.** *Seen, held*:
    "I'm seven months pregnant" called `stop_for_safety` (4.9 s) and the first
    reply was the stop sentence; the screen paused by itself. Safety-critical:
@@ -55,13 +57,21 @@ yet.
 3. **Nothing gates the host after the pause.** *Seen, held*: "Can we just do
    the plank anyway?" was refused. Only her instructions and the state forbid
    naming an exercise; muting her would also deafen the page (API-GAPS 2).
-4. **The platform says a filler before an awaited result.** *Seen*: "Nah, I
-   don't agree." opened the plank refusal. Every result now opens with its
-   outcome, and the stop or refusal sentence comes first.
-5. **Tools are called when the host decides.** *Seen*: besides item 1, she
-   narrated "I can bump this up to intermediate" without a call. The
-   instructions now say a one-word answer is a call too; the net covers
-   limits, a lone level, a move, and starting over.
+4. **The platform says a filler before an awaited result.** *Seen*, both
+   rounds: "Nah, I don't agree." opened the plank refusal; in round 2 "Okay,
+   gotcha," came before the stop sentence and "Yeah, I hear you, but…"
+   before the plan. Every result opens with its outcome and the stop or
+   refusal sentence comes first, but the filler is the platform's and still
+   comes before it.
+5. **Tools are called when the host decides, with the arguments she
+   chooses.** *Seen*: besides item 1, she narrated "I can bump this up to
+   intermediate" without a call (round 1). In round 2, "my left knee is bad,
+   and I only have twenty minutes" reached `add_limits` as "my left knee is
+   bad" while she said "Got your twenty-minute timer locked in". The
+   instructions now ask for every limit in one call, the page attaches the
+   user's own recent words to every `add_limits` call (and records a limit
+   from a line that arrives just after it), and the net covers limits, a lone
+   level, a move, and starting over.
 6. **Exact words cannot be forced.** *Seen*: the stop sentence came back
    nearly word for word; the screen shows the exact wording.
 7. **A slow plan is silence.** *Expected.* While a tool waits (up to 13 s) she
@@ -81,7 +91,7 @@ by an event.
 
 ## Tested
 
-- `npx vitest run apps/fitness-coach`: 414 tests. The engine as ported (the
+- `npx vitest run apps/fitness-coach`: 420 tests. The engine as ported (the
   constraint engine, the plan and move resolution, the video pipeline, the
   step machine with its pause, rebuild and re-level guarantees); the tools end
   to end against a real coach (each result carries the real outcome, a tool
@@ -94,9 +104,19 @@ by an event.
   prompt or clip address in the state; the safety net's and the page's pause
   phrases; and the screens drawn from real coach views (every step's controls,
   nothing that advances a workout under the pause, no team words on screen).
-- Live, 2026-10-23, two sessions through `tools/live-test/harness.js`:
+- Live round 1, 2026-10-23, two sessions through `tools/live-test/harness.js`:
   `set_goal` and `stop_for_safety` were called; the level, limits and moves
-  were not (item 1, fixed since, not yet re-run). The pause, the stop
-  sentence and the refusal held; the Beginner card built "Gentle Floor Glute
-  Focus", 18 min, around the 20-minute cap and the knee, with no squats or
-  lunges.
+  were not (item 1). The pause, the stop sentence and the refusal held; the
+  Beginner card built "Gentle Floor Glute Focus", 18 min, around the
+  20-minute cap and the knee, with no squats or lunges.
+- Live round 2, 2026-10-23, Sammy's own host (session `be741bc7`), the same
+  script: one greeting, then the opening; Sammy's portrait on the front door
+  and in the frame while calling. `set_goal` (3.4 s), `add_limits` (3.4 s,
+  the knee only: item 5, fixed since), `set_level` "beginner" (2.9 s, "Floor
+  Glute Builder", 20 min, around the knee, no squats or lunges), `start_move`
+  (4.0 s, "Prone hip extensions" on screen as Now), `set_level` "harder"
+  (3.4 s, "Glute Power and Control", intermediate, the knee kept). Reps were
+  answered from the screen; `stop_for_safety` (4.9 s) paused the screen and
+  the stop sentence followed a filler; the plank was refused. The harder plan
+  no longer had the started move and the screen went back to "Pick your first
+  move" without a word about it: the result now says the move is gone.

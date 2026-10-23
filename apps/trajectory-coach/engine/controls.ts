@@ -124,8 +124,8 @@ export class Controls {
 
   private async aim(args: Record<string, unknown>): Promise<string> {
     const before = this.range.snapshot();
-    let angle = numberArg(args.angle_deg);
-    let speed = numberArg(args.speed_ms);
+    const given = { angle: numberArg(args.angle_deg), speed: numberArg(args.speed_ms) };
+    let { angle, speed } = given;
     let thenFire = yes(args.then_fire);
     // Whatever was not a plain number is read as words, with its unit: "forty-five" for an angle still counts.
     const words = [
@@ -133,23 +133,35 @@ export class Controls {
       angle === undefined && wordy(args.angle_deg) ? `${args.angle_deg} degrees` : '',
       speed === undefined && wordy(args.speed_ms) ? `${args.speed_ms} metres a second` : '',
     ].map((w) => w.trim()).filter(Boolean).join(', ').slice(0, 200);
-    const fromWords = angle === undefined && speed === undefined;
-    if (fromWords) {
-      if (!words) return said.noAim();
+    // The numbers come first; words fill whatever is still missing. Words that
+    // cannot be read refuse the whole call: half an aim is not what was asked.
+    if (words && (angle === undefined || speed === undefined)) {
       const ctx = contextOf(before);
       let command = commandIn(words, ctx);
-      // "Fire" passed as words to aim: it is the shot, at the aim there is.
-      if (command?.kind === 'fire') return this.fire();
-      if (command?.kind !== 'aim' && this.opts.interpret && worthAsking(words)) command = await this.opts.interpret(words, ctx).catch(() => null);
-      if (command?.kind !== 'aim') return said.unreadable(words);
-      angle = command.angle_deg;
-      speed = command.speed_ms;
-      thenFire ||= command.thenFire === true;
+      if (command?.kind === 'fire') {
+        // "Fire" as the words: the shot, after whatever numbers came with it.
+        if (angle === undefined && speed === undefined) return this.fire();
+        thenFire = true;
+      } else {
+        if (command?.kind !== 'aim' && this.opts.interpret && worthAsking(words)) command = await this.opts.interpret(words, ctx).catch(() => null);
+        if (command?.kind !== 'aim') return said.unreadable(words);
+        angle ??= command.angle_deg;
+        speed ??= command.speed_ms;
+        thenFire ||= command.thenFire === true;
+      }
     }
+    else if (words) {
+      // Both numbers came; the words can still ask for the shot ("…and fire").
+      const command = commandIn(words, contextOf(before));
+      if (command?.kind === 'fire' || (command?.kind === 'aim' && command.thenFire)) thenFire = true;
+    }
+    if (angle === undefined && speed === undefined) return said.noAim();
     // Never clamped: the launcher refuses what it cannot do, with the numbers.
     const r = this.apply({ kind: 'set_aim', angle_deg: angle ?? null, speed_ms: speed ?? null }, 'host');
     if (!r.applied) return said.aimRefused(r.reason, this.range.snapshot());
     if (thenFire) return said.aimedAndFired(r.snapshot, await this.fire());
+    // A value that came from words is new to them, so it is named; their own numbers are not repeated.
+    const fromWords = (given.angle === undefined && angle !== undefined) || (given.speed === undefined && speed !== undefined);
     return fromWords ? said.stepped(r.snapshot, before) : said.aimed(r.snapshot);
   }
 

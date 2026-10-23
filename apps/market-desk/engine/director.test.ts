@@ -4,7 +4,7 @@
 // original's state.py cases (test_table.py) and its persona test (test_persona.py).
 import { expect, test } from 'vitest';
 import * as board from './board.ts';
-import { agePhrase, boardState, formatWatchlist, INSTRUCTIONS, pressed, said, say, STANDING_LINE, TOOLS } from './director.ts';
+import { agePhrase, boardState, formatWatchlist, INSTRUCTIONS, netNote, pressed, said, say, STANDING_LINE, TOOLS } from './director.ts';
 import { entry, quote } from './test-helpers.ts';
 import type { AddReport, Board, Quote } from './types.ts';
 
@@ -59,6 +59,19 @@ test('every result begins with the plain outcome, so the filler before it cannot
   ];
   for (const text of texts) expect(text).toMatch(/^(Done|Partly done|Not done|Not yet|Not refreshed|Failed|Refused):/);
   expect(texts.slice(0, 7).map((t) => t.split(':')[0])).toEqual(['Done', 'Done', 'Partly done', 'Not done', 'Not yet', 'Not done', 'Not done']);
+});
+
+test('focus_symbol opens with the words people use, and is called for a stock already up', () => {
+  // Live, twice: "Pull up Tesla." got no call while Tesla was on the board, and Reese said it was up front.
+  const focus = TOOLS.find((t) => t.name === 'focus_symbol')!;
+  expect(focus.description).toMatch(/^Call it when the user says "pull up Tesla", "show me Apple", "bring up Nvidia", "go to Microsoft" or "back to Tesla", even when that stock is already on the board/);
+  expect(INSTRUCTIONS).toContain('Call it even when that stock is already on the board: only the call brings it to the front.');
+});
+
+test('the safety net\'s note says plainly the page acted, not the host', () => {
+  expect(netNote('focus_symbol', { stock: 'TSLA' })).toBe('The page brought TSLA to the front itself, not you: you had not called focus_symbol. Call focus_symbol yourself whenever the user says pull up, show me, bring up, go to or back to.');
+  expect(netNote('remove_symbols', { stocks: ['TSLA', 'AAPL'] })).toContain('took TSLA, AAPL off the board itself, not you');
+  for (const name of ['refresh_quote', 'clear_board']) expect(netNote(name, {})).toContain('itself, not you');
 });
 
 test('the instructions fit 4,000 characters and name every tool', () => {

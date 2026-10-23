@@ -206,6 +206,11 @@ img { max-width: 100%; }
 .nt-piece-shot { aspect-ratio: 1; display: grid; place-items: center; overflow: hidden; border-radius: 2px; background: linear-gradient(160deg, #fbf3f1, #ecdeda); color: var(--nt-rose); }
 .nt-piece-shot img { width: 100%; height: 100%; object-fit: cover; }
 .nt-glyph { width: 46%; height: 46%; }
+/* a piece with no catalogue shot: a fabric swatch in its colour, pinked along the bottom like a sample card */
+.nt-swatch-card { --sw: #e9dcd8; --sw-ink: var(--nt-rose); position: relative; width: 100%; height: 100%; display: grid; place-items: center; color: var(--sw-ink); background-color: var(--sw); background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, .07) 0 2px, transparent 2px 5px), repeating-linear-gradient(-45deg, rgba(0, 0, 0, .05) 0 2px, transparent 2px 5px); -webkit-mask: linear-gradient(#000 0 0) top / 100% calc(100% - 7px) no-repeat, conic-gradient(from -45deg at 50% 100%, #000 90deg, transparent 0) bottom / 10px 7px repeat-x; mask: linear-gradient(#000 0 0) top / 100% calc(100% - 7px) no-repeat, conic-gradient(from -45deg at 50% 100%, #000 90deg, transparent 0) bottom / 10px 7px repeat-x; }
+.nt-swatch-card.is-plain { background-image: repeating-linear-gradient(45deg, rgba(149, 81, 92, .08) 0 2px, transparent 2px 6px); }
+.nt-swatch-card .nt-glyph { width: 42%; height: 42%; opacity: .9; }
+.nt-swatch-kind { position: absolute; left: 8px; top: 8px; padding: 3px 7px; background: var(--nt-card); color: var(--nt-ink); font: 700 10.5px/1.2 var(--nt-label); letter-spacing: .1em; text-transform: uppercase; border-radius: 2px; box-shadow: 0 2px 6px rgba(46, 39, 37, .12); }
 .nt-piece h3 { margin: 2px 0 0; font: 600 17px/1.2 var(--nt-display); }
 .nt-piece p { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--nt-muted); flex: 1; }
 .nt-piece-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 4px; }

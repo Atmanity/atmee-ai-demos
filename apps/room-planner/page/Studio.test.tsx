@@ -46,6 +46,7 @@ function level(over: Partial<Level> = {}): Level {
     name: "ground",
     w_cm: 900,
     h_cm: 700,
+    style: "day_night",
     rooms: [
       {
         id: "r1", name: "Living room", kind: "living", area_m2: 28,
@@ -445,6 +446,20 @@ describe("the drawing sheet", () => {
     expect(link.getAttribute("download")).toBe("planwright-ground.svg");
     fireEvent.click(screen.getByText("Back to the plan"));
     await waitFor(() => expect(screen.queryByAltText("Drawing sheet")).toBeNull());
+  });
+});
+
+describe("the arrangement in force", () => {
+  it("the picker and the bar show how the floor is laid out now", () => {
+    const typologies = [
+      { key: "day_night", label: "Day end, night end", note: "Living at the front." },
+      { key: "open_plan", label: "Open plan living", note: "One big room." },
+    ];
+    render(<Studio state={snapshot({ selected: null, typologies, level: level({ style: "open_plan" }) })} send={fakePlanner().send} />);
+    const picker = screen.getByRole("combobox", { name: "Arrangement" }) as HTMLSelectElement;
+    expect(picker.value).toBe("open_plan");
+    expect(screen.getByText("One big room.")).toBeTruthy();
+    expect(document.querySelector(".pw-bar-meta")!.textContent).toContain("Open plan living");
   });
 });
 

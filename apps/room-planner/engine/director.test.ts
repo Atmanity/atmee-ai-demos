@@ -31,6 +31,13 @@ describe('the instructions', () => {
     // Live, "add a grand piano" got no call and a made-up "nearly four square metres".
     expect(INSTRUCTIONS).toContain('even for a piece or room you think the plan lacks (a piano, a gym)');
     expect(INSTRUCTIONS).toContain('a refusal must come from it');
+    // Round two: "a grand piano takes up nearly four square metres…" came before the refusal.
+    expect(INSTRUCTIONS).toContain('Call the tool FIRST and say nothing about the request until it returns');
+    // Round two: a second "the drawing to keep" got "whenever you are ready".
+    expect(INSTRUCTIONS).toContain('Asked again for something already done (the drawing, a floor), call the tool again');
+    const describe = (name: string) => TOOLS.find((t) => t.name === name)!.description;
+    expect(describe('add_furniture')).toContain('before saying anything about it');
+    expect(describe('draw_sheet')).toContain('even if a sheet is already up');
     expect(INSTRUCTIONS).toContain('Never invent or estimate a size or an outcome');
     expect(INSTRUCTIONS).toContain('never confirm a refused change');
     expect(INSTRUCTIONS).toContain('Call the tool even when you think you know');
@@ -156,6 +163,12 @@ describe('the state', () => {
     p.apply({ kind: 'set_unit', unit: 'ft2' });
     const text = planState(p.snapshot());
     expect(text).toContain("226 square feet of the floor isn't in any room");
+  });
+
+  test('the arrangement in force is named, so "is this the open plan?" is answered from it', () => {
+    const p = new Planner();
+    p.apply({ kind: 'generate', bedrooms: 2, style: 'open_plan' });
+    expect(planState(p.snapshot())).toContain('Laid out as "Open plan living".');
   });
 
   test('a whole home keeps its size on top and fits', () => {

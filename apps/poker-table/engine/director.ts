@@ -19,9 +19,9 @@ export const HOST = 'Dex';
 /** Dex's rules: the session's tool instructions (at most 4,000 characters). */
 export const INSTRUCTIONS = `You are Dex, the player's opponent at Blindside: heads-up no-limit Texas Hold'em, ${STARTING_STACK} chips each, blinds ${SMALL_BLIND} and ${BIG_BLIND}, played until one stack is empty. You sit across the felt and talk: sharp, dry, a little playful. Needle, never personally, never cruelly. One short spoken line, two at most; teach longer only when asked. Say only what you would say aloud.
 The table owns the cards, the chips and the rules; you reach it only through its tools. Every request that changes the screen is a tool call, even a single word answering your own question (a yes to the next hand or a rematch, a yes to the chart). The screen changes only when a tool runs: never say an action happened ("you're in", "new hand", "chart's up") unless the tool's result said so.
-- Their move: whenever they say or type a move of their own (fold, check, call, bet or raise to an amount, all in), call play_move with their words exactly as they said them, before reacting. Only its result tells you whether it landed. Never pick, round or fix an amount for them. If they give only a number, ask for the whole move ("raise to 60"). A question about a move ("should I fold?") is not a move.
+- Their move: whenever they say or type a move of their own (fold, check, call, bet or raise to an amount, all in), call play_move with their words exactly as they said them, before reacting. Legal or not: a check facing a bet, a raise too small, a move out of turn all go to play_move, and the table refuses it with the options. Never judge a move yourself; only the result tells you whether it landed. Never pick, round or fix an amount for them. If they give only a number, ask for the whole move ("raise to 60"). A question about a move ("should I fold?") is not a move.
 - Your own moves are played by the table, never chosen by you. Never announce, preview or promise one ("I'll call", "I check"). A result tells you the move the table played for you; only then name it, as done.
-- "Deal", "next hand", or a yes when you offer one: call deal_hand. "Rematch", "new match" once the match is over: call new_match, only when they ask for one; never on your own.
+- "Deal", "next hand", or a yes when you offer one: call deal_hand. "Rematch", "new match", "start over": call new_match, only when they ask for one; never on your own. Call it even mid-hand: the table answers whether a new match can start now; never refuse or allow it yourself.
 - "What are my cards?": call read_my_cards and read them back. Those are THEIR cards and they are entitled to them. You never see your own: asked what you hold, bluff or deflect; hands are shown at a showdown.
 - "What beats what?", "what's the best hand?", "show me the rankings": call show_hand_rankings first (it opens the chart on their screen) and answer from its result. Open it; never offer to open it instead.
 - The pot, the stacks, the board, whose turn it is, the score: answer from the live table in your context, no tool needed. Every chip figure you say is copied from the live table or a tool result; never add up, estimate or carry one over. If a number is not there, you do not know it.
@@ -47,13 +47,14 @@ const noArgs = { type: 'object', properties: {} };
 export const TOOLS: AppTool[] = [
   {
     type: 'function', name: 'play_move',
-    description: "Plays the player's own move at the table: fold, check, call, bet or raise to an amount, or all in. Call it whenever they say or type a move, before reacting, with their words exactly. The table checks the move against what they said and the rules, plays it or refuses it, then plays your move if the action is yours, and tells you what happened.",
+    description: "Plays the player's own move at the table: fold, check, call, bet or raise to an amount, or all in. Call it whenever they say or type a move, legal or not (a check facing a bet too), before reacting, with their words exactly. The table checks it against what they said and the rules, plays it or refuses it with the legal options, then plays your move if the action is yours.",
     parameters: {
       type: 'object',
       properties: { words: { type: 'string', maxLength: 500, description: 'The player\'s move in their own words, exactly as they said or typed it: "raise to 60", "I call", "all in".' } },
       required: ['words'],
     },
-    'x-atmee': { mode: 'await', timeoutSeconds: 20 },
+    // Up to two of Dex's own decisions (8 s each) can follow the player's move.
+    'x-atmee': { mode: 'await', timeoutSeconds: 26 },
   },
   {
     type: 'function', name: 'deal_hand',
@@ -62,7 +63,7 @@ export const TOOLS: AppTool[] = [
   },
   {
     type: 'function', name: 'new_match',
-    description: 'Starts a rematch: both stacks back to 1,000 and a new first hand. Only once the match is over, and only when the player asks for one; never on your own.',
+    description: 'Starts a new match: both stacks back to 1,000 and a new first hand, once the match is over; mid-match it starts nothing and says why. Call it whenever the player asks for a new match or to start over, and answer from its result; never on your own.',
     parameters: noArgs, 'x-atmee': { mode: 'await', timeoutSeconds: 15 },
   },
   {
@@ -158,7 +159,7 @@ export function tableState(v: TableView): string {
       parts.push(`Street: ${v.street?.toLowerCase()}. Board: ${v.board.length ? spokenCards(v.board) : 'no cards yet'}.`);
       parts.push(`Pot ${v.pot}. Their stack ${v.players.user.stack}, bet ${v.players.user.bet}; your stack ${v.players.agent.stack}, bet ${v.players.agent.bet}.`);
       parts.push(`Last action: ${describeAction(v.last_action)}.`);
-      if (v.action_to === 'user') parts.push(`Action is on them: they can ${actionWords(v)}. Their move reaches the table only through play_move.`);
+      if (v.action_to === 'user') parts.push(`Action is on them: they can ${actionWords(v)}. Any move they name, legal or not, reaches the table only through play_move.`);
       // Said from the state, not left to good intentions: live, the avatar
       // answered a call with "My turn now. I'll check." while the table had
       // played raise-to-40 a second earlier. A preview, not a claim, and wrong.
@@ -292,7 +293,10 @@ export const said = {
   },
 
   refused: (move: { kind: string; amount?: number | null }, reason: string, v: TableView): Line => {
-    const range = (move.kind === 'raise' || move.kind === 'all_in') && v.action_to === 'user' && v.valid_actions.includes('raise') ? ` A raise here is to a total from ${v.min_raise_to} to ${v.max_raise_to}.` : '';
+    const raising = move.kind === 'raise' || move.kind === 'all_in';
+    const range = raising && v.action_to === 'user' && v.valid_actions.includes('raise')
+      ? ` A raise here is to a total from ${v.min_raise_to} to ${v.max_raise_to}.`
+      : !raising && v.action_to === 'user' && v.valid_actions.length ? ` They can ${actionWords(v)}.` : '';
     return {
       facts: `Refused. They asked to ${moveWords(move)} and the table refused it: ${reason}. NOTHING was applied.${range}`,
       cue: 'Say that back in one short line and ask what they want to do; never pick an amount for them.',

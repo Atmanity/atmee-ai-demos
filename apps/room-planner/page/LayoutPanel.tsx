@@ -35,6 +35,7 @@ export function LayoutPanel({
   hasFloor,
   canAddLevel,
   upstairs,
+  currentStyle,
   widthCm,
   depthCm,
   onGenerate,
@@ -47,6 +48,8 @@ export function LayoutPanel({
   hasFloor: boolean;
   canAddLevel: boolean;
   upstairs: boolean;
+  /** The arrangement the floor on screen is laid out in, if any. */
+  currentStyle?: string | null;
   widthCm: number;
   depthCm: number;
   onGenerate: (brief: Brief) => void;
@@ -54,7 +57,7 @@ export function LayoutPanel({
   onAddLevel: () => void;
 }) {
   const [bedrooms, setBedrooms] = useState(2);
-  const [style, setStyle] = useState(typologies[0]?.key ?? "day_night");
+  const [style, setStyle] = useState(currentStyle ?? typologies[0]?.key ?? "day_night");
   const [extras, setExtras] = useState({ office: false, dining: false, ensuite: false, wc: false, utility: false });
   const [newKind, setNewKind] = useState("bedroom");
   const [newWhere, setNewWhere] = useState("center");
@@ -68,6 +71,9 @@ export function LayoutPanel({
     setWidth(widthCm / 100);
     setDepth(depthCm / 100);
   }, [widthCm, depthCm]);
+  // The picker shows the arrangement in force: live it read "Day end, night
+  // end" over an open-plan floor laid out by voice.
+  useEffect(() => { if (currentStyle) setStyle(currentStyle); }, [currentStyle]);
 
   const note = typologies.find((entry) => entry.key === style)?.note;
   const w = Math.round(width * 100), h = Math.round(depth * 100);

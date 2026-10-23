@@ -110,3 +110,13 @@ Fixed by tools, compared with the first port:
   early; factoring x² − 4x + 1 was refused with the board's sentence; the
   recap after hang-up listed three equations, one solved. Smoke pass on Ada's
   own host (session `86f05535`): put up, factoring and next all called.
+- Round 2, after the fixes (staging, 2026-10-23, Ada's new host `6523639b`,
+  session `563d7683`, 118 s): one greeting in the new persona ("I'm Ada, the
+  voice of the Chalkline board…"), then "The board is ready. You can name any
+  quadratic or tap one of the three examples on the board." `put_up_equation`
+  (4.2 s), `choose_method` (2.4 s) and two `next_line` calls (2.3 s, 2.4 s)
+  each carried the board's outcome in the first reply; a typed "Hide the
+  graph." called `hide_graph` once, in 1.1 s, with no help from the safety
+  net, and showed once in the conversation. No doubled openers and no
+  "Executing request". Still seen: short fillers ("Yeah, got it,") that
+  contradict nothing, and the ~10 s check-in after line 2.

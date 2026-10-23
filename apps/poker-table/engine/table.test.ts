@@ -197,6 +197,15 @@ test('a call with nothing to call is played and said as a check', async () => {
   expect(text(result)).toContain('The table played their check.');
 });
 
+test('a check facing a bet goes to the table, which refuses it with the options', () => {
+  // Round 2, live: "Check." facing a bet got a needle from Dex and no call.
+  const table = liveTable();
+  const result = say(table, 'Check.');
+  expect(result.changed).toBe(false);
+  expect(text(result)).toMatch(/^Refused\. They asked to check and the table refused it: you cannot check facing a bet/);
+  expect(text(result)).toContain('They can fold, call 10 or raise to anything from 40 up to 1000');
+});
+
 test('a move out of turn is refused with the reason', () => {
   const table = liveTable();
   say(table, 'call');

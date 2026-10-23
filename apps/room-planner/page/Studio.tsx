@@ -129,6 +129,7 @@ export function Studio({
   const selectedItem = level.items.find((item) => item.id === state.selected) ?? null;
   const selectedIssues = issues.filter((issue) => issue.room === state.selected || issue.item === state.selected);
   const floorName = level.name === "ground" ? "Ground floor" : "Upper floor";
+  const arrangement = state.typologies?.find((t) => t.key === level.style)?.label ?? null;
 
   const openLayout = () => {
     setTab("layout");
@@ -161,6 +162,7 @@ export function Studio({
         <span className="pw-bar-meta">
           {metres(level.w_cm)} × {metres(level.h_cm)}
           {!empty && <> · {areaLabel(schedule.total_m2, state.unit)}</>}
+          {!empty && !upstairs && arrangement && <> · {arrangement}</>}
         </span>
         <span className="pw-bar-tools">
           <span className="pw-segment" role="group" aria-label="Units">
@@ -280,7 +282,7 @@ export function Studio({
           {tab === "layout" && (
             <LayoutPanel
               typologies={state.typologies ?? []} roomKinds={state.room_kinds ?? []} busy={false}
-              hasFloor={!empty} canAddLevel={state.levels.length < 2} upstairs={upstairs}
+              hasFloor={!empty} canAddLevel={state.levels.length < 2} upstairs={upstairs} currentStyle={level.style}
               widthCm={level.w_cm} depthCm={level.h_cm}
               onGenerate={(brief) => void intend({ kind: "generate", ...brief })}
               onAddRoom={(room_kind, near) => void intend({ kind: "add_room", room_kind, near })}

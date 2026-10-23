@@ -69,6 +69,24 @@ function menu(v: Snapshot): string {
   return v.catalog.map((e) => `${e.glyph} ${e.meaning} (${plural(e.strokes_total, 'stroke')})`).join(', ');
 }
 
+const TIMES = ['no', 'one', 'two', 'three', 'four', 'five'];
+
+/** How many of the strokes so far were right on the first try. */
+export const firstTries = (v: Snapshot) => v.results.filter((r) => r.how === 'drawn' && r.tries <= 1).length;
+
+/**
+ * The first-try record in plain words, from the sheet: "3 of 4 strokes right
+ * on the first try; stroke 1 took two tries." Live, Ren praised "every single
+ * stroke right on your first try" after a stroke drawn backwards first: praise
+ * comes from this record, never from the impression of a lesson.
+ */
+export function firstTryRecord(v: Snapshot): string {
+  const exceptions = v.results.filter((r) => !(r.how === 'drawn' && r.tries <= 1)).map((r) => r.how === 'drawn'
+    ? `stroke ${r.index + 1} took ${TIMES[r.tries] ?? r.tries} tries`
+    : `stroke ${r.index + 1} was shown to them ${r.tries >= 2 ? 'after two misses' : 'because they asked'}`);
+  return `${firstTries(v)} of ${plural(v.results.length, 'stroke')} right on the first try${exceptions.length ? `; ${exceptions.join('; ')}` : ''}.`;
+}
+
 /** Which stroke, by number: the only way Ren may refer to an unearned one. */
 const position = (v: Snapshot) => `stroke ${Math.min(v.stroke_index + 1, v.character?.strokes_total ?? 1)} of ${v.character?.strokes_total ?? 0}`;
 
@@ -95,14 +113,14 @@ export function boardState(v: Snapshot): string {
     const how = verdict?.revealed ? (v.attempts >= 2 ? 'shown to them after two misses' : 'shown to them because they asked') : 'drawn correctly';
     parts.push(`${cap(position(v))} is done: ${how}. It is on the sheet now. When they are ready they say "next" (call next_stroke) or tap Next stroke.`);
   } else if (v.phase === 'debrief') {
-    parts.push(`The character is finished: ${v.score.correct} of ${plural(v.score.total, 'stroke')} right at the first try. Their finished sheet and a summary are on screen. The menu: ${menu(v)}.`);
+    parts.push(`The character is finished. Their record: ${firstTryRecord(v)} Their finished sheet and a summary are on screen. The menu: ${menu(v)}.`);
   }
 
   const earned = v.strokes.filter((s) => s.status === 'done' && s.teach);
   parts.push(earned.length
     ? `Strokes earned so far (yours to talk about): ${earned.map((s) => `stroke ${s.index + 1}, ${s.name}: "${s.teach}"`).join(' ')}`
     : 'None of its strokes is earned yet.');
-  if (v.phase !== 'debrief') parts.push(`Score for this character: ${v.score.correct} of ${plural(v.score.total, 'stroke')} right at the first try.`);
+  if (v.phase !== 'debrief') parts.push(v.results.length ? `Their record on this character so far: ${firstTryRecord(v)}` : 'No stroke of this character is finished yet.');
   return parts.join(' ');
 }
 
@@ -154,7 +172,10 @@ export const say = {
 
   cleared: (v: Snapshot) => `Done: they cleared their attempt; the attempt count is back to zero. ${ask(v)}`,
 
-  debrief: (v: Snapshot) => `Done: that was the last stroke of ${v.character!.glyph}. They got ${v.score.correct} of ${v.score.total} right first time, and their finished sheet with a summary is on screen. Give a short, warm debrief in two sentences, then ask which character they would like next; put one up only when they choose.`,
+  debrief: (v: Snapshot) => {
+    const all = firstTries(v) === v.results.length;
+    return `Done: that was the last stroke of ${v.character!.glyph}. Their record, from the sheet: ${firstTryRecord(v)} Their finished sheet with this summary is on screen. Give a short, warm debrief in two sentences that praises only what this record says${all ? '' : ': do NOT say every stroke was right first time, because it was not'}, then ask which character they would like next; put one up only when they choose.`;
+  },
 
   /**
    * The coaching line after a verdict lands. The note is QUOTED rather than

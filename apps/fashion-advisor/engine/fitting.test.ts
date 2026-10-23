@@ -132,11 +132,13 @@ describe('rating the outfit', () => {
     expect(models.reads).toHaveLength(1);
   });
 
-  test('rate it again: a fresh read for the same occasion', async () => {
+  test('rate it again with nothing changed: the same reading, and Emery says it is the same', async () => {
     const { f, models } = await rated();
+    const reads = models.reads.length;
     const { result } = await settle(f, tool(f, 'rate_outfit'));
-    expect(result).toContain('6 out of 10 for dinner out');
-    expect(models.reads.at(-1)?.context).toBe('Manual refresh requested by user');
+    expect(result).toMatch(/^Done: the same verdict as before, 6 out of 10 for dinner out/);
+    expect(result).toContain("the photo and the occasion haven't changed");
+    expect(models.reads).toHaveLength(reads);
   });
 });
 

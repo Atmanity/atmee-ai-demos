@@ -1,7 +1,7 @@
 // Reading the host's tool arguments the way people say them, and the phrases
 // the page's safety net acts on when the host does not.
 import { describe, expect, it } from 'vitest';
-import { goalIn, levelAsked, moveAsked, moveIn, mustDo, mustSetLevel, mustStartMove, mustStop, readLevel, stepLevel, type NetContext } from './judge.ts';
+import { goalIn, levelAsked, limitWords, moveAsked, moveIn, mustDo, mustSetLevel, mustStartMove, mustStop, readLevel, stepLevel, type NetContext } from './judge.ts';
 import { buildFallbackPlan } from './plan.ts';
 
 const plan = buildFallbackPlan('Full body', 'Beginner');
@@ -131,5 +131,19 @@ describe('the net for a level and a move', () => {
     ];
     for (const [said, ctx, move] of cases) expect(moveAsked(said, ctx), `${said} @${ctx.stage}`).toBe(move);
     expect(mustStartMove('the plank', withPlan)).toEqual({ name: 'start_move', arguments: { move: 'Plank hold' } });
+  });
+});
+
+describe('the user’s own words, attached to an add_limits call', () => {
+  it('keeps recent lines that carry a limit, and nothing else', () => {
+    const now = 100_000;
+    const lines = [
+      { text: 'I want to work on my glutes.', at: now - 8_000 },
+      { text: 'Oh, and my left knee is bad, and I only have twenty minutes.', at: now - 2_000 },
+      { text: 'no equipment', at: now - 60_000 },
+      { text: '', at: now },
+    ];
+    expect(limitWords(lines, now)).toBe('Oh, and my left knee is bad, and I only have twenty minutes.');
+    expect(limitWords([], now)).toBe('');
   });
 });

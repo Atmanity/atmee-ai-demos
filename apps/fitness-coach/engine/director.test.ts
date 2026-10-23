@@ -62,6 +62,12 @@ describe('the limits of the API', () => {
     expect(INSTRUCTIONS).toContain('"Beginner, please"');
   });
 
+  it('asks for every limit in one add_limits call', () => {
+    const addLimits = TOOLS.find((t) => t.name === 'add_limits')!;
+    expect(addLimits.description).toContain('every limit they said in one call');
+    expect(INSTRUCTIONS).toContain('call add_limits once with ALL of their words');
+  });
+
   it('opens without a second greeting', () => {
     const view = new Coach({ seed: 'abc' }).view();
     for (const text of [say.start(view), say.resume(view)]) {

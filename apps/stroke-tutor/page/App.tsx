@@ -5,7 +5,7 @@
 // current, and tells Ren about strokes and button presses as they land.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
-import { boardState, say, TTL } from '../engine/director.ts';
+import { boardState, firstTries, say, TTL } from '../engine/director.ts';
 import { mustDo } from '../engine/judge.ts';
 import type { Command, Snapshot } from '../engine/types.ts';
 import { createCoach, cueFor, type Coach } from './coach.ts';
@@ -58,7 +58,7 @@ export function App() {
     setMarks(marksRef.current);
     setView(next);
     if (next.phase === 'debrief' && next.character && before?.phase !== 'debrief') {
-      const done = { id: next.character.id, glyph: next.character.glyph, correct: next.score.correct, total: next.score.total };
+      const done = { id: next.character.id, glyph: next.character.glyph, correct: firstTries(next), total: next.results.length };
       setWritten((list) => [...list, done]);
     }
   }, []);

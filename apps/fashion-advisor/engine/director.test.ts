@@ -175,16 +175,18 @@ describe('the words Emery speaks from', () => {
   });
 
   test('the opening follows where the fitting stands', () => {
-    expect(said.opening(viewOf({ target: '', image: null, photo: 'none' }))).toContain("ask what they're dressing for today");
-    expect(said.opening(viewOf({ image: null, photo: 'none' }))).toContain("confirm they're dressing for smart casual");
-    expect(said.opening(viewOf({ target: '' }))).toContain("ask what they're dressing for");
+    // An empty room: her greeting already asked where they're headed, so nothing more (live, the question came twice).
+    expect(said.opening(viewOf({ target: '', image: null, photo: 'none' }))).toBeNull();
+    expect(said.opening(viewOf({ target: '', image: null, photo: 'none' }), true)).toBeNull();
+    expect(said.opening(viewOf({ image: null, photo: 'none' }))).toContain("confirm in a few words that they're dressing for smart casual");
+    expect(said.opening(viewOf({ target: '' }))).toContain("don't ask again, wait for their answer");
     expect(said.opening(viewOf({ jobs: { photo: false, analysing: true, tryOn: null, queued: [], more: false } }))).toContain("Don't guess it");
     expect(said.opening(viewOf({ analysis: analysis() }))).toContain('6 out of 10 for smart casual');
     expect(said.opening(viewOf({ analysis: analysis() }), true)).toMatch(/^You have just greeted them; do not greet or introduce yourself again\. They called you back to carry on the same fitting/);
     // Her own greeting already introduced her: the opening never greets again.
-    for (const v of [viewOf(), viewOf({ target: '', image: null, photo: 'none' })]) {
+    for (const v of [viewOf(), viewOf({ target: '' }), viewOf({ image: null, photo: 'none' })]) {
       expect(said.opening(v)).toMatch(/^You have just greeted them; do not greet or introduce yourself again\./);
-      expect(said.opening(v)).not.toMatch(/welcome|introduce yourself as/i);
+      expect(said.opening(v)).not.toMatch(/welcome|introduce yourself as|what (?:are you|they're) dressing for\?/i);
     }
   });
 

@@ -18,7 +18,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
 import { parseConstraints } from '../engine/constraints.ts';
 import { boardState, say } from '../engine/director.ts';
-import { mustDo, mustSetLevel, mustStartMove, mustStop, type NetCall, type NetContext } from '../engine/judge.ts';
+import { limitWords, mustDo, mustSetLevel, mustStartMove, mustStop, type NetCall, type NetContext } from '../engine/judge.ts';
 import type { Command, Outcome, View } from '../engine/types.ts';
 import { Workout, type Pending } from './Workout.tsx';
 import portrait from '../host/portrait.jpg';
@@ -52,6 +52,9 @@ export function App() {
   const [pending, setPending] = useState<Pending | null>(null);
   const [refusal, setRefusal] = useState('');
   const avatarRef = useRef<Avatar | null>(null);
+  /** What the user said lately, so an add_limits call keeps every limit they named. */
+  const said = useRef<{ text: string; at: number }[]>([]);
+  const lastLimits = useRef(0);
 
   // The newest screen wins: a tool's reply and a streamed outcome can cross.
   const show = useCallback((next: View) => {
@@ -63,7 +66,16 @@ export function App() {
   // Sammy's tool calls: the server acts, the screen follows, the result is what she says.
   const onToolCall = useCallback(async ({ name, arguments: args }: ToolCall) => {
     if (!session.current) throw new Error('Spotter is still opening; try again in a moment');
-    const { view: next, result } = await post<{ view: View; result: string }>(`/sessions/${session.current}/tool`, { name, arguments: args });
+    // The server reads the limits in the user's own words too (the finished lines, and
+    // the words still being recognised), in case Sammy's words dropped one.
+    let sent = args;
+    if (name === 'add_limits') {
+      lastLimits.current = Date.now();
+      const now = Date.now();
+      const words = [...said.current, { text: avatarRef.current?.heard ?? '', at: now }];
+      sent = { ...args, heard: limitWords(words, now) };
+    }
+    const { view: next, result } = await post<{ view: View; result: string }>(`/sessions/${session.current}/tool`, { name, arguments: sent });
     show(next);
     return result;
   }, [show]);
@@ -82,6 +94,14 @@ export function App() {
 
   // Everything the user says or types passes here once it is final.
   const heard = (text: string) => {
+    said.current = [...said.current.slice(-9), { text, at: Date.now() }];
+    // Sammy called add_limits before these words were final: record what her call left
+    // out (a repeat records nothing), and tell her only if it added something.
+    if (Date.now() - lastLimits.current < 10_000 && mustDo(text)?.name === 'add_limits') {
+      void onToolCall({ id: `own-${Date.now()}`, name: 'add_limits', arguments: { words: text } }).then((result) => {
+        if (/^Done: Noted on/.test(String(result))) avatarRef.current?.event(`The user's own words carried a limit your add_limits call left out; Spotter has recorded it now. ${result}`, 30);
+      }).catch((err) => console.warn('[spotter] a limit from the user\'s words did not reach the server', err));
+    }
     const conditions = parseConstraints(text).clearance;
     if (conditions.length) {
       // Frozen now, by the page: the screen stops before anyone has spoken.

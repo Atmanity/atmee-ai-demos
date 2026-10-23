@@ -50,12 +50,14 @@ export const POI_SEARCH_RADIUS_M = 1500;
 export const SIGHT_RADIUS_M = 3000;
 /** With this many good sights from Wikipedia, Overpass is not asked at all. */
 export const ENOUGH_SIGHTS = 3;
-/** The most time the Overpass mirrors get, together: past it, the next mirror is not tried. */
+/** The most time the Overpass mirrors get, together: each attempt gets only what is left of it. */
 export const OVERPASS_BUDGET_MS = 14_000;
+/** Less time than this left in the budget, and another mirror is not worth starting: Overpass rarely answers that fast. */
+export const OVERPASS_MIN_ATTEMPT_MS = 3_000;
 
-/** What the fetchers use to make requests: `fetch`, or a scripted double in tests. */
-export type Http = (url: string, init?: RequestInit) => Promise<Response>;
-export const defaultHttp: Http = (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(HTTP_TIMEOUT_MS) });
+/** What the fetchers use to make requests: `fetch`, or a scripted double in tests. `timeoutMs` (default HTTP_TIMEOUT_MS) is how long this one request may take. */
+export type Http = (url: string, init?: RequestInit & { timeoutMs?: number }) => Promise<Response>;
+export const defaultHttp: Http = (url, { timeoutMs = HTTP_TIMEOUT_MS, ...init } = {}) => fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
 
 export interface GeoCountry {
   country: string;
@@ -433,9 +435,11 @@ async function overpass(lat: number, lon: number, http: Http): Promise<RawSpot[]
   const body = new URLSearchParams({ data: overpassQuery(lat, lon) });
   const started = Date.now();
   for (const url of OVERPASS_URLS) {
-    if (Date.now() - started > OVERPASS_BUDGET_MS) break;
+    // Each mirror gets only what is left of the budget: a first 12 s timeout must not let a second full one start.
+    const left = OVERPASS_BUDGET_MS - (Date.now() - started);
+    if (left < OVERPASS_MIN_ATTEMPT_MS) break;
     try {
-      const res = await http(url, { method: 'POST', body, headers: { 'User-Agent': USER_AGENT } });
+      const res = await http(url, { method: 'POST', body, headers: { 'User-Agent': USER_AGENT }, timeoutMs: Math.min(left, HTTP_TIMEOUT_MS) });
       if (res.status !== 200) {
         console.warn('[Travel] overpass %s returned %d', url, res.status);
         continue;

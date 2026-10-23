@@ -104,7 +104,8 @@ const app: AppServer = {
         const result = await seat.table.opponentTurn(ask, req.body?.again === true);
         if (result.changed && seat.table.lastDecision) {
           const d = seat.table.lastDecision;
-          console.log('[%s] Dex played %s%s (%s)', ID, d.kind, d.amount ? ` ${d.amount}` : '', d.source);
+          if (d.source === 'model') console.log('[%s] Dex played %s%s (model, %d ms)', ID, d.kind, d.amount ? ` ${d.amount}` : '', d.ms);
+          else console.warn('[%s] Dex played %s (fallback after %d ms: %s)', ID, d.kind, d.ms, d.reason ?? 'unknown');
         }
         res.json(reply(result));
       } catch (err) {
