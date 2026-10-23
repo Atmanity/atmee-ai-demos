@@ -12,7 +12,7 @@ export function Mark({ size = 34 }: { size?: number }) {
       <rect x="2" y="12" width="36" height="16" rx="2.5" fill="var(--nt-tape)" />
       <path d="M7 12v6M12 12v4M17 12v6M27 12v6M32 12v4" stroke="var(--nt-ink)" strokeWidth="1.6" strokeLinecap="round" />
       <path d="M19.5 12 22 19.5 24.5 12z" fill="var(--nt-pin)" />
-      <path d="M2 28h36" stroke="var(--nt-ink)" strokeWidth="1.6" opacity=".35" />
+      <path d="M2 29.5h36" stroke="var(--nt-rose)" strokeWidth="2.4" strokeLinecap="round" />
     </svg>
   );
 }
