@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title>Studio · Nightcap Live</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>if (new URLSearchParams(location.search).get('role') === 'viewer') location.replace('livestream-viewer.html');</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="kit.css">
@@ -47,6 +48,11 @@
   .empty { margin: auto; text-align: center; color: var(--muted); font-size: 14px; display: grid; gap: 10px; }
   .chatfoot { padding: 12px 16px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
   .copied { color: var(--accent); }
+  /* Streamer / Viewer: the same switch on both Nightcap pages, shown before you go live */
+  .mode { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); flex: none; }
+  .mode a { padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--muted); text-decoration: none; white-space: nowrap; }
+  .mode a:hover { color: var(--text); }
+  .mode a[aria-current] { background: var(--accent); color: var(--accent-ink); }
   @media (max-width: 900px) { .studio { grid-template-columns: 1fr; height: auto; } .chatcol { height: 70vh; border-left: 0; border-top: 1px solid var(--line); } .stats { grid-template-columns: 1fr 1fr 1fr; } }
 </style>
 </head>
@@ -54,12 +60,13 @@
 <header class="topbar">
   <div class="brand"><span class="moon"></span>Nightcap Live <small>Creator studio</small></div>
   <span class="spacer"></span>
+  <nav class="mode" id="mode" aria-label="Join as"><a href="livestream-host.html" aria-current="page">Streamer</a><a href="livestream-viewer.html">Viewer</a></nav>
   <span class="chip" id="state">Offline</span>
 </header>
 <main class="studio">
   <section class="left">
     <div class="stage player" id="player">
-      <div class="hud"><span class="chip off" id="liveBadge">OFFLINE</span><span class="chip" id="viewerBadge">👁 0</span></div>
+      <div class="hud"><span class="chip off" id="liveBadge">OFFLINE</span><span class="chip" id="viewerBadge">👁 0</span><span class="chip" id="relayBadge" hidden title="Viewers watching the video this studio forwards">📡 0</span></div>
       <video id="video" autoplay playsinline muted></video><audio id="audio" autoplay></audio>
       <div class="caption" id="caption"></div>
       <div class="overlay" id="overlay"></div>
@@ -89,10 +96,11 @@
 <script src="https://unpkg.com/livekit-client@2.9.5/dist/livekit-client.umd.js"></script>
 <script src="common.js"></script>
 <script src="kit.js"></script>
+<script src="livestream-relay.js"></script>
 <script>
   const { $, esc } = UI;
-  $('share').innerHTML = '🔗 Copy chat link';
-  let s, msgs = 0, liveEl = null, stopClock = () => {};
+  $('share').innerHTML = '🔗 Copy viewer link';
+  let s, relay = null, msgs = 0, liveEl = null, stopClock = () => {};
   const caption = UI.captions($('caption'));
   const debug = UI.debugLog();
   const overlay = UI.stage($('overlay'), {
@@ -101,7 +109,7 @@
     connecting: ['Connecting…', 'Opening the stream.'],
     arriving: ['Your co-host is taking the stage…', 'Going live in a moment.'],
   });
-  overlay.idle('<div class="title">You\'re offline</div><div class="detail">Press <b>Go live</b> and your AI co-host starts the show, reading your chat as it comes in.</div>');
+  overlay.idle('<div class="title">You\'re offline</div><div class="detail">Press <b>Go live</b> and your AI co-host starts the show, reading your chat as it comes in. Viewers watch it through this page, so keep it open.</div>');
 
   function line(cls, who, text) {
     $('empty').hidden = true;
@@ -126,10 +134,10 @@
   $('share').onclick = async () => {
     const url = new URL('livestream-viewer.html', location.href).href;
     try { await navigator.clipboard.writeText(url); $('share').innerHTML = '<span class="copied">✓ Link copied</span>'; } catch (e) { window.open(url, '_blank'); }
-    setTimeout(() => { $('share').innerHTML = '🔗 Copy chat link'; }, 2000);
+    setTimeout(() => { $('share').innerHTML = '🔗 Copy viewer link'; }, 2000);
   };
   async function goLive() {
-    $('golive').disabled = true; $('state').textContent = 'Starting…';
+    $('golive').disabled = true; $('state').textContent = 'Starting…'; $('mode').hidden = true;
     try {
       s = await Atmee.join({
         usecase: 'livestream', video: $('video'), audio: $('audio'), mic: null, tools,
@@ -145,16 +153,20 @@
         },
         onEnd: () => stopped('Stream ended'),
       });
+      // Viewers are not in the room: this page forwards the avatar to each of them.
+      relay = StreamRelay.streamer({ room: s.room, onCount: (n, max) => { $('relayBadge').hidden = false; $('relayBadge').textContent = `📡 ${n}/${max} watching`; } });
+      if (Atmee.debug) window.__relay = relay;
       $('liveBadge').textContent = '● LIVE'; $('liveBadge').className = 'chip live'; $('state').textContent = 'Live';
       $('golive').textContent = 'End stream'; $('golive').className = 'btn danger'; $('golive').disabled = false;
       $('golive').onclick = async () => { await s.end(); stopped('Stream ended'); };
       stopClock = UI.countdown($('statTime'), s.session.maxSeconds, () => line('', 'Nightcap', 'About a minute of stream time left.'));
     } catch (e) {
-      $('golive').disabled = false; $('state').textContent = 'Offline';
+      $('golive').disabled = false; $('state').textContent = 'Offline'; $('mode').hidden = false;
       overlay.error(e.friendly || 'The stream could not start.', 'Try again', goLive);
     }
   }
   function stopped(text) {
+    if (relay) { relay.stop(); relay = null; } $('relayBadge').hidden = true;
     stopClock(); $('liveBadge').textContent = 'OFFLINE'; $('liveBadge').className = 'chip off'; $('state').textContent = 'Offline';
     overlay.ended(`<div class="title">${esc(text)}</div><button class="btn primary" onclick="location.reload()">Go live again</button>`);
     $('golive').hidden = true;

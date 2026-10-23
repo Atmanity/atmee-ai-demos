@@ -64,6 +64,7 @@ function hub(name) {
     hubs.set(name, {
       name, def, avatarId: process.env[`AVATAR_${name.toUpperCase()}`] || process.env.AVATAR_ID,
       session: null, host: null, viewers: new Set(), transcript: [], pending: [],
+      streamer: null, watchers: new Map(), // the video relay: the studio's socket, and viewer id -> socket
       memo: {}, // the use case's own scratch state (scores, scene, last observation)
     });
   }
@@ -76,6 +77,7 @@ function broadcast(h, msg) {
   for (const ws of h.viewers) if (ws.readyState === ws.OPEN) ws.send(data);
   toHost(h, msg);
 }
+function toViewers(h, msg) { const data = JSON.stringify(msg); for (const ws of h.viewers) if (ws.readyState === ws.OPEN) ws.send(data); }
 // A policy returns relay messages for the host page: say (lk.chat) or app (atmee.app).
 function relay(h, messages) { for (const m of messages || []) toHost(h, m); }
 
@@ -115,6 +117,7 @@ async function endSession(h) {
   if (!h.session) return;
   const id = h.session.sessionId; h.session = null;
   if (h.def.onEnd) h.def.onEnd(h, (m) => broadcast(h, m)); // e.g. close the stream's open poll
+  if (h.streamer) h.streamer.close(); // the video relay ends with the session
   h.memo = {}; // nothing of this session is shown to whoever connects next
   try {
     const r = await api("POST", `/v1/session/${id}/end`);
@@ -194,7 +197,54 @@ app.post("/api/presence/frame", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// WebSocket: /?usecase=<name>&role=host|viewer
+// The video relay (livestream): the studio page forwards the avatar to each
+// viewer over its own RTCPeerConnection, and this server only passes the
+// offer, answer and ICE candidates between them, keyed by the viewer's
+// connection id. The studio connects as role=streamer once it is live; a
+// viewer asks to watch, and is turned away when MAX_WATCHERS already do
+// (each one costs the studio its upload).
+// ---------------------------------------------------------------------------
+const MAX_WATCHERS = Number(process.env.LIVESTREAM_MAX_WATCHERS || 8);
+let nextViewerId = 1;
+const sendTo = (ws, msg) => { if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg)); };
+
+function onStreamer(h, ws) {
+  if (!h.session) return ws.close(4000, "no live session");
+  if (h.streamer && h.streamer !== ws) h.streamer.close(4001, "replaced");
+  h.streamer = ws;
+  console.log(`[${h.name}] streamer connected, ${h.watchers.size} watcher(s) waiting`);
+  sendTo(ws, { type: "watchers", ids: [...h.watchers.keys()], max: MAX_WATCHERS });
+  toViewers(h, { type: "stream", live: true });
+  ws.on("message", (raw) => {
+    const msg = JSON.parse(raw);
+    if (msg.type === "rtc" && h.watchers.has(msg.to)) sendTo(h.watchers.get(msg.to), { type: "rtc", data: msg.data });
+  });
+  ws.on("close", () => {
+    if (h.streamer !== ws) return;
+    h.streamer = null;
+    console.log(`[${h.name}] streamer left`);
+    toViewers(h, { type: "stream", live: false });
+  });
+}
+// A viewer's relay messages; true when the message was one.
+function onWatcherMessage(h, ws, msg) {
+  if (msg.type === "watch") {
+    if (!h.watchers.has(ws.viewerId) && h.watchers.size >= MAX_WATCHERS) { sendTo(ws, { type: "watch-full", max: MAX_WATCHERS }); return true; }
+    h.watchers.set(ws.viewerId, ws);
+    sendTo(ws, { type: "watching", live: !!h.streamer });
+    sendTo(h.streamer, { type: "watcher", id: ws.viewerId }); // again on a repeat: the studio makes a fresh offer
+    return true;
+  }
+  if (msg.type === "rtc") { if (h.watchers.has(ws.viewerId)) sendTo(h.streamer, { type: "rtc", from: ws.viewerId, data: msg.data }); return true; }
+  return false;
+}
+function onWatcherClose(h, ws) {
+  if (!h.watchers.delete(ws.viewerId)) return;
+  sendTo(h.streamer, { type: "watcher-left", id: ws.viewerId });
+}
+
+// ---------------------------------------------------------------------------
+// WebSocket: /?usecase=<name>&role=host|viewer|streamer
 // ---------------------------------------------------------------------------
 const server = createServer(app);
 const wss = new WebSocketServer({
@@ -232,12 +282,16 @@ wss.on("connection", (ws, req) => {
     ws.on("close", () => { if (h.host === ws) h.host = null; });
     return;
   }
+  if (role === "streamer") return onStreamer(h, ws);
+  ws.viewerId = nextViewerId++;
   h.viewers.add(ws);
   ws.send(JSON.stringify({ type: "history", transcript: h.transcript.slice(-50) }));
   for (const m of h.def.snapshot ? h.def.snapshot(h) : []) ws.send(JSON.stringify(m)); // what is on screen now (a pin, a poll)
+  ws.send(JSON.stringify({ type: "stream", live: !!h.streamer }));
   broadcast(h, { type: "viewers", count: h.viewers.size });
   ws.on("message", (raw) => {
     const msg = JSON.parse(raw);
+    if (onWatcherMessage(h, ws, msg)) return;
     if (msg.type === "vote") { if (h.def.onVote) h.def.onVote(h, String(msg.name || "viewer").slice(0, 24), Number(msg.option), (m) => broadcast(h, m)); return; }
     if (msg.type !== "chat") return;
     const text = String(msg.text || "").slice(0, 300).trim();
@@ -248,7 +302,7 @@ wss.on("connection", (ws, req) => {
     broadcast(h, { type: "chat", ...entry });
     if (h.def.onViewerChat) relay(h, h.def.onViewerChat(h, entry));
   });
-  ws.on("close", () => { h.viewers.delete(ws); broadcast(h, { type: "viewers", count: h.viewers.size }); });
+  ws.on("close", () => { onWatcherClose(h, ws); h.viewers.delete(ws); broadcast(h, { type: "viewers", count: h.viewers.size }); });
 });
 
 setInterval(() => { for (const h of hubs.values()) if (h.session && h.def.tick) relay(h, h.def.tick(h, (m) => broadcast(h, m))); }, 5000);

@@ -4,13 +4,14 @@
 <meta charset="utf-8">
 <title>Chat · Nightcap Live</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>if (new URLSearchParams(location.search).get('role') === 'streamer') location.replace('livestream-host.html');</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="kit.css">
 <style>
   :root {
     --bg: #0c0b10; --surface: #16141d; --surface-2: #211e2b; --text: #f2f0f7; --muted: #9b96ad; --line: #2a2735;
-    --accent: #ff3d81; --accent-ink: #fff; --accent-soft: rgb(255 61 129 / .14);
+    --accent: #ff3d81; --accent-ink: #fff; --accent-soft: rgb(255 61 129 / .14); --stage: #050407;
     --font: "Space Grotesk", system-ui, sans-serif; color-scheme: dark;
   }
   body { display: flex; flex-direction: column; height: 100vh; max-width: 560px; margin: 0 auto; border-left: 1px solid var(--line); border-right: 1px solid var(--line); background: var(--surface); }
@@ -20,6 +21,19 @@
   header b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   header span.sub { color: var(--muted); font-size: 13px; }
   .chip.live { background: #e5384f; color: #fff; }
+  /* Streamer / Viewer: the same switch on both Nightcap pages */
+  .mode { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); flex: none; }
+  .mode a { padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--muted); text-decoration: none; white-space: nowrap; }
+  .mode a:hover { color: var(--text); }
+  .mode a[aria-current] { background: var(--accent); color: var(--accent-ink); }
+  /* The stream, as the studio forwards it */
+  .player { flex: none; margin: 12px 16px 0; aspect-ratio: 16 / 9; }
+  .player video { object-fit: contain; }
+  .player .overlay .title { font-size: 17px; }
+  .hud { position: absolute; top: 10px; left: 10px; z-index: 3; display: flex; gap: 6px; }
+  .hud .chip { background: rgb(0 0 0 / .55); color: #fff; }
+  .hud .chip.live { background: #e5384f; }
+  .unmute { position: absolute; right: 10px; bottom: 10px; z-index: 3; padding: 8px 14px; font-size: 14px; }
   .pinned { margin: 12px 16px 0; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: 13px; color: var(--muted); }
   #log { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
   .msg { line-height: 1.4; overflow-wrap: anywhere; animation: rise .2s ease-out; }
@@ -38,8 +52,14 @@
 <header>
   <div class="av"></div>
   <div class="t"><b>Late-night tech talk with your AI co-host</b><span class="sub" id="viewers">Connecting…</span></div>
-  <span class="chip" id="badge">OFFLINE</span>
+  <nav class="mode" aria-label="Join as"><a href="livestream-host.html">Streamer</a><a href="livestream-viewer.html" aria-current="page">Viewer</a></nav>
 </header>
+<div class="stage player no-face" id="player">
+  <div class="hud"><span class="chip" id="badge">OFFLINE</span></div>
+  <video id="video" autoplay playsinline muted></video>
+  <button class="btn primary unmute" id="unmute" type="button" hidden>🔇 Tap to unmute</button>
+  <div class="overlay" id="overlay"></div>
+</div>
 <div class="pinned">📌 End a message with “?” to ask the host directly. Everything else, the host catches up on every few seconds.</div>
 <div class="pin" id="pin" hidden></div>
 <div class="poll" id="poll" hidden></div>
@@ -49,6 +69,7 @@
   <label class="who">Chatting as <input id="name" maxlength="24"></label>
 </form>
 <script src="kit.js"></script>
+<script src="livestream-relay.js"></script>
 <script>
   const { $, esc, icon } = UI;
   $('send').innerHTML = icon.send;
@@ -65,7 +86,6 @@
       let d = m.id && live.get(m.id);
       if (!d) { d = document.createElement('div'); $('log').appendChild(d); if (m.id) live.set(m.id, d); }
       d.className = 'msg host' + (m.final ? '' : ' live'); d.innerHTML = `<b>Host</b>${esc(m.text)}`;
-      $('badge').textContent = '● LIVE'; $('badge').className = 'chip live';
     }
     $('log').scrollTop = 1e9;
   }
@@ -77,18 +97,48 @@
     UI.poll($('poll'), m, (i) => { myVote = i; ws.send(JSON.stringify({ type: 'vote', option: i, name: $('name').value.trim() || 'viewer' })); }, myVote);
   }
   setInterval(() => { if (lastPoll && lastPoll.open) showPoll(lastPoll); }, 1000);
+  // The stream: the studio page forwards the avatar's video and voice to this
+  // page (it is the only one in the room). The video starts muted, since a
+  // browser plays sound only after a tap; one tap unmutes it for the visit.
+  const video = $('video');
+  let wantSound = false;
+  function overlay(html) { $('overlay').hidden = !html; $('overlay').innerHTML = html ? `<div class="inner">${html}</div>` : ''; }
+  function showStream(state, d) {
+    const live = state === 'playing' || state === 'tuning';
+    $('badge').textContent = live ? '● LIVE' : state === 'full' ? 'FULL' : 'OFFLINE'; $('badge').className = live ? 'chip live' : 'chip';
+    if (state === 'offline') overlay('<div class="title">The stream is offline</div><div class="detail">It shows up here as soon as the creator goes live. The chat stays open.</div>');
+    else if (state === 'tuning') overlay('<div class="spinner"></div><div class="title">Tuning in…</div><div class="detail">Connecting to the stream.</div>');
+    else if (state === 'full') overlay(`<div class="title">The stream is full</div><div class="detail">${d.max || 'The most'} people are already watching, and each one costs the studio upload. You can still chat; you get in as soon as a spot opens.</div>`);
+    else overlay('');
+    $('unmute').hidden = state !== 'playing' || !video.muted;
+  }
+  video.addEventListener('resize', () => $('player').classList.toggle('no-face', !video.videoWidth));
+  video.addEventListener('emptied', () => $('player').classList.add('no-face'));
+  video.addEventListener('playing', () => {
+    $('player').classList.toggle('no-face', !video.videoWidth);
+    if (wantSound) { video.muted = false; video.play().catch(() => { video.muted = true; $('unmute').hidden = false; }); }
+  });
+  function unmute() { wantSound = true; video.muted = false; video.play().catch(() => {}); $('unmute').hidden = true; }
+  $('unmute').onclick = unmute;
+  $('player').addEventListener('click', (e) => { if (video.muted && video.srcObject && e.target === video) unmute(); });
+  const watch = StreamRelay.viewer({ video, send: (m) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); }, onState: showStream });
+  window.__watch = watch; // for checks: watch.pc is the receiving connection
+  showStream('offline');
+
   let ws;
   function connect() {
     ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/?usecase=livestream&role=viewer`);
+    ws.onopen = () => watch.connected();
     ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data);
+      if (watch.handle(msg)) return;
       if (msg.type === 'history') msg.transcript.forEach(render);
       else if (msg.type === 'chat' || msg.type === 'caption') render(msg);
       else if (msg.type === 'viewers') $('viewers').textContent = `${msg.count} watching`;
       else if (msg.type === 'pin') { $('pin').hidden = false; $('pin').innerHTML = `<b>📌 Pinned by the host</b>${esc(msg.text)}`; }
       else if (msg.type === 'poll') showPoll(msg);
     };
-    ws.onclose = () => { $('viewers').textContent = 'Reconnecting…'; setTimeout(connect, 1500); };
+    ws.onclose = () => { watch.disconnected(); $('viewers').textContent = 'Reconnecting…'; setTimeout(connect, 1500); };
   }
   connect();
   $('f').onsubmit = (e) => {
