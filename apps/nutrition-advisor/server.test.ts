@@ -145,6 +145,34 @@ describe('look_up_food', () => {
     expect(body.text).toMatch(/^Done: back on screen, [^]*It was already in the comparison table, with "Medium apple"/);
   });
 
+  it('a stated amount of a food already on screen is said with its own figures, not the earlier portion\'s', async () => {
+    const { tool } = await open();
+    fake.respond = (req) => /said how much: "large"/.test(req.user)
+      ? cardJson('banana', { product_name: 'Large banana', serving_size: '1 large (136 g)', calories: 121 })
+      : model(req);
+    await tool('look_up_food', { foods: ['banana'] });
+    const { body } = await tool('look_up_food', { foods: ['a large banana'] });
+    expect(body.view.nutrition?.product_name).toBe('Large banana');
+    expect(body.text).toContain('the nutrition card for "Large banana"');
+    expect(body.text).toContain('121 calories');
+    expect(body.text).not.toContain('105 calories');
+  });
+
+  it('two portions of one food are two rows; a later plain ask brings back the usual portion', async () => {
+    const { tool } = await open();
+    fake.respond = (req) => /said how much: "200 g"/.test(req.user)
+      ? cardJson('chicken', { product_name: 'Chicken breast', serving_size: '200 g', calories: 330 })
+      : cardJson('chicken', { product_name: 'Chicken breast', serving_size: '1 breast (120 g)', calories: 198 });
+    await tool('look_up_food', { foods: ['chicken breast'] });
+    const { body } = await tool('look_up_food', { foods: ['200 g chicken breast'] });
+    expect(body.text).toContain('330 calories');
+    expect(body.text).not.toContain('198 calories');
+    expect(body.view.shelf.items.map((r) => [r.product_name, r.calories])).toEqual([['Chicken breast', 198], ['Chicken breast, 200 g', 330]]);
+    const plain = await tool('look_up_food', { foods: ['chicken breast'] });
+    expect(plain.body.view.nutrition?.calories).toBe(198);
+    expect(calls(CARD_SCHEMA)).toBe(2);
+  });
+
   it('two foods at once: both up, each with its figures', async () => {
     const { tool } = await open();
     const { body } = await tool('look_up_food', { foods: ['a banana and an apple'] });

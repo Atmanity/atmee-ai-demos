@@ -211,8 +211,14 @@ export class Advisor {
 
   /** The whole card of a food already looked at (by its name as the user says it), if it is still on the shelf. */
   cardFor(name: string): NutritionData | null {
-    const row = this.shelf.find((r) => sameFood(r.product_name, name));
-    return row ? this.cards.get(fold(row.product_name)) ?? null : null;
+    // A plain ask is for the usual portion (or the label read from a photo):
+    // the newest such card of that food, never a card for an amount someone stated.
+    for (const row of [...this.shelf].reverse()) {
+      if (!sameFood(row.product_name, name)) continue;
+      const card = this.cards.get(fold(row.product_name));
+      if (card && (card.portion_assumed || card.source === 'label')) return card;
+    }
+    return null;
   }
 
   /** Whether a food the user names is already in the comparison table. */
@@ -228,15 +234,26 @@ export class Advisor {
    * starts describing the one that is actually on screen.
    */
   show(card: NutritionData, ticket = this.begin()): string[] {
+    return this.place(card, ticket).others;
+  }
+
+  /**
+   * `show`, saying what happened: the card as it now stands in the table
+   * (renamed if another portion of the food holds its name), whether it was
+   * written at all, and whether it took the front.
+   */
+  place(given: NutritionData, ticket = this.begin()): { card: NutritionData; others: string[]; written: boolean; front: boolean } {
+    const card = this.distinct(given);
     const key = fold(card.product_name);
     const others = () => this.shelf.filter((r) => fold(r.product_name) !== key).map((r) => r.product_name);
     // Newer work already wrote this food: an older card of it writes nowhere,
     // or the table and the cache would hold older figures than the label.
-    if ((this.writtenAt.get(key) ?? 0) > ticket) return others();
+    if ((this.writtenAt.get(key) ?? 0) > ticket) return { card: this.cards.get(key) ?? card, others: others(), written: false, front: false };
     this.writtenAt.set(key, ticket);
     this.seq += 1;
     // Work overtaken by newer work files its food in the table, behind what is in front.
-    if (this.mayFront(ticket)) {
+    const front = this.mayFront(ticket);
+    if (front) {
       this.frontAt = ticket;
       this.nutrition = card;
       // A new food invalidates the recipe CARD: leaving it up would pair one
@@ -245,9 +262,21 @@ export class Advisor {
       this.recipe = null;
     }
     this.rememberFood(card);
-    this.cards.set(fold(card.product_name), card);
+    this.cards.set(key, card);
     for (const name of this.cards.keys()) if (!this.shelf.some((r) => fold(r.product_name) === name)) this.cards.delete(name);
-    return others();
+    return { card, others: others(), written: true, front };
+  }
+
+  /**
+   * The card under a name that is its own: another portion of the same food
+   * ("Chicken breast", 1 breast) keeps its row, and this one ("Chicken
+   * breast", 200 g) becomes "Chicken breast, 200 g". The same serving again is
+   * the same row.
+   */
+  private distinct(card: NutritionData): NutritionData {
+    const row = this.shelf.find((r) => fold(r.product_name) === fold(card.product_name));
+    if (!row || !card.serving_size.trim() || fold(row.serving_size) === fold(card.serving_size)) return card;
+    return { ...card, product_name: `${card.product_name}, ${card.serving_size.trim()}`.slice(0, 120) };
   }
 
   // -- display_recipe_details -----------------------------------------------

@@ -121,10 +121,10 @@ async function lookUp(v: Visit, foods: FoodAsk[]): Promise<Outcome> {
   let front = false;
   cards.forEach((card, i) => {
     if (!card) return void missing.push(asked(foods[i]));
-    front = advisor.mayFront(ticket);
-    advisor.show(card, ticket);
-    // What the table holds for it now: newer work on the same food keeps its figures.
-    put.push(advisor.cardFor(card.product_name) ?? card);
+    // The card as the table now holds it: the one just shown, or the newer figures that kept their place.
+    const placed = advisor.place(card, ticket);
+    if (placed.front) front = true;
+    put.push(placed.card);
   });
   const notice = missing.length ? `Couldn't find ${missing.join(' or ')} just now. Try again in a moment, or ask about another food.` : undefined;
   if (!put.length) return { view: advisor.view(), kind: 'failed', text: said.lookupFailed(missing), notice };
@@ -155,9 +155,9 @@ async function compare(v: Visit, foods: FoodAsk[]): Promise<Outcome> {
   let front = false;
   cards.forEach((card, i) => {
     if (!card) return void missing.push(asked(needed[i]));
-    front = advisor.mayFront(ticket);
-    advisor.show(card, ticket);
-    put.push(card.product_name);
+    const placed = advisor.place(card, ticket);
+    if (placed.front) front = true;
+    put.push(placed.card.product_name);
   });
   const notice = missing.length ? `Couldn't find ${missing.join(' or ')} just now. Try again in a moment, or ask about another food.` : undefined;
   // "It" is the card that was up; the foods named are the rest. No foods named ("compare them"): the whole table.
@@ -221,15 +221,13 @@ function photo(v: Visit, image: Image, sample: boolean): Promise<Outcome> {
     const { advisor } = v;
     if (!advisor.current(ticket)) return { view: advisor.view(), kind: 'failed', text: said.clearedMeanwhile('the photo') };
     if ('card' in reading) {
-      const front = advisor.mayFront(ticket);
-      const others = advisor.show(reading.card, ticket);
-      if (!front) {
-        const kept = advisor.cardFor(reading.card.product_name) ?? reading.card;
+      const placed = advisor.place(reading.card, ticket);
+      if (!placed.front) {
         const shown = advisor.nutrition;
-        const text = shown && kept.product_name === shown.product_name ? said.cards([shown], [], true) : said.filed([kept], shown?.product_name ?? '');
+        const text = shown && placed.card.product_name === shown.product_name ? said.cards([shown], [], true) : said.filed([placed.card], shown?.product_name ?? '');
         return { view: advisor.view(), kind: 'photo', card: false, text };
       }
-      return { view: advisor.view(), kind: 'photo', card: true, text: said.photo(reading.card, reading.seen, sample, others) };
+      return { view: advisor.view(), kind: 'photo', card: true, text: said.photo(placed.card, reading.seen, sample, placed.others) };
     }
     if ('notFood' in reading) return { view: advisor.view(), kind: 'failed', text: said.notFood(reading.notFood), notice: "That photo doesn't look like a food or a food label. Try another, or just name the food." };
     if ('noVision' in reading) return { view: advisor.view(), kind: 'failed', text: said.noVision(), notice: "Photo reading isn't available right now. Name the food instead and its card comes up." };

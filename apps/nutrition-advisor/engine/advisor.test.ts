@@ -346,3 +346,27 @@ describe('work that started before something newer', () => {
     expect(a.current(a.begin())).toBe(true);
   });
 });
+
+describe('portions of one food', () => {
+  it('a plain ask finds the usual portion, never a stated one, and the newest of them', () => {
+    const a = new Advisor();
+    a.show(food('Medium banana', { calories: 105 }));
+    a.show(food('Large banana', { calories: 121, portion_assumed: false }));
+    expect(a.cardFor('banana')?.calories).toBe(105);
+    const b = new Advisor();
+    b.show(food('Large banana', { calories: 121, portion_assumed: false }));
+    expect(b.cardFor('banana')).toBeNull();
+  });
+
+  it('the same name with another serving is a row of its own, named with its serving', () => {
+    const a = new Advisor();
+    a.show(food('Chicken breast', { serving_size: '1 breast (120 g)', calories: 198 }));
+    const placed = a.place(food('Chicken breast', { serving_size: '200 g', calories: 330, portion_assumed: false }));
+    expect(placed.card.product_name).toBe('Chicken breast, 200 g');
+    expect(a.nutrition?.product_name).toBe('Chicken breast, 200 g');
+    expect(a.shelf.map((r) => [r.product_name, r.calories])).toEqual([['Chicken breast', 198], ['Chicken breast, 200 g', 330]]);
+    // The same serving again is the same row, updated.
+    a.show(food('Chicken breast', { serving_size: '1 breast (120 g)', calories: 200 }));
+    expect(a.shelf.map((r) => r.calories)).toEqual([200, 330]);
+  });
+});
