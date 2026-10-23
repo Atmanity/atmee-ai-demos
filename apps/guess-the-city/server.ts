@@ -123,8 +123,8 @@ const ACTIONS = new Set(TOOLS.map((t) => t.name));
 
 const app: AppServer = {
   id: ID,
-  title: 'Guess the City',
-  tagline: 'A photo of a mystery city, three clues, and a host who never knows the answer.',
+  title: 'Postmark',
+  tagline: 'One photo, three clues: guess the city with Marco.',
   maxSeconds: 600,
   appTools: { instructions: INSTRUCTIONS, tools: TOOLS },
   routes(router) {

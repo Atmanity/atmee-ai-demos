@@ -48,13 +48,15 @@ export interface Avatar {
 }
 
 const ERRORS: Record<string, string> = {
-  avatar_busy: 'The avatar is in another conversation right now. Try again in a minute.',
-  avatar_not_ready: 'The avatar is not ready yet.',
-  insufficient_credits: 'The app is out of credits.',
-  api_key_spend_cap_reached: 'The app reached its spending limit.',
-  no_avatar: 'No avatar is configured for this app (see the README).',
-  arrival_timeout: 'The avatar did not arrive in time. A second try usually works.',
-  backend_unreachable: 'Could not reach the app server. Is it running?',
+  avatar_busy: 'Already on another call. Try again in a minute.',
+  avatar_not_ready: 'Not ready to take calls yet. Try again shortly.',
+  no_capacity: 'Every line is busy right now. Try again in a minute.',
+  insufficient_credits: 'Calls are paused right now. Please try again later.',
+  api_key_spend_cap_reached: 'Calls are paused right now. Please try again later.',
+  no_avatar: 'This app is not set up yet: give it a host (AVATAR_DEFAULT, see the README).',
+  arrival_timeout: 'The call did not connect in time. A second try usually works.',
+  backend_unreachable: 'We could not reach the server. Check your connection and try again.',
+  upstream_failed: 'We could not place the call. Try again in a moment.',
 };
 
 export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
@@ -85,7 +87,14 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
     return Boolean(typed && Date.now() - typed.at < 20_000 && norm(typed.text) === norm(text));
   };
   const lineId = useRef(0);
-  const addLine = useCallback((line: Omit<Line, 'id'>) => setLines((ls) => [...ls.slice(-80), { ...line, id: ++lineId.current }]), []);
+  const addLine = useCallback((line: Omit<Line, 'id'>) => {
+    setLines((ls) => [...ls.slice(-80), { ...line, id: ++lineId.current }]);
+    // For tests and analytics, whatever the app's layout: every finished line, as a window event.
+    dispatchEvent(new CustomEvent('atmee:line', { detail: line }));
+  }, []);
+  // The call's phase and whether the host is speaking, on <html> (data-call, data-speaking): for CSS and tests.
+  useEffect(() => { document.documentElement.dataset.call = phase; }, [phase]);
+  useEffect(() => { document.documentElement.dataset.speaking = String(speaking); }, [speaking]);
 
   const starting = useRef(false);   // set before the first await: a second click while the mic prompt is up starts nothing
   const start = useCallback(async ({ mic = false }: { mic?: boolean } = {}) => {
@@ -98,16 +107,16 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
       } catch {
-        setDetail('Microphone unavailable: you can type instead.');
+        setDetail('No microphone: you can type instead.');
       }
     }
     setMicOn(Boolean(stream));
     try {
       const session = await joinAvatar({
-        app, mic: stream, video: videoRef.current, audio: audioRef.current,
+        app, mic: stream, video: () => videoRef.current, audio: () => audioRef.current,
         onPhase: (p, d) => {
           setPhase(p);
-          if (p === 'warming') setDetail(`The avatar is warming up (${d?.waited ?? 0} s so far)…`);
+          if (p === 'warming') setDetail(`Getting ready (${d?.waited ?? 0} s)…`);
           if (p === 'live') setSecondsLeft(typeof d?.maxSeconds === 'number' ? d.maxSeconds : null);
         },
         onAvatarSpeech: (text, done) => {
@@ -155,7 +164,8 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
     } catch (err) {
       const code = err instanceof AvatarError ? err.code : 'failed';
       setErrorCode(code);
-      setDetail(ERRORS[code] ?? `The session could not start (${code}).`);
+      setDetail(ERRORS[code] ?? 'We could not place the call. Try again in a moment.');
+      console.warn('[call] could not start: %s', code);
       setPhase('failed');
       stream?.getTracks().forEach((t) => t.stop());
     } finally {
@@ -202,7 +212,7 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
       const session = sessionRef.current;
       if (!session) return setMicOn(on);   // before a session: the choice for start()
       // A typing-only session gets a real microphone here; the toggle shows on only once it is.
-      session.setMicMuted(!on).then(() => setMicOn(on), () => setDetail('Microphone unavailable: you can type instead.'));
+      session.setMicMuted(!on).then(() => setMicOn(on), () => setDetail('No microphone: you can type instead.'));
     },
     resumeAudio() { void resumeRef.current?.().then(() => setAudioBlocked(false)); },
   }), [phase, detail, errorCode, speaking, caption, heard, lines, secondsLeft, micOn, audioBlocked, start, end, addLine]);

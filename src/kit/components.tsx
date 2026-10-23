@@ -6,10 +6,10 @@ import type { Avatar } from './useAvatar.ts';
 import './kit.css';
 
 const PHASE_TEXT: Record<string, [string, string]> = {
-  starting: ['Starting the session', 'Asking for the avatar…'],
-  warming: ['Warming up', ''],
-  connecting: ['Connecting', 'Joining the room…'],
-  arriving: ['Almost there', 'The avatar is on its way…'],
+  starting: ['Calling…', 'This takes a few seconds.'],
+  warming: ['Getting ready', ''],
+  connecting: ['Connecting…', ''],
+  arriving: ['Almost there', 'Joining now…'],
 };
 
 export function AvatarStage({ avatar, name, lobby, startLabel = 'Start', allowTyping = true }: {
@@ -41,7 +41,7 @@ export function AvatarStage({ avatar, name, lobby, startLabel = 'Start', allowTy
           {lobby}
           <div className="kit-actions">
             <button className="kit-btn kit-primary" onClick={() => avatar.start({ mic: true })}>{startLabel}</button>
-            {allowTyping && <button className="kit-btn" onClick={() => avatar.start({ mic: false })}>Type instead</button>}
+            {allowTyping && <button className="kit-btn" onClick={() => avatar.start({ mic: false })}>Use the keyboard</button>}
           </div>
         </div>
       )}
@@ -54,10 +54,10 @@ export function AvatarStage({ avatar, name, lobby, startLabel = 'Start', allowTy
       )}
       {(phase === 'ended' || phase === 'failed') && (
         <div className="kit-overlay">
-          <div className="kit-title">{phase === 'ended' ? 'The session has ended' : 'Something went wrong'}</div>
+          <div className="kit-title">{phase === 'ended' ? 'Call ended' : 'We could not connect'}</div>
           {avatar.detail && <div className="kit-detail">{avatar.detail}</div>}
           <div className="kit-actions">
-            <button className="kit-btn kit-primary" onClick={() => avatar.start({ mic: avatar.micOn })}>Start again</button>
+            <button className="kit-btn kit-primary" onClick={() => avatar.start({ mic: avatar.micOn })}>Call again</button>
           </div>
         </div>
       )}
@@ -96,7 +96,7 @@ export function Composer({ avatar, placeholder = 'Type a message…', onSubmit }
   return (
     <div className="kit-composer">
       <input
-        className="kit-input" value={text} placeholder={live ? placeholder : 'Start the session to talk'} disabled={!live}
+        className="kit-input" value={text} placeholder={live ? placeholder : 'Start the call to chat'} disabled={!live}
         onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
       />
       <button className="kit-btn" disabled={!live || !text.trim()} onClick={submit}>Send</button>
@@ -117,7 +117,7 @@ export function Transcript({ avatar, names }: { avatar: Avatar; names: { avatar:
     <div className="kit-transcript" ref={box}>
       {avatar.lines.map((line) => (
         <div key={line.id} className={`kit-line is-${line.who}`}>
-          <span className="kit-who">{line.who === 'avatar' ? names.avatar : names.user ?? 'You'}{line.typed ? ' (typed)' : ''}</span>
+          <span className="kit-who">{line.who === 'avatar' ? names.avatar : names.user ?? 'You'}</span>
           <span>{line.text}</span>
         </div>
       ))}

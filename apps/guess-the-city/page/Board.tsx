@@ -1,104 +1,100 @@
-// The travel-journal board, from the original mini-app panel: the photo, the
-// clues given, the reveal and the actions. It shows only what the server's
-// view holds, so it can never show the answer early.
+// Postmark's board: the postcard (the mystery photo, stamped with the round),
+// the three sealed clues, and the end-of-game summary. It shows only what the
+// server's view holds, so it can never show the answer early.
 import { hintCost, roundValue } from '../engine/game.ts';
 import type { Command } from '../engine/judge.ts';
 import type { View } from '../engine/types.ts';
 
-export function Board({ view, busy, live, onCommand }: { view: View | null; busy: boolean; live: boolean; onCommand: (c: Command) => void }) {
+export function Postcard({ view }: { view: View | null }) {
   if (!view) {
     return (
-      <div className="game-panel">
-        <div className="game-header"><h1 className="game-title">Guess the City</h1></div>
-        <div className="game-loading">
-          {live ? <div className="loading-spinner" /> : null}
-          <p>{live ? 'Your host is preparing your adventure…' : 'Start the game to see your first mystery city.'}</p>
-        </div>
-      </div>
+      <figure className="pm-card is-loading" aria-busy="true">
+        <div className="pm-photo"><span className="pm-dealing">Marco is picking your cities…</span></div>
+      </figure>
     );
   }
-
-  const hintsUsed = view.hints.length;
-  const worth = roundValue(hintsUsed);
-  const nextHintCost = hintCost(hintsUsed);
-  const disabled = busy || !live;
-
+  const round = Math.min(view.round, view.rounds);
   return (
-    <div className="game-panel">
-      <div className="game-header">
-        <h1 className="game-title">Guess the City</h1>
-        <div className="game-stats">
-          <span className="stat"><span className="stat-label">Round</span><span className="stat-value">{Math.min(view.round, view.rounds)}/{view.rounds}</span></span>
-          <span className="stat"><span className="stat-label">Score</span><span className="stat-value">{view.score}</span></span>
+    <figure className={`pm-card ${view.revealed ? 'is-revealed' : ''}`}>
+      <div className="pm-photo">
+        {view.photo
+          ? <img key={view.photo} src={view.photo} alt={view.city ? `${view.city.name}, ${view.city.country}` : 'The mystery city'} />
+          : <span className="pm-nophoto" aria-label="No photo for this city">?</span>}
+        <div className="pm-postmark" aria-hidden="true">
+          <span>Round</span><b>{round}</b><span>of {view.rounds}</span>
         </div>
       </div>
-
-      <div className="city-photo-container">
-        <div className="city-photo" aria-label={view.city ? `Photo of ${view.city.name}` : 'Mystery city photo'}>
-          {view.photo && <img key={view.photo} className="city-photo-img" src={view.photo} alt={view.city ? view.city.name : 'Mystery city'} />}
-          {!view.revealed && !view.photo && <div className="mystery-overlay">?</div>}
-          {view.city && (
-            <div className="revealed-overlay">
-              <span className="city-name">{view.city.name}</span>
-              <span className="city-country">{view.city.country}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="hints-section">
-        <div className="hints-header">
-          <span className="hints-title">Clues</span>
-          <span className="hints-count">
-            {hintsUsed}/{view.hintsTotal}
-            {!view.revealed && !view.over && <span className="round-value"> · worth {worth} pt</span>}
-          </span>
-        </div>
-        {hintsUsed === 0 ? (
-          <p className="no-hints">Guess it cold for {worth} points. Each clue you take costs one, down to a minimum of 1.</p>
-        ) : (
-          <ul className="hints-list">
-            {view.hints.map((hint, i) => (
-              <li key={i} className="hint-item"><span className="hint-number">{i + 1}</span><span className="hint-text">{hint}</span></li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {view.city?.funFact && (
-        <div className="fun-fact">
-          <span className="fun-fact-label">Fun fact</span>
-          <p className="fun-fact-text">{view.city.funFact}</p>
-        </div>
-      )}
-
-      {view.over && (
-        <div className="game-over">
-          <h2>Adventure complete!</h2>
-          <p>You explored {view.rounds} cities and scored {view.score} of {view.rounds * 4} points.</p>
-        </div>
-      )}
-
-      <div className="game-actions">
-        {!view.revealed && !view.over && (
+      <figcaption className="pm-caption">
+        {view.city ? (
           <>
-            <button type="button" className="action-btn hint-btn" onClick={() => onCommand('hint')} disabled={disabled || hintsUsed >= view.hintsTotal}>
-              {hintsUsed >= view.hintsTotal ? 'No more clues' : nextHintCost > 0 ? `Get a clue (−${nextHintCost} pt)` : 'Get a clue (free)'}
-            </button>
-            <button type="button" className="action-btn skip-btn" onClick={() => onCommand('skip')} disabled={disabled}>I give up</button>
+            <p className="pm-place">{view.city.name}<span>{view.city.country}</span></p>
+            <p className="pm-fact">{view.city.funFact}</p>
+          </>
+        ) : (
+          <p className="pm-ask">Where in the world is this?</p>
+        )}
+      </figcaption>
+    </figure>
+  );
+}
+
+export function Clues({ view, busy, live, onCommand }: { view: View | null; busy: boolean; live: boolean; onCommand: (c: Command) => void }) {
+  if (!view || view.over) return null;
+  const used = view.hints.length;
+  const disabled = busy || !live;
+  return (
+    <section className="pm-clues" aria-label="Clues">
+      <ol>
+        {Array.from({ length: view.hintsTotal }, (_, i) => {
+          const text = view.hints[i];
+          if (text) return <li key={i} className="pm-clue is-open"><span className="pm-clue-n">Clue {i + 1}</span><p>{text}</p></li>;
+          const nextUp = i === used && !view.revealed;
+          return (
+            <li key={i} className="pm-clue is-sealed">
+              {nextUp ? (
+                <button type="button" onClick={() => onCommand('hint')} disabled={disabled}>
+                  <span className="pm-clue-n">Clue {i + 1}</span>
+                  <span>Open it{hintCost(used) > 0 ? ` · −${hintCost(used)} point` : ''}</span>
+                </button>
+              ) : (
+                <span className="pm-sealed"><span className="pm-clue-n">Clue {i + 1}</span><span>Sealed</span></span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      <div className="pm-actions">
+        {view.revealed ? (
+          <button type="button" className="pm-primary" onClick={() => onCommand('next')} disabled={disabled}>
+            {view.round >= view.rounds ? 'See your score' : 'Next city'} <span aria-hidden="true">→</span>
+          </button>
+        ) : (
+          <>
+            <span className="pm-worth">A right guess is worth <b>{roundValue(used)}</b> point{roundValue(used) === 1 ? '' : 's'}</span>
+            <button type="button" className="pm-quiet" onClick={() => onCommand('skip')} disabled={disabled}>I give up</button>
           </>
         )}
-        {view.revealed && !view.over && (
-          <button type="button" className="action-btn next-btn" onClick={() => onCommand('next')} disabled={disabled}>Next city</button>
-        )}
-        {view.over && (
-          <button type="button" className="action-btn new-game-btn" onClick={() => onCommand('new')} disabled={disabled}>Play again</button>
-        )}
       </div>
+    </section>
+  );
+}
 
-      <div className="voice-prompt">
-        <p>{view.over ? 'Say "new game" to play again.' : view.revealed ? 'Say "next city" to continue.' : 'Say your guess out loud, or type it.'}</p>
-      </div>
-    </div>
+export function Summary({ view, live, busy, onAgain }: { view: View; live: boolean; busy: boolean; onAgain: () => void }) {
+  const max = view.rounds * 4;
+  return (
+    <section className="pm-summary" aria-label="Your score">
+      <p className="pm-eyebrow">Trip complete</p>
+      <p className="pm-total"><b>{view.score}</b> / {max} points</p>
+      <ol className="pm-results">
+        {view.results.map((r, i) => (
+          <li key={i} className={r.correct ? 'is-right' : 'is-missed'}>
+            <span className="pm-result-mark" aria-hidden="true">{r.correct ? '✓' : '–'}</span>
+            <span className="pm-result-place">{r.name}<small>{r.country}</small></span>
+            <span className="pm-result-points">{r.correct ? `+${r.points}` : 'missed'}</span>
+          </li>
+        ))}
+      </ol>
+      <button type="button" className="pm-primary" onClick={onAgain} disabled={busy}>{live ? 'Play three new cities' : 'Play again'}</button>
+    </section>
   );
 }

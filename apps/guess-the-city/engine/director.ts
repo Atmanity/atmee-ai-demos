@@ -10,8 +10,9 @@ import type { View } from './types.ts';
 export const INSTRUCTIONS = `You are hosting "Guess the City" for one player. A photo of a mystery city is on the player's screen. You cannot see it and you do not know which city it is: the game does, and you reach it only through its tools.
 - When the player names a place as their answer ("is it Lisbon?", "Paris!", "maybe Osaka"), call check_guess with that place before saying anything about it, and answer only from the result. Never say right, wrong, close or "not quite" on your own.
 - When they ask for a clue or a hint, call get_clue and give that clue in your own words, adding nothing. Never make up a clue, describe the photo, or mention a landmark, feature or region yourself.
-- "I give up", "tell me", "skip": call reveal_answer. "Next", "next city", "go on": call next_city. "New game", "play again": call new_game.
+- "I give up", "tell me", "skip": call reveal_answer. "Next", "next city", "go on": call next_city. "New game", "play again": call new_game, and only then.
 - Questions about the score, the round or the rules: answer from the live board in your context, no tool needed.
+- The player's screen changes only when you call a tool. Saying "let's move on" or "it was Cairo" without the call changes nothing and misleads them: call the tool every time, even when you think you already know the answer. You never know the city; only check_guess and reveal_answer can tell you.
 - If the player presses a button on screen, the game tells you what happened; carry on from that.
 Scoring: a city guessed with no clues is worth 4 points, each clue costs one point, never below 1; a game is three cities. Keep every reply to one or two short spoken sentences: no lists.`;
 
@@ -26,7 +27,7 @@ export const TOOLS: AppTool[] = [
   { type: 'function', name: 'get_clue', description: 'Gives the next clue for the mystery city (it costs the player a point). Call it when the player asks for a clue or a hint.', parameters: noArgs, 'x-atmee': awaits },
   { type: 'function', name: 'reveal_answer', description: 'Reveals the city when the player gives up.', parameters: noArgs, 'x-atmee': awaits },
   { type: 'function', name: 'next_city', description: 'Moves on to the next mystery city once the current one is solved or revealed.', parameters: noArgs, 'x-atmee': awaits },
-  { type: 'function', name: 'new_game', description: 'Starts a new game of three new cities.', parameters: noArgs, 'x-atmee': awaits },
+  { type: 'function', name: 'new_game', description: 'Starts a new game of three new cities. Only when the player asks for one; never on your own, not even at the end of a game.', parameters: noArgs, 'x-atmee': awaits },
 ];
 
 /** The live board, as the avatar's state. Never the answer before the reveal. */
@@ -52,10 +53,10 @@ export const said = {
   noClue: () => `No clues are left for this city. The player can guess again or give up.`,
   reveal: (v: View) => `The player gave up. It was ${v.city!.name}, ${v.city!.country}. Share this fun fact in your own words: ${v.city!.funFact} Then offer the next city.`,
   next: (v: View) => `Round ${v.round} of ${v.rounds}: a new mystery city's photo is on the player's screen. Invite a first guess in one line; do not describe or name the city.`,
-  over: (v: View) => `That was the last city: the player finished with ${v.score} of ${v.rounds * 4} points. Congratulate them in a sentence and offer a new game.`,
+  over: (v: View) => `That was the last city: the player finished with ${v.score} of ${v.rounds * 4} points, and their score card is on screen. Congratulate them in a sentence and ask whether they would like another game; start one only if they say so.`,
   notRevealed: () => `This city is not solved yet: the player can keep guessing, take a clue, or give up to see the answer.`,
   alreadyRevealed: (v: View) => `This round is already over (it was ${v.city!.name}). Offer the next city.`,
-  finished: () => `The game is over. Offer a new game.`,
+  finished: () => `The game is over and the score card is on screen. Ask whether they would like another game; start one only if they say so.`,
 };
 
 /** A button press, told to the host: it cannot see the screen. */

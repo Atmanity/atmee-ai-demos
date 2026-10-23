@@ -31,9 +31,9 @@ export function install() {
   // Log each connection phase as the stage shows it, and the first caption.
   let last = '';
   new MutationObserver(() => {
-    const title = document.querySelector('.kit-overlay .kit-title')?.textContent || (live() ? 'LIVE' : '');
+    const title = document.documentElement.dataset.call || '';
     if (title && title !== last) { last = title; mark(`phase: ${title}`); }
-  }).observe(document.body, { subtree: true, childList: true, characterData: true });
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-call'] });
 }
 
 export async function speak(name) {
@@ -48,10 +48,11 @@ export async function speak(name) {
 }
 
 export function type(text) {
-  const input = document.querySelector('.kit-input');
+  const input = document.querySelector('.call-input, .kit-input');
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, text);
   input.dispatchEvent(new Event('input', { bubbles: true }));
-  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  if (input.form) input.form.requestSubmit();
+  else input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   mark(`type ${text}`);
 }
 
@@ -62,9 +63,12 @@ export function click(label) {
   return Boolean(el);
 }
 
-export const lines = () => [...document.querySelectorAll('.kit-line')].map((l) => `${l.classList.contains('is-avatar') ? 'AVATAR' : 'USER'}: ${l.querySelector('span:last-child')?.textContent}`);
-export const avatarCount = () => document.querySelectorAll('.kit-line.is-avatar').length;
-export const live = () => Boolean(document.querySelector('.kit-badge'));
+// Every finished line, from the kit's window event: independent of the app's layout.
+const said = [];
+addEventListener('atmee:line', (e) => said.push(e.detail));
+export const lines = () => said.map((l) => `${l.who === 'avatar' ? 'AVATAR' : 'USER'}: ${l.text}`);
+export const avatarCount = () => said.filter((l) => l.who === 'avatar').length;
+export const live = () => document.documentElement.dataset.call === 'live';
 export const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export async function waitLive(ms = 240000) {
@@ -73,7 +77,7 @@ export async function waitLive(ms = 240000) {
   return live();
 }
 
-export const speaking = () => Boolean(document.querySelector('.kit-stage.is-speaking'));
+export const speaking = () => document.documentElement.dataset.speaking === 'true';
 
 /** Until the avatar has said something new and then been quiet for `quietMs`, as a user would wait. */
 export async function waitTurn(ms = 40000, quietMs = 2500) {

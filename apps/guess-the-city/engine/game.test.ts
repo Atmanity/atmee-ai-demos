@@ -56,3 +56,14 @@ describe('the view never gives the answer away', () => {
     expect(g.view(null).hints).toEqual([g.city.hints[0]]);
   });
 });
+
+test('the results list only revealed rounds, with their points', () => {
+  const g = new Game(structuredClone(FALLBACK_CITIES));
+  expect(g.view(null).results).toEqual([]);
+  g.hint(); g.win();
+  g.next(); g.skip();
+  const results = g.view(null).results;
+  expect(results.map((r) => [r.correct, r.points])).toEqual([[true, 3], [false, 0]]);
+  g.next();
+  expect(g.view(null).results).toHaveLength(2);   // the third city is still hidden
+});

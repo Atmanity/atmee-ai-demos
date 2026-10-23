@@ -1,0 +1,54 @@
+/* The kit's call parts. An app themes them with these variables and its own classes. */
+:root {
+  --call-accent: var(--accent, #3b5bdb);
+  --call-accent-ink: var(--accent-ink, #fff);
+  --call-bg: #10131a;
+  --call-surface: var(--surface, #fff);
+  --call-ink: var(--ink, #1b1d24);
+  --call-muted: var(--muted, #6b7080);
+  --call-line: var(--line, #e4e6ee);
+  --call-radius: 18px;
+  --call-font: inherit;
+}
+
+.call-video { position: relative; overflow: hidden; background: var(--call-bg); border-radius: var(--call-radius); isolation: isolate; }
+.call-video video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.call-video::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 0 var(--call-accent); transition: box-shadow .25s; pointer-events: none; z-index: 2; }
+.call-video.is-speaking::after { box-shadow: inset 0 0 0 3px var(--call-accent); }
+.call-caption { position: absolute; left: 12px; right: 12px; bottom: 14px; text-align: center; z-index: 3; }
+.call-caption span { display: inline; padding: 3px 8px; background: rgba(0, 0, 0, .62); color: #fff; font: 500 15px/1.65 var(--call-font); border-radius: 6px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.call-hear { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 4; border: 0; border-radius: 999px; padding: 10px 18px; background: #fff; color: #111; font: 600 14px var(--call-font); cursor: pointer; }
+
+.call-status { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 20px; text-align: center; color: #fff; background: radial-gradient(circle at 50% 35%, rgba(255, 255, 255, .08), rgba(0, 0, 0, .72)); font-family: var(--call-font); }
+.call-status strong { font-size: 18px; font-weight: 650; }
+.call-status span { font-size: 14px; color: rgba(255, 255, 255, .78); max-width: 32ch; }
+.call-spinner { width: 30px; height: 30px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, .25); border-top-color: #fff; animation: call-spin 1s linear infinite; }
+.call-again { margin-top: 6px; border: 0; border-radius: 999px; padding: 10px 18px; background: var(--call-accent); color: var(--call-accent-ink); font: 600 14px var(--call-font); cursor: pointer; }
+@keyframes call-spin { to { transform: rotate(360deg); } }
+
+.call-controls { display: flex; gap: 10px; align-items: center; }
+.call-round { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--call-line); background: var(--call-surface); color: var(--call-ink); display: grid; place-items: center; cursor: pointer; transition: background .15s, transform .08s; }
+.call-round:hover { filter: brightness(.97); }
+.call-round:active { transform: scale(.96); }
+.call-round.is-off { background: #fde8ea; color: #b42332; border-color: transparent; }
+.call-round.is-end { background: #d93a3a; color: #fff; border-color: transparent; }
+.call-round:focus-visible, .call-send:focus-visible, .call-again:focus-visible, .call-hear:focus-visible { outline: 2px solid var(--call-accent); outline-offset: 2px; }
+
+.call-chat { display: flex; flex-direction: column; min-height: 0; gap: 10px; font-family: var(--call-font); }
+.call-lines { list-style: none; margin: 0; padding: 2px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 0; flex: 1; }
+.call-line { display: flex; flex-direction: column; gap: 3px; max-width: 86%; }
+.call-line.is-avatar { align-self: flex-start; }
+.call-line.is-user { align-self: flex-end; align-items: flex-end; }
+.call-who { font-size: 12px; font-weight: 600; color: var(--call-muted); padding-left: 4px; }
+.call-bubble { padding: 8px 12px; border-radius: 16px; font-size: 14.5px; line-height: 1.45; background: var(--call-surface); color: var(--call-ink); border: 1px solid var(--call-line); }
+.call-line.is-avatar .call-bubble { border-bottom-left-radius: 6px; }
+.call-line.is-user .call-bubble { background: var(--call-accent); color: var(--call-accent-ink); border-color: transparent; border-bottom-right-radius: 6px; }
+.call-line.is-hearing .call-bubble { opacity: .6; font-style: italic; }
+.call-empty { color: var(--call-muted); font-size: 14px; text-align: center; padding: 16px 8px; }
+.call-compose { display: flex; gap: 8px; }
+.call-input { flex: 1; min-width: 0; padding: 11px 14px; border-radius: 999px; border: 1px solid var(--call-line); background: var(--call-surface); color: var(--call-ink); font: 15px var(--call-font); }
+.call-input:focus { outline: 2px solid color-mix(in srgb, var(--call-accent) 45%, transparent); border-color: var(--call-accent); }
+.call-input:disabled { opacity: .7; }
+.call-send { width: 44px; height: 44px; flex: none; border-radius: 50%; border: 0; background: var(--call-accent); color: var(--call-accent-ink); display: grid; place-items: center; cursor: pointer; }
+.call-send:disabled { opacity: .4; cursor: default; }
+@media (prefers-reduced-motion: reduce) { .call-spinner { animation-duration: 3s; } .call-video::after { transition: none; } }

@@ -1,7 +1,7 @@
 // The game's rules and state, free of everything else so they test alone.
 // Scoring: a city guessed with no hints is worth 4 points; each hint costs
 // one, never below 1.
-import type { City, View } from './types.ts';
+import type { City, RoundResult, View } from './types.ts';
 
 export const roundValue = (hintsUsed: number) => Math.max(1, 4 - Math.max(0, Math.floor(hintsUsed)));
 /** What the next hint costs: 1 until the floor, then 0. */
@@ -14,6 +14,7 @@ export class Game {
   hintsGiven = 0;
   revealed = false;
   correct = false;
+  results: RoundResult[] = [];
 
   constructor(public cities: City[]) {}
 
@@ -29,6 +30,7 @@ export class Game {
     this.score += points;
     this.revealed = true;
     this.correct = true;
+    this.results.push({ name: this.city.name, country: this.city.country, correct: true, points });
     return points;
   }
 
@@ -41,6 +43,7 @@ export class Game {
     if (this.revealed || this.over) return false;
     this.revealed = true;
     this.correct = false;
+    this.results.push({ name: this.city.name, country: this.city.country, correct: false, points: 0 });
     return true;
   }
 
@@ -68,6 +71,7 @@ export class Game {
       correct: this.correct,
       photo,
       city: this.revealed ? { name: city.name, country: city.country, funFact: city.funFact } : null,
+      results: [...this.results],
     };
   }
 }

@@ -4,6 +4,19 @@
 
 export type Command = 'hint' | 'skip' | 'next' | 'new';
 
+/**
+ * The game action the player's words clearly ask for, among those safe to do
+ * twice (a clue is not: a second one would cost a point). The app's safety
+ * net does it when the host does not call the tool itself.
+ */
+export function mustDo(text: string): 'reveal_answer' | 'next_city' | 'new_game' | null {
+  const t = norm(text);
+  if (/\b(new game|play again|start (a new game|over|again))\b/.test(t)) return 'new_game';
+  if (/\b(i give up|give up|i (don't|do not) know|tell me (the answer|what it is)|reveal (it|the answer))\b/.test(t)) return 'reveal_answer';
+  if (/^(ok(ay)? )?(next|next city|next one|go on|next round|move on|on to the next( one| city)?)( please)?$|\b(next city|next round|the next one)\b/.test(t)) return 'next_city';
+  return null;
+}
+
 const norm = (text: string) => text.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9' ]+/g, ' ').replace(/\s+/g, ' ').trim();
 
 /** Without a model: the city's name (accents and case aside) appearing in what was said. */

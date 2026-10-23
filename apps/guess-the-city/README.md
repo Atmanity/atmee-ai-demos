@@ -1,59 +1,59 @@
-# Guess the City
+# Postmark
 
-A photo of a mystery city, three clues, and a host who never knows the answer.
-Say or type a guess, ask for a clue (each costs a point), give up, move on.
-Three cities a game; a city guessed cold is worth 4 points.
+A city-guessing game with a host. Marco deals you three mystery cities, each a
+single photo on a postcard. Guess from the photo alone for 4 points, or open a
+sealed clue when you're stuck (each costs a point). Say your guess out loud or
+type it. Rebuilt from the `guess-the-city` mini-app as a standalone product on
+the Avatar API.
 
-Ported from `Atmanity/apps/apps/guess-the-city` (a Python LiveKit agent with
-five tools plus a React panel) onto the Avatar API. It is the reference app:
-the others follow its shape (see `docs/PORTING.md`).
+Open it at `/apps/guess-the-city/`.
 
-## How it works on the API
+## How it works
 
-| Feature | Mechanism |
+| Part | Where |
 |---|---|
-| The deck (3 cities, clues, fun facts) | `server.ts`: a Gemini call per game (a random starting region and the recent cities to avoid keep games varied); the original three as a fallback |
-| The game (scoring, rounds, reveal) | `engine/game.ts` on the server. The page only ever sees a masked view: no name, country or fun fact before the reveal |
-| The photo | Wikipedia's lead image, served by the app from a random token (the file name would give the city away) |
-| Clue / give up / next / new game | buttons, typed lines and speech, all through one `act` route; command words by rules (`engine/judge.ts`) |
-| Guesses (spoken or typed) | the app's own model call on the server judges "is this a guess, and is it the city", misheard names included ("sidney" counts) |
-| The host's rules | two standing `note`s (`engine/director.ts`) |
-| The board | `state`: round, score, clues so far, and the next clue, staged so a spoken "can I have a clue?" gets the real one at once |
-| Outcomes (verdict, reveal, next round, game over) | `event`s, which the avatar says in its own words |
-| Typed lines | judged first; a game action is recorded and acted on, anything else goes to the avatar as a typed turn |
+| The game: three cities, clues, scoring, reveals | `engine/game.ts`, on the server. The page sees a masked view: no name, country or fun fact before the reveal. |
+| The deck | A Gemini call per game (`engine/deck.ts`), avoiding recent cities; three built-in cities without a key. Photos are Wikipedia lead images served behind random tokens. |
+| Marco's actions | Five `await` tools (`engine/director.ts`): `check_guess(place)`, `get_clue`, `reveal_answer`, `next_city`, `new_game`. The page answers each `atmee.tool` call by asking the server, which acts and returns the words Marco speaks from. His first reply to a guess carries the game's verdict. |
+| Judging a guess | `engine/judge.ts`: the name itself, else the server's own model call (other names, spellings and mishearings count). |
+| Marco's rules | The session's tool `instructions`: he never knows the city and acts only through the tools. |
+| What Marco sees | `state`: round, score, clues so far, never the city before the reveal. |
+| Buttons | Open a clue, give up, next city, play again: they act at once and Marco is told by an event (he cannot see the screen). |
+| The safety net | `useToolNet` (kit): when the player clearly says "I give up", "next" or "new game" and Marco does not call the tool within 7 s, the page does it and tells him. Clues and guesses are left out: a duplicate would cost a point. |
+| The screens | A front door (`page/Lobby.tsx`), the game (postcard, sealed clues, Marco's frame, the conversation) and the trip summary (`page/Board.tsx`), styled in `page/postmark.css`. |
 
-## What the API could not do (seen in live runs)
+## What the API could not do
 
-1. **The avatar answers a spoken guess before the app can judge it.** The
-   user's final transcript reaches the app about a second after they stop
-   speaking; the avatar's reply is already being made. Despite a standing note
-   ("you do not know the city; never say right or wrong"), it said "That's not
-   quite right…" to "Is it Paris?" in every run, then repeated the app's
-   verdict. Both orders happened (holding line then verdict, verdict then
-   "let's see"). A function call (the original `guess_city` tool) returned the
-   verdict inside the reply; the API has no equivalent.
-2. **Without staging, the avatar invents clues.** Before the next clue was put
-   in `state`, a spoken "can I have a clue?" got a made-up clue ("home to the
-   Burj Khalifa" for New York; "it is the capital of France") in 2 of 3 runs,
-   before the app's real one arrived.
-3. **The persona is the avatar's.** The test avatar greets as itself ("I'm
-   Emily, a livestream host…") before the app's welcome; the app's host
-   ("Marco", `avatar.json`) needs a dedicated avatar.
-4. **No per-session speech hints.** City names come from a model per game; the
-   original biased Deepgram toward them. Through the API, rare names depend on
-   the recogniser alone (the model judge absorbs some mishearings).
-5. **The ~10 s check-in** prods a player who is looking at the photo ("Take your
-   time, or just let me know if you want another clue!"); it cannot be tuned.
+Status after the live runs of 2026-10-23 on staging. **Seen**: observed live.
+**Expected**: not observed yet.
 
-Platform findings from these runs that every app shares are in `docs/API-GAPS.md`.
+1. **Tools are called when the host decides.** *Seen.* In two of three
+   rounds Marco called every tool. In one, he answered "I give up" with "wait,
+   didn't we just jump to the new city?" and no call; the safety net revealed
+   the city 7 s later and he carried on ("Oh, fair enough! That second mystery
+   city was actually Bangkok…"). Once, before the stronger rules, he named the
+   city himself without calling `reveal_answer`. Once he started a new game on
+   his own at the end, wiping the score card; `new_game` now says "only when
+   the player asks".
+2. **The persona and the greeting belong to the avatar.** *Seen.* On the shared
+   test avatar, "Marco" introduces herself as Emily, a college student, before
+   the game's welcome. `avatar.json` is the host the game was designed for.
+3. **The ~10 s check-in** prods a player studying the photo. *Seen.*
+4. **No speech hints for city names.** *Expected.* The model judge accepts
+   mishearings ("sidney").
+
+Fixed by tools, compared with the first port: the host no longer says "that's
+not quite right" before the verdict, and never invents a clue (every clue in
+the runs was the game's).
 
 ## Tested
 
-- `npm test`: game rules, deck validation, the judge's command words, the
-  director (never leaks the city, stages the next clue, stays under the limits).
-- Live on staging (avatar `2cd3ec08`, 2026-10-23), spoken and typed, with
-  `.test-audio/harness.js`: a spoken clue request answered with the real clue;
-  "Is it Paris?" judged wrong by the app (and pre-judged by the avatar, gap 1);
-  "I give up" revealed Bangkok with its fun fact; a spoken "next city" moved to
-  round 2 with the host's intro; a typed "What is my score?" answered from the
-  board ("You're at zero points right now…"); the session ended `ended_by_api`.
+- `npx vitest run apps/guess-the-city`: the game rules, the deck checks, the
+  safety net's phrases, the tools and instructions against the API limits, and
+  the board never naming the city early.
+- Live on staging (avatar `baf61f2c`), spoken through
+  `tools/live-test/harness.js`: a clue request called `get_clue` about 3 s after
+  the words began and the clue was read in the first reply; "Is it Paris?"
+  called `check_guess`; "I give up", "next city" and a typed "Is it Tokyo?"
+  each went through their tools; "What is my score?" was answered from the
+  board. A full three-city game reached the score card.

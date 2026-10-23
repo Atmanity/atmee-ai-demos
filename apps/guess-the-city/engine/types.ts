@@ -13,4 +13,7 @@ export interface View {
   correct: boolean;
   photo: string | null;   // an opaque URL that never names the city
   city: { name: string; country: string; funFact: string } | null;   // null until revealed
+  results: RoundResult[];  // the rounds already revealed, in order (never one still hidden)
 }
+
+export interface RoundResult { name: string; country: string; correct: boolean; points: number }

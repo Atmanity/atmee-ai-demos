@@ -28,8 +28,9 @@ export interface SessionInfo { sessionId: string; serverUrl: string; userToken: 
 
 export interface JoinOptions {
   app: string;                          // the app id: /api/apps/<app>/...
-  video?: HTMLVideoElement | null;
-  audio?: HTMLAudioElement | null;
+  /** Where the host's video and voice play: the element, or how to find it once the tracks arrive (an app may mount its call screen after starting). */
+  video?: HTMLVideoElement | null | (() => HTMLVideoElement | null);
+  audio?: HTMLAudioElement | null | (() => HTMLAudioElement | null);
   mic?: MediaStream | null;             // null: typing only (a silent track is published)
   onPhase?: (phase: Phase, detail?: Record<string, unknown>) => void;
   /** The avatar's words; `done` once the utterance is complete. */
@@ -67,6 +68,17 @@ export class AvatarError extends Error {
 }
 
 const TOOL_RPC = 'atmee.tool';
+
+/** The element itself, or the one the getter finds within a few seconds (a call screen mounting after the start). */
+async function element<T extends HTMLMediaElement>(target: T | (() => T | null)): Promise<T | null> {
+  if (typeof target !== 'function') return target;
+  for (let i = 0; i < 50; i++) {
+    const found = target();
+    if (found) return found;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return null;
+}
 // LiveKit refuses an RPC response over 15,360 bytes.
 const MAX_TOOL_REPLY_BYTES = 15_000;
 
@@ -166,17 +178,18 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
 
   let arrived!: () => void;
   const arrival = new Promise<void>((resolve) => { arrived = resolve; });
-  if (video) {
-    Object.assign(video, { muted: true, playsInline: true, autoplay: true });
-    video.addEventListener('playing', () => arrived(), { once: true });
-  }
   room.on(RoomEvent.TrackSubscribed, (track) => {
     if (track.kind === Track.Kind.Video) {
       if (!video) return arrived();
-      track.attach(video);
-      video.play().catch(() => {});
+      void element(video).then((el) => {
+        if (!el) return arrived();   // the app shows no video: arrival is the track itself
+        Object.assign(el, { muted: true, playsInline: true, autoplay: true });
+        el.addEventListener('playing', () => arrived(), { once: true });
+        track.attach(el);
+        el.play().catch(() => {});
+      });
     } else if (track.kind === Track.Kind.Audio && audio) {
-      track.attach(audio);
+      void element(audio).then((el) => { if (el) track.attach(el); });
     }
   });
   room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
