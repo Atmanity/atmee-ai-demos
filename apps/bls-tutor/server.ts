@@ -2,10 +2,13 @@
 // content holds every step's answer (a step's label IS the answer to the
 // question on screen) and the page must only ever see the stripped snapshot.
 // Alex's tool calls and the learner's buttons go through one set of actions
-// (engine/drill.ts). No model calls and no keys: grading is substring
-// matching against static AHA/ERC lay-rescuer sequences.
+// (engine/drill.ts). Grading is the drill's own phrase lists against static
+// AHA/ERC lay-rescuer sequences; an answer they leave open goes to a model
+// judge (engine/assess.ts) when GEMINI_API_KEY is set, which can only pass it.
 import { randomBytes } from 'node:crypto';
 import type { AppServer } from '../../server/app-server.ts';
+import { llmAvailable, structured } from '../../server/llm.ts';
+import { judge, type Ask } from './engine/assess.ts';
 import { BUTTON, INSTRUCTIONS, pressed, said, TOOLS } from './engine/director.ts';
 import { isAction, run, viewOf } from './engine/drill.ts';
 import { find } from './engine/scenarios.ts';
@@ -17,6 +20,9 @@ const KEEP_MS = 3 * 3600_000;
 
 interface Drill { tutor: BlsTutor; at: number }
 const drills = new Map<string, Drill>();
+
+/** The answer judge's model call, or none without a key. */
+const ask = (): Ask | null => (llmAvailable() ? (req) => structured(req) : null);
 
 const ACTION_OF: Record<Command, Action> = {
   start: 'start_scenario', reveal: 'show_step', hint: 'give_hint', next: 'next_step', leave: 'leave_scenario', resume: 'resume_practice', emergency: 'stop_for_emergency',
@@ -57,12 +63,15 @@ const app: AppServer = {
     });
 
     // Alex's tool calls (and the page's safety net): the result is what he says next.
-    router.post('/drills/:id/tool', (req, res) => {
+    router.post('/drills/:id/tool', async (req, res) => {
       const drill = drillFor(req.params.id);
       if (!drill) return void res.status(404).json({ error: 'no_drill' });
-      const { name, arguments: args } = (req.body ?? {}) as { name?: unknown; arguments?: Record<string, unknown> };
+      const { name, arguments: raw } = (req.body ?? {}) as { name?: unknown; arguments?: Record<string, unknown> };
       if (!isAction(name)) return void res.status(400).json({ error: 'unknown_tool' });
-      const done = run(drill.tutor, name, args && typeof args === 'object' ? args : {});
+      const args = raw && typeof raw === 'object' ? raw : {};
+      // An answer the phrase lists leave open is judged first (at most a few seconds).
+      const judged = name === 'check_answer' ? await judge(drill.tutor, String(args.answer ?? ''), ask()) : null;
+      const done = run(drill.tutor, name, args, judged);
       if (done.emergency) console.warn('[%s] drill %s stopped for a possible real emergency (host)', ID, req.params.id.slice(0, 6));
       res.json({ view: viewOf(drill.tutor), result: done.text, hint: done.hint, emergency: done.emergency } satisfies ToolReply);
     });

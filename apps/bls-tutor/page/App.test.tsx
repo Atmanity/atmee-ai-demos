@@ -53,11 +53,14 @@ vi.mock('../../../src/kit/index.ts', async () => {
   };
 });
 
+// No model in these tests: open answers stay "Not yet", as with no key.
+vi.mock('../../../server/llm.ts', () => ({ llmAvailable: () => false, structured: vi.fn() }));
+
 const { App } = await import('./App.tsx');
 const server = (await import('../server.ts')).default;
 
 // The server's routes, reached through fetch without a network.
-type Handler = (req: { params: Record<string, string>; body: unknown }, res: unknown) => void;
+type Handler = (req: { params: Record<string, string>; body: unknown }, res: unknown) => void | Promise<void>;
 const routes: { method: string; re: RegExp; keys: string[]; handler: Handler }[] = [];
 const add = (method: string) => (path: string, handler: Handler) => {
   const keys: string[] = [];
@@ -91,7 +94,7 @@ beforeEach(() => {
       let status = 200;
       let json: unknown;
       const res = { status(c: number) { status = c; return res; }, json(b: unknown) { json = b; } };
-      r.handler({ params: Object.fromEntries(r.keys.map((k, i) => [k, m[i + 1]])), body }, res);
+      await r.handler({ params: Object.fromEntries(r.keys.map((k, i) => [k, m[i + 1]])), body }, res);
       if (path === '/drills') drillId = (json as { id: string }).id;
       return { ok: status < 400, status, json: async () => json } as Response;
     }

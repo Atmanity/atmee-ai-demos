@@ -164,15 +164,20 @@ export class BlsTutor {
     this.lastVerdict = null;
   }
 
-  /** Grade a free-text answer against the current step. */
-  answer(stepKey: string, text: string): Verdict {
+  /**
+   * Grade a free-text answer against the current step. `judgedRight` is the
+   * model judge's pass for an answer the phrase lists left open; it can turn
+   * an open answer right, never a veto or a match.
+   */
+  answer(stepKey: string, text: string, judgedRight = false): Verdict {
     this.requirePractice();
     if (this._phase !== 'answering') throw new TutorRefusal(this._phase === 'debrief' ? SCENARIO_FINISHED : BETWEEN_STEPS);
     const step = this.currentStep()!;   // answering implies a live step
     const wanted = (stepKey ?? '').trim();
     if (wanted && wanted !== step.key) throw new TutorRefusal(wrongStep(this.stepIndex + 1));
 
-    const verdict = grade(step, text);
+    const graded = grade(step, text);
+    const verdict: Verdict = !graded.sure && judgedRight ? { ok: true, note: step.teach } : { ok: graded.ok, note: graded.note };
     this.attempts += 1;
     this.lastVerdict = verdict;
     if (verdict.ok) {
@@ -301,20 +306,27 @@ export class BlsTutor {
   }
 }
 
+/** A verdict, and whether the phrase lists decided it (a match either way) or left it open. */
+export interface Graded extends Verdict { sure: boolean }
+
 /**
- * Deterministic verdict for one answer.
+ * Deterministic verdict for one answer: the fast path.
  *
  * Forbidden first: "start compressions" at the call-for-help step is a wrong
  * ORDER, and telling someone their answer was simply not recognised would
  * teach them nothing. The note is the step's own sentence either way.
+ *
+ * An answer neither list matches is `sure: false`: free text has more ways of
+ * saying a right action than any list, so the server may ask a model judge
+ * about it (engine/assess.ts). A veto or a match is never re-judged.
  */
-export function grade(step: Step, text: string): Verdict {
+export function grade(step: Step, text: string): Graded {
   const said = ` ${answerForm(text)} `;
-  if (!said.trim()) return { ok: false, note: step.hint };
+  if (!said.trim()) return { ok: false, note: step.hint, sure: true };
   const has = (phrase: string) => matches(said, phrase);
-  if (step.forbidden.some(has)) return { ok: false, note: step.forbiddenNote || step.hint };
-  if (step.expected.some(has)) return { ok: true, note: step.teach };
-  return { ok: false, note: step.hint };
+  if (step.forbidden.some(has)) return { ok: false, note: step.forbiddenNote || step.hint, sure: true };
+  if (step.expected.some(has)) return { ok: true, note: step.teach, sure: true };
+  return { ok: false, note: step.hint, sure: false };
 }
 
 /**

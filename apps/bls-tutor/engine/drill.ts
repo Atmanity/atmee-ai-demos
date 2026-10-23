@@ -9,6 +9,7 @@
 //
 // Every answer crosses the real-emergency watch before the tutor grades it.
 // Server only: it reads the tutor, which reads scenarios.ts.
+import type { Judged } from './assess.ts';
 import { said } from './director.ts';
 import { resolveScenario } from './judge.ts';
 import { isRealEmergency } from './safety.ts';
@@ -47,8 +48,12 @@ const labelOf = (tutor: BlsTutor) => {
 const ACTIONS = new Set<Action>(['start_scenario', 'check_answer', 'show_step', 'give_hint', 'next_step', 'leave_scenario', 'stop_for_emergency', 'resume_practice']);
 export const isAction = (name: unknown): name is Action => ACTIONS.has(name as Action);
 
-/** Do one action. A refusal changes nothing and comes back as the sentence to say. */
-export function run(tutor: BlsTutor, action: Action, args: Record<string, unknown> = {}): Done {
+/**
+ * Do one action. A refusal changes nothing and comes back as the sentence to
+ * say. `judged` is the model judge's answer for check_answer (engine/assess.ts,
+ * asked by the server first); it is used only for the step it was about.
+ */
+export function run(tutor: BlsTutor, action: Action, args: Record<string, unknown> = {}, judged: Judged | null = null): Done {
   // The watch first, from any phase: an answer is the learner's own words too.
   if (action === 'check_answer' && isRealEmergency(String(args.answer ?? ''))) return stop(tutor);
   try {
@@ -57,7 +62,8 @@ export function run(tutor: BlsTutor, action: Action, args: Record<string, unknow
       case 'check_answer': {
         const answer = String(args.answer ?? '').trim().slice(0, 500);
         if (!answer) return { applied: false, text: 'No answer: nothing reached the drill. Ask them what they would do.' };
-        const verdict = tutor.answer('', answer);
+        const judgedRight = Boolean(judged?.right && judged.stepKey === tutor.currentStep()?.key);
+        const verdict = tutor.answer('', answer, judgedRight);
         if (verdict.ok) return { applied: true, text: said.right(viewOf(tutor), verdict.note) };
         const rescued = rescueIfStuck(tutor);
         if (rescued) return { applied: true, text: said.rescued(labelOf(tutor), rescued.note) };

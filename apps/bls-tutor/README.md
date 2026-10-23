@@ -18,7 +18,7 @@ Open it at `/apps/bls-tutor/`.
 | Part | Where |
 |---|---|
 | The drill: four scenarios, one step at a time, the two-miss rescue, the review | `engine/scenarios.ts` (the content, every clinical number) and `engine/tutor.ts` (the rules), on the server. The page sees a stripped view: a step's words appear only once it is answered or shown. `page/imports.test.ts` keeps the content out of the page bundle. |
-| Grading | `tutor.ts grade()`: substring matching against each step's expected and forbidden phrases, forbidden first. No model and no keys. |
+| Grading | Three layers. The fast path (`tutor.ts grade()`): each step's phrases, matched as concepts through one normaliser (`answerForm`, `matches`). The veto: a step's forbidden phrases fail an answer outright (a pulse check; on a check step, treatment given to the casualty). Anything else is open, and the server asks a model judge with the step's rubric (`engine/assess.ts`, Gemini, temperature 0, 5 s): it can only pass an open answer, and a model that fails, stalls or has no key never passes one. |
 | Alex's actions | Eight `await` tools (`engine/director.ts`): `check_answer(answer)`, `show_step`, `give_hint`, `next_step`, `start_scenario(scenario)`, `leave_scenario`, `stop_for_emergency`, `resume_practice`. The page answers each `atmee.tool` call by asking the server, which acts (`engine/drill.ts run()`) and returns the words Alex speaks from. His first reply to an answer carries the drill's verdict; a second miss comes back already taught. |
 | Naming a drill | Alex passes what he heard ("the pool one", "you pick"); `engine/judge.ts` decides which of the four it is, or none. |
 | Alex's rules | The tool `instructions`: never grade on his own, never a number from memory, never teach ahead, call the tool every time, real emergencies first. |
@@ -92,7 +92,10 @@ answer; and a spoken "show me" or scenario choice is no longer narrated twice.
 
 ## Tested
 
-- `npx vitest run apps/bls-tutor`: 734 tests. The engine's own
+- `npx vitest run apps/bls-tutor`: 782 tests (the answer judge's own in
+  `engine/assess.test.ts`: it passes what the lists cannot know, is never asked
+  about a match or a veto, and never passes on a model failure, stall or wrong
+  shape). The engine's own
   (scenarios, grading, phases, the review, the emergency watch and its
   suppressions; only the staging tests went, with staging), plus, for every
   step of every drill, a table of the answers people give (`engine/answers.test.ts`:

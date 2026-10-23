@@ -94,14 +94,20 @@ const CHECK_RESPONSE = [
 ] as const;
 
 /**
- * A check step's correction: no pulse check, and no treatment yet. Any
- * treatment verb acting on the casualty fails a check step outright, however
- * the answer frames it ("if he's not breathing, give him two breaths").
+ * A check step's correction: no pulse check, and no treatment yet. Treatment
+ * given to the casualty fails a check step outright, however the answer frames
+ * it ("if he's not breathing, give him two breaths"), but only where the
+ * treatment word is governed by its verb: giving breaths (any breath, the
+ * object of give or blow), or starting, doing or trying a treatment right
+ * after the verb ("start compressions", "do two rescue breaths"). "Start by
+ * looking for a breath" opens with start and is a check, so a bare start,
+ * begin or try never reaches as far as "breath".
  */
 const CHECK_FIRST = {
   forbidden: [
     'pulse', 'carotid', 'wrist',
-    'give|do|start|begin|perform|add|try|use ~4 breaths$|breath$|compress|cpr$|blows|thrust|rescue|heimlich',
+    'giv|blow|deliver ~4 breaths$|breath$|rescue|compress|cpr$|blows|thrust',
+    'do|doing|start|starting|begin|beginning|perform|performing|try|trying|add ~3 breaths$|compress|cpr$|blows|thrust|rescue|heimlich|mouth',
     'push|pushing|press|pressing|pump ~3 chest|hard|down|fast|sternum', 'push on', 'rescue breaths', 'blow into', 'breathe into', 'breathe for',
   ],
   forbiddenNote: 'Check first, treat after: tap and shout, then look and listen for normal breathing for up to 10 seconds. Lay rescuers do not check for a pulse.',

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const SERVER_ONLY = ['engine/scenarios.ts', 'engine/tutor.ts', 'engine/judge.ts', 'engine/drill.ts'].map((f) => resolve(here, '..', f));
+const SERVER_ONLY = ['engine/scenarios.ts', 'engine/tutor.ts', 'engine/judge.ts', 'engine/drill.ts', 'engine/assess.ts'].map((f) => resolve(here, '..', f));
 
 function reachable(entry: string): Set<string> {
   const seen = new Set<string>();

@@ -28,6 +28,8 @@ const CHECK = {
     ...forEach('listen for his breathing', 'listen for her breathing', 'listen for their breathing'),
     ...forEach('check whether he is breathing', "check whether she's breathing", "check whether they're breathing"),
     'look at her chest to see if she is breathing', 'ask him if he is all right', 'listen to him breathe',
+    // a check that opens with start, begin or try is still a check, not a treatment
+    'start by looking for a breath', 'begin by feeling for a breath', "start by checking if he's breathing", 'try listening for breathing',
     // the short shouts
     'you ok?', 'hey, you okay?', ...forEach('he ok?', 'she ok?', 'they ok?'), ...forEach('ask him', 'ask her', 'ask them'), "ask her if she's alright",
   ],
@@ -37,6 +39,8 @@ const CHECK = {
     "if he's unresponsive, give rescue breaths", 'check his airway and give two breaths', 'is it CPR? I would push hard on his chest',
     "if he's not okay I'll do mouth to mouth", 'are breaths next? give her a breath', "I'm not sure if it is, but I'd start chest compressions",
     'see if he is ok and then push on his chest',
+    // treatment that governs the casualty, however it opens
+    'start by giving him two breaths', 'begin compressions', 'start chest compressions on her', 'do two rescue breaths', 'try a couple of back blows',
   ],
 };
 const withCheck = (rows: { right: string[]; wrong: string[] }) => ({ right: [...rows.right, ...CHECK.right], wrong: [...rows.wrong, ...CHECK.wrong] });
@@ -168,6 +172,24 @@ describe('every step, every answer people give', () => {
       });
     }
   }
+
+  // Not in the phrase lists either way: the server asks the model judge
+  // (engine/assess.ts). The matcher must neither pass nor veto them.
+  test.each([
+    ['adult_cardiac_arrest', 'check_response', 'watch his chest for breathing'],
+    ['child_cardiac_arrest', 'check_response', 'look at her chest for breathing'],
+    ['recovery_position', 'check_response_breathing', 'put my ear by his mouth'],
+  ])('%s / %s: left to the judge: %s', (id, key, answer) => {
+    const graded = grade(find(id)!.steps.find((s) => s.key === key)!, answer);
+    expect(graded.ok).toBe(false);
+    expect(graded.sure).toBe(false);
+  });
+
+  test('a veto and a clear match are sure; the judge never sees them', () => {
+    const check = find('adult_cardiac_arrest')!.steps[1];
+    expect(grade(check, 'give him two breaths').sure).toBe(true);
+    expect(grade(check, 'start by looking for a breath')).toMatchObject({ ok: true, sure: true });
+  });
 
   test('every step still takes its own label as right', () => {
     for (const scenario of SCENARIOS) for (const s of scenario.steps) expect(grade(s, s.label).ok, `${scenario.id}/${s.key}`).toBe(true);
