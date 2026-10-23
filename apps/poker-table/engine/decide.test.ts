@@ -1,0 +1,99 @@
+// The decision, minus the model (ported from test_decide.py). Everything that
+// decides what reaches the table is here; the model call is server.ts. The
+// original bug was a model that answered in prose and a table that was never
+// told, so these cover the two ways an answer can be useless: absent, and illegal.
+import { describe, expect, test } from 'vitest';
+import { decide, DECISION_TIMEOUT_MS, decisionPrompt, decisionSchema, normalizeDecision, safeAction, type Ask } from './decide.ts';
+import type { DecisionRequest } from './match.ts';
+
+describe('safeAction', () => {
+  test('checks when checking is free', () => expect(safeAction(['check', 'raise'], 0)).toEqual({ kind: 'check', amount: null }));
+  test('calls when there is a price', () => expect(safeAction(['fold', 'call', 'raise'], 20)).toEqual({ kind: 'call', amount: null }));
+  test('folds only when nothing else is legal', () => expect(safeAction(['fold'], 20)).toEqual({ kind: 'fold', amount: null }));
+  test('survives a junk to_call', () => {
+    // The one path whose whole job is to always answer must not throw on junk.
+    expect(safeAction(['check'], 'not a number').kind).toBe('check');
+  });
+  test('empty valid actions still answers', () => expect(safeAction([], 0)).toEqual({ kind: 'fold', amount: null }));
+});
+
+describe('normalizeDecision', () => {
+  const request = (over: Partial<DecisionRequest> = {}): Partial<DecisionRequest> => ({ valid_actions: ['fold', 'check', 'raise'], to_call: 0, min_raise_to: 40, ...over });
+
+  test('passes a legal action through', () => expect(normalizeDecision('check', null, request())).toEqual({ kind: 'check', amount: null }));
+  test('rewrites a free fold into a check', () => {
+    // Folding for nothing is legal and never right; the player would rightly read it as a bug.
+    expect(normalizeDecision('fold', null, request())).toEqual({ kind: 'check', amount: null });
+  });
+  test('keeps a fold when folding actually costs something', () => {
+    expect(normalizeDecision('fold', null, request({ valid_actions: ['fold', 'call'], to_call: 80 })).kind).toBe('fold');
+  });
+  test('falls back when the action is not on the list', () => {
+    expect(normalizeDecision('check', null, request({ valid_actions: ['fold', 'call'], to_call: 20 })).kind).toBe('call');
+  });
+  test('a raise with no amount uses the minimum', () => expect(normalizeDecision('raise', null, request())).toEqual({ kind: 'raise', amount: 40 }));
+  test('a raise with a junk amount uses the minimum', () => expect(normalizeDecision('raise', 'forty', request()).amount).toBe(40));
+  test('a raise with no minimum to fall back on degrades', () => expect(normalizeDecision('raise', null, request({ min_raise_to: 0 })).kind).toBe('check'));
+  test('amounts reach the table as whole chips', () => expect(normalizeDecision('raise', 61.5, request()).amount).toBe(61));
+  test('an amount outside the legal range is pulled into it (new in the port)', () => {
+    expect(normalizeDecision('raise', 25, request({ max_raise_to: 1000 })).amount).toBe(40);
+    expect(normalizeDecision('raise', 5000, request({ max_raise_to: 980 })).amount).toBe(980);
+  });
+});
+
+const REQUEST: DecisionRequest = {
+  hand: ['As', 'Kd'], board: ['2c', '7d', '9h'], street: 'FLOP', pot: 40, your_stack: 980, opponent_stack: 980,
+  to_call: 0, current_bet: 0, min_raise_to: 20, max_raise_to: 980, valid_actions: ['fold', 'check', 'raise'],
+};
+
+test('the prompt carries the table and the own hand, and asks for totals', () => {
+  const prompt = decisionPrompt(REQUEST);
+  expect(prompt).toContain('Your hand: As Kd');
+  expect(prompt).toContain('Board: 2c 7d 9h');
+  expect(prompt).toContain('Minimum raise-to (a TOTAL, not an increment): 20');
+  expect(prompt).toContain('Valid actions: fold check raise');
+});
+
+test('the schema only offers the legal actions', () => {
+  expect((decisionSchema(REQUEST).properties.action as { enum: string[] }).enum).toEqual(['fold', 'check', 'raise']);
+});
+
+test('decide: the model answer, normalized; or the safe action', async () => {
+  expect(await decide(REQUEST, async () => ({ action: 'raise', amount: 60 }))).toMatchObject({ kind: 'raise', amount: 60, source: 'model' });
+  expect(await decide(REQUEST, null)).toMatchObject({ kind: 'check', amount: null, source: 'fallback' });
+  expect(await decide(REQUEST, async () => null)).toMatchObject({ kind: 'check', source: 'fallback' });
+  expect(await decide(REQUEST, () => new Promise(() => undefined), 20)).toMatchObject({ kind: 'check', source: 'fallback' });
+});
+
+test('a fallback says why, so a live log can tell a slow model from a broken one', async () => {
+  // Live: "Dex played check (fallback)" with no reason; the next decision, same
+  // prompt and schema, came from the model.
+  expect((await decide(REQUEST, null)).reason).toBe('no model key');
+  expect((await decide(REQUEST, () => new Promise(() => undefined), 20)).reason).toBe('no answer within 20 ms');
+  expect((await decide(REQUEST, async () => { throw new Error('400 bad schema'); })).reason).toBe('the model call failed: 400 bad schema');
+  expect((await decide(REQUEST, async () => null)).reason).toBe('an empty answer');
+  expect((await decide(REQUEST, async () => ({ action: 'shove', amount: 0 }))).reason).toMatch(/answered "shove", not one of/);
+  const model = await decide(REQUEST, async () => ({ action: 'check', amount: 0 }));
+  expect(model.reason).toBeUndefined();
+  expect(model.ms).toBeGreaterThanOrEqual(0);
+});
+
+test('the budget is the one measured live, not the original 4.5 s', () => {
+  expect(DECISION_TIMEOUT_MS).toBe(8000);
+});
+
+test("a model call that fails after the budget ran out is handled, not left to crash the server", async () => {
+  // Review: the race returned the timeout and left the model's promise with no
+  // handler; its later rejection was unhandled.
+  const unhandled: unknown[] = [];
+  const listen = (reason: unknown) => { unhandled.push(reason); };
+  process.on('unhandledRejection', listen);
+  try {
+    const late: Ask = () => new Promise((_, reject) => setTimeout(reject, 30, new Error('late failure')));
+    expect(await decide(REQUEST, late, 5)).toMatchObject({ source: 'fallback', reason: 'no answer within 5 ms' });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(unhandled).toEqual([]);
+  } finally {
+    process.off('unhandledRejection', listen);
+  }
+});
