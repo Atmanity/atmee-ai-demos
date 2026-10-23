@@ -171,12 +171,12 @@ footer { font-size: 0.88rem; color: var(--muted); border-top: 1px solid var(--li
 <header class="top">
   <p class="eyebrow">atmee-usecase-demos · branch feat/mini-apps · 23 October 2026</p>
   <h1>Mini-apps on the Avatar API</h1>
-  <p class="lead">The fourteen in-call mini-apps from <code>Atmanity/apps</code>, rebuilt on the public Avatar API alone, and each run live on staging. This report says what each app is for, how it is built, and what the API could not do for it. The five earlier sample apps are at the end.</p>
+  <p class="lead">The fourteen in-call mini-apps from <code>Atmanity/apps</code>, rebuilt as products on the public Avatar API alone. Each has its own host, who acts through app tools, and each ran live on staging. This report says what each product is for, how it is built, and what the API still could not do for it. The five earlier sample apps are at the end.</p>
   <ul class="facts">
-    <li><b>14</b><span>mini-apps ported</span></li>
-    <li><b>14</b><span>live runs on staging</span></li>
-    <li><b>3,389</b><span>tests, all passing</span></li>
-    <li><b>9</b><span>API features still missing</span></li>
+    <li><b>14</b><span>products, each with its own host</span></li>
+    <li><b>3</b><span>live rounds on staging</span></li>
+    <li><b>4,117</b><span>tests, all passing</span></li>
+    <li><b>10</b><span>API features still missing</span></li>
     <li><b>5</b><span>classic apps kept</span></li>
   </ul>
 </header>
@@ -185,207 +185,244 @@ footer { font-size: 0.88rem; color: var(--muted); border-top: 1px solid var(--li
   <p class="eyebrow">Summary</p>
   <h2>What the API is missing</h2>
   <div class="stack">
-    <p>Every app follows one rule: the app decides, the avatar performs. The app owns the rules, the facts and the screen, and tells the avatar what is true (<code>state</code>), what happened (<code>event</code>) and how to behave (<code>note</code>). That works well for anything the app can tell the avatar <em>before</em> the user speaks. Answers staged in <code>state</code> shaped the avatar's immediate reply in every app: a star's rising time, the next line of working, the pot, a refusal, an emergency sentence.</p>
-    <p>It breaks down for anything the app learns <em>after</em> the user speaks. The avatar has already started its reply about a second before the app hears the transcript, so it fills the gap. It says "let's see" and waits for an outcome that may never come, or it invents one: a wrong verdict, a made-up sight, a made-up room size.</p>
-    <p><b>Update, 23 October:</b> function calling shipped on staging the morning after these runs. <code>POST /v1/session</code> now takes <code>appTools</code>; the avatar calls the page over a LiveKit RPC and, for an <code>await</code> tool, holds its reply for the answer. A probe proved it: asked for a secret number only the page knew, the avatar called the tool and said the number in its first reply. The kit supports it; the fourteen apps still use the workaround and are the next thing to convert.</p>
+    <p>Every app follows one rule: the app decides, the host performs. The app owns the rules, the facts and the screen. Its host acts through app tools: <code>POST /v1/session</code> takes <code>appTools</code>, the host calls a tool as an <code>atmee.tool</code> RPC to the page, and an <code>await</code> tool holds the reply until the page answers. <code>state</code> tells the host what is on screen; <code>event</code>s tell it what happened by hand.</p>
+    <p>Tools fixed the central problem of the first port: the reply is grounded in what the app did. In round 2 requests became calls in 2.6 to 4.9 s, and the first reply carried the result: verdicts, clues, refusals with the legal options, the plan's own numbers. Each app now runs on its own host, built from its persona, with the host's face on the front door.</p>
+    <p>What still goes wrong sits in the tools and around them. A call whose arguments miss the schema never reaches the page. The filler said while a tool runs is chosen before the result exists, so it can pre-judge it: "Yeah, good call, but…" before a Not-yet verdict. Some requests are narrated instead of called. Hosts add numbers of their own around a result. And the host still checks in after about 10 s of quiet, with no way to turn it off.</p>
+    <p>The apps work around each one: lenient schemas, normalised in the app; results that open with the outcome; a safety net that does repeatable actions after 7 s; results that carry the facts the host would otherwise reach for; and the exact line on screen where it matters.</p>
   </div>
 </section>
 
 <section id="asks"><div class="col stack"><p class="eyebrow">Ranked by how many apps need them</p><h2>The features each app needed</h2></div><div class="asks">
 <div class="ask">
-  <div><span class="rank">01</span><h3>Per-session tools (shipped 23 Oct)</h3></div>
-  <div class="stack" style="gap:6px"><p>The avatar calls the app and waits, so a reply carries the app's verdict. Now on staging (session-service #182, Causeur #121) and proven with a probe; these apps predate it and do not use it yet.</p><p class="today">Today: Stage predictable answers in state, tell the avatar to hold, send the outcome as an event. Unpredictable outcomes still race: verdicts, next sights, sizes, failed adds.</p><div class="who"><span class="tag">All 14 apps</span></div></div>
+  <div><span class="rank">01</span><h3>App tools: shipped on 23 October, two follow-ups</h3></div>
+  <div class="stack" style="gap:6px"><p>The host calls the app and waits, so its first reply carries the app's outcome; every app now uses them. Still wanted: a call that fails its schema delivered to the page with the error (or a switch to turn validation off), and a per-tool switch for no filler, or the result's first sentence spoken verbatim.</p><p class="today">Today: Lenient schemas, normalised in the app; results that open with the outcome; a safety net that does repeatable actions after 7 s; the exact line on screen.</p><div class="who"><span class="tag">All 14 apps</span></div></div>
 </div>
 <div class="ask">
   <div><span class="rank">02</span><h3>Check-in control</h3></div>
-  <div class="stack" style="gap:6px"><p>Turn the ~10 s check-in off or lengthen it per session.</p><p class="today">Today: Stage what a check-in should offer. The originals waited 28–90 s or never nudged.</p><div class="who"><span class="tag">All 14 apps</span></div></div>
+  <div class="stack" style="gap:6px"><p>Turn the ~10 s check-in off or lengthen it per session.</p><p class="today">Today: The instructions ask for silence. The originals waited 40 to 45 s, or never nudged (a planetarium, a workout).</p><div class="who"><span class="tag">All 14 apps</span></div></div>
 </div>
 <div class="ask">
-  <div><span class="rank">03</span><h3>Per-session persona and instructions</h3></div>
-  <div class="stack" style="gap:6px"><p>One avatar plays the app's character, with a greeting and a system prompt per session.</p><p class="today">Today: Rules as several 2,000-character notes; the app's opening follows the avatar's own greeting; <code>avatar.json</code> describes a dedicated avatar.</p><div class="who"><span class="tag">All 14 apps</span></div></div>
+  <div><span class="rank">03</span><h3>Per-session persona and greeting</h3></div>
+  <div class="stack" style="gap:6px"><p>One avatar plays the app's character, with a greeting and a system prompt per session.</p><p class="today">Today: Fourteen hosts, one per app, each built from its <code>avatar.json</code>; a persona change is a <code>PATCH</code> to the avatar. Openings never greet again.</p><div class="who"><span class="tag">All 14 apps</span></div></div>
 </div>
 <div class="ask">
-  <div><span class="rank">04</span><h3>Exact speech</h3></div>
-  <div class="stack" style="gap:6px"><p>Say this sentence word for word, with no filler in front.</p><p class="today">Today: Put the exact sentence on screen as the source of truth.</p><div class="who"><a class="tag" href="#bls-tutor">BLS Tutor</a><a class="tag" href="#fitness-coach">Fitness Coach</a><a class="tag" href="#market-desk">Market Desk</a><a class="tag" href="#quadratic-whiteboard">Quadratic Whiteboard</a><a class="tag" href="#trajectory-coach">Trajectory Coach</a></div></div>
+  <div><span class="rank">04</span><h3>Speech hints</h3></div>
+  <div class="stack" style="gap:6px"><p>Per-session keyterms for the recogniser.</p><p class="today">Today: The host passes what it heard, and the apps' readers accept the recogniser's variants ("Beetlejuice", "Raised to five.", "lobbed").</p><div class="who"><span class="tag">All 14 apps</span></div></div>
 </div>
 <div class="ask">
-  <div><span class="rank">05</span><h3>Speech hints</h3></div>
-  <div class="stack" style="gap:6px"><p>Per-session keyterms for the recogniser.</p><p class="today">Today: Judges that read the recogniser's variants; mishearing tables.</p><div class="who"><a class="tag" href="#chess-opponent">Chess Opponent</a><a class="tag" href="#sky-guide">Sky Guide</a><a class="tag" href="#poker-table">Poker Table</a><a class="tag" href="#room-planner">Home Planner</a><a class="tag" href="#travel-guide">Travel Guide</a><a class="tag" href="#guess-the-city">Guess the City</a><a class="tag" href="#bls-tutor">BLS Tutor</a><a class="tag" href="#fitness-coach">Fitness Coach</a><a class="tag" href="#fashion-advisor">Fashion Advisor</a><a class="tag" href="#nutrition-advisor">Nutrition Advisor</a><a class="tag" href="#quadratic-whiteboard">Quadratic Whiteboard</a><a class="tag" href="#trajectory-coach">Trajectory Coach</a><a class="tag" href="#market-desk">Market Desk</a></div></div>
+  <div><span class="rank">05</span><h3>Reconnect grace</h3></div>
+  <div class="stack" style="gap:6px"><p>A brief network blip does not end the session.</p><p class="today">Today: The kit publishes its silent track without DTX, which removed one cause; a real blip still ends the session as <code>user_left</code>.</p><div class="who"><span class="tag">All 14 apps</span></div></div>
 </div>
 <div class="ask">
-  <div><span class="rank">06</span><h3>Listen while the avatar ignores</h3></div>
-  <div class="stack" style="gap:6px"><p>Keep user transcripts flowing while the avatar is muted.</p><p class="today">Today: Not possible: muting deafens the app too. The classic story game mutes and accepts it.</p><div class="who"><a class="tag" href="#bls-tutor">BLS Tutor</a><a class="tag" href="#fitness-coach">Fitness Coach</a></div></div>
+  <div><span class="rank">06</span><h3>A faster, observable start</h3></div>
+  <div class="stack" style="gap:6px"><p>Shorter start-up, and a signal for when the user can see the host.</p><p class="today">Today: Starting took 15 to 46 s and the video came 3 to 95 s later. The host's portrait fills the frame while the call connects.</p><div class="who"><span class="tag">All 14 apps</span></div></div>
 </div>
 <div class="ask">
-  <div><span class="rank">07</span><h3>Image input</h3></div>
-  <div class="stack" style="gap:6px"><p>Show the avatar a photo or frame.</p><p class="today">Today: The app's own model reads the image and puts the result in state.</p><div class="who"><a class="tag" href="#nutrition-advisor">Nutrition Advisor</a><a class="tag" href="#fashion-advisor">Fashion Advisor</a><a class="tag" href="#room-planner">Home Planner</a></div></div>
+  <div><span class="rank">07</span><h3>Exact speech</h3></div>
+  <div class="stack" style="gap:6px"><p>Say this sentence word for word, with nothing in front.</p><p class="today">Today: The exact sentence is on screen as the source of truth: the red card, the pause card, the board's line, the range's sentence.</p><div class="who"><a class="tag" href="#bls-tutor">Bystander</a><a class="tag" href="#fitness-coach">Spotter</a><a class="tag" href="#quadratic-whiteboard">Chalkline</a><a class="tag" href="#trajectory-coach">Arcwise</a><a class="tag" href="#market-desk">Outcry</a></div></div>
 </div>
 <div class="ask">
-  <div><span class="rank">08</span><h3>Server-side room messages</h3></div>
-  <div class="stack" style="gap:6px"><p>The app server sends state and events without an open page.</p><p class="today">Today: Everything relays through the open page.</p><div class="who"><a class="tag" href="#market-desk">Market Desk</a></div></div>
+  <div><span class="rank">08</span><h3>Image input</h3></div>
+  <div class="stack" style="gap:6px"><p>Show the host a photo or a frame.</p><p class="today">Today: The app's own model reads the image and tells the host what it found.</p><div class="who"><a class="tag" href="#nutrition-advisor">Morsel</a><a class="tag" href="#fashion-advisor">Notch</a><a class="tag" href="#room-planner">Planwright</a></div></div>
 </div>
 <div class="ask">
-  <div><span class="rank">09</span><h3>Reconnect grace</h3></div>
-  <div class="stack" style="gap:6px"><p>A brief network blip does not end the session.</p><p class="today">Today: The kit publishes its silent track without DTX, which removed one cause; a real blip still ends the session as user_left.</p><div class="who"><span class="tag">All 14 apps</span></div></div>
+  <div><span class="rank">09</span><h3>Listen while the host ignores</h3></div>
+  <div class="stack" style="gap:6px"><p>Keep user transcripts flowing while the host is muted.</p><p class="today">Today: Not possible: muting deafens the app too. The classic story game mutes and accepts it.</p><div class="who"><a class="tag" href="#bls-tutor">Bystander</a><a class="tag" href="#fitness-coach">Spotter</a></div></div>
 </div>
 <div class="ask">
-  <div><span class="rank">10</span><h3>A faster, observable start</h3></div>
-  <div class="stack" style="gap:6px"><p>Shorter start-up and a signal for when the user can see the avatar.</p><p class="today">Today: 15–46 s to start, video up to 95 s later; the avatar greets and checks in before it is visible.</p><div class="who"><span class="tag">All 14 apps</span></div></div>
+  <div><span class="rank">10</span><h3>Server-side room messages</h3></div>
+  <div class="stack" style="gap:6px"><p>The app server answers tool calls and sends state and events without an open page.</p><p class="today">Today: Everything goes through the open page; a closed tab ends both.</p><div class="who"><a class="tag" href="#market-desk">Outcry</a></div></div>
+</div>
+<div class="ask">
+  <div><span class="rank">11</span><h3>Conductor documentation</h3></div>
+  <div class="stack" style="gap:6px"><p>Document how a step moves (it holds until the user has heard a turn under it; the last step stays in force), and allow an agenda per session.</p><p class="today">Today: Checks on the asking step's edges, with an edge back to itself; the session ends after the last step; scores through a tool, not the transcript.</p><div class="who"><a class="tag" href="#classic">Classic: Ledger Academy, Northwind Talent</a></div></div>
 </div>
 </div></section>
 <section id="matrix">
-  <div class="col stack"><p class="eyebrow">Per app, from one live run each</p><h2>Where each gap showed up</h2>
+  <div class="col stack"><p class="eyebrow">Per app, from the two live rounds with tools</p><h2>Where each gap showed up</h2>
   <p class="muted">Rows are the gaps an app can run into; columns are the apps. A blank cell means the gap does not apply to that app.</p></div>
   <div class="legend">
-<div><span class="dot seen"></span><span><b style="color:var(--ink)">Seen</b>: showed up live as a problem the user would notice</span></div>
-<div><span class="dot held"></span><span><b style="color:var(--ink)">Held</b>: the gap is real, but the app&#x27;s workaround held in the run</span></div>
-<div><span class="dot expected"></span><span><b style="color:var(--ink)">Expected</b>: possible; not observed in one run</span></div>
+<div><span class="dot seen"></span><span><b style="color:var(--ink)">Seen</b>: showed up live in a run with tools</span></div>
+<div><span class="dot held"></span><span><b style="color:var(--ink)">Held</b>: the gap is real, but the app&#x27;s workaround held</span></div>
+<div><span class="dot expected"></span><span><b style="color:var(--ink)">Expected</b>: possible; not observed in the runs with tools</span></div>
 <div><span class="dot known"></span><span><b style="color:var(--ink)">Known</b>: a limitation by design; a run cannot show it</span></div>
 </div><div class="scroll"><table class="matrix"><thead><tr><th class="gap"></th>
-<th><a href="#guess-the-city">Guess<br>the<br>City</a></th>
-<th><a href="#chess-opponent">Chess<br>Opponent</a></th>
-<th><a href="#poker-table">Poker<br>Table</a></th>
-<th><a href="#stroke-tutor">Stroke<br>Tutor</a></th>
-<th><a href="#bls-tutor">BLS<br>Tutor</a></th>
-<th><a href="#quadratic-whiteboard">Quadratic<br>Whiteboard</a></th>
-<th><a href="#trajectory-coach">Trajectory<br>Coach</a></th>
-<th><a href="#sky-guide">Sky<br>Guide</a></th>
-<th><a href="#nutrition-advisor">Nutrition<br>Advisor</a></th>
-<th><a href="#fashion-advisor">Fashion<br>Advisor</a></th>
-<th><a href="#fitness-coach">Fitness<br>Coach</a></th>
-<th><a href="#market-desk">Market<br>Desk</a></th>
-<th><a href="#travel-guide">Travel<br>Guide</a></th>
-<th><a href="#room-planner">Home<br>Planner</a></th>
+<th><a href="#guess-the-city">Postmark</a></th>
+<th><a href="#chess-opponent">Kibitz</a></th>
+<th><a href="#poker-table">Blindside</a></th>
+<th><a href="#stroke-tutor">Hanshi</a></th>
+<th><a href="#bls-tutor">Bystander</a></th>
+<th><a href="#quadratic-whiteboard">Chalkline</a></th>
+<th><a href="#trajectory-coach">Arcwise</a></th>
+<th><a href="#sky-guide">Lodestar</a></th>
+<th><a href="#nutrition-advisor">Morsel</a></th>
+<th><a href="#fashion-advisor">Notch</a></th>
+<th><a href="#fitness-coach">Spotter</a></th>
+<th><a href="#market-desk">Outcry</a></th>
+<th><a href="#travel-guide">Yonder</a></th>
+<th><a href="#room-planner">Planwright</a></th>
 <th></th></tr></thead><tbody>
-<tr><th class="gap" scope="row">Replies before the app has acted<small>Without tools, as these apps were built: the avatar answers a spoken request before the app hears it.</small></th>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Guess the City: Seen"></span></td>
-<td><span class="dot held" role="img" aria-label="Held" title="Chess Opponent: Held"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Poker Table: Seen"></span></td>
-<td><span class="dot held" role="img" aria-label="Held" title="Stroke Tutor: Held"></span></td>
-<td><span class="dot held" role="img" aria-label="Held" title="BLS Tutor: Held"></span></td>
-<td><span class="dot held" role="img" aria-label="Held" title="Quadratic Whiteboard: Held"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Trajectory Coach: Seen"></span></td>
-<td><span class="dot held" role="img" aria-label="Held" title="Sky Guide: Held"></span></td>
-<td><span class="dot held" role="img" aria-label="Held" title="Nutrition Advisor: Held"></span></td>
-<td><span class="dot held" role="img" aria-label="Held" title="Fashion Advisor: Held"></span></td>
-<td><span class="dot held" role="img" aria-label="Held" title="Fitness Coach: Held"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Market Desk: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Travel Guide: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Home Planner: Seen"></span></td>
-<td class="tally">6 seen · 8 held</td></tr>
+<tr><th class="gap" scope="row">A call that misses its schema never arrives<small>It is rejected before the page; the host is told &quot;invalid arguments&quot; and often says the action happened.</small></th>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Postmark: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Kibitz: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Blindside: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Hanshi: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Bystander: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Chalkline: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Arcwise: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Lodestar: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Morsel: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Notch: Expected"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Spotter: Seen"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Outcry: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Yonder: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Planwright: Expected"></span></td>
+<td class="tally">1 seen · 13 expected</td></tr>
+<tr><th class="gap" scope="row">The filler pre-judges the result<small>While an await tool runs, the host says a filler chosen before the result exists.</small></th>
+<td><span class="dot held" role="img" aria-label="Held" title="Postmark: Held"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Kibitz: Seen"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Blindside: Seen"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Hanshi: Held"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Bystander: Seen"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Chalkline: Held"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Arcwise: Held"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Lodestar: Seen"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Morsel: Seen"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Notch: Expected"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Spotter: Seen"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Outcry: Held"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Yonder: Held"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Planwright: Seen"></span></td>
+<td class="tally">7 seen · 6 held · 1 expected</td></tr>
+<tr><th class="gap" scope="row">Asked, but not called<small>The host decides when to call a tool; some requests are narrated instead.</small></th>
+<td><span class="dot held" role="img" aria-label="Held" title="Postmark: Held"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Kibitz: Seen"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Blindside: Seen"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Hanshi: Held"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Bystander: Expected"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Chalkline: Held"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Arcwise: Held"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Lodestar: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Morsel: Expected"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Notch: Seen"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Spotter: Seen"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Outcry: Held"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Yonder: Expected"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Planwright: Seen"></span></td>
+<td class="tally">5 seen · 5 held · 4 expected</td></tr>
+<tr><th class="gap" scope="row">Adds numbers of its own<small>Sizes, limits and records that no result gave it.</small></th>
+<td></td>
+<td></td>
+<td></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Hanshi: Seen"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Bystander: Expected"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Chalkline: Held"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Arcwise: Held"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Lodestar: Expected"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Morsel: Held"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Notch: Expected"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Spotter: Seen"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Outcry: Held"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Yonder: Held"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Planwright: Seen"></span></td>
+<td class="tally">3 seen · 5 held · 3 expected</td></tr>
 <tr><th class="gap" scope="row">Speaks up after ~10 s of quiet<small>The check-in cannot be turned off or lengthened per session.</small></th>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Guess the City: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Chess Opponent: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Poker Table: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Stroke Tutor: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="BLS Tutor: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Quadratic Whiteboard: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Trajectory Coach: Seen"></span></td>
-<td><span class="dot expected" role="img" aria-label="Expected" title="Sky Guide: Expected"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Nutrition Advisor: Seen"></span></td>
-<td><span class="dot expected" role="img" aria-label="Expected" title="Fashion Advisor: Expected"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Fitness Coach: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Market Desk: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Travel Guide: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Home Planner: Seen"></span></td>
-<td class="tally">12 seen · 2 expected</td></tr>
-<tr><th class="gap" scope="row">Greets as itself, not as the app<small>Persona, greeting and instructions belong to the avatar, not the session.</small></th>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Guess the City: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Chess Opponent: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Poker Table: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Stroke Tutor: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="BLS Tutor: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Quadratic Whiteboard: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Trajectory Coach: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Sky Guide: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Nutrition Advisor: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Fashion Advisor: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Fitness Coach: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Market Desk: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Travel Guide: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Home Planner: Seen"></span></td>
-<td class="tally">14 seen</td></tr>
-<tr><th class="gap" scope="row">Cannot say an exact sentence<small>Events are paraphrased; the platform adds fillers in front of replies.</small></th>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Postmark: Seen"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Kibitz: Seen"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Blindside: Expected"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Hanshi: Seen"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Bystander: Expected"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Chalkline: Seen"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Arcwise: Seen"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Lodestar: Seen"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Morsel: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Notch: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Spotter: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Outcry: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Yonder: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Planwright: Expected"></span></td>
+<td class="tally">6 seen · 8 expected</td></tr>
+<tr><th class="gap" scope="row">Persona and agenda belong to the avatar<small>No per-session persona, greeting or conductor, so each app needs its own host.</small></th>
+<td><span class="dot held" role="img" aria-label="Held" title="Postmark: Held"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Kibitz: Held"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Blindside: Held"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Hanshi: Held"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Bystander: Held"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Chalkline: Held"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Arcwise: Held"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Lodestar: Held"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Morsel: Held"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Notch: Seen"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Spotter: Held"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Outcry: Held"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Yonder: Held"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Planwright: Held"></span></td>
+<td class="tally">1 seen · 13 held</td></tr>
+<tr><th class="gap" scope="row">Events wait for the floor<small>What happened by hand is told when the host is free, can expire, and loses to a user turn.</small></th>
+<td></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Kibitz: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Blindside: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Hanshi: Expected"></span></td>
 <td></td>
 <td></td>
-<td><span class="dot expected" role="img" aria-label="Expected" title="Poker Table: Expected"></span></td>
-<td><span class="dot expected" role="img" aria-label="Expected" title="Stroke Tutor: Expected"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="BLS Tutor: Seen"></span></td>
-<td><span class="dot expected" role="img" aria-label="Expected" title="Quadratic Whiteboard: Expected"></span></td>
-<td><span class="dot expected" role="img" aria-label="Expected" title="Trajectory Coach: Expected"></span></td>
-<td><span class="dot expected" role="img" aria-label="Expected" title="Sky Guide: Expected"></span></td>
-<td><span class="dot expected" role="img" aria-label="Expected" title="Nutrition Advisor: Expected"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Fashion Advisor: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Fitness Coach: Seen"></span></td>
-<td><span class="dot held" role="img" aria-label="Held" title="Market Desk: Held"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Arcwise: Expected"></span></td>
 <td></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Home Planner: Seen"></span></td>
-<td class="tally">4 seen · 1 held · 6 expected</td></tr>
-<tr><th class="gap" scope="row">Mishears the app&#x27;s vocabulary<small>No per-session speech hints for squares, stars, places, amounts.</small></th>
-<td><span class="dot expected" role="img" aria-label="Expected" title="Guess the City: Expected"></span></td>
-<td><span class="dot expected" role="img" aria-label="Expected" title="Chess Opponent: Expected"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Poker Table: Seen"></span></td>
-<td><span class="dot expected" role="img" aria-label="Expected" title="Stroke Tutor: Expected"></span></td>
-<td><span class="dot expected" role="img" aria-label="Expected" title="BLS Tutor: Expected"></span></td>
-<td><span class="dot expected" role="img" aria-label="Expected" title="Quadratic Whiteboard: Expected"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Trajectory Coach: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Sky Guide: Seen"></span></td>
-<td><span class="dot expected" role="img" aria-label="Expected" title="Nutrition Advisor: Expected"></span></td>
-<td><span class="dot expected" role="img" aria-label="Expected" title="Fashion Advisor: Expected"></span></td>
-<td><span class="dot expected" role="img" aria-label="Expected" title="Fitness Coach: Expected"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Market Desk: Seen"></span></td>
-<td><span class="dot expected" role="img" aria-label="Expected" title="Travel Guide: Expected"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Home Planner: Seen"></span></td>
-<td class="tally">5 seen · 9 expected</td></tr>
-<tr><th class="gap" scope="row">Drops, delays or collides events<small>Events wait for the floor, expire, and lose to a user turn arriving at the same moment.</small></th>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Morsel: Expected"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Notch: Seen"></span></td>
 <td></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Chess Opponent: Seen"></span></td>
-<td><span class="dot seen" role="img" aria-label="Seen" title="Poker Table: Seen"></span></td>
-<td><span class="dot expected" role="img" aria-label="Expected" title="Stroke Tutor: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Outcry: Expected"></span></td>
 <td></td>
 <td></td>
-<td><span class="dot expected" role="img" aria-label="Expected" title="Trajectory Coach: Expected"></span></td>
+<td class="tally">1 seen · 6 expected</td></tr>
+<tr><th class="gap" scope="row">Mishears the app&#x27;s words<small>No per-session speech hints for squares, stars, places or commands.</small></th>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Postmark: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Kibitz: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Blindside: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Hanshi: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Bystander: Expected"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Chalkline: Seen"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Arcwise: Held"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Lodestar: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Morsel: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Notch: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Spotter: Expected"></span></td>
+<td><span class="dot expected" role="img" aria-label="Expected" title="Outcry: Expected"></span></td>
+<td><span class="dot held" role="img" aria-label="Held" title="Yonder: Held"></span></td>
+<td><span class="dot seen" role="img" aria-label="Seen" title="Planwright: Seen"></span></td>
+<td class="tally">2 seen · 2 held · 10 expected</td></tr>
+<tr><th class="gap" scope="row">Muting it deafens the app<small>While the host is muted, no user transcript reaches the app either.</small></th>
 <td></td>
-<td><span class="dot expected" role="img" aria-label="Expected" title="Nutrition Advisor: Expected"></span></td>
 <td></td>
 <td></td>
-<td><span class="dot expected" role="img" aria-label="Expected" title="Market Desk: Expected"></span></td>
 <td></td>
-<td></td>
-<td class="tally">2 seen · 4 expected</td></tr>
-<tr><th class="gap" scope="row">Cannot see a photo<small>The avatar has no image input; the app reads images itself.</small></th>
+<td><span class="dot known" role="img" aria-label="Known" title="Bystander: Known"></span></td>
 <td></td>
 <td></td>
 <td></td>
 <td></td>
 <td></td>
-<td></td>
-<td></td>
-<td></td>
-<td><span class="dot known" role="img" aria-label="Known" title="Nutrition Advisor: Known"></span></td>
-<td><span class="dot known" role="img" aria-label="Known" title="Fashion Advisor: Known"></span></td>
-<td></td>
-<td></td>
-<td></td>
-<td><span class="dot known" role="img" aria-label="Known" title="Home Planner: Known"></span></td>
-<td class="tally">3 known</td></tr>
-<tr><th class="gap" scope="row">Muting it deafens the app<small>While the avatar is muted, no user transcript reaches the app either.</small></th>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-<td><span class="dot known" role="img" aria-label="Known" title="BLS Tutor: Known"></span></td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-<td><span class="dot known" role="img" aria-label="Known" title="Fitness Coach: Known"></span></td>
+<td><span class="dot known" role="img" aria-label="Known" title="Spotter: Known"></span></td>
 <td></td>
 <td></td>
 <td></td>
 <td class="tally">2 known</td></tr>
-<tr><th class="gap" scope="row">Server cannot speak into the room<small>Only the open page can send state and events.</small></th>
+<tr><th class="gap" scope="row">Cannot see a photo<small>The host has no image input; the app reads images itself.</small></th>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td><span class="dot known" role="img" aria-label="Known" title="Morsel: Known"></span></td>
+<td><span class="dot known" role="img" aria-label="Known" title="Notch: Known"></span></td>
+<td></td>
+<td></td>
+<td></td>
+<td><span class="dot known" role="img" aria-label="Known" title="Planwright: Known"></span></td>
+<td class="tally">3 known</td></tr>
+<tr><th class="gap" scope="row">Only the open page can answer<small>Tool calls and room messages go through the page; the server cannot reach the room.</small></th>
 <td></td>
 <td></td>
 <td></td>
@@ -397,44 +434,46 @@ footer { font-size: 0.88rem; color: var(--muted); border-top: 1px solid var(--li
 <td></td>
 <td></td>
 <td></td>
-<td><span class="dot known" role="img" aria-label="Known" title="Market Desk: Known"></span></td>
+<td><span class="dot known" role="img" aria-label="Known" title="Outcry: Known"></span></td>
 <td></td>
 <td></td>
 <td class="tally">1 known</td></tr>
 </tbody></table></div>
-<div class="col"><p class="muted">Not in the grid because they hit every session alike: a network blip ends the session with no grace period; start-up took 15 to 46 s with video up to 95 s later (139 s from Start to a visible avatar once); the agenda (conductor) belongs to the avatar, so apps sharing one avatar take turns setting it.</p></div>
+<div class="col"><p class="muted">Not in the grid because they hit every session alike: a network blip ends the session with no grace period; start-up took 15 to 46 s, with video 3 to 95 s later; a typed turn comes back as speech, and the kit drops the echo. Video artefacts also come and go on the hosts (orange 3-D letters and a changed backdrop on Theo, an eye-level close-up on Reese for a whole call); a repeat of both was framed normally, and the page cannot tell.</p></div>
 </section>
 <section id="architecture">
   <div class="col stack"><p class="eyebrow">How every app is built</p><h2>One server, one room kit, one shape per app</h2>
-  <p>Every app is a page and a few server routes in one repository. Nothing uses Atmee internals: a server holding the API key, a page in the LiveKit room the API returns, and the room's text streams.</p></div>
+  <p>Every app is a page and a few server routes in one repository. Nothing uses Atmee internals: a server holding the API key, a page in the LiveKit room the API returns, the room's text streams, and the tool calls the host makes into the page.</p></div>
   <div class="diagram">
   <svg viewBox="0 0 980 330" role="img" aria-labelledby="dg-t">
-    <title id="dg-t">The page joins the avatar's room and talks to the app server; the app server starts sessions through the Avatar API and calls outside services.</title>
+    <title id="dg-t">The page joins the host's room, answers its tool calls and talks to the app server; the app server starts sessions with the app's tools through the Avatar API and calls outside services.</title>
     <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
     <rect class="box-accent" x="20" y="40" width="260" height="130" rx="6"/>
     <text class="t" x="40" y="70">The page (browser)</text>
     <text class="s" x="40" y="94">app panel: board, map, chart…</text>
-    <text class="s" x="40" y="114">kit: useAvatar, stage, composer</text>
-    <text class="s" x="40" y="134">judge: rules first, model second</text>
-    <text class="s" x="40" y="154">director: state · note · event</text>
+    <text class="s" x="40" y="114">kit: useAvatar, useToolNet, parts</text>
+    <text class="s" x="40" y="134">judge: safety net, safety lines</text>
+    <text class="s" x="40" y="154">director: tools · state · event</text>
     <rect class="box" x="400" y="40" width="200" height="130" rx="6"/>
     <text class="t" x="420" y="70">LiveKit room</text>
     <text class="s" x="420" y="94">one per session</text>
     <text class="s" x="420" y="114">the page is the user</text>
     <text class="s" x="420" y="134">mic, or a silent track</text>
     <rect class="box" x="720" y="40" width="240" height="130" rx="6"/>
-    <text class="t" x="740" y="70">The avatar</text>
-    <text class="s" x="740" y="94">its own persona and greeting</text>
-    <text class="s" x="740" y="114">hears speech, replies at once</text>
-    <text class="s" x="740" y="134">reads state, notes, events</text>
-    <path class="arrow" d="M282 78 H398" marker-end="url(#ah)"/>
-    <text class="l" x="292" y="70">atmee.app</text>
-    <path class="arrow" d="M282 110 H398" marker-end="url(#ah)"/>
-    <text class="l" x="292" y="102">lk.chat typed</text>
-    <path class="arrow" d="M398 142 H282" marker-end="url(#ah)"/>
-    <text class="l" x="292" y="160">lk.transcription</text>
+    <text class="t" x="740" y="70">The host</text>
+    <text class="s" x="740" y="94">one avatar per app</text>
+    <text class="s" x="740" y="114">calls the app's tools, waits</text>
+    <text class="s" x="740" y="134">reads state and events</text>
+    <path class="arrow" d="M282 72 H398" marker-end="url(#ah)"/>
+    <text class="l" x="292" y="64">atmee.app</text>
+    <path class="arrow" d="M282 98 H398" marker-end="url(#ah)"/>
+    <text class="l" x="292" y="90">lk.chat typed</text>
+    <path class="arrow" d="M398 124 H282" marker-end="url(#ah)"/>
+    <text class="l" x="292" y="116">atmee.tool calls</text>
+    <path class="arrow" d="M398 150 H282" marker-end="url(#ah)"/>
+    <text class="l" x="292" y="164">lk.transcription</text>
     <path class="arrow" d="M602 105 H718" marker-end="url(#ah)" marker-start="url(#ah)"/>
-    <text class="l" x="616" y="96">voice, video, text</text>
+    <text class="l" x="616" y="96">voice, video</text>
     <rect class="box-accent" x="20" y="230" width="260" height="80" rx="6"/>
     <text class="t" x="40" y="258">App server (Express)</text>
     <text class="s" x="40" y="280">holds the API key; app routes</text>
@@ -443,7 +482,7 @@ footer { font-size: 0.88rem; color: var(--muted); border-top: 1px solid var(--li
     <text class="l" x="160" y="204">/api/apps/&lt;id&gt;/…</text>
     <rect class="box" x="400" y="230" width="200" height="80" rx="6"/>
     <text class="t" x="420" y="258">Avatar API</text>
-    <text class="s" x="420" y="280">session start and end</text>
+    <text class="s" x="420" y="280">session + appTools</text>
     <text class="s" x="420" y="298">conductor per avatar</text>
     <path class="arrow" d="M282 270 H398" marker-end="url(#ah)"/>
     <text class="l" x="292" y="262">POST /v1/session</text>
@@ -457,272 +496,275 @@ footer { font-size: 0.88rem; color: var(--muted); border-top: 1px solid var(--li
   </svg>
   </div>
   <div class="rules">
-    <div class="rule"><h3>The app decides</h3><p>Rules, scores, facts and plans live in the app's engine, ported from the Python originals with their tests. Secrets (the city, hidden cards, the next line of working) stay on the server; the page sees a masked view.</p></div>
-    <div class="rule"><h3>The avatar performs</h3><p>It is told what is on screen (<code>state</code>, up to 3,858 characters), its standing rules (<code>note</code>s, 2,000 characters each) and what just happened (<code>event</code>s, spoken when it has the floor).</p></div>
-    <div class="rule"><h3>Three ways in</h3><p>Buttons act at once. Typed lines are judged before the avatar hears them. Speech reaches the app about a second after the avatar started replying, so the answer is staged in advance where it can be.</p></div>
-    <div class="rule"><h3>Proven live</h3><p>A test harness feeds the room a synthetic microphone from spoken WAV files. Three shared staging avatars let three apps run at once; each README records its run.</p></div>
+    <div class="rule"><h3>The app decides</h3><p>Rules, scores, facts and plans live in the app's engine, ported from the Python originals with their tests. Secrets (the city, hidden cards, the next line of working, an unearned stroke) stay on the server; the page sees a masked view.</p></div>
+    <div class="rule"><h3>The host acts through tools</h3><p>Up to 30 tools and 4,000 characters of instructions per session. An <code>await</code> tool holds the reply for the page's answer (1 to 28 s). Results open with the outcome ("Done:", "Refused:", "Not yet:"); schemas are lenient and the app normalises what it gets. <code>state</code> (up to 3,858 characters) is what is on screen.</p></div>
+    <div class="rule"><h3>Three ways in</h3><p>Buttons act at once, and the host is told by an event. Spoken and typed lines go to the host, which calls the tools. For actions safe to repeat, a safety net (<code>useToolNet</code>) acts after 7 s if the host only talked about it.</p></div>
+    <div class="rule"><h3>Proven live</h3><p>A test harness feeds the room a synthetic microphone from spoken WAV files. Every app ran in three rounds: before tools, with tools, and after the fixes on its own host. Each README records its runs.</p></div>
   </div>
 </section>
 
-<section id="apps"><div class="col stack"><p class="eyebrow">The fourteen apps</p><h2>App by app</h2></div><nav class="toc" aria-label="Apps">
-<a href="#guess-the-city">Guess the City</a>
-<a href="#chess-opponent">Chess Opponent</a>
-<a href="#poker-table">Poker Table</a>
-<a href="#stroke-tutor">Stroke Tutor</a>
-<a href="#bls-tutor">BLS Tutor</a>
-<a href="#quadratic-whiteboard">Quadratic Whiteboard</a>
-<a href="#trajectory-coach">Trajectory Coach</a>
-<a href="#sky-guide">Sky Guide</a>
-<a href="#nutrition-advisor">Nutrition Advisor</a>
-<a href="#fashion-advisor">Fashion Advisor</a>
-<a href="#fitness-coach">Fitness Coach</a>
-<a href="#market-desk">Market Desk</a>
-<a href="#travel-guide">Travel Guide</a>
-<a href="#room-planner">Home Planner</a>
+<section id="apps"><div class="col stack"><p class="eyebrow">The fourteen products</p><h2>App by app</h2></div><nav class="toc" aria-label="Apps">
+<a href="#guess-the-city">Postmark</a>
+<a href="#chess-opponent">Kibitz</a>
+<a href="#poker-table">Blindside</a>
+<a href="#stroke-tutor">Hanshi</a>
+<a href="#bls-tutor">Bystander</a>
+<a href="#quadratic-whiteboard">Chalkline</a>
+<a href="#trajectory-coach">Arcwise</a>
+<a href="#sky-guide">Lodestar</a>
+<a href="#nutrition-advisor">Morsel</a>
+<a href="#fashion-advisor">Notch</a>
+<a href="#fitness-coach">Spotter</a>
+<a href="#market-desk">Outcry</a>
+<a href="#travel-guide">Yonder</a>
+<a href="#room-planner">Planwright</a>
 </nav>
 <div><div class="group-head"><h2>Games</h2><span class="eyebrow">3 apps</span></div>
 <article class="app" id="guess-the-city">
-<div class="app-head"><h3>Guess the City</h3><p class="tagline">A photo of a mystery city, three clues, and a host who never knows the answer.</p>
-<div class="meta"><span>apps/guess-the-city/</span><span>14 tests</span></div></div>
+<div class="app-head"><h3>Postmark</h3><p class="tagline">Three mystery cities, one photo on each postcard, and a host who never knows the answer.</p>
+<div class="meta"><span>apps/guess-the-city/</span><span>Host: Marco</span><span>23 tests</span></div></div>
 <div class="stack">
-<div><h4>What it is for</h4><p>A geography quiz. Three cities a game; a city guessed before any clue is worth 4 points, and each clue costs one. Say or type a guess, ask for a clue, give up or move on. This was the reference port the other thirteen followed.</p></div>
-<div><h4>How it is built</h4><ul><li>The game runs on the server, because the city is the secret: the page only ever sees a masked view (no name, country or fun fact before the reveal).</li><li>Gemini writes a fresh three-city deck per game; Wikipedia's lead image is served from a random token so the file name cannot give the city away.</li><li>Guesses are judged by the app's own model call (misheard names count); command words (clue, give up, next) by rules.</li><li>The next clue is staged in <code>state</code>, so a spoken "can I have a clue?" gets the real one at once. Verdicts and reveals go out as events.</li></ul></div>
+<div><h4>What it is for</h4><p>A city-guessing game. Marco deals three mystery cities, each a single photo on a postcard. Guess from the photo alone for 4 points, or open a sealed clue when you are stuck (each costs a point). Say your guess or type it. This is the reference app the other thirteen follow.</p></div>
+<div><h4>How it is built</h4><ul><li>The game runs on the server, because the city is the secret: the page sees a masked view, with no name, country or fun fact before the reveal.</li><li>A Gemini call deals each game, avoiding recent cities. Photos are Wikipedia lead images behind random tokens, downloaded as soon as the game is dealt.</li><li>Marco acts through five <code>await</code> tools: <code>check_guess</code>, <code>get_clue</code>, <code>reveal_answer</code>, <code>next_city</code>, <code>new_game</code>. The page asks the server, which acts and returns the words he speaks from, so his first reply to a guess is the game's verdict. A guess is judged by name, else by the server's own model call, so misheard names count.</li><li>The safety net does "I give up", "next" and "new game" if Marco has not called within 7 s. Clues and guesses are left out: a duplicate would cost a point.</li><li>Marco's face is on the front door ("Hosted by Marco") and fills his frame while the call connects.</li></ul></div>
 </div>
 <div><h4>What the API missed</h4><ul class="gaplist">
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Replies before the verdict</b><p>"Is it Paris?" got "That's not quite right…" in every run, before the app had judged it, despite a note forbidding it.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Invents clues unless they are staged</b><p>Before staging, "can I have a clue?" got a made-up clue ("home to the Burj Khalifa" for New York) in 2 of 3 runs. Staging fixed it.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Greets as the test avatar</b><p>"I'm Emily, a livestream host…" before the app's welcome.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Check-in while the player studies the photo</b><p>"Take your time, or just let me know if you want another clue!"</p></li>
-<li><span class="st st-expected" title="Possible; not observed in one run">Expected</span><b>No speech hints for city names</b><p>Rare names rely on the recogniser; the model judge absorbs some mishearings.</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>The verdict is the game's</b><p>"Is it Paris?" called <code>check_guess</code> and the first reply was the verdict: "Okay, got it, but it's not Paris this time!" The first port said "that's not quite right" before the app had judged.</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>A give-up narrated once</b><p>In one game Marco answered "I give up" with "wait, didn't we just jump to the new city?" and no call. The safety net revealed the city 7 s later and he carried on.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>A photo announced before it arrived</b><p>In round 2 the next postcard stayed blank for more than 8 s while Marco said "a brand new city photo just popped up on your screen". Photos are now fetched when the game is dealt.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>Check-in while the player studies the photo</b><p>It cannot be turned off.</p></li>
+<li><span class="st st-expected" title="Possible; not observed in the runs with tools">Expected</span><b>No speech hints for city names</b><p>The model judge accepts mishearings ("sidney").</p></li>
 </ul></div>
-<div class="live"><span class="eyebrow">Live run</span><p>Staging, avatar 2cd3ec08: real clue on request, "I give up" revealed Bangkok, typed "What is my score?" answered from the board. A second run proved the mid-session mic switch (65 s billed).</p></div>
+<div class="live"><span class="eyebrow">Round 2</span><p><b>No regressions.</b> Round 2, on Marco's own host (103 s): one greeting; a guess, a clue, the reveal and the next city each went through its tool in 2.3 to 3.6 s, with no safety-net catches. Since then the photo is ready before Marco announces it (not yet run live).</p></div>
 </article>
 <article class="app" id="chess-opponent">
-<div class="app-head"><h3>Chess Opponent</h3><p class="tagline">A real game of chess against an opponent who moves on its own, says why, and needles you a little.</p>
-<div class="meta"><span>apps/chess-opponent/</span><span>431 tests</span></div></div>
+<div class="app-head"><h3>Kibitz</h3><p class="tagline">Chess with a club player who plays her own moves, says why, and needles you a little.</p>
+<div class="meta"><span>apps/chess-opponent/</span><span>Host: Sasha</span><span>552 tests</span></div></div>
 <div class="stack">
-<div><h4>What it is for</h4><p>Play a full game of chess against the avatar. Drag a piece or say or type a move ("e4", "knight to f3", "castle"); pick a side and a difficulty, resign or start over. The opponent explains its moves and names openings.</p></div>
-<div><h4>How it is built</h4><ul><li>The board runs in the page with chess.js: chess has no secrets, and drags must be instant.</li><li>The opponent is a one-move-ahead heuristic with three strengths and a seeded tie-break, ported from the Python original (with its "1.e4 h5" bug fixed).</li><li>Rules read spoken moves conservatively; doubtful lines go to the server's model judge, whose move must land on a square the player actually said.</li><li><code>state</code> carries the player's legal moves and staged answers to "can I play black?" and "go easier", so the avatar's first reply is true.</li></ul></div>
+<div><h4>What it is for</h4><p>Play a full game of chess against Sasha. Say your move, type it, drag the piece or tap it; ask for Black, an easier game, to resign or for a rematch. She names openings and explains her moves. At the end the game downloads as a PGN scoresheet.</p></div>
+<div><h4>How it is built</h4><ul><li>The board runs in the page with chess.js: chess has no secrets, so the page answers Sasha's tool calls itself. Her moves come from the original one-move-ahead heuristic with a seeded tie-break, never a model.</li><li>Five <code>await</code> tools: <code>play_move</code>, <code>choose_side</code>, <code>set_strength</code>, <code>resign</code>, <code>new_game</code>. <code>play_move</code> plays the player's move, waits 0.7 s, plays Sasha's reply and returns both, so her first reply carries the ruling and her own move. Every result opens with its outcome ("Done:", "Refused:", "Not yet:").</li><li>Sasha passes the words she heard and the page resolves them against the position: an ambiguous move comes back as a question, never as illegal. A typed line written as a move goes straight to the board.</li><li>The safety net resigns, deals a new game, eases the strength or picks a side before the first move. Never a move: a doubled move is two moves.</li><li>Sasha's face is on the front door ("Across the board — Sasha, club player").</li></ul></div>
 </div>
 <div><h4>What the API missed</h4><ul class="gaplist">
-<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held in the run">Held</span><b>Replies before the board acts</b><p>"Rook to a five" was refused twice: first from the staged legal moves, then by the app's event. Nothing illegal was ever agreed to.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Commentary dropped</b><p>After the switch to Black, the opponent's first move (1.Nf3) was never named; the avatar only said "It's your turn".</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Check-in hurries a thinking player</b><p>"Take your time…", "No rush at all…". The original waited 45 s.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Greets as the test avatar</b><p>The board labels it "Opponent" because the avatar keeps its own name.</p></li>
-<li><span class="st st-expected" title="Possible; not observed in one run">Expected</span><b>No speech hints for squares</b><p>"b4" can come back as "before"; every square was heard right in this run.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>The filler contradicts the result</b><p>"Black, please." called <code>choose_side</code> in 2.6 s, but the reply began "That's actually not right, we're flipping the board now!" before a switch that had happened.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>Actions narrated, not called</b><p>On a shared avatar in round 1 she made no call for seven requests in a row and said "you're Black now and the board's reset" with nothing changed. It did not happen again on her own host.</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>Typed moves go to the board</b><p>A typed "Ra5" was refused under the board by the page, and Sasha gave the reason: "your rooks are trapped behind that wall of pawns".</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>Check-in over a thinking player</b><p>"Take your time over there, I know Knight to f3 is a truly terrifying first move to face." The original waited 45 s.</p></li>
+<li><span class="st st-expected" title="Possible; not observed in the runs with tools">Expected</span><b>Moves by hand reach her as events</b><p>A dragged move's reply waits for the floor, and a player who keeps talking can outlast it.</p></li>
+<li><span class="st st-expected" title="Possible; not observed in the runs with tools">Expected</span><b>No speech hints for squares</b><p>"b4" can come back as "before".</p></li>
 </ul></div>
-<div class="live"><span class="eyebrow">Live run</span><p>Staging, avatar baf61f2c, 233 s: e4, Nf3, an illegal move refused, a switch to Black, beginner mode, undo refused, typed d5, resignation. A first attempt crashed from a dev-server bundling bug, since fixed.</p></div>
+<div class="live"><span class="eyebrow">Round 2</span><p><b>Fixed.</b> Round 2, on Sasha's own host (118 s): one greeting; a typed "Ra5" refused on the board; "E four." called <code>play_move</code> in 2.8 s (1.e4 Nf6, Alekhine's Defence named); "Black, please." flipped the board, with her first move in the same reply. The safety net was not needed.</p></div>
 </article>
 <article class="app" id="poker-table">
-<div class="app-head"><h3>Poker Table</h3><p class="tagline">Heads-up no-limit hold'em against the avatar: say your moves, it plays its own.</p>
-<div class="meta"><span>apps/poker-table/</span><span>158 tests</span></div></div>
+<div class="app-head"><h3>Blindside</h3><p class="tagline">Heads-up no-limit hold'em against a sharp, talkative opponent who never sees his own cards.</p>
+<div class="meta"><span>apps/poker-table/</span><span>Host: Dex</span><span>190 tests</span></div></div>
 <div class="stack">
-<div><h4>What it is for</h4><p>Heads-up Texas Hold'em: 1,000 chips each, blinds 10/20, played until one stack is empty. Play with buttons or say "call", "raise to 60", "I fold", "all in". The avatar plays its own hand and needles you about yours.</p></div>
-<div><h4>How it is built</h4><ul><li>The whole table runs on the server: hold'em rules, a hand evaluator checked against seven golden hands, and the match. The avatar's hidden cards never reach the page or the avatar.</li><li>The opponent decides on the server with a model call and a 4.5 s rule-based fallback.</li><li>A strict parser reads spoken moves (number words included) and asks rather than guesses; every amount is checked by the table.</li><li>The table's rules travel as four notes (about 4,250 characters); rulings and refusals go out as events; the pot and the player's cards sit in <code>state</code>.</li></ul></div>
+<div><h4>What it is for</h4><p>Heads-up Texas Hold'em: 1,000 chips each, blinds 10 and 20, played until one stack is empty. Say your move, type it or tap it; the table rules on it, plays Dex's hand, and Dex speaks from what landed. His cards stay face down even from him, so his table talk is bluff by construction.</p></div>
+<div><h4>How it is built</h4><ul><li>The whole table runs on the server: hold'em rules, a hand evaluator, the match. Dex's hidden cards never leave it; his state is built from the player's view, so he never knows his hand.</li><li>Five <code>await</code> tools: <code>play_move</code>, <code>deal_hand</code>, <code>new_match</code>, <code>read_my_cards</code>, <code>show_hand_rankings</code>. The server reads the player's words with the original's parser and plays a move only if the player's own words contain it, so a move Dex invents is refused. One result carries the player's move and Dex's answer.</li><li>Dex's own moves come from a Gemini call with an 8 s budget; without an answer the table plays the safe action (check, else call) and logs why.</li><li>A bet never lands twice: words count only at the point in the hand they were said. The safety net deals, starts a rematch, reads the cards or opens the chart; never a move.</li><li>Dex's live video is his seat at the head of the felt, and his face is on the front door.</li></ul></div>
 </div>
 <div><h4>What the API missed</h4><ul class="gaplist">
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>A holding line nobody kept</b><p>"Raise to five" arrived as "Raised to five.", which the parser missed; the avatar had said "let's see" and nothing followed. Parser fixed.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>An event and a question collide</b><p>A typed "what beats what?" met the opponent's move event; only the event was answered.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Check-in while sizing a bet</b><p>"Still thinking over that forty to call, or are…"</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Greets as the test avatar</b><p>It described its own test setup ("a fixed four hundred millisecond prime lead").</p></li>
-<li><span class="st st-expected" title="Possible; not observed in one run">Expected</span><b>Rulings paraphrased</b><p>Live rulings kept their numbers; the table's message line shows the exact range.</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>The chart opens on request</b><p>"What beats what?" called <code>show_hand_rankings</code> in 2.6 s and the chart opened while Dex walked the order. In round 1 he recited the rankings and only offered the chart.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>A move answered in words</b><p>"Check." facing a bet got no <code>play_move</code>; Dex needled instead: "Don't tell me thirty whole chips scared you off already." Every move now goes to the table, legal or not.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>A refusal that was his, not the table's</b><p>"Can we start a new match?" mid-hand got no call, and the filler framed his refusal: "Of course, you can't start a new match in the middle of a hand!" The outcome was right; now he calls <code>new_match</code> and the table answers.</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>One reply for both moves</b><p>"I call." returned the call, Dex's check, the flop and his bet of 30 in one reply.</p></li>
+<li><span class="st st-expected" title="Possible; not observed in the runs with tools">Expected</span><b>Check-in while sizing a bet</b><p>Seen in the first port; it cannot be tuned.</p></li>
 </ul></div>
-<div class="live"><span class="eyebrow">Live run</span><p>Staging, avatar 2cd3ec08, 198 s: rules from <code>state</code>, a call answered by the opponent's raise, pot and cards read right, a fold with the uncalled bet returned, hand two dealt.</p></div>
+<div class="live"><span class="eyebrow">Round 2</span><p><b>Partly fixed.</b> Round 2, on Dex's own host (153 s): one greeting; the chart, a call with Dex's answer, and the player's cards each went through their tool in 2.6 s. Missed: "Check." facing a bet and "New match" mid-hand. Since then a refused move's result names the player's options, and Dex's decision budget is 8 s.</p></div>
 </article>
 </div>
 <div><div class="group-head"><h2>Tutors</h2><span class="eyebrow">5 apps</span></div>
 <article class="app" id="stroke-tutor">
-<div class="app-head"><h3>Stroke Tutor</h3><p class="tagline">A calligraphy teacher who grades your stroke order and direction, never your handwriting.</p>
-<div class="meta"><span>apps/stroke-tutor/</span><span>181 tests</span></div></div>
+<div class="app-head"><h3>Hanshi</h3><p class="tagline">Stroke-order lessons with a calligraphy teacher who grades order and direction, never your handwriting.</p>
+<div class="meta"><span>apps/stroke-tutor/</span><span>Host: Ren</span><span>269 tests</span></div></div>
 <div class="stack">
-<div><h4>What it is for</h4><p>Write a character one stroke at a time and get graded on stroke order and direction. Seven characters from 一 to 永, plus the capitals A and E for learners with no Japanese. Two misses and the teacher shows the stroke.</p></div>
-<div><h4>How it is built</h4><ul><li>Lessons and reference strokes stay on the server: an unrevealed stroke is the secret, and the page sees a masked snapshot.</li><li>The grader is pure geometry, ported from the Python original; 12,000 random drawings got identical verdicts from both.</li><li>The canvas turns ink into grid points (1,000 units across); each gesture is one stroke sent to the lesson.</li><li>A coach queue holds cues while the avatar speaks and keeps only the newest, so coaching does not pile up behind a sentence.</li></ul></div>
+<div><h4>What it is for</h4><p>Write a character one stroke at a time on a practice sheet. Ren says when a stroke comes out of order, runs the wrong way or starts in the wrong place. Seven characters, from 一 to 永, plus the capitals A and E. Draw with a finger, a stylus or a mouse; talk to Ren or type.</p></div>
+<div><h4>How it is built</h4><ul><li>The lesson runs on the server: a stroke's reference points reach the page and Ren only once it is earned, drawn right or shown. Grading is geometry, checked against the Python original on 12,000 random drawings.</li><li>Five <code>await</code> tools: <code>show_stroke</code>, <code>next_stroke</code>, <code>choose_character</code>, <code>next_character</code>, <code>start_over</code>. There is no tool for drawing: the server grades each gesture, and the verdict reaches Ren as an event, the newest cue only.</li><li>A stroke drawn backwards is told as two fixed sentences worked out from the lines. Each finished stroke carries its record (right on try N, or shown), so praise can only repeat it.</li><li>The safety net shows the stroke, goes on to the next, starts over or picks a character off the menu: each is safe twice. Not the next character, which twice would skip one.</li><li>Ren's face is on the front door, and the sheet keeps working while the call is down.</li></ul></div>
 </div>
 <div><h4>What the API missed</h4><ul class="gaplist">
-<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held in the run">Held</span><b>Answers "which way does it go?" before the reveal</b><p>It said only "let me show you", as the notes ask; describing the hidden stroke from memory would be the leak this app prevents.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Check-in interrupts drawing</b><p>Twice in one run: "Whenever you're ready, try stroke two!"</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Misreads a correct state</b><p>After stroke 2 was missed twice and shown, it said "We've got the first two down".</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Spoken commands wait for the transcript</b><p>"Next" and "start over" act a second late; the buttons always work.</p></li>
-<li><span class="st st-expected" title="Possible; not observed in one run">Expected</span><b>Stale coaching</b><p>An event cannot be withdrawn once sent, so a cue can arrive after the learner has drawn again.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>Praise beyond the record</b><p>After stroke 1 was first drawn backwards, Ren said "you finished with every single stroke right on your first try". The sheet's own count was wrong too; both now say "3 of 4 strokes right on the first try".</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>Direction said as written</b><p>"You drew it from right to left. This stroke goes from left to right." In round 1 Ren flipped a verdict, saying "that one went top to bottom!" after an upward stroke.</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>"Next." narrated once in five</b><p>Four of five called <code>next_stroke</code> in 2.4 to 2.5 s; the safety net took the fifth.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>Check-in over a learner drawing</b><p>"Whenever you're ready, take your time with that first stroke!" The instructions ask for silence while the learner writes.</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>No stroke described early</b><p>The leak probe "Is it the long one down the middle?" called <code>show_stroke</code>; Ren described the stroke only once it was on the sheet.</p></li>
 </ul></div>
-<div class="live"><span class="eyebrow">Live run</span><p>Staging, avatar baf61f2c, 151 s: holding line then lesson, a wrong-direction stroke caught twice and shown, "start over" returned to stroke 1.</p></div>
+<div class="live"><span class="eyebrow">Round 2</span><p><b>Fixed.</b> Round 2, on Ren's own host (277 s): one greeting; 木 with stroke 1 drawn backwards first, every verdict the sheet's, then 十. "Next." called its tool 4 of 5 times; the safety net took the fifth. Since then each stroke keeps its first-try record, and the debrief, seal and summary say it plainly.</p></div>
 </article>
 <article class="app" id="bls-tutor">
-<div class="app-head"><h3>BLS Tutor</h3><p class="tagline">A calm paramedic walks you through CPR and first-aid scenarios, step by step.</p>
-<div class="meta"><span>apps/bls-tutor/</span><span>245 tests</span></div></div>
+<div class="app-head"><h3>Bystander</h3><p class="tagline">CPR and first-aid practice with a calm paramedic instructor, one step at a time.</p>
+<div class="meta"><span>apps/bls-tutor/</span><span>Host: Alex</span><span>274 tests</span></div></div>
 <div class="stack">
-<div><h4>What it is for</h4><p>Basic Life Support practice: an adult collapse, a child at a pool, choking at dinner, the recovery position. Say what you would do; the drill grades it against the AHA/ERC sequence with the exact numbers. If it sounds like a real emergency, a red Call 911 / 112 card covers the screen.</p></div>
-<div><h4>How it is built</h4><ul><li>The drill runs on the server and a rules-only judge grades answers: no model decides whether CPR was right.</li><li>Only the live step's answer, teaching line and hint are staged in <code>state</code>, fenced by "only if they ask"; steps ahead never are.</li><li>Emergency phrases are caught in the page itself, so the red card goes up even with the server down.</li><li>A standing note carries the exact emergency sentence, so the avatar's own first reply already has it.</li></ul></div>
+<div><h4>What it is for</h4><p>Practice for ordinary people: an adult collapse in a café, a child by a pool, choking at dinner, someone unresponsive but breathing. Say or type what you would do; the drill grades it against the AHA/ERC lay-rescuer sequence and teaches each step with the exact numbers. If what you say sounds like a real emergency, a red Call 911 / 112 card covers the screen at once.</p></div>
+<div><h4>How it is built</h4><ul><li>The drill runs on the server and grades by phrase rules: no model decides whether CPR was right. The page sees a step's words only once it is answered or shown.</li><li>Eight <code>await</code> tools: <code>check_answer</code>, <code>show_step</code>, <code>give_hint</code>, <code>next_step</code>, <code>start_scenario</code>, <code>leave_scenario</code>, <code>stop_for_emergency</code>, <code>resume_practice</code>. Alex's first reply to an answer carries the drill's verdict; a second miss comes back already taught.</li><li>Safety-critical detection: the page reads every spoken and typed line, and the red card goes up the moment one reads like a real emergency, before and without the server. Alex's <code>stop_for_emergency</code> is a second path. Only the learner's own words, saying nobody is in danger, take the card down.</li><li>The safety net shows a step, goes on, leaves, picks a drill or clears a false alarm. Never answers or hints: a second grade would use up an attempt.</li><li>Alex's face is on the front door and in his frame.</li></ul></div>
 </div>
 <div><h4>What the API missed</h4><ul class="gaplist">
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>The emergency line cannot be forced</b><p>"My dad just collapsed" got the line from the note, behind the platform's filler ("Man, that's rough, Stop — …call 911"), then the event said it a second time.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Transcripts lose words</b><p>"This is too hard, can I pick a different scenario?" arrived as "I pick a different scenario?" (it still worked).</p></li>
-<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held in the run">Held</span><b>No verdict before the reply</b><p>Both answers got "let's see what the drill says", then the right verdict.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Check-in prods a learner</b><p>Three times in one run.</p></li>
-<li><span class="st st-known" title="A limitation by design; a run cannot show it">Known</span><b>No push-to-answer</b><p>Muting the avatar would also stop the transcript the drill needs.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>Praise before a Not-yet verdict</b><p>A wrong answer got "Yeah, good call, but find out how bad it is first…" The verdict was the drill's, but the filler came first, and the app cannot reach it.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>A filler before the emergency line</b><p>"Oh, that's difficult, Stop — if this is happening now…" The 911 sentence itself was word for word. The guarantee is the red card, with the exact sentence and tap-to-call numbers.</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>The red card comes first</b><p>"my dad just collapsed and he's not breathing" put the card up from the page's own watch before Alex's <code>stop_for_emergency</code>. Practice resumed only after "false alarm, nobody's hurt".</p></li>
+<li><span class="st st-expected" title="Possible; not observed in the runs with tools">Expected</span><b>Clinical numbers can be paraphrased</b><p>"at least 2 inches" could become "about two inches"; the exact text is on the sheet.</p></li>
+<li><span class="st st-known" title="A limitation by design; a run cannot show it">Known</span><b>Muting would deafen the emergency watch</b><p>Alex cannot be told to ignore the learner while the page keeps listening.</p></li>
 </ul></div>
-<div class="live"><span class="eyebrow">Live run</span><p>Staging, avatar baf61f2c, 300 s: choking scenario graded step by step, "show me" answered from the staged answer, a scenario switch, the emergency card up the moment the transcript arrived, then cleared on "false alarm".</p></div>
+<div class="live"><span class="eyebrow">Round 2</span><p><b>Partly fixed.</b> Round 2, on Alex's own host (119 s): one greeting, then the safety line and the choking scene. A wrong answer, the emergency and the false alarm went through <code>check_answer</code>, <code>stop_for_emergency</code> and <code>resume_practice</code>. The 911 sentence was word for word, but the platform's filler came first both times, and no wording of a result can remove it.</p></div>
 </article>
 <article class="app" id="quadratic-whiteboard">
-<div class="app-head"><h3>Quadratic Whiteboard</h3><p class="tagline">Name a quadratic, pick a method, and reveal the working one line at a time beside its graph.</p>
-<div class="meta"><span>apps/quadratic-whiteboard/</span><span>304 tests</span></div></div>
+<div class="app-head"><h3>Chalkline</h3><p class="tagline">A maths board a teacher drives by voice: name a quadratic, pick a method, reveal the working a line at a time.</p>
+<div class="meta"><span>apps/quadratic-whiteboard/</span><span>Host: Ada</span><span>392 tests</span></div></div>
 <div class="stack">
-<div><h4>What it is for</h4><p>A whiteboard a teacher drives by voice in front of a class. Put up a quadratic, choose factoring, completing the square or the formula, and say "next" for each line of working beside the parabola. Every number is exact: surds stay surds.</p></div>
-<div><h4>How it is built</h4><ul><li>The engine runs on the server in exact fractions and matches the Python original line for line on 1,210 equations; unrevealed working never leaves it.</li><li>Only the next line's sentence is staged in <code>state</code>, so a spoken "next" is read correctly at once; spoken requests get no event, buttons and typed lines do.</li><li>Spoken maths ("x squared minus four x plus three") is read by rules; anything else goes to a model call.</li><li>The avatar is "the chalk hand": it reads lines and answers questions about the board, and never teaches or reads ahead.</li></ul></div>
+<div><h4>What it is for</h4><p>For a teacher in front of a class. Say a quadratic, choose factoring, completing the square or the formula, and say "next" for each line of working beside the parabola. Ada reads each new line exactly as written: surds stay surds. She does not teach, quiz or read ahead, and she cannot: no line leaves the server until the board puts it up.</p></div>
+<div><h4>How it is built</h4><ul><li>The engine runs on the server in exact fractions and is checked line for line against the Python original's output. The page and Ada get only the revealed lines and a count of the rest.</li><li>Eight <code>await</code> tools: <code>put_up_equation</code>, <code>choose_method</code>, <code>next_line</code>, <code>previous_line</code>, <code>show_all_working</code>, <code>show_graph</code>, <code>hide_graph</code>, <code>clear_board</code>. <code>next_line</code> reveals a line and returns it, so Ada's first reply to "next" is the line that just went up.</li><li>Equations are read by rules first, then by a Gemini call capped at 8 s for brackets and mishearings. Putting up the same equation twice changes nothing.</li><li>The safety net puts up an equation, picks a method, shows all, shows or hides the graph, or clears; never the next or previous line. It waits 7 s for spoken lines and 15 s for typed ones.</li><li>Ada's face is on the front door. The board outlives the call, and lesson notes download at the end.</li></ul></div>
 </div>
 <div><h4>What the API missed</h4><ul class="gaplist">
-<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held in the run">Held</span><b>Replies before the board moves</b><p>Every "next" and "go on" was answered with the right staged line while the board moved to match.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Speaks into the class's pauses</b><p>"Whenever you are ready for the next line…", three times; the original never spoke unprompted.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Greets as the test avatar</b><p>A lighthouse keeper on the Taitung coast, then the board's opening.</p></li>
-<li><span class="st st-expected" title="Possible; not observed in one run">Expected</span><b>One unrevealed line is within reach</b><p>Staging puts one line in the avatar's state; no early read was seen.</p></li>
-<li><span class="st st-expected" title="Possible; not observed in one run">Expected</span><b>Decimals instead of surds</b><p>Asked for a decimal, it kept "two plus root three".</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>Each line read as it went up</b><p><code>put_up_equation</code>, <code>choose_method</code> and two <code>next_line</code> calls each carried the board in the first reply: "Sure thing, line one is up: x squared minus five x plus six equals zero."</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>A typed line handled once</b><p>A typed "Hide the graph." called <code>hide_graph</code> in 1.1 s. In round 1 it took 26.9 s and the safety net hid it first.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>Speaks into the class's pause</b><p>"Just say the word whenever you're ready for the next line of working." The original's rule, "never speak unprompted", cannot be met.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>Misheard maths</b><p>"Hide the graph." arrived as "Hi DeGraff."</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>A persona that fits the board</b><p>Round 1's host said "Executing request."; the new one greets "I'm Ada, the voice of the Chalkline board…"</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>Surds kept</b><p>Asked "what's that as a decimal?", Ada kept the exact surds.</p></li>
 </ul></div>
-<div class="live"><span class="eyebrow">Live run</span><p>Staging, avatar 26cbe079, 267 s: factoring revealed by voice, button and typing; discriminant and roots answered; factoring refused for x² − 4x + 1; the formula started.</p></div>
+<div class="live"><span class="eyebrow">Round 2</span><p><b>Fixed.</b> Round 2, on Ada's own host (118 s): one greeting in the new persona; put up, factoring, two lines and a typed "Hide the graph." each called once, in 1.1 to 4.2 s, with no doubled openers. Still seen: short fillers that contradict nothing, and the check-in after line 2.</p></div>
 </article>
 <article class="app" id="trajectory-coach">
-<div class="app-head"><h3>Trajectory Coach</h3><p class="tagline">Shoot at things on a range drawn to scale; a coach explains, in real numbers, why it fell short.</p>
-<div class="meta"><span>apps/trajectory-coach/</span><span>228 tests</span></div></div>
+<div class="app-head"><h3>Arcwise</h3><p class="tagline">A projectile range drawn to scale, and a coach who explains each miss in the range's own numbers.</p>
+<div class="meta"><span>apps/trajectory-coach/</span><span>Host: Theo</span><span>286 tests</span></div></div>
 <div class="stack">
-<div><h4>What it is for</h4><p>Learn projectile motion by shooting: aim by dragging an arrow or saying "forty-five at twenty-four", fire, and the coach explains the miss in real numbers. Six challenges, each built to disprove a piece of folklore about 45°.</p></div>
-<div><h4>How it is built</h4><ul><li>The flight engine runs in the page, ported line for line; a golden test compares 273 graded shots byte for byte with the Python output.</li><li>The range itself lands each shot on a timer, and the verdict stays out of <code>state</code> while the ball flies.</li><li>Rules read numbers, "X at Y" and relative steps; shots described by their shape ("like a mortar") go to a model call.</li><li>The launcher's limits and the challenges are staged; the landing line is the main event.</li></ul></div>
+<div><h4>What it is for</h4><p>Learn projectile motion by shooting. Theo puts up a target; aim by dragging the arrow, nudging the steppers or telling him ("forty degrees", "a bit more speed"), fire, and watch the shot fly. Six challenges, each built to disprove a piece of folklore about 45°, and a logbook of every lesson to keep.</p></div>
+<div><h4>How it is built</h4><ul><li>The physics runs in the page, ported line for line; a golden test pins 273 graded shots to the Python engine's output. While a shot flies, nothing built from the range, neither the screen nor Theo's picture, has its result.</li><li>Four <code>await</code> tools: <code>aim</code>, <code>fire</code>, <code>choose_challenge</code>, <code>start_over</code>. <code>fire</code> resolves when the ball is down, so Theo's first reply to "fire" is where it landed. After an aim from words, the result has him name the new angle once and forbids a prediction.</li><li>Aims without a number go through the range's own steps ("a bit" is 3°); phrases the rules cannot read ("lob it like a mortar") go to a validated model call.</li><li>The safety net fires, starts over or changes the challenge after 7 s. Aims are left out: "a bit steeper" done twice moves twice.</li><li>Theo's face is on the front door; progress and the logbook outlive a call.</li></ul></div>
 </div>
 <div><h4>What the API missed</h4><ul class="gaplist">
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Acts out what the app did not do</b><p>"Lob it like a mortar", heard as "Lobbied like a mortar.", got "let's send it!" while the range did nothing. The model prompt was fixed.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Predicts the result before landing</b><p>"let's watch this one fly right over!" before the shot came down (right by luck).</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Refusals said twice</b><p>"maxes out at eighty-five degrees" from the staged limits, then the event.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Check-in before the opening</b><p>"Just checking in—did you want to keep chatting…" before the app's welcome was said.</p></li>
-<li><span class="st st-expected" title="Possible; not observed in one run">Expected</span><b>Numbers paraphrased</b><p>Both landing lines kept every figure ("0.76 m going past 40 m, 2.24 m below the top").</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>The landing in the first reply</b><p>"Fire!" said during the greeting called <code>fire</code>: "You were at 0.76 m going past 40 m, 2.24 m below the top."</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>Narrated in round 1, called in round 2</b><p>Round 1's "Start over." got "I've wiped the board clean" with no call, and the safety net did it. In round 2 it called <code>start_over</code>.</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>The new angle, not a prediction</b><p>"Make it a bit steeper." got "I bumped you up to forty-eight degrees". Round 1 promised "way more arc to sail right over the wall!" before any shot; a softer one remains ("a slightly higher arc over the wall").</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>Check-in while the student thinks</b><p>"Still there? Take the shot". The original nudged after 45 s.</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>Misheard, still aimed</b><p>"Lob it like a mortar" arrived as "Lobbied like a mortar"; Theo passed "lobbed like a mortar" and the range aimed from it.</p></li>
 </ul></div>
-<div class="live"><span class="eyebrow">Live run</span><p>Staging, avatar 2cd3ec08, 224 s: a miss explained from its numbers, a steeper aim, 90° refused, a clear at 45° and 24 m/s, the Moon challenge.</p></div>
+<div class="live"><span class="eyebrow">Round 2</span><p><b>Fixed.</b> Round 2, on Theo's own host (114 s): "Fire!" during the greeting, "Start over." and "Make it a bit steeper." each called their tool in 2.4 to 3.3 s; the safety net had nothing to do.</p></div>
 </article>
 <article class="app" id="sky-guide">
-<div class="app-head"><h3>Sky Guide</h3><p class="tagline">Tonight's sky from anywhere, and a guide who only says what the catalogue knows.</p>
-<div class="meta"><span>apps/sky-guide/</span><span>225 tests</span></div></div>
+<div class="app-head"><h3>Lodestar</h3><p class="tagline">Tonight's sky from anywhere on Earth, with a guide who only says what the chart worked out.</p>
+<div class="meta"><span>apps/sky-guide/</span><span>Host: Mira</span><span>311 tests</span></div></div>
 <div class="stack">
-<div><h4>What it is for</h4><p>A chart of the sky from one place at one held instant: 135 naked-eye stars, 18 figures and catalogue facts. Tap a star or ask "where's Vega?", light a constellation, move the place and the clock.</p></div>
-<div><h4>How it is built</h4><ul><li>The engine runs in the page: sky, catalogue and chart ported formula for formula; nothing is secret.</li><li><code>state</code> lists every star that is up by direction, and every figure as up (where to look) or down (when it rises), so "show me Orion" is answered from the chart.</li><li>A mishearing table maps "beetle juice" to Betelgeuse; a server model call reads commands the rules cannot place.</li><li>Place and time moves always get an event; questions the state already answers get none.</li></ul></div>
+<div><h4>What it is for</h4><p>A night-sky chart for any city and any night between 1900 and 2100: 135 naked-eye stars and 18 constellation figures. Ask Mira "where's Vega?", "show me Orion", "the sky from Lisbon at midnight" or "two hours later". What you looked at becomes your night's list, to download and take outside.</p></div>
+<div><h4>How it is built</h4><ul><li>The sky runs in the page: it is public and the maths is pure, so the chart on screen, Mira's picture of it and every tool result come from one object.</li><li>Four <code>await</code> tools: <code>point_out</code>, <code>show_constellation</code>, <code>move_chart</code>, <code>clear_chart</code>. Each result starts with its outcome ("Marked:", "Not up now:", "Moved:", "Not moved:"), with the rising time for a figure that is down.</li><li>Mira passes the words she heard ("beetle juice", "two hours later"); rules over the catalogue's own names read them, and a Gemini call only reads what the rules cannot place.</li><li>The safety net makes moves that are safe twice: a named place, an absolute time, a figure, a clear. Never a relative time or a star.</li><li>Mira's face is on the front door; red light turns the whole app torch-red for dark-adapted eyes.</li></ul></div>
 </div>
 <div><h4>What the API missed</h4><ul class="gaplist">
-<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held in the run">Held</span><b>Replies before the chart moves</b><p>"Show me Orion" got the right rising time from <code>state</code>, then the refusal event repeated it.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Star names misheard</b><p>"Betelgeuse" arrived as "Beetlejuice"; the mishearing table caught it.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Greets as the test avatar</b><p>Then the app's opening: "the sky over Taipei at about nine in the evening".</p></li>
-<li><span class="st st-expected" title="Possible; not observed in one run">Expected</span><b>Facts only by instruction</b><p>Live facts were the catalogue's; nothing gates the avatar's memory.</p></li>
-<li><span class="st st-expected" title="Possible; not observed in one run">Expected</span><b>Check-in over stargazing</b><p>None in a run with steady questions; it cannot be turned off.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>A filler that sounds like a mishearing</b><p>"What does that mean, then? That would be Vega…" In round 1 a result came after "Could you repeat that?"</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>A yes before a refusal</b><p>"Sure thing, ok though I don't have Kyoto listed directly." The chart's offer followed: Tokyo, or its latitude and longitude.</p></li>
+<li><span class="st st-expected" title="Possible; not observed in the runs with tools">Expected</span><b>Narration not seen</b><p>Every request called its tool once, 2.5 to 2.8 s after the words began; the safety net never fired.</p></li>
+<li><span class="st st-expected" title="Possible; not observed in the runs with tools">Expected</span><b>Facts only by instruction</b><p>Nothing gates Mira's memory; the catalogue's lines are on screen beside the chart.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>Check-in over the stargazing</b><p>One came 19 s after "Clear the chart". The original had no idle nudge at all.</p></li>
 </ul></div>
-<div class="live"><span class="eyebrow">Live run</span><p>Staging, avatar baf61f2c, 211 s: Orion refused with its rising time, Vega located, Lisbon at the same instant, midnight, Betelgeuse, "I don't do planets", Kyoto refused, Sydney typed.</p></div>
+<div class="live"><span class="eyebrow">Round 2</span><p><b>Fixed.</b> Round 2, on Mira's own host (122 s): one greeting, then straight to "Taipei around nine tonight"; Kyoto refused with Tokyo offered, Vega marked, Cygnus drawn, the clock moved to 11 pm.</p></div>
 </article>
 </div>
 <div><div class="group-head"><h2>Advisors and tools</h2><span class="eyebrow">6 apps</span></div>
 <article class="app" id="nutrition-advisor">
-<div class="app-head"><h3>Nutrition Advisor</h3><p class="tagline">Name a food or share a photo of one: its card, a side-by-side table, and recipes talked through.</p>
-<div class="meta"><span>apps/nutrition-advisor/</span><span>242 tests</span></div></div>
+<div class="app-head"><h3>Morsel</h3><p class="tagline">Name a food or add a photo: its nutrition label, a side-by-side table, and recipes talked through.</p>
+<div class="meta"><span>apps/nutrition-advisor/</span><span>Host: Rachel</span><span>284 tests</span></div></div>
 <div class="stack">
-<div><h4>What it is for</h4><p>Name a food or share a photo of it or its label, and get a card: serving, calories, macros with % daily value, a 1–10 score and three recipe ideas. Every food stays in a comparison table; a recipe opens into steps the advisor talks you through.</p></div>
-<div><h4>How it is built</h4><ul><li>The engine runs on the server: every card is a Gemini call, and one writer keeps the card, table and recipes in step.</li><li>The board in <code>state</code> carries every figure, so "which has more sugar?" is answered from the app's numbers.</li><li>Recipe steps are written ahead of time, so a spoken "walk me through the first recipe" starts at once.</li><li>Photos come by upload or drag and drop only; the camera is never opened.</li></ul></div>
+<div><h4>What it is for</h4><p>Ask Rachel about any food (say it, type it, or add a photo of the food or its label) and its label lands on your table: serving, calories, macros against a 2,000-calorie day, a 1 to 10 score and her plain-words takeaway. Foods stay side by side; a recipe is talked through two steps at a time. Notes to take home at the end.</p></div>
+<div><h4>How it is built</h4><ul><li>The table runs on the server. Each card is the server's own model call, bounded at 14 s and marked as an estimate unless the user gave the portion; six common foods have built-in cards.</li><li>Six <code>await</code> tools: <code>look_up_food</code>, <code>compare_foods</code>, <code>open_recipe</code>, <code>next_steps</code>, <code>close_recipe</code>, <code>start_over</code>. Her first reply to "what's in a banana?" carries the card's figures; <code>compare_foods</code> returns both rows.</li><li>Photos are the app's, not a tool: the user adds one, the server reads it, and Rachel is told what was found. The camera is never opened.</li><li>A safety line checks every line the user says or types: a possible emergency puts a notice at the top at once, and a question about their own health shows a note that it belongs with their doctor.</li><li>The safety net looks up a food, goes back to the card or starts over; never next steps or a recipe. Rachel sits in a framed tile with her nameplate, and her face is on the front door.</li></ul></div>
 </div>
 <div><h4>What the API missed</h4><ul class="gaplist">
-<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held in the run">Held</span><b>Replies before the card exists</b><p>Each request got "let me pull that up", then the card; no figures from memory.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Check-in before it could be seen</b><p>Twice, while its video had not yet appeared.</p></li>
-<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held in the run">Held</span><b>Medical advice held by words only</b><p>"I have diabetes, is a banana safe?" was refused with an offer to read the numbers.</p></li>
-<li><span class="st st-known" title="A limitation by design; a run cannot show it">Known</span><b>Cannot see the food</b><p>The original read live camera frames; here the app reads uploaded photos with its own model.</p></li>
-<li><span class="st st-expected" title="Possible; not observed in one run">Expected</span><b>Photo answers late and paraphrased</b><p>The photo path was not run live.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>A doubled filler</b><p>"Sure, I can, let me pull up the info for a banana for you right now!" was said twice before the card's 105 calories.</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>Nothing beyond the card</b><p>Asked about potassium, Rachel said "potassium actually isn't listed with a specific number on this card", with no number. In round 1 she had added potassium, which is not on the label.</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>Medical advice held</b><p>"I have diabetes…" called no tool: the health note appeared at once, and Rachel declined and offered the numbers.</p></li>
+<li><span class="st st-known" title="A limitation by design; a run cannot show it">Known</span><b>Cannot see the food</b><p>The original saw camera frames; here the app reads photos the user adds, with its own model.</p></li>
+<li><span class="st st-expected" title="Possible; not observed in the runs with tools">Expected</span><b>A photo's answer is late and paraphrased</b><p>It is told as an event, which waits for the floor.</p></li>
 </ul></div>
-<div class="live"><span class="eyebrow">Live run</span><p>Staging, avatar 2cd3ec08, 345 s: banana card, comparison with an apple, sugar answered from the board, a recipe two steps at a time, a medical question refused, 200 g of chicken read exactly. The session took 139 s from Start to visible video.</p></div>
+<div class="live"><span class="eyebrow">Round 2</span><p><b>Fixed.</b> Round 2, on Rachel's own host (120 s): one greeting; "What's in a banana?" called <code>look_up_food</code> in 2.7 s with no safety net; potassium answered without a number. Still seen: the platform's doubled filler.</p></div>
 </article>
 <article class="app" id="fashion-advisor">
-<div class="app-head"><h3>Fashion Advisor</h3><p class="tagline">Share a photo of your outfit: a stylist rates it for the look you want, suggests pieces and puts them on you.</p>
-<div class="meta"><span>apps/fashion-advisor/</span><span>226 tests</span></div></div>
+<div class="app-head"><h3>Notch</h3><p class="tagline">A stylist on call: one photo of your outfit, a score for the occasion, the one fix, and pieces to finish it.</p>
+<div class="meta"><span>apps/fashion-advisor/</span><span>Host: Emery</span><span>171 tests</span></div></div>
 <div class="stack">
-<div><h4>What it is for</h4><p>Tell the stylist your name and the look you want, share one photo, and get a score out of 10 against that look, what works, the one fix, and pieces to add with shop links. With an image model it puts a piece on your photo and re-rates it.</p></div>
-<div><h4>How it is built</h4><ul><li>The stylist runs on the server with one serial job queue for style reads and try-ons; the page sees opaque image URLs.</li><li>Gemini reads the photo; xAI renders try-ons. Without an xAI key, try-on buttons are disabled with the reason and the avatar describes pieces in words.</li><li>Onboarding (name, style, photo) is a set of steps with buttons, and the app keeps the counters the original enforced in tools.</li><li><code>state</code> says what is rendering and "NOT on screen yet", so the avatar never claims a result early.</li></ul></div>
+<div><h4>What it is for</h4><p>Tell Emery what you are dressing for (a job interview, a summer wedding, a first date) and share one photo: upload it, drag it onto the mirror, or borrow the example outfit. Notch scores it out of 10 for that occasion, says what works and the one fix, and hangs pieces on a rail with shop links. With an image model it puts a piece on your photo. The fitting ends with notes to download.</p></div>
+<div><h4>How it is built</h4><ul><li>The fitting runs on the server: Gemini reads the photo, xAI renders try-ons. Each picture's verdict is kept per occasion and read at temperature 0, so "rate it again" gives the same score.</li><li><code>await</code> tools: <code>rate_outfit</code>, <code>suggest_pieces</code>, and with an image model <code>try_on</code> and <code>restore_photo</code>. Without an xAI key Emery is not given the try-on tools, and each piece on the rail is a swatch card with a shop link.</li><li>A read that takes longer than the page's 20 s wait comes back "still working" and lands later as an event; a try-on (about 20 s) is always an event.</li><li>The safety net re-rates and goes back to the user's own photo. Never more pieces or a try-on, which would grow the rail or pay for a render twice.</li><li>Emery's face is on the front door ("Your stylist — Emery, ex-runway, styling on call") and in her frame while the call connects.</li></ul></div>
 </div>
 <div><h4>What the API missed</h4><ul class="gaplist">
-<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held in the run">Held</span><b>No result claimed early</b><p>"Rate me for a wedding" got "let's see it!", then the new score (3/10).</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Asked for what it was told</b><p>Told "I'm Sam, going for smart casual", it still asked which vibe; the app had already recorded both.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Said twice</b><p>"Try-ons are turned off in this demo", once from the state and once from the event.</p></li>
-<li><span class="st st-known" title="A limitation by design; a run cannot show it">Known</span><b>Cannot see the outfit</b><p>The original used the live camera; here only the app's reading of one photo.</p></li>
-<li><span class="st st-expected" title="Possible; not observed in one run">Expected</span><b>Speech split by the recogniser</b><p>"Sure, I can share a photo" arrived as "[backchannel] Sure, I." and "can share a photo."; the kit now strips the tag.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>Requests narrated in round 1</b><p>The occasion, "Can you rate it again?" and "Make the pieces more streetwear" got no call, and Emery said "I'm updating the rail…" The likely cause was strict schemas; in round 2 all three reached their tools.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>The same outfit, two scores</b><p>"Rate it again" on the same photo for the same occasion went from 7 to 5. The app now keeps each picture's verdict per occasion.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>The question asked twice</b><p>One greeting, but Emery's greeting and the opening both asked the occasion. An empty room now gets no opening.</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>The example photo noticed</b><p>"I see the example outfit is up on the mirror now!", at once.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>A reply a turn late</b><p>The 7/10 verdict landed while "Rate it again" was being handled, so the lines interleaved.</p></li>
+<li><span class="st st-known" title="A limitation by design; a run cannot show it">Known</span><b>Cannot see the outfit</b><p>Emery knows the look only as Notch's verdict on one photo.</p></li>
 </ul></div>
-<div class="live"><span class="eyebrow">Live run</span><p>Staging, avatar 2cd3ec08, 326 s, no xAI key: sample photo rated 7/10 for smart casual, try-ons declined honestly, more ideas, re-rated for a wedding.</p></div>
+<div class="live"><span class="eyebrow">Round 2</span><p><b>Partly fixed.</b> Round 2, on Emery's own host, with no xAI key: one greeting; the occasion, "Rate it again." and "More streetwear." each called their tool in 3.2 to 4.0 s, none by the safety net; the fitting notes opened at hang-up. Since then: one score per picture and occasion, no opening in an empty room, swatch cards on the rail.</p></div>
 </article>
 <article class="app" id="fitness-coach">
-<div class="app-head"><h3>Fitness Coach</h3><p class="tagline">Tell a coach your goal, level and limits; get a plan that honours them and a walk-through of the first move.</p>
-<div class="meta"><span>apps/fitness-coach/</span><span>362 tests</span></div></div>
+<div class="app-head"><h3>Spotter</h3><p class="tagline">A workout built around your goal, level and limits, with a coach who stops when it is not safe.</p>
+<div class="meta"><span>apps/fitness-coach/</span><span>Host: Sammy</span><span>420 tests</span></div></div>
 <div class="stack">
-<div><h4>What it is for</h4><p>Say what you want to train and your level, and get a plan built around your time, equipment and injuries, enforced in code, plus a walk-through of the first move. Mention a condition no exercise swap makes safe (pregnancy, a cardiac history, recent surgery) and the session stops.</p></div>
-<div><h4>How it is built</h4><ul><li>A step machine on the server (goal, level, plan, first move, coaching) replaces the original's five agent tasks and is the only source of truth.</li><li>A constraint engine, ported from the original, runs on every plan path; a limit mentioned mid-rebuild gets its own pass.</li><li>Plans come from Gemini; demo clips from xAI when a key is set. Background work reaches the page over a server-sent event stream.</li><li>The safety hold freezes the board, refuses every tap, and shows the stop sentence on a hold card.</li></ul></div>
+<div><h4>What it is for</h4><p>Tell Sammy what you want to train, your level and anything to work around (twenty minutes, no kit, a sore knee). Spotter builds the plan, enforces every limit in code, and Sammy coaches your first move. Mention a condition no exercise swap makes safe (pregnancy, a cardiac history, recent surgery) and the workout pauses at once.</p></div>
+<div><h4>How it is built</h4><ul><li>A step machine on the server (goal, level, plan, first move, coaching) is the one writer of the screen. The original's constraint engine checks every plan, from the model or built in.</li><li>Six <code>await</code> tools: <code>set_goal</code>, <code>set_level</code>, <code>add_limits</code>, <code>start_move</code>, <code>start_over</code>, <code>stop_for_safety</code>. A tool that builds a plan waits up to 13 s for it, so Sammy's first reply is the plan on screen, or exactly what a limit changed.</li><li>Safety-critical detection: the page reads every finished line itself, and a condition freezes the screen and the server's plan at once. <code>stop_for_safety</code> is the second path; if Sammy has not called it 4 s later, the page does and gives her the words. After that every tool and tap is refused.</li><li>The safety net starts over, records a limit, sets a lone level or starts a plan move; goals are left out. The page also attaches the user's recent words to every <code>add_limits</code> call.</li><li>Sammy's face is on the front door and fills her frame while the call connects.</li></ul></div>
 </div>
 <div><h4>What the API missed</h4><ul class="gaplist">
-<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held in the run">Held</span><b>The safety stop held, said twice</b><p>"I'm seven months pregnant" got the refusal as the avatar's own first reply (from the standing note), then again from the event. "The plank anyway?" was refused.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Fillers and premature claims</b><p>"Man, that's rough, but I've got your knee taken care of" while the plan was still being rebuilt.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Check-in mid-exercise</b><p>The original deliberately had no idle nudge.</p></li>
-<li><span class="st st-known" title="A limitation by design; a run cannot show it">Known</span><b>Nothing gates the avatar after a hold</b><p>Muting would also deafen the app, so only notes and state keep it from naming exercises.</p></li>
-<li><span class="st st-expected" title="Possible; not observed in one run">Expected</span><b>Exercise names misheard</b><p>Every move was heard right in this run.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>Calls lost to the schema</b><p>In round 1 "Beginner, please." never arrived, in 2 of 2 runs, while Sammy said "I've set you up for a beginner glute plan". With lenient schemas every step reached its tool in round 2, in 2.9 to 4.9 s.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>A limit she added herself</b><p>"my left knee is bad, and I only have twenty minutes" reached <code>add_limits</code> as the knee only, while she said "Got your twenty-minute timer locked in". The page now attaches the user's own words to the call.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>Fillers before the safety lines</b><p>"Okay, gotcha," came before the stop sentence, and "Well, I don't agree, because…" before the plank refusal.</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>The pause held</b><p>"I'm seven months pregnant" called <code>stop_for_safety</code> in 4.9 s, the screen paused, and "Can we just do the plank anyway?" was refused.</p></li>
+<li><span class="st st-known" title="A limitation by design; a run cannot show it">Known</span><b>Nothing gates the host after a pause</b><p>Only her instructions and the state keep Sammy from naming an exercise; muting her would deafen the page too.</p></li>
 </ul></div>
-<div class="live"><span class="eyebrow">Live run</span><p>Staging, avatar baf61f2c, 234 s: glutes, beginner, a knee limit (squats and lunges removed), an intermediate rebuild that kept the knee limit, then the pregnancy stop.</p></div>
+<div class="live"><span class="eyebrow">Round 2</span><p><b>Fixed.</b> Round 2, on Sammy's own host: every step reached its tool on the first try in 2.9 to 4.9 s; the plan was built, started and made harder by voice, and the safety stop paused the screen. Since then every limit goes in one call, and a rebuilt plan says the started move is gone.</p></div>
 </article>
 <article class="app" id="market-desk">
-<div class="app-head"><h3>Market Desk</h3><p class="tagline">A live stock watchlist you build by talking, read by an analyst who never gives advice.</p>
-<div class="meta"><span>apps/market-desk/</span><span>208 tests</span></div></div>
+<div class="app-head"><h3>Outcry</h3><p class="tagline">A live stock watchlist you build by talking, read by an analyst who never gives advice.</p>
+<div class="meta"><span>apps/market-desk/</span><span>Host: Reese</span><span>277 tests</span></div></div>
 <div class="stack">
-<div><h4>What it is for</h4><p>Put up to six stocks on a board by saying a company or ticker. The analyst reads the tape (last sale, day move, 52-week range, how old each print is), announces moves over 1%, and never gives advice.</p></div>
-<div><h4>How it is built</h4><ul><li>The feed runs on the server (Nasdaq first, Yahoo as fallback): browsers cannot call them, and the refresh timer and move announcer must keep running.</li><li>The board streams to the page over server-sent events; the page relays the desk's lines to the avatar.</li><li>The judge checks for advice first, then verbs, names on the board, about 90 well-known names, <code>$TICKER</code> and spelled letters, then a model call, then a symbol search.</li><li>A refusal with a rotating board fact is staged in <code>state</code>, so "should I buy?" is declined once, with substance.</li></ul></div>
+<div><h4>What it is for</h4><p>Name a company ("put Nvidia up") and Reese puts it on a six-slot board with its real last sale, today's move, the 52-week range and how old the print is. The stock on watch refreshes every minute, and Reese speaks up when it moves a point. Ask what to buy and he says it straight: "I read the tape, I don't give advice."</p></div>
+<div><h4>How it is built</h4><ul><li>The feed runs on the server, Nasdaq first and Yahoo as the fallback: neither answers a browser, and the refresh timer and move announcer must keep running.</li><li>Five <code>await</code> tools: <code>add_symbols</code>, <code>focus_symbol</code>, <code>refresh_quote</code>, <code>remove_symbols</code>, <code>clear_board</code>. The server acts, waits for the quote and returns it, so Reese's first reply to "add Nvidia" carries the real price, or why it did not go up.</li><li>Names become tickers through the board, about 90 well-known names, written tickers, the app's own model call, then Nasdaq's symbol search. The no-advice rule is in the instructions; no tool hands out advice.</li><li>The desk's own lines (a 1% move, a late quote) reach the page as server-sent events and go on to Reese as events: only the open page holds the call.</li><li>The safety net clears, refreshes, drops, and focuses a stock already on the board; never an add. Reese's face is on the front door, and the closing sheet downloads as CSV.</li></ul></div>
 </div>
 <div><h4>What the API missed</h4><ul class="gaplist">
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Promises an add the app then refuses</b><p>"Add Z Q X W Q" got "putting Z Q X W Q up for you now", then the app's "couldn't find a listing".</p></li>
-<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held in the run">Held</span><b>No-advice rule held for speech</b><p>"Should I buy Nvidia?" got one refusal with a board fact, not two.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Chatter between moves</b><p>The design is to speak only on a 1% move; the check-in talks into every silence.</p></li>
-<li><span class="st st-known" title="A limitation by design; a run cannot show it">Known</span><b>The server cannot speak into the room</b><p>Move announcements reach the avatar only while the page is open.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Names misheard</b><p>"Add Nvidia and Tesla" arrived as "At Nvidia and Tesla."; the judge still read both.</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>"Pull up Tesla." never called</b><p>Missed in 2 of 2 runs by voice. In round 1 Reese said "Tesla is front and centre now" with no call; in round 2 the safety net brought Tesla up and he spoke as if he had. The tool's description now opens with the user's words.</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>The no-advice rule held</b><p>"Should I buy Nvidia?" got "I read the tape, I don't give investment advice." and a board fact, after a filler: "Let's examine the numbers, but…"</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>Real moves in the first reply</b><p>"Put Nvidia and Tesla up" read both real moves in 3.5 s.</p></li>
+<li><span class="st st-known" title="A limitation by design; a run cannot show it">Known</span><b>Only the open page can answer</b><p>Tool calls and the desk's lines go through the page; a closed tab ends both.</p></li>
+<li><span class="st st-expected" title="Possible; not observed in the runs with tools">Expected</span><b>The desk's lines compete for the floor</b><p>A 1% move is dropped if the user keeps talking past its 30 s.</p></li>
 </ul></div>
-<div class="live"><span class="eyebrow">Live run</span><p>Staging, avatar 26cbe079, 209 s, after the close: Nvidia and Tesla with their real moves, Netflix, advice declined, a plain answer about Nvidia, Tesla dropped, a fake ticker taken back.</p></div>
+<div class="live"><span class="eyebrow">Round 2</span><p><b>Partly fixed.</b> Round 2, on Reese's own host (100 s): one greeting; two stocks added with their real moves; the advice refusal held; the closing sheet's time in English. "Pull up Tesla." was missed again and done by the safety net. Since then the net's note to Reese says plainly that the page did it.</p></div>
 </article>
 <article class="app" id="travel-guide">
-<div class="app-head"><h3>Travel Guide</h3><p class="tagline">Plan a trip on a live map, or find what is worth seeing near you, with a well-travelled friend.</p>
-<div class="meta"><span>apps/travel-guide/</span><span>317 tests</span></div></div>
+<div class="app-head"><h3>Yonder</h3><p class="tagline">Dream up your next trip on a live map, with a friend who has been.</p>
+<div class="meta"><span>apps/travel-guide/</span><span>Host: Lumi</span><span>351 tests</span></div></div>
 <div class="stack">
-<div><h4>What it is for</h4><p>Name a country and it is outlined on an OpenStreetMap map with local headlines and three dishes ready. Or say where you are and nearby sights come one at a time, each with a photo, a Wikipedia sentence and a maps link.</p></div>
-<div><h4>How it is built</h4><ul><li>The trip runs on the server: Nominatim needs a User-Agent and one request a second, and the news needs a key.</li><li>Leaflet draws the map; nearby spots come from Overpass, with Wikipedia GeoSearch as the fallback.</li><li>Dishes and headlines are fetched as soon as a country is chosen and staged in <code>state</code> for "only if they ask".</li><li>"You choose" lets the app read the guide's next two lines for exactly one country and draw it.</li></ul></div>
+<div><h4>What it is for</h4><p>Name a country (or a city in one, or "you choose") and it lands on the map with its outline. Ask what to eat and three local dishes appear with their photos; ask what is worth seeing around a street or a square and the sights come one at a time, each with a photo, a line from Wikipedia, a distance and a maps link. The trip downloads as notes at the end.</p></div>
+<div><h4>How it is built</h4><ul><li>The trip runs on the server: the open-data lookups need a User-Agent, a request-a-second throttle and, for the news, a key a browser cannot hold.</li><li>Six <code>await</code> tools and one <code>notify</code>: <code>choose_destination</code>, <code>show_food</code>, <code>show_news</code> (only with a news key), <code>explore_near</code>, <code>next_sight</code>, <code>previous_sight</code>, <code>remember_name</code>. A tool still running 4 s before its timeout answers "still looking", and the outcome follows as an event.</li><li>Sights come from Wikipedia first, ranked for a traveller (articles with a lead photo, landmarks over districts and stations), topped up from Overpass within a 14 s budget.</li><li>Lumi's state never holds the next sight, or dishes and headlines before they are shown, so she has to call for them. The safety net does a named country, the food, the news and the sight moves.</li><li>Lumi's face is on the front door, and her tile sits in the map's corner.</li></ul></div>
 </div>
 <div><h4>What the API missed</h4><ul class="gaplist">
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Invents the next sight</b><p>"Another one, please" got "Miyashita Park" from the avatar, then the app's real next spot, a different place.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>A promise nobody kept</b><p>"Any news from there?" got "Let me pull that up for you right now!" and nothing after; the staged "no news source" was ignored. The app now always sends that outcome.</p></li>
-<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held in the run">Held</span><b>The guide's own pick drives the map</b><p>"You choose!" got Portugal, and the map drew it.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Greets as the test avatar</b><p>The lighthouse keeper ("Sure thing, skipper!"), once mentioning Portugal while the map showed Japan.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Check-in while reading the map</b><p>"Still looking around, or shall we pick a country to…"</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>Real sights, with photos</b><p>"What's worth seeing around Alfama in Lisbon?" put São Jorge Castle on screen, and "Another one, please" gave Lisbon Cathedral. Round 1 gave an obscure memorial with no photo.</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>Fillers, harmless here</b><p>"Smart move," came before Portugal landed.</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>Her own colour, never a sight</b><p>Lines such as "old wooden trams" are hers, never a sight, a dish or a distance.</p></li>
+<li><span class="st st-expected" title="Possible; not observed in the runs with tools">Expected</span><b>Slow lookups</b><p>The Wander reply still came about 20 s after the words.</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>Misheard, then right</b><p>"Alfama" was first captioned "Alfa Min"; the final transcript and the tool's place were right.</p></li>
 </ul></div>
-<div class="live"><span class="eyebrow">Live run</span><p>Staging, avatar 26cbe079, 313 s: Japan, the guide's pick, back to Japan, spots near Shibuya (every Overpass mirror failed; GeoSearch covered), Bali typed.</p></div>
+<div class="live"><span class="eyebrow">Round 2</span><p><b>Fixed.</b> Round 2, on Lumi's own host (147 s): one greeting; Portugal, Alfama's sights and the next sight each called their tool, with photos; no safety-net catches. Since then each Overpass mirror gets only what is left of the 14 s budget (not yet run live).</p></div>
 </article>
 <article class="app" id="room-planner">
-<div class="app-head"><h3>Home Planner</h3><p class="tagline">Plan a whole home by talking: rooms, walls, doors and furniture at real sizes.</p>
-<div class="meta"><span>apps/room-planner/</span><span>238 tests</span></div></div>
+<div class="app-head"><h3>Planwright</h3><p class="tagline">Plan a home by talking to an architect: rooms, walls, doors and furniture at real sizes.</p>
+<div class="meta"><span>apps/room-planner/</span><span>Host: Iris</span><span>303 tests</span></div></div>
 <div class="stack">
-<div><h4>What it is for</h4><p>Plan a home of up to two floors with an architect: give the size and bedrooms, then trade area between rooms, move walls, add doors and windows, furnish at real sizes, save and compare schemes, undo, and download the drawing sheet.</p></div>
-<div><h4>How it is built</h4><ul><li>The full Python engine is ported (grid, rooms, placement, generator, checks, schemes, SVG sheet) and runs in the page, so drags are instant and undo is local.</li><li>Rules handle trades and common commands at once; other lines go to a model call that returns operations by room and piece id, never coordinates.</li><li>A critic folds the plan's new problems into the next line (a windowless study, a bed reachable from one side).</li><li>Photos are read by the app's own model into catalogue pieces.</li></ul></div>
+<div><h4>What it is for</h4><p>Tell Iris roughly how big your place is and who lives there; she lays out a whole floor in seconds, and then you argue with it: trade area between rooms, knock two together, add a window and a bed, add an upstairs, save schemes and compare them, undo, and take the drawing sheet away. Dragging walls and furniture works by hand too.</p></div>
+<div><h4>How it is built</h4><ul><li>The whole Python engine is ported and runs in the page: nothing about a plan is secret, and every drag is an instant local change. A refused change leaves the plan as it was.</li><li>25 <code>await</code> tools, from <code>lay_out_floor</code> and <code>trade_area</code> to <code>add_furniture</code>, <code>save_scheme</code> and <code>draw_sheet</code>. Arguments are what Iris heard ("the second bedroom", "two square metres"), never coordinates. Results carry the plan's real numbers, or the reason a change will not work, in the client's unit.</li><li>A refused piece's result carries the room's own numbers (its area, how much of it is clear), so there is nothing to estimate.</li><li>The safety net switches units, shows a floor, stops comparing, draws the sheet or adds the upper floor. Never undo, a trade, a scheme, a layout or a clear: doubled, those are a second change.</li><li>Photos are read by Gemini into kit pieces and rooms, never sizes. Iris's face is on the front door.</li></ul></div>
 </div>
 <div><h4>What the API missed</h4><ul class="gaplist">
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>A made-up size before the real one</b><p>"Give the study two square metres off the kitchen" got "eight point three square metres", then the app's 8.4.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Mixes units</b><p>After the board switched to ft², "the stairs… at thirty-nine square feet, leaving fifty-nine square metres".</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Asks what the app already did</b><p>"Add an upstairs" got "Are you thinking of a whole second floor?" while the floor was already added.</p></li>
-<li><span class="st st-known" title="A limitation by design; a run cannot show it">Known</span><b>Cannot see the photo</b><p>Only what the app's reader extracted.</p></li>
-<li><span class="st st-seen" title="Showed up live as a problem the user would notice">Seen</span><b>Check-in while studying the plan</b><p>The original waited 40 s and nudged at most twice.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>A size before the refusal</b><p>"a grand piano takes up nearly four square metres… Shall I try squeezing it into the west corner?", then the plan's refusal. The tool now says to call first and say nothing about the piece until the result.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>An offer, not the action</b><p>A second "the drawing to keep" got "whenever you are ready" and no call.</p></li>
+<li><span class="st st-seen" title="Showed up live in a run with tools">Seen</span><b>A misheard command</b><p>Spoken, "Add an upstairs." arrived as "At an upstairs" and got a question; typed, it called <code>add_upper_floor</code> in 1.0 s.</p></li>
+<li><span class="st st-held" title="The gap is real, but the app&#x27;s workaround held">Held</span><b>Real numbers in the first reply</b><p>In round 1, eleven of twelve requests went through their tools with the plan's numbers ("eight point four… five point seven").</p></li>
+<li><span class="st st-known" title="A limitation by design; a run cannot show it">Known</span><b>Cannot see a photo</b><p>Iris can only say what the app's reader put in.</p></li>
 </ul></div>
-<div class="live"><span class="eyebrow">Live run</span><p>Staging, avatar 26cbe079, 285 s: a 63 m² seven-room plan, two trades, a queen bed placed and undone, a scheme saved with open plan, square feet, an upper floor.</p></div>
+<div class="live"><span class="eyebrow">Round 2</span><p><b>Partly fixed.</b> Round 2, on Iris's own host (250 s): open plan as one 21.4 m² kitchen and living room; the piano reached <code>add_furniture</code> and the plan's refusal; an upstairs kept every ground-floor room. Since then: the piano rule, a repeat call for the sheet, and each floor remembering its arrangement (not yet run live).</p></div>
 </article>
 </div>
 </section>
 <section id="classic"><div class="col stack"><p class="eyebrow">Built first, on 22 October</p><h2>The classic five</h2><p>Five branded sample apps built straight on the API with one small Node server, before the mini-app port. They live in <code>classic/</code> and run with <code>npm run classic</code>.</p></div>
 <div class="scroll"><table class="classic"><thead><tr><th>App</th><th>Use case</th><th>What it does</th><th>How it is built</th></tr></thead><tbody>
-<tr><td>Ledger Academy</td><td>Internal training</td><td>A trainer lectures three slides, takes questions, then runs a two-question quiz.</td><td>A conductor with <code>speak</code> edges drives the lecture; the slide and score go in <code>state</code>; verdicts as events.</td></tr>
+<tr><td>Ledger Academy</td><td>Internal training</td><td>A trainer lectures three slides, takes questions, then runs a two-question quiz.</td><td>A conductor with <code>speak</code> edges drives the lecture; the slide and score go in <code>state</code>; the page scores a verdict by its first word.</td></tr>
 <tr><td>Northwind Talent</td><td>Recruiter screening</td><td>A recruiter runs a structured first-round interview against a job card.</td><td>A conductor graph: greet, background, must-haves, logistics, questions, wrap; job and candidate in <code>state</code>.</td></tr>
 <tr><td>Kin</td><td>Presence companion</td><td>A companion sits beside you and reacts to what is on your screen.</td><td>The page sends a frame when the screen changes; Gemini describes it; the description goes to <code>state</code>, anything notable as an event.</td></tr>
 <tr><td>Isle of Whispers</td><td>Interactive story</td><td>A narrator speaks only on game events; conversation opens only at the oracle's shrine.</td><td>The user is muted; each move is an event; entering the shrine unmutes and allows typed turns.</td></tr>
 <tr><td>Nightcap Live</td><td>Live stream host</td><td>A host reads a stream's chat to viewers on a branded page.</td><td>The user is muted; questions go in as typed turns, the rest as an event digest every 20 s; the viewer count in <code>state</code>.</td></tr>
 </tbody></table></div>
-<div class="col stack"><h3>What they found missing</h3><ul class="plain"><li>No audience in the room: one user token per session, no viewer tokens or egress, so a stream must re-broadcast the avatar.</li><li>Sessions are capped by plan (900 s on Free, up to 4 h), and an avatar runs one session at a time.</li><li>A typed turn sent while the avatar is speaking was dropped, not queued (the kit now holds typed turns until the avatar finishes).</li><li>No transcript or reply feed outside the room; the app must read the room's transcription stream.</li><li>The check-in and the persona are the avatar's, as in the mini-apps.</li></ul></div></section>
+<div class="col stack"><h3>What they found missing</h3><ul class="plain"><li>No audience in the room: one user token per session, no viewer tokens or egress, so a stream must re-broadcast the avatar.</li><li>Sessions are capped by plan (900 s on Free, up to 4 h), and an avatar runs one session at a time.</li><li>A typed turn sent while the avatar is speaking was dropped, not queued (the kit now holds typed turns until the avatar finishes).</li><li>No transcript or reply feed outside the room; the app must read the room's transcription stream.</li><li>The agenda (conductor) is set per avatar, not per session, so the server puts each use case's agenda back before its session.</li><li>Run again live on 23 October, the recruiter ran every stage once, in order, and the lecture spoke its three slides with no user input. What went wrong follows from one rule: a step does not move until the user has heard a turn written under it. The Q&amp;A step said "if they have none, start the quiz"; "No questions." was answered under that step, so the model invented a quiz question. Put the check on the asking step's edges, with an edge back to itself.</li><li>The last step stays in force: the idle check-in said the farewell again 19 s after it ended. End the session after the last step.</li><li>Scoring by a verdict's first word broke: the filler came first ("Aye, good choice, right right correct"), the score stayed 0 and the wrap read "nought of two". Score through a tool, not the transcript.</li><li>The recruiter greeted twice: once on its own, and again when the page's update with the candidate's name arrived.</li><li>The check-in and the persona are the avatar's, as in the mini-apps.</li></ul></div></section>
 <footer>
-  <p>Sources: each app's <code>README.md</code> (its live run and its gaps), <code>docs/API-GAPS.md</code>, <code>docs/PORTING.md</code> and <code>classic/README.md</code> in <code>atmee-usecase-demos</code>, branch <code>feat/mini-apps</code>.</p>
-  <p>Live runs: staging Causeur sessions on 23 October 2026, one run per app on shared test avatars, so every app greets with a test avatar's persona. Statuses come from one run each; "expected" means not observed, not ruled out.</p>
+  <p>Sources: each app's <code>README.md</code> (its live runs and its gaps), <code>docs/API-GAPS.md</code>, <code>docs/PORTING.md</code> and <code>classic/README.md</code> in <code>atmee-usecase-demos</code>, branch <code>feat/mini-apps</code>.</p>
+  <p>Live runs: staging Causeur sessions on 23 October 2026, spoken through a synthetic microphone, in three rounds: before the apps used tools, with tools, and after the fixes (round 2), each app on its own host. Statuses come from the two rounds with tools; "expected" means not observed, not ruled out.</p>
 </footer>
 </div>
 </body>

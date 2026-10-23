@@ -14,7 +14,9 @@ text streams.
   these, with what was seen live (a table per app at the top).
 - `docs/PORTING.md`: how an app here is built, and how to add one.
 - `docs/apps-report.html`: the report on all of them: what each app is for, how
-  it is built, and what the API missed for it (open it in a browser).
+  it is built, and what the API missed for it (open it in a browser). Its facts
+  live in `tools/report/make_report.py`; edit them there and run
+  `python3 tools/report/make_report.py docs/apps-report.html`.
 
 ## Run
 
