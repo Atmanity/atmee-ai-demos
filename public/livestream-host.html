@@ -152,7 +152,7 @@
         onEnd: () => stopped('Stream ended'),
       });
       // Viewers are not in the room: this page forwards the avatar to each of them.
-      relay = StreamRelay.streamer({ room: s.room, onCount: (n, max) => { $('relayBadge').hidden = false; $('relayBadge').textContent = `📡 ${n}/${max} watching`; } });
+      relay = StreamRelay.streamer({ room: s.room, key: s.session.key, onCount: (n, max) => { $('relayBadge').hidden = false; $('relayBadge').textContent = `📡 ${n}/${max} watching`; } });
       if (Atmee.debug) window.__relay = relay;
       $('liveBadge').textContent = '● LIVE'; $('liveBadge').className = 'chip live'; $('state').textContent = 'Live';
       $('golive').textContent = 'End stream'; $('golive').className = 'btn danger'; $('golive').disabled = false;
@@ -160,7 +160,8 @@
       stopClock = UI.countdown($('statTime'), s.session.maxSeconds, () => line('', 'Nightcap', 'About a minute of stream time left.'));
     } catch (e) {
       $('golive').disabled = false; $('state').textContent = 'Offline'; $('mode').hidden = false;
-      overlay.error(e.friendly || 'The stream could not start.', 'Try again', goLive);
+      if (e.code === 'stream_live') overlay.error(e.friendly, 'Join as a viewer', () => { location.href = 'livestream-viewer.html'; });
+      else overlay.error(e.friendly || 'The stream could not start.', 'Try again', goLive);
     }
   }
   function stopped(text) {

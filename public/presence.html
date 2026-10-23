@@ -161,7 +161,7 @@
     lastSent = now; observe.last = Date.now();
     $('seeingText').textContent = 'Kin is looking…';
     try {
-      const res = await fetch('/api/presence/frame', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image: canvas.toDataURL('image/jpeg', 0.6), hint }) });
+      const res = await fetch('/api/presence/frame', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: s.session.key, image: canvas.toDataURL('image/jpeg', 0.6), hint }) });
       const seen = await res.json();
       if (seen.description) noticed(seen.noteworthy || seen.description, !!seen.noteworthy);
     } catch (e) {}
