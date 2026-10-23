@@ -1,12 +1,12 @@
 // Spotter's front door: what it is, how a workout goes, the promise that sets
 // it apart (every limit is enforced, and it knows when to stop), and the way in.
 
-/** The mark: a floor spot, the marker you stand on in a gym. */
+/** The mark: a floor spot on rubber matting, the marker you stand on in a gym. */
 export function Mark({ size = 34 }: { size?: number }) {
   return (
     <svg viewBox="0 0 40 40" width={size} height={size} aria-hidden="true" className="sp-mark">
-      <circle cx="20" cy="20" r="18.5" fill="var(--sp-court)" />
-      <circle cx="20" cy="20" r="11.5" fill="none" stroke="var(--sp-lane)" strokeWidth="3.5" />
+      <circle cx="20" cy="20" r="18.5" fill="var(--sp-rubber)" />
+      <circle cx="20" cy="20" r="11.5" fill="none" stroke="var(--sp-tangerine)" strokeWidth="3.5" />
       <path d="M20 4.5v6M20 29.5v6M4.5 20h6M29.5 20h6" stroke="var(--sp-lane)" strokeWidth="2.5" strokeLinecap="round" />
       <circle cx="20" cy="20" r="4.2" fill="#fff" />
     </svg>
