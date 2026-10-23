@@ -554,6 +554,66 @@ describe('focus, refresh, remove, clear', () => {
     expect(await s.refresh('TSLA', { by: 'tool' })).toEqual({ kind: 'missing', symbol: 'TSLA' });
   });
 
+  test('a late "pull up" takes watch when it lands (Bugbot), and its line says so', async () => {
+    const feed = gated();
+    const { s, speaker } = session(async (symbol) => (symbol === 'MSFT' ? feed.fetch(symbol, { now: 0 }) : quote({ symbol })));
+    fill(s.desk, ['AAPL']);
+    const report = await s.focus('MSFT', { by: 'tool', waitMs: 5 });
+    expect(report).toMatchObject({ kind: 'added', report: { pending: ['MSFT'] } });
+    expect(s.board().focus).toBe('AAPL');
+    feed.release();
+    await settle();
+    await settle();
+    expect(s.board().focus).toBe('MSFT');
+    expect(speaker.said.at(-1)).toContain('MSFT is front and centre now');
+  });
+
+  test('a late "pull up" leaves watch alone if the user put something else on watch meanwhile', async () => {
+    const feed = gated();
+    const { s } = session(async (symbol) => (symbol === 'MSFT' ? feed.fetch(symbol, { now: 0 }) : quote({ symbol })));
+    fill(s.desk, ['AAPL', 'NVDA']);
+    await s.focus('MSFT', { by: 'tool', waitMs: 5 });
+    await s.focus('NVDA', { by: 'button' });
+    feed.release();
+    await settle();
+    await settle();
+    expect(s.board().focus).toBe('NVDA');
+    expect(s.board().watchlist.map((q: Quote) => q.symbol)).toContain('MSFT');
+  });
+
+  test('a pull that fails after the board was cleared says nothing and leaves no refusal (Bugbot)', async () => {
+    const feed = gated(() => new board.UnknownSymbol(board.unknownMessage('ZZZZ')));
+    const { s, speaker } = session(feed.fetch);
+    const add = s.add(['ZZZZ'], { by: 'tool', waitMs: 5 });
+    await add;   // on its way: the pump owes the host a line about it
+    s.clear();
+    feed.release();
+    await settle();
+    expect(speaker.said).toEqual([]);
+    expect(s.board().last_error).toBeNull();
+  });
+
+  test('a refresh that fails after its stock was removed says nothing and leaves no refusal', async () => {
+    let n = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const clock = new Clock();
+    const { s, speaker } = session(async (symbol) => {
+      n += 1;
+      if (n === 1) return quote({ symbol });
+      await gate;
+      throw new board.FeedUnavailable(board.FEED_DOWN_MESSAGE);
+    }, clock);
+    await s.add(['AAPL'], { by: 'tool' });
+    clock.now += 30;
+    await s.refresh(null, { by: 'tool', waitMs: 5 });
+    s.remove(['AAPL']);
+    release();
+    await settle();
+    expect(speaker.said).toEqual([]);
+    expect(s.board().last_error).toBeNull();
+  });
+
   test('a refresh slower than the wait is told when it lands', async () => {
     let n = 0;
     const clock = new Clock();

@@ -307,3 +307,35 @@ test('NEW: a closed-session stamp is still the print time, in winter time too', 
   expect(board.nasdaqStamp('Dec 4, 2026 9:30 AM ET', 0)).toBe(Date.UTC(2026, 11, 4, 14, 30) / 1000);
   expect(board.nasdaqStamp('Dec 4, 2026', 0)).toBe(Date.UTC(2026, 11, 4, 5, 0) / 1000);
 });
+
+// ─── a pull the board let go of (Bugbot) ─────────────────────────────────
+// A landing for a stock cleared or removed while its quote was in flight was
+// already ignored; a failure in the same spot still wrote its refusal onto
+// the board, about a stock that was no longer there.
+
+test('a failed add after the board was cleared leaves no refusal behind', () => {
+  let state = board.beginAdd(board.initialState(), 'ZZZZ', { now: 1 });
+  state = board.clear(state);
+  const after = board.failAdd(state, 'ZZZZ', board.unknownMessage('ZZZZ'));
+  expect(after).toBe(state);
+  expect(after.last_error).toBeNull();
+});
+
+test('a failed refresh of a stock removed meanwhile leaves no refusal behind', () => {
+  let state = board.beginAdd(board.initialState(), 'AAPL', { now: 1 });
+  state = board.finishAdd(state, 'AAPL', entry());
+  state = board.beginRefresh(state, 'AAPL', { now: 100 });
+  state = board.remove(state, 'AAPL');
+  const after = board.failRefresh(state, 'AAPL', board.FEED_DOWN_MESSAGE);
+  expect(after.last_error).toBeNull();
+  expect(after.fetching).toEqual([]);
+});
+
+test('a failed add or refresh that is still held is reported as before', () => {
+  const adding = board.beginAdd(board.initialState(), 'ZZZZ', { now: 1 });
+  expect(board.failAdd(adding, 'ZZZZ', 'gone').last_error).toBe('gone');
+  let up = board.finishAdd(board.beginAdd(board.initialState(), 'AAPL', { now: 1 }), 'AAPL', entry());
+  up = board.beginRefresh(up, 'AAPL', { now: 100 });
+  const failed = board.failRefresh(up, 'AAPL', 'down');
+  expect([failed.last_error, failed.watchlist[0].stale]).toEqual(['down', true]);
+});

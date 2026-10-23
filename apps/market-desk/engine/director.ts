@@ -266,9 +266,10 @@ export const say = {
   },
 
   /** Quotes the host was told were on their way have landed. */
-  landed: (rows: { quote: Quote; said?: string }[], now = nowS()) => {
+  landed: (rows: { quote: Quote; said?: string; front?: boolean }[], now = nowS()) => {
     const list = rows.map(({ quote: q, said: s }) => `${read(q, now)}${forSaid(q, s)}`).join('; ');
-    return `${rows.length === 1 ? 'The quote you said was coming is' : 'The quotes you said were coming are'} on the board now: ${list}. Read ${rows.length === 1 ? 'it' : 'them'} in one short line: the move and nothing else. No advice.`;
+    const front = rows.filter((r) => r.front).map((r) => r.quote.symbol);
+    return `${rows.length === 1 ? 'The quote you said was coming is' : 'The quotes you said were coming are'} on the board now: ${list}.${front.length ? ` ${front.join(', ')} is front and centre now.` : ''} Read ${rows.length === 1 ? 'it' : 'them'} in one short line: the move and nothing else. No advice.`;
   },
 
   /** A refresh the host was told was on its way came back. */

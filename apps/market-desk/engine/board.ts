@@ -421,6 +421,9 @@ export function finishAdd(state: BoardState, symbol: string, entry: Quote): Boar
 /** The fetch failed. The slot is released and the reason is on the board: a
  * failed add that silently vanished is how a user ends up asking twice. */
 export function failAdd(state: BoardState, symbol: string, reason: string): BoardState {
+  // The claim was released while the quote was in flight (the board was
+  // cleared): like a landing then, a failure has nothing left to report.
+  if (!state.fetching.includes(symbol)) return state;
   return { ...state, fetching: withoutFetching(state, symbol), last_error: reason, _pulled: withoutPulled(state, symbol) };
 }
 
@@ -466,6 +469,8 @@ export function finishRefresh(state: BoardState, symbol: string, entry: Quote): 
  * Nothing here speaks: a background timer announcing its plumbing is a nuisance.
  */
 export function failRefresh(state: BoardState, symbol: string, reason: string): BoardState {
+  // Removed (or the board cleared) while the pull was in flight: no row to grey, no refusal to show.
+  if (find(state, symbol) === null) return { ...state, fetching: withoutFetching(state, symbol) };
   return {
     ...state,
     watchlist: state.watchlist.map((e) => (e.symbol === symbol ? { ...e, stale: true, error: reason } : e)),

@@ -182,7 +182,13 @@ export class Announcer {
 }
 
 
-interface Asked { by: Asker; said?: string; call?: number }
+interface Asked {
+  by: Asker;
+  said?: string;
+  call?: number;
+  /** A "pull up" of a stock not yet on the board: it takes watch when it lands, if watch is still where it was then. */
+  front?: { from: string | null };
+}
 
 /**
  * The pump that turns a claim in `fetching` into a quote on the board.
@@ -204,7 +210,7 @@ export class Fetcher {
   private tasks = new Map<string, Promise<PullOutcome>>();
   private asked = new Map<string, Asked>();
   private outcomes = new Map<string, PullOutcome>();
-  private landed: { quote: Quote; said?: string; call?: number }[] = [];
+  private landed: { quote: Quote; said?: string; call?: number; front?: boolean }[] = [];
 
   constructor(
     private desk: Desk,
@@ -222,15 +228,15 @@ export class Fetcher {
   expect(symbol: string, asked: Asked) { this.asked.set(symbol, asked); }
 
   /** Another caller waits on a pull already in flight: its reply reports it too. */
-  join(symbol: string, by: Asker, said?: string, call?: number) {
+  join(symbol: string, next: Asked) {
     const asked = this.asked.get(symbol);
-    this.asked.set(symbol, { by, said: said ?? asked?.said, call: call ?? asked?.call });
+    this.asked.set(symbol, { by: next.by, said: next.said ?? asked?.said, call: next.call ?? asked?.call, front: next.front ?? asked?.front });
   }
 
   /** The caller stopped waiting: the landing (or the failure) is told by the pump. */
   late(symbol: string, call?: number) {
     const asked = this.asked.get(symbol);
-    this.asked.set(symbol, { by: 'late', said: asked?.said, call: call ?? asked?.call });
+    this.asked.set(symbol, { ...asked, by: 'late', call: call ?? asked?.call });
   }
 
   /** The pull in flight for this symbol, or null when there is none. */
@@ -264,11 +270,19 @@ export class Fetcher {
       const reason = err instanceof BoardError ? err.message : board.FEED_DOWN_MESSAGE;
       if (!(err instanceof BoardError)) console.error('[market-desk] [Feed] %s %s crashed: %s', kind, symbol, (err as Error)?.message);
       else console.info('[market-desk] [Feed] %s %s failed: %s', kind, symbol, reason);
+      const asked = this.asked.get(symbol);
+      this.asked.delete(symbol);
+      // The board let go of this pull (cleared, or the stock removed) while it
+      // was in flight: as with a landing, there is nothing to show or say.
+      if (isRefresh ? !board.find(this.desk.raw(), symbol) : !this.desk.raw().fetching.includes(symbol)) {
+        const dropped: PullOutcome = { symbol, kind, ok: false, reason: 'It came off the board before its quote came back.' };
+        this.outcomes.set(symbol, dropped);
+        this.flushLanded();
+        return dropped;
+      }
       const outcome: PullOutcome = { symbol, kind, ok: false, reason };
       this.outcomes.set(symbol, outcome);
       this.desk.apply({ kind, symbol, error: reason }, 'agent');
-      const asked = this.asked.get(symbol);
-      this.asked.delete(symbol);
       const reported = asked?.by === 'tool' || asked?.by === 'button';
       if (this.speaker && !isRefresh && !reported) this.speaker.say(say.addFailed(symbol, reason, asked?.said), RESULT_TTL_S, asked?.call);
       // A refresh someone stopped waiting for was promised; the timer's own never was.
@@ -286,17 +300,25 @@ export class Fetcher {
     if (asked) this.announcer?.markSpoken(symbol, entry.as_of, entry.change_pct);
     const outcome: PullOutcome = { symbol, kind, ok: true };
     this.outcomes.set(symbol, outcome);
-    const result = this.desk.apply({ kind, symbol, entry }, 'agent');
+    const watchBefore = this.desk.raw().focus;
+    let result = this.desk.apply({ kind, symbol, entry }, 'agent');
     if (!result.applied) {
       console.warn('[market-desk] [Feed] %s %s refused on landing: %s', kind, symbol, result.reason);
       return outcome;
+    }
+    // "Pull up NVDA" for a stock that was not up yet: it takes watch on landing,
+    // late or not, unless the user put something else on watch meanwhile.
+    const front = Boolean(asked?.front && board.find(result.board, symbol) && watchBefore === asked.front.from);
+    if (front && result.board.focus !== symbol) {
+      const focused = this.desk.apply({ kind: 'focus', symbol }, 'agent');
+      if (focused.applied) result = focused;
     }
     if (asked?.by !== 'late' || !this.speaker) return outcome;
     if (isRefresh) {
       if (board.find(result.board, symbol)) this.speaker.say(say.refreshed(entry, before?.as_of === entry.as_of), RESULT_TTL_S, asked.call);
       return outcome;
     }
-    if (board.find(result.board, symbol)) this.landed.push({ quote: board.find(result.board, symbol)!, said: asked.said, call: asked.call });
+    if (board.find(result.board, symbol)) this.landed.push({ quote: board.find(result.board, symbol)!, said: asked.said, call: asked.call, front });
     this.flushLanded();
     return outcome;
   }
@@ -412,7 +434,9 @@ export class DeskSession {
    * keyed by ticker. The board refuses what it must (full, a phrase that is
    * not a ticker) before any round trip.
    */
-  async add(symbols: string[], { by, said = {}, waitMs = WAIT_MS, unresolved = [], call }: { by: 'tool' | 'button'; said?: Record<string, string>; waitMs?: number; unresolved?: string[]; call?: number }): Promise<AddReport> {
+  async add(symbols: string[], { by, said = {}, waitMs = WAIT_MS, unresolved = [], call, front = false }: { by: 'tool' | 'button'; said?: Record<string, string>; waitMs?: number; unresolved?: string[]; call?: number; front?: boolean }): Promise<AddReport> {
+    // Where watch is now: a "pull up" moves it on landing only if it has not moved by then.
+    const wantFront = front ? { from: this.desk.raw().focus } : undefined;
     const report: AddReport = { landed: [], already: [], failed: [], pending: [], unresolved: [...unresolved] };
     const claimed: string[] = [];
     for (const raw of symbols) {
@@ -431,7 +455,7 @@ export class DeskSession {
       }
       if (state.fetching.includes(symbol)) {
         // Already on its way (a button, a moment ago): wait for that pull.
-        this.fetcher.join(symbol, by, said[symbol], call);
+        this.fetcher.join(symbol, { by, said: said[symbol], call, front: wantFront });
         claimed.push(symbol);
         continue;
       }
@@ -440,7 +464,7 @@ export class DeskSession {
         report.failed.push({ symbol, reason: r.reason, said: said[symbol] });
         continue;
       }
-      this.fetcher.expect(symbol, { by, said: said[symbol], call });
+      this.fetcher.expect(symbol, { by, said: said[symbol], call, front: wantFront });
       claimed.push(symbol);
     }
     await this.wait(claimed, waitMs);
@@ -467,10 +491,9 @@ export class DeskSession {
       // "Pull up Apple" when Apple is not on the board means PUT it up, and
       // look at it. Refusing was a dead end, and "pull up" sits one letter
       // from "put up": a request to add three once came back "the board is empty".
-      const report = await this.add([symbol], { by, said: said ? { [symbol]: said } : {}, waitMs, call });
-      const landed = report.landed[0]?.quote.symbol;
-      if (landed && this.desk.raw().focus !== landed) this.desk.apply({ kind: 'focus', symbol: landed });
-      return { kind: 'added', report };
+      // The pump puts it on watch when it lands, now or after the wait.
+      const report = await this.add([symbol], { by, said: said ? { [symbol]: said } : {}, waitMs, call, front: true });
+      return { kind: 'added', report: { ...report, landed: report.landed.map((l) => ({ ...l, quote: board.find(this.desk.raw(), l.quote.symbol) ?? l.quote })) } };
     }
     // The reply reads this print, so it is the announcer's baseline, not news.
     this.announcer.markSpoken(symbol, row.as_of, row.change_pct);
@@ -486,7 +509,7 @@ export class DeskSession {
     const before = board.find(state, target);
     const inFlight = state.fetching.includes(target);
     if (!before && !inFlight) return { kind: 'missing', symbol: target };
-    if (inFlight) this.fetcher.join(target, by, undefined, call);
+    if (inFlight) this.fetcher.join(target, { by, call });
     else {
       const r = this.desk.apply({ kind: 'refresh', symbol: target });
       // On a row that is there and not in flight, the one refusal left is the 15 s floor.
