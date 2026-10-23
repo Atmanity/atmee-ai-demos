@@ -57,11 +57,14 @@ export function App() {
     setBusy(false);
   }, []);
 
-  // Replies can cross (a slow equation reading, then a key): never go back to an older board.
-  const show = useCallback((next: View) => {
-    if (next.seq < seen.current) return;
+  // Replies can cross (a slow equation reading, then a key): never go back to an
+  // older board, and never show the message that came with one. True when shown.
+  const show = useCallback((next: View, message = ''): boolean => {
+    if (next.seq < seen.current) return false;
     seen.current = next.seq;
     setView(next);
+    setMessage(message);
+    return true;
   }, []);
 
   // Ada's tool calls: the server acts, the board follows, the result is what Ada says.
@@ -71,10 +74,7 @@ export function App() {
     track(1);
     try {
       const outcome = await post<ToolOutcome>(`/boards/${board.current}/tool`, { name, arguments: args });
-      if (current(mine)) {
-        show(outcome.view);
-        setMessage(outcome.message ?? '');
-      }
+      if (current(mine)) show(outcome.view, outcome.message);
       return outcome.result;
     } catch (err) {
       console.warn('[board] %s failed', name, err);
@@ -113,8 +113,7 @@ export function App() {
     try {
       const outcome = await post<Outcome>(`/boards/${board.current}/act`, body);
       if (!current(mine)) return null;
-      show(outcome.view);
-      setMessage(outcome.message ?? '');
+      show(outcome.view, outcome.message);
       if (outcome.event) avatarRef.current.event(outcome.event, outcome.ttl ?? 25);
       return outcome;
     } catch (err) {

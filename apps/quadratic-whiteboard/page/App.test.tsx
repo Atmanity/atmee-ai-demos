@@ -285,6 +285,38 @@ describe('one call never acts on another', () => {
   });
 });
 
+describe('answers that cross', () => {
+  it('never shows a refusal from a key that answers after a newer change from Ada', async () => {
+    // The box's refusal is decided first (the board as it was), Ada's method lands after it, then the refusal's answer arrives.
+    const { held } = holding((path) => path.endsWith('/act') && held.length === 0);
+    await live();
+    await call('put_up_equation', { equation: 'x^2 - 4x + 1' });
+    const input = screen.getByLabelText('Equation') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '2x + 3' } });
+    fireEvent.submit(input.closest('form')!);
+    await waitFor(() => expect(held).toHaveLength(1));
+    await call('choose_method', { method: 'completing the square' });
+    await act(async () => held[0].release());
+    await act(async () => {});
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByRole('heading', { level: 2 }).textContent).toBe('Completing the square');
+  });
+
+  it('never shows a refusal from Ada that answers after her own newer change', async () => {
+    // The keys wait while Ada's calls run, but her calls do not wait for each other.
+    const { held } = holding((path) => path.endsWith('/tool') && held.length === 0);
+    await live();
+    fireEvent.click(screen.getByRole('button', { name: /Factors neatly/ }));
+    await waitFor(() => expect(heading()).toBe('y = x² − 5x + 6'));
+    const late = fake.onToolCall!({ id: 'early', name: 'next_line', arguments: {} }); // refused: no method yet
+    await waitFor(() => expect(held).toHaveLength(1));
+    await call('choose_method', { method: 'factoring' });
+    await act(async () => { held[0].release(); await late; });
+    expect(screen.getByText('0 of 6')).toBeTruthy();
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+});
+
 describe('after the call', () => {
   it('shows today\'s board with the notes to download, and calling back resumes the same board', async () => {
     await live();
