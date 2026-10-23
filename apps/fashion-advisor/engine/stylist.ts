@@ -116,6 +116,8 @@ export class Stylist {
   private readings = new Map<string, CleanAnalysis>();
   /** Which picture and occasion the verdict on screen is for. */
   private readOf = '';
+  /** Moves on whenever the rail is replaced (a new photo, a fresh read): pieces fetched for an older rail are not hung on it. */
+  private railGen = 0;
   private lines = 0;   // rotates the example lines the original picked at random
 
   constructor(private models: Models, private opts: StylistOptions) {}
@@ -301,6 +303,7 @@ export class Stylist {
     this.tried = [];
     this.latestItem = '';
     this.analysis = null;
+    this.railGen += 1;
     this.photoDeclined = false;   // a photo after a refusal is the answer that counts
     this.wantsPhoto = false;
     this.jobs.photo = true;
@@ -359,6 +362,7 @@ export class Stylist {
       this.jobs.queued.splice(this.jobs.queued.indexOf(item), 1);
       const source = this.current;
       if (!source) return [];
+      const occasion = stylePhraseKey(this.target);
       this.jobs.tryOn = item;
       this.touch();
       let result: Img | null;
@@ -379,7 +383,14 @@ export class Stylist {
         mark('image', [say.tryOnFailed(item, true)]);
         return [];
       }
-      const previousScore = this.analysis?.style_score;
+      // A new photo came in during the render: this picture is of a look that is gone.
+      if (this.current?.token !== source.token) {
+        this.touch();
+        mark('image', []);
+        return [];
+      }
+      // The score change is only meaningful against the same occasion's score.
+      const previousScore = stylePhraseKey(this.target) === occasion ? this.analysis?.style_score : undefined;
       const token = this.store(result);
       const attributes = buildItemAttributes(item, this.category, normalizeStyleCategory);
       this.current = { token, img: result, item, kind: 'tryon', shopLinks: buildAmazonShopLinks(attributes, this.opts.amazon) };
@@ -407,9 +418,12 @@ export class Stylist {
     this.jobs.more = true;
     this.touch();
     // Not on the serial queue, as in the original: more pieces need no image job to finish first.
+    // So the rail can be replaced meanwhile (another occasion, a new photo): then these are not for it.
+    const rail = this.railGen;
     return this.started(['done'], async () => {
       try {
         const fresh = await this.generateMore(this.analysis?.suggestions.map((s) => s.item) ?? []);
+        if (this.railGen !== rail || !this.analysis) return quiet ? [] : [say.moreStale()];
         if (this.analysis) {
           const seen = new Set(this.analysis.suggestions.map((s) => s.item.trim().toLowerCase()));
           const merged = [...this.analysis.suggestions];
@@ -439,6 +453,7 @@ export class Stylist {
       this.tried = [];
       this.latestItem = '';
       this.analysis = null;
+      this.railGen += 1;
       this.touch();
       return this.read({ context: 'Initial camera look after reset', refresh: true });
     });
@@ -463,6 +478,11 @@ export class Stylist {
         known ?? this.models.analyze(shown.img, { userName: this.name, target: this.targetBrief(), context: opts.context }).catch(() => null),
         keepPieces ? Promise.resolve([]) : this.models.suggest({ image: shown.img, zones: this.zones, target: this.targetBrief(), recent: this.tried }).catch(() => []),
       ]);
+      // A new photo came in while this read ran: its verdict is for a picture no longer on screen.
+      if (this.current?.token !== shown.token) {
+        if (read && !known) this.readings.set(key, read);
+        return [];
+      }
       if (!read) {
         this.notice = { kind: 'error', text: 'The verdict didn\'t come through. Tap "Rate it again".' };
         return opts.narrate === false ? [] : [say.analysisFailed()];
@@ -473,6 +493,7 @@ export class Stylist {
       }
       // Pieces appended while this read ran are kept too.
       const suggestions = keepPieces ? (this.analysis ?? previous)!.suggestions : this.enrich(this.assemble(dynamic));
+      if (!keepPieces) this.railGen += 1;
       const same = Boolean(known) && this.readOf === key && Boolean(previous);
       this.analysis = { ...read, suggestions, tried_items: this.tried.map(titleCase) };
       this.readOf = key;
@@ -480,7 +501,8 @@ export class Stylist {
       if (opts.narrate === false) return [];
       const wish = this.wish;
       const event = say.analysis(this.view(), {
-        previousScore: opts.added ? opts.previousScore ?? previous?.style_score : undefined,
+        // Only what the caller vouches for: after a change of occasion there is no like-for-like score.
+        previousScore: opts.added ? opts.previousScore : undefined,
         added: opts.added,
         wish,
         // Asked again with nothing changed: the same reading, said as such.

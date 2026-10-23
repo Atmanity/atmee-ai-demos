@@ -255,6 +255,8 @@ export const say = {
     return ev(`Done: ${names.length} new piece${names.length === 1 ? ' is' : 's are'} on the rail now, among them ${list}. Name one or two in a sentence, ${ask}.`, 45, tryOnAvailable ? { offer: names[0] } : {});
   },
 
+  moreStale: () => ev("Not added: the rail changed while more pieces were being found (a new photo or occasion), so they were left off. Ask whether they'd like more pieces for what's on screen now; find them only if they say yes.", 30),
+
   moreCapped: (count: number) => ev(`Refused: the rail is full, ${count} pieces are already on their screen. Say so lightly and point them to one of those.`, 20),
 
   needsRead: (what: string) => ev(`Not yet: they asked ${what}, but there is no photo to read. ${askForPhoto[0].toUpperCase()}${askForPhoto.slice(1)}.`, 20),

@@ -33,13 +33,29 @@ class FakeModels implements Models {
   private gates: (() => void)[] = [];
   holdTryOns = false;
 
+  /** While set, a read waits for the test to let it go (releaseReads). */
+  holdReads = false;
+  private readGates: (() => void)[] = [];
+  /** While set, each call for pieces waits on its own gate, so a test can answer them in any order. */
+  holdSuggest = false;
+  suggestGates: (() => void)[] = [];
+  /** Pieces named for the target they were asked for, instead of the fixed list. */
+  piecesByTarget = false;
+
   async analyze(_image: Img, input: ReadInput): Promise<CleanAnalysis | null> {
     this.reads.push(input);
     if (this.readFails) return null;
+    if (this.holdReads) await new Promise<void>((resolve) => this.readGates.push(resolve));
     return { target_style: input.target, style_summary: 'Clean base', occasion: 'Dinner', style_score: this.scores.shift() ?? 6, color_palette: ['navy', 'white', 'denim'], what_works: 'The navy layer frames you.', style_tip: 'Ground it with sharper shoes.' };
   }
   async zones(): Promise<Set<Zone>> { return new Set(this.zonesFor); }
-  async suggest() { this.suggestCalls += 1; return this.pieces.map((p) => ({ ...p })); }
+  async suggest({ target }: { target: string }) {
+    const call = ++this.suggestCalls;
+    if (this.holdSuggest) await new Promise<void>((resolve) => this.suggestGates.push(resolve));
+    if (this.piecesByTarget) return Array.from({ length: 6 }, (_, i) => ({ item: `${target} Layer ${call}-${i}`, text: `For ${target}.` }));
+    return this.pieces.map((p) => ({ ...p }));
+  }
+  releaseReads() { this.holdReads = false; this.readGates.splice(0).forEach((go) => go()); }
   async tryOn(_image: Img, prompt: string): Promise<Img | null> {
     this.tryOns.push(prompt);
     if (this.holdTryOns) await new Promise<void>((resolve) => this.gates.push(resolve));
@@ -429,5 +445,79 @@ describe('the read and the pieces', () => {
     expect(out.job).toBeUndefined();
     expect(out.view.notice?.text).toMatch(/JPEG, PNG or WebP/);
     expect(stylist.act({ type: 'photo', mime: 'image/jpeg', data: 'aGk=', source: 'upload' }).job).toBeUndefined();
+  });
+});
+
+// Work that finishes after the look it was started for has changed must not
+// act on the new look (Bugbot, PR #14).
+describe('late work never lands on a newer look', () => {
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  test('a photo dropped in while a piece is being put on: the try-on of the old look is dropped', async () => {
+    const models = new FakeModels();
+    models.holdTryOns = true;
+    const { stylist } = await styled(models);
+    const tryOn = stylist.act({ type: 'tryOn', item: 'Camel Wool Topcoat' });
+    await tick();
+    expect(stylist.view().jobs.tryOn).toBe('Camel Wool Topcoat');
+    const photo = stylist.act({ type: 'photo', mime: 'image/png', data: PHOTO, source: 'upload' });
+    const newLook = photo.view.image!.url;
+    models.release();
+    const [image, done] = await settle(stylist, tryOn);
+    await settle(stylist, photo);
+    expect(stylist.view().image).toMatchObject({ kind: 'look', url: newLook });
+    expect(stylist.view().analysis?.tried_items).toEqual([]);
+    expect([...image.events, ...done.events]).toEqual([]);   // nothing said about a picture that is not on screen
+  });
+
+  test('the occasion changed while a piece was being put on: no score change is claimed across occasions', async () => {
+    const models = new FakeModels();
+    models.holdTryOns = true;
+    models.scores = [6, 3];
+    const { stylist } = await styled(models);
+    const tryOn = stylist.act({ type: 'tryOn', item: 'Camel Wool Topcoat' });
+    await tick();
+    const retarget = stylist.act({ type: 'retarget', style: 'wedding' });
+    models.release();
+    const [, done] = await settle(stylist, tryOn);
+    await settle(stylist, retarget);
+    expect(done.events[0].text).toContain('3 out of 10 for wedding');
+    expect(done.events[0].text).not.toMatch(/lifts|hurts|steady|it was 6/);
+  });
+
+  test("a read that finishes after a new photo was dropped in never shows the old photo's verdict", async () => {
+    const models = new FakeModels();
+    const { stylist } = await styled(models);
+    models.holdReads = true;
+    const reread = stylist.act({ type: 'retarget', style: 'wedding' });   // the old photo, read for a wedding
+    await tick();
+    const photo = stylist.act({ type: 'photo', mime: 'image/png', data: PHOTO, source: 'upload' });
+    models.readFails = true;    // the new photo's own read does not come through
+    models.releaseReads();
+    const [stale] = await settle(stylist, reread);
+    await settle(stylist, photo);
+    expect(stale.events).toEqual([]);
+    expect(stylist.view().analysis).toBeNull();   // not the old photo's verdict under the new photo
+  });
+
+  test('more pieces fetched for the old occasion are not hung on the new rail', async () => {
+    const models = new FakeModels();
+    models.piecesByTarget = true;
+    const { stylist } = await styled(models);
+    models.holdSuggest = true;
+    const more = stylist.act({ type: 'more' });                         // pieces for smart casual, held
+    await tick();
+    const retarget = stylist.act({ type: 'retarget', style: 'wedding' }); // a new rail for a wedding, held
+    await tick();
+    expect(models.suggestGates).toHaveLength(2);
+    models.suggestGates[1]();                                            // the wedding rail lands first
+    await settle(stylist, retarget);
+    models.holdSuggest = false;
+    models.suggestGates[0]();                                            // then the old occasion's pieces
+    const [done] = await settle(stylist, more);
+    const items = stylist.view().analysis!.suggestions.map((p) => p.item);
+    expect(items.length).toBeGreaterThan(0);
+    for (const item of items) expect(item).toMatch(/^wedding /);
+    expect(done.events[0].text).toMatch(/^Not added:/);
   });
 });
