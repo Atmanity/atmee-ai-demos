@@ -2,3 +2,6 @@
 node_modules
 server.log
 .env.local
+dist
+tools/live-test/audio
+*.log

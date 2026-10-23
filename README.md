@@ -1,9 +1,15 @@
 # atmee-usecase-demos
 
-Five sample apps built purely on the Atmee Avatar API (v2), with one small Node server and no
-changes to the platform. They cover the target-app checklist from the product thread: a
-recruiter call, internal training, a presence/companion, an interactive story and a live
-stream.
+Sample apps built purely on the Atmee Avatar API (v2), with no changes to the platform:
+
+- **Five apps** on one small Node server (`server.js`). They cover the target-app checklist
+  from the product thread: a recruiter call, internal training, a presence/companion, an
+  interactive story and a live stream.
+- **Fourteen mini-apps** from `Atmanity/apps` (games, tutors, advisors, a planetarium, a room
+  planner), rebuilt as products on their own server (`server/`). See
+  [The fourteen mini-apps](#the-fourteen-mini-apps).
+
+Every app has its folder in `apps/<app>/` with its README.
 
 | app | product | what it shows | README |
 |---|---|---|---|
@@ -110,7 +116,56 @@ Shared pieces:
 - `public/kit.js` and `public/kit.css`: stage overlay, captions, transcript, countdown, mic
   button, poll card.
 
+## The fourteen mini-apps
+
+The mini-apps from `Atmanity/apps`, each rebuilt as a product with its own name, look and
+host. The host acts through app tools; the app owns the rules, the facts and the screen.
+Each was run live on staging; its README has the runs and what the API could not do.
+
+### Run them
+
+```
+cp .env.example .env     # as above; the mini-apps also read MINIAPPS_PORT and GEMINI_API_KEY
+npm install
+npm run dev              # http://localhost:5190/
+npm test                 # engines, judges, directors, the kit
+npm run typecheck
+```
+
+Node 22.9+ (for `--env-file-if-exists`). `npm run dev` (and `npm run start:apps`) read `.env`,
+then `.env.local` if it exists, so a key there wins. Each app's host is the `avatarId` in
+`apps/<app>/avatar.json`, an avatar of the account the key belongs to; make that key without
+printing it with `atmee keys create --name mini-apps --scopes avatars:read,avatars:write --out
+.env.local`. `AVATAR_<APP_ID>` (for example `AVATAR_CHESS_OPPONENT`) overrides one app's host,
+and `AVATAR_DEFAULT` serves an app with neither. They run on `MINIAPPS_PORT` (default 5190), so
+`PORT` stays the five apps' (3333).
+
+### How a mini-app is put together
+
+```
+server/              their server: the API key, sessions, each app's own routes
+  atmee.ts             the Avatar API (session, end, conductor, app tools)
+  llm.ts               the apps' own model calls (structured JSON, images)
+  api.ts               discovers apps/<app>/server.ts; /api/apps/<app>/session, /end, routes
+src/avatar/          the room, framework-free: join, the app's messages, both sides' words,
+                     the app-tool RPC
+src/kit/             React: useAvatar(), the call parts (HostVideo, CallStatus, ChatPanel),
+                     useToolNet() (the safety net for actions the host narrates)
+apps/<app>/
+  server.ts          the app's server side: its tools' instructions, secrets, model calls
+  engine/            its rules and its "director" (tools, results, instructions), with tests
+  page/              its screen
+  avatar.json        its host: persona and avatarId
+  host/portrait.jpg  the host's face, shown before the video plays
+tools/live-test/     a synthetic microphone and helpers for live runs
+```
+
+The rule every app follows: **the app decides, the host performs.** The host acts through the
+app's tools and says what their results say; results lead with the outcome; tool schemas are
+lenient and the app normalises what arrives. `docs/PORTING.md` is the guide to building one.
+
 ## What the API cannot do yet (found while building these)
+
 
 1. **No audience in the room.** `POST /v1/session` gives exactly one user token for a room in
    Atmee's LiveKit project; there are no viewer tokens and no egress. The alternative,

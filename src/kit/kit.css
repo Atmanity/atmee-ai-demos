@@ -1,0 +1,56 @@
+/* The avatar kit: stage, composer, transcript. Apps theme it with these variables. */
+:root {
+  --accent: #5b5bf0;
+  --accent-ink: #fff;
+  --stage-bg: #0f1117;
+  --ink: #1b1d24;
+  --muted: #6b7080;
+  --line: #e4e6ee;
+  --surface: #ffffff;
+  --page: #f5f6fa;
+  --radius: 16px;
+  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--font); color: var(--ink); background: var(--page); }
+
+.kit-stage { position: relative; aspect-ratio: 1 / 1; width: 100%; background: var(--stage-bg); border-radius: var(--radius); overflow: hidden; box-shadow: 0 0 0 0 var(--accent); transition: box-shadow .25s; }
+.kit-stage.is-speaking { box-shadow: 0 0 0 3px var(--accent); }
+.kit-video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.kit-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; text-align: center; color: #fff; background: radial-gradient(circle at 50% 30%, rgba(255,255,255,.08), rgba(0,0,0,.65)); }
+.kit-title { font-size: 20px; font-weight: 650; }
+.kit-detail { font-size: 14px; color: rgba(255,255,255,.75); max-width: 34ch; }
+.kit-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
+.kit-spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(255,255,255,.25); border-top-color: #fff; animation: kit-spin 1s linear infinite; }
+@keyframes kit-spin { to { transform: rotate(360deg); } }
+.kit-badge { position: absolute; top: 12px; left: 12px; display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; background: rgba(0,0,0,.45); color: #fff; font-size: 13px; font-weight: 600; backdrop-filter: blur(6px); }
+.kit-dot { width: 8px; height: 8px; border-radius: 50%; background: #3ddc84; }
+.kit-timer { position: absolute; top: 12px; right: 12px; padding: 5px 10px; border-radius: 999px; background: rgba(0,0,0,.45); color: #fff; font: 600 13px/1 ui-monospace, monospace; }
+.kit-captions { position: absolute; left: 12px; right: 12px; bottom: 14px; text-align: center; }
+.kit-captions span { display: inline; padding: 4px 8px; background: rgba(0,0,0,.6); color: #fff; font-size: 15px; line-height: 1.7; border-radius: 6px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.kit-heard { position: absolute; left: 12px; right: 12px; top: 50px; text-align: center; color: rgba(255,255,255,.85); font-style: italic; font-size: 13px; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+.kit-hear { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+
+.kit-btn { appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 600 14px var(--font); padding: 9px 16px; border-radius: 10px; cursor: pointer; transition: transform .08s, background .15s, opacity .15s; }
+.kit-btn:hover:not(:disabled) { background: #f0f1f6; }
+.kit-btn:active:not(:disabled) { transform: translateY(1px); }
+.kit-btn:disabled { opacity: .45; cursor: default; }
+.kit-primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.kit-primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+.kit-danger { color: #c62f3a; }
+.kit-icon { padding: 9px 12px; }
+.kit-icon.is-off { background: #fdecee; }
+
+.kit-composer { display: flex; gap: 8px; align-items: center; }
+.kit-input { flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; font: 15px var(--font); background: var(--surface); }
+.kit-input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); border-color: var(--accent); }
+
+.kit-transcript { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; padding: 4px 2px; font-size: 14px; }
+.kit-line { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
+.kit-line.is-user { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.kit-who { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+
+/* A common two-column app layout: the avatar on the left, the app on the right. */
+.kit-layout { display: grid; grid-template-columns: minmax(280px, 380px) 1fr; gap: 20px; max-width: 1280px; margin: 0 auto; padding: 20px; min-height: 100vh; }
+.kit-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+@media (max-width: 860px) { .kit-layout { grid-template-columns: 1fr; padding: 16px; } }
