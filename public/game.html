@@ -54,7 +54,6 @@
   .narrator { aspect-ratio: 1; border-radius: 10px; }
   .narrator .tag { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 1; font-family: var(--font-display); font-size: 12px; letter-spacing: .12em; color: #f3d48a; background: rgb(0 0 0 / .45); padding: 3px 12px; border-radius: 99px; }
   .narrator.talking { box-shadow: 0 0 30px rgb(217 164 65 / .45); }
-  .narrator .caption { font-size: 16px; }
   .inventory { display: flex; gap: 10px; align-items: center; }
   .inventory .slot { width: 52px; height: 52px; border-radius: 10px; border: 1px dashed #3c4757; display: grid; place-items: center; font-size: 26px; background: var(--surface); }
   .inventory .slot.full { border-style: solid; border-color: var(--accent); background: var(--accent-soft); }
@@ -107,7 +106,6 @@
     <div class="frame"><div class="stage narrator" id="narrator">
       <span class="tag">THE NARRATOR</span>
       <video id="video" autoplay playsinline muted></video><audio id="audio" autoplay></audio>
-      <div class="caption" id="caption"></div>
       <div class="overlay" id="overlay"></div>
     </div></div>
     <div class="inventory"><span class="muted" style="font-size:15px">Satchel</span><div class="slot" id="slotKey"></div><div class="slot" id="slotMap"></div><div class="slot" id="slotGold"></div><div class="slot" id="slotGift" title="The oracle's gift"></div></div>
@@ -141,7 +139,6 @@
   ];
   let s, here = [0, 0], steps = 0, atShrine = false, won = false;
   const visited = new Set(['0,0']), inv = new Set(), clues = new Set();
-  const caption = UI.captions($('caption'));
   const debug = UI.debugLog();
   const overlay = UI.stage($('overlay'), {
     starting: ['The tale is being prepared…', 'Summoning your narrator.'],
@@ -251,7 +248,7 @@
       s = await Atmee.join({
         usecase: 'game', video: $('video'), audio: $('audio'), mic: null, tools,
         onPhase: (p, d) => overlay.phase(p, d),
-        onCaption: (text, final) => { caption(text, final); narrate(text, final); },
+        onCaption: narrate,
         onSpeaking: (v) => { $('narrator').classList.toggle('talking', v); sender.speaking(v); },
         onRelay: debug,
         onEnd: () => { s = null; render(); overlay.ended('<div class="title">The tale has ended</div><button class="btn primary" onclick="location.reload()">Begin anew</button>'); },

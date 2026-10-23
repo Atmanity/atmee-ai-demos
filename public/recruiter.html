@@ -115,7 +115,6 @@
       <video id="video" autoplay playsinline muted></video><audio id="audio" autoplay></audio>
       <div class="selfie" id="selfie">AC<small>You</small></div>
       <div class="nameplate"><span class="bars"><i></i><i></i><i></i></span>Recruiter · Northwind Talent</div>
-      <div class="caption" id="caption"></div>
       <div class="overlay" id="overlay"></div>
     </div>
     <div class="controls">
@@ -194,7 +193,6 @@
   paintAgenda();
 
   const tr = UI.transcript($('transcript'), { avatar: 'Recruiter', user: 'You' });
-  const caption = UI.captions($('caption'));
   const debug = UI.debugLog();
   const sender = UI.politeSender(() => s);
   const overlay = UI.stage($('overlay'), {
@@ -225,7 +223,8 @@
       s = await Atmee.join({
         usecase: 'recruiter', video: $('video'), audio: $('audio'), mic, tools,
         onPhase: (p, d) => overlay.phase(p, d),
-        onCaption: (text, final) => { caption(text, final); tr.avatar(text, final); },
+        onCaption: tr.avatar,
+        onUserCaption: tr.heard,
         onSpeaking: (v) => { $('stage').classList.toggle('talking', v); sender.speaking(v); },
         onRelay: debug,
         onEnd: () => finish(),

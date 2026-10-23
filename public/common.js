@@ -6,8 +6,11 @@
 //
 //   const mic = await Atmee.requestMic();          // in the lobby, or null for typing only
 //   const s = await Atmee.join({ usecase, video, audio, mic, tools,
-//     onPhase(phase, detail), onCaption(text, final), onSpeaking(bool), onVideo(bool),
-//     onMessage(msg), onRelay(topic, text), onEnd() });
+//     onPhase(phase, detail), onCaption(text, final), onUserCaption(text, final, segmentId),
+//     onSpeaking(bool), onVideo(bool), onMessage(msg), onRelay(topic, text), onEnd() });
+//
+// onCaption carries the avatar's words; onUserCaption the user's spoken words
+// as recognised (interims of one utterance share a segment id, then a final).
 //   s.user(kind, text)  tell the server what the user did (the use case decides)
 //   s.setMuted(bool)    mute or unmute the user's microphone
 //   s.end()
@@ -40,6 +43,9 @@
   const debug = new URLSearchParams(location.search).has('debug');
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // The recogniser marks an utterance that cut into the avatar's turn, or a
+  // short acknowledgement, with a tag in front of its text.
+  const cleanUserText = (text) => text.replace(/^\s*\[(?:interruption|backchannel)\]\s*/i, '').trim();
   function failure(message, friendly) { const e = new Error(message); e.friendly = friendly; return e; }
 
   async function requestMic() {
@@ -121,7 +127,7 @@
 
     room.registerTextStreamHandler(TRANSCRIPTION_TOPIC, async (reader, participant) => {
       const info = reader.info || {};
-      if (participant && participant.identity === room.localParticipant.identity) return; // our own words
+      if (participant && participant.identity === room.localParticipant.identity) return userCaption(reader, info);
       arrived();
       floor.captionStarted();
       let text = '';
@@ -133,6 +139,22 @@
       opts.onCaption && opts.onCaption(text, true);
       if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'caption', text, final: true, id: info.id }));
     });
+
+    // The user's own words, as the agent's speech recognition heard them,
+    // published under this participant's identity: each interim is a new
+    // stream carrying the whole utterance so far, the last one is attributed
+    // lk.transcription_final, and all of them share lk.segment_id. They are
+    // never the avatar's turn, so they touch neither arrival nor the floor.
+    async function userCaption(reader, info) {
+      const attrs = info.attributes || {};
+      const final = attrs['lk.transcription_final'] === 'true';
+      const segment = attrs['lk.segment_id'] || info.id;
+      let text = '';
+      try { for await (const chunk of reader) text += chunk; } catch (e) {}
+      text = cleanUserText(text);
+      if (debug) console.log(`[atmee] ${stamp()} heard${final ? ' (final)' : ''} ${segment}: ${text}`);
+      if (opts.onUserCaption && (text || final)) opts.onUserCaption(text, final, segment);
+    }
 
     // App tool calls arrive as an RPC to this participant; registered before
     // connecting, so no call finds the page without a handler.

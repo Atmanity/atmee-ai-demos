@@ -80,7 +80,7 @@ ends the session when the trainee leaves or the page closes.
 | linked, and after every slide, quiz or score change | `atmee.app` `{"type":"state","text":"Training app state. On screen: quiz question 2. Quiz questions graded: 1 of 2; score so far: 1 of 2. …"}` |
 | the trainee types | `lk.chat` with the text |
 
-The page reads `lk.transcription` only to show captions and the transcript; no state is taken
+The page reads `lk.transcription` only to show the transcript (both sides' words); no state is taken
 from what the trainer says.
 
 ## App tools

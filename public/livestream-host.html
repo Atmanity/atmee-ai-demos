@@ -68,7 +68,6 @@
     <div class="stage player" id="player">
       <div class="hud"><span class="chip off" id="liveBadge">OFFLINE</span><span class="chip" id="viewerBadge">👁 0</span><span class="chip" id="relayBadge" hidden title="Viewers watching the video this studio forwards">📡 0</span></div>
       <video id="video" autoplay playsinline muted></video><audio id="audio" autoplay></audio>
-      <div class="caption" id="caption"></div>
       <div class="overlay" id="overlay"></div>
     </div>
     <div class="meta">
@@ -101,7 +100,6 @@
   const { $, esc } = UI;
   $('share').innerHTML = '🔗 Copy viewer link';
   let s, relay = null, msgs = 0, liveEl = null, stopClock = () => {};
-  const caption = UI.captions($('caption'));
   const debug = UI.debugLog();
   const overlay = UI.stage($('overlay'), {
     starting: ['Starting your stream…', 'Booking your co-host.'],
@@ -143,7 +141,7 @@
         usecase: 'livestream', video: $('video'), audio: $('audio'), mic: null, tools,
         onPhase: (p, d) => overlay.phase(p, d),
         onSpeaking: (v) => $('player').classList.toggle('talking', v),
-        onCaption: (text, final) => { caption(text, final); hostSays(text, final); },
+        onCaption: hostSays,
         onRelay: debug,
         onMessage: (m) => {
           if (m.type === 'chat') { msgs++; $('statMsgs').textContent = msgs; line(/\?\s*$/.test(m.text) ? 'q' : '', m.name, m.text); }

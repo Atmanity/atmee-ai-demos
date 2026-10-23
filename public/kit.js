@@ -41,9 +41,23 @@
   }
 
   // A chat-style transcript. avatar(text, final) grows one live bubble per
-  // sentence and settles it when the sentence is complete.
+  // sentence and settles it when the sentence is complete. heard(text, final,
+  // segment) does the same for the user's spoken words, one bubble per
+  // segment. A typed turn comes back as a user transcription too; that echo
+  // is not shown again.
+  const ECHO_MS = 60000; // a typed turn can wait out a long avatar turn before it is sent
+  const norm = (t) => String(t).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
   function transcript(el, names) {
-    let live = null;
+    let live = null, typed = [];
+    const spoken = new Map(); // segment -> its live bubble
+    const isEcho = (text, final) => {
+      const n = norm(text), at = Date.now();
+      typed = typed.filter((x) => at - x.at < ECHO_MS);
+      const i = typed.findIndex((x) => (final ? x.n === n : x.n.startsWith(n)));
+      if (i < 0) return false;
+      if (final) typed.splice(i, 1);
+      return true;
+    };
     const stick = () => { el.scrollTop = el.scrollHeight; };
     function bubble(cls, who, text) {
       const d = document.createElement('div'); d.className = `bubble ${cls}`;
@@ -57,10 +71,23 @@
         if (final) { live.classList.remove('live'); live = null; }
         stick();
       },
-      user(text, who) { bubble('me', who || names.user || 'You', text); },
+      user(text, who) { typed.push({ n: norm(text), at: Date.now() }); bubble('me', who || names.user || 'You', text); },
+      heard(text, final, segment) {
+        let d = spoken.get(segment);
+        if (!d && isEcho(text, final)) return;
+        if (!text) { if (d) d.remove(); spoken.delete(segment); return; }
+        if (!d) {
+          // A new utterance settles one whose final never came.
+          spoken.forEach((x) => x.classList.remove('live')); spoken.clear();
+          d = bubble('me live', names.user || 'You', text); spoken.set(segment, d);
+        }
+        d.querySelector('.t').textContent = text;
+        if (final) { d.classList.remove('live'); spoken.delete(segment); }
+        stick();
+      },
       other(text, who) { bubble('them', who, text); },
       note(text) { const d = document.createElement('div'); d.className = 'system-note'; d.textContent = text; el.appendChild(d); stick(); },
-      clear() { el.innerHTML = ''; live = null; },
+      clear() { el.innerHTML = ''; live = null; typed = []; spoken.clear(); },
     };
   }
 
