@@ -95,9 +95,11 @@ async function closeRoom(h, key, why) {
   if (!key || h.key !== key) return; // already closed, or a newer claim
   h.key = null; rooms.delete(key); clearTimeout(h.joinTimer);
   console.log(`[${h.name}] visitor ${shortKey(key)} closed (${why})`);
+  // The page's socket is closed first, and its handlers check the key, so
+  // nothing it still sends reaches a stream another streamer claims meanwhile.
   const host = h.host; h.host = null;
-  await endSession(h);
   if (host && host.readyState === host.OPEN) host.close(1000, "session ended");
+  await endSession(h);
 }
 
 // The Avatar API runs one live session per avatar (409 avatar_busy). When the
@@ -335,6 +337,7 @@ function onStreamer(h, ws, key) {
   sendTo(ws, { type: "watchers", ids: [...h.watchers.keys()], max: MAX_WATCHERS });
   toViewers(h, { type: "stream", live: true });
   ws.on("message", (raw) => {
+    if (h.key !== key) return; // an old studio's socket, still closing, never reaches a newer stream
     const msg = JSON.parse(raw);
     if (msg.type === "rtc" && h.watchers.has(msg.to)) sendTo(h.watchers.get(msg.to), { type: "rtc", data: msg.data });
   });
@@ -382,6 +385,7 @@ wss.on("connection", (ws, req) => {
     h.host = ws; clearTimeout(h.joinTimer);
     ws.send(JSON.stringify({ type: "history", transcript: h.transcript.slice(-50) }));
     ws.on("message", (raw) => {
+      if (h.key !== key) return; // this page's session is over; a newer one may own the hub (the stream)
       const msg = JSON.parse(raw);
       if (msg.type === "caption") {
         const entry = { role: "avatar", text: msg.text, final: msg.final, id: msg.id, ts: Date.now() };
