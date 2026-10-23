@@ -63,7 +63,7 @@ api.post('/apps/:app/session', async (req, res) => {
   }
 
   const maxSeconds = Number(process.env.MAX_SECONDS) || app.maxSeconds || 600;
-  const r = await startSession(avatarId, maxSeconds, { app: 'atmee-usecase-demos', usecase: app.id });
+  const r = await startSession(avatarId, maxSeconds, { app: 'atmee-usecase-demos', usecase: app.id }, app.appTools);
   if (!r.ok) {
     // The code is for the page; the message (which limit, which key) is for you.
     console.warn('[%s] POST /v1/session -> %d %s %s', app.id, r.status, r.json?.error ?? '', r.json?.message ?? '');

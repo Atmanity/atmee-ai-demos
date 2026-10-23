@@ -17,8 +17,8 @@ export async function avatarApi<T = any>(method: string, path: string, body?: un
 
 export interface StartedSession { sessionId: string; serverUrl: string; userToken: string; maxSeconds: number | null }
 
-export async function startSession(avatarId: string, maxSeconds: number, metadata: Record<string, unknown>) {
-  const r = await avatarApi('POST', '/v1/session', { avatarId, maxDurationSeconds: maxSeconds, metadata });
+export async function startSession(avatarId: string, maxSeconds: number, metadata: Record<string, unknown>, appTools?: unknown) {
+  const r = await avatarApi('POST', '/v1/session', { avatarId, maxDurationSeconds: maxSeconds, metadata, ...(appTools ? { appTools } : {}) });
   if (r.status !== 201) return { ok: false as const, ...r };
   const { sessionId, serverUrl, userToken, actualDurationSeconds } = r.json;
   return { ok: true as const, session: { sessionId, serverUrl, userToken, maxSeconds: actualDurationSeconds ?? null } as StartedSession };

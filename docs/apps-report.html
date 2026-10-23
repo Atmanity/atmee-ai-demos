@@ -176,7 +176,7 @@ footer { font-size: 0.88rem; color: var(--muted); border-top: 1px solid var(--li
     <li><b>14</b><span>mini-apps ported</span></li>
     <li><b>14</b><span>live runs on staging</span></li>
     <li><b>3,389</b><span>tests, all passing</span></li>
-    <li><b>10</b><span>API features missing</span></li>
+    <li><b>9</b><span>API features still missing</span></li>
     <li><b>5</b><span>classic apps kept</span></li>
   </ul>
 </header>
@@ -186,14 +186,15 @@ footer { font-size: 0.88rem; color: var(--muted); border-top: 1px solid var(--li
   <h2>What the API is missing</h2>
   <div class="stack">
     <p>Every app follows one rule: the app decides, the avatar performs. The app owns the rules, the facts and the screen, and tells the avatar what is true (<code>state</code>), what happened (<code>event</code>) and how to behave (<code>note</code>). That works well for anything the app can tell the avatar <em>before</em> the user speaks. Answers staged in <code>state</code> shaped the avatar's immediate reply in every app: a star's rising time, the next line of working, the pot, a refusal, an emergency sentence.</p>
-    <p>It breaks down for anything the app learns <em>after</em> the user speaks. The avatar has already started its reply about a second before the app hears the transcript, so it fills the gap. It says "let's see" and waits for an outcome that may never come, or it invents one: a wrong verdict, a made-up sight, a made-up room size. Per-session tools would fix this at the root; everything else in the list below is smaller.</p>
+    <p>It breaks down for anything the app learns <em>after</em> the user speaks. The avatar has already started its reply about a second before the app hears the transcript, so it fills the gap. It says "let's see" and waits for an outcome that may never come, or it invents one: a wrong verdict, a made-up sight, a made-up room size.</p>
+    <p><b>Update, 23 October:</b> function calling shipped on staging the morning after these runs. <code>POST /v1/session</code> now takes <code>appTools</code>; the avatar calls the page over a LiveKit RPC and, for an <code>await</code> tool, holds its reply for the answer. A probe proved it: asked for a secret number only the page knew, the avatar called the tool and said the number in its first reply. The kit supports it; the fourteen apps still use the workaround and are the next thing to convert.</p>
   </div>
 </section>
 
 <section id="asks"><div class="col stack"><p class="eyebrow">Ranked by how many apps need them</p><h2>The features each app needed</h2></div><div class="asks">
 <div class="ask">
-  <div><span class="rank">01</span><h3>Per-session tools</h3></div>
-  <div class="stack" style="gap:6px"><p>The avatar calls the app and waits, so a reply carries the app's verdict.</p><p class="today">Today: Stage predictable answers in state, tell the avatar to hold, send the outcome as an event. Unpredictable outcomes still race: verdicts, next sights, sizes, failed adds.</p><div class="who"><span class="tag">All 14 apps</span></div></div>
+  <div><span class="rank">01</span><h3>Per-session tools (shipped 23 Oct)</h3></div>
+  <div class="stack" style="gap:6px"><p>The avatar calls the app and waits, so a reply carries the app's verdict. Now on staging (session-service #182, Causeur #121) and proven with a probe; these apps predate it and do not use it yet.</p><p class="today">Today: Stage predictable answers in state, tell the avatar to hold, send the outcome as an event. Unpredictable outcomes still race: verdicts, next sights, sizes, failed adds.</p><div class="who"><span class="tag">All 14 apps</span></div></div>
 </div>
 <div class="ask">
   <div><span class="rank">02</span><h3>Check-in control</h3></div>
@@ -256,7 +257,7 @@ footer { font-size: 0.88rem; color: var(--muted); border-top: 1px solid var(--li
 <th><a href="#travel-guide">Travel<br>Guide</a></th>
 <th><a href="#room-planner">Home<br>Planner</a></th>
 <th></th></tr></thead><tbody>
-<tr><th class="gap" scope="row">Replies before the app has acted<small>No function calling: the avatar answers a spoken request before the app hears it.</small></th>
+<tr><th class="gap" scope="row">Replies before the app has acted<small>Without tools, as these apps were built: the avatar answers a spoken request before the app hears it.</small></th>
 <td><span class="dot seen" role="img" aria-label="Seen" title="Guess the City: Seen"></span></td>
 <td><span class="dot held" role="img" aria-label="Held" title="Chess Opponent: Held"></span></td>
 <td><span class="dot seen" role="img" aria-label="Seen" title="Poker Table: Seen"></span></td>

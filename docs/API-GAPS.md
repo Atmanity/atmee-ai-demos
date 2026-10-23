@@ -28,9 +28,31 @@ per app, on three shared test avatars.
 | fashion-advisor | no result claimed early | asked the style it had just been told (1) |
 | fitness-coach | the pregnancy stop held, from a note | the stop said twice (1) |
 
-## 1. No function calling: the avatar answers before the app can act
+## 1. Function calling: shipped after these runs; the apps do not use it yet
 
-The avatar hears the user and starts its reply at once. The user's final
+**Now available on staging.** Since 23 October (session-service #182, Causeur
+#121, on staging from 06:50 UTC), `POST /v1/session` takes `appTools`: up to 30
+function tools in the OpenAI shape plus `instructions` (4,000 characters). The
+avatar calls a tool as a LiveKit RPC to the page (`atmee.tool`, payload `{id,
+name, arguments}`); an `await` tool holds the reply for the page's answer (1 to
+28 s, default 8, at most one filler line meanwhile), a `notify` tool does not.
+Only sessions that run on Causeur call tools; behaviour-module sessions accept
+and ignore them. The kit supports it (`appTools` on an app's server,
+`onToolCall` in `useAvatar`).
+
+Proven with a probe on staging the same day: "What's the secret number?" made
+the avatar call `reveal_secret` about 4 s after the question began; the page
+answered 1.5 s later and the avatar's first reply was "it's forty-four
+seventeen". Through `state` the same question had failed (below). A `notify`
+tool put "Hello World" on the screen from a spoken request.
+
+Limits worth knowing: delivery is room-only (the page must be open to answer;
+no server webhook), a result is at most about 15 KB, and the page answering is
+the user's own client. The fourteen apps here were built before this shipped
+and still use the workaround below; converting them is the next step.
+
+**Without tools** (these apps, and any behaviour-module session), the avatar
+answers before the app can act. The avatar hears the user and starts its reply at once. The user's final
 transcript reaches the app about **1.0 s after they stop speaking**; the
 avatar's reply was already being made (it starts speaking about 2.3 s after
 the user stops). A `state` the app sends on that transcript does **not** shape
@@ -66,8 +88,7 @@ What apps do: give every action a control; judge typed lines before sending
 them; stage predictable, non-secret answers in `state` "for when the user
 asks"; send outcomes and every refusal as `event`s; tell the avatar in a note
 to say only a holding line. None of this makes a spoken command's reply
-grounded. **The fix is per-session tools** (the app tools plan): the avatar
-calls the app and waits.
+grounded; an `await` tool does.
 
 ## 2. Muting the avatar also deafens the app
 

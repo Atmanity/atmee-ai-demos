@@ -39,7 +39,15 @@ export interface JoinOptions {
   onSpeaking?: (speaking: boolean) => void;
   onAudioBlocked?: (blocked: boolean, resume: () => Promise<void>) => void;
   onEnd?: (reason: unknown) => void;
+  /**
+   * A call of one of the app's tools (`appTools` on the server). The returned
+   * value (a string, or anything JSON) is the result an `await` tool hands the
+   * avatar; a `notify` tool's is ignored. A throw becomes "error: …".
+   */
+  onToolCall?: (call: ToolCall) => unknown | Promise<unknown>;
 }
+
+export interface ToolCall { id: string; name: string; arguments: Record<string, unknown> }
 
 export interface AvatarSession {
   session: SessionInfo;
@@ -58,6 +66,16 @@ export class AvatarError extends Error {
   constructor(public code: string, message?: string) { super(message || code); }
 }
 
+const TOOL_RPC = 'atmee.tool';
+// LiveKit refuses an RPC response over 15,360 bytes.
+const MAX_TOOL_REPLY_BYTES = 15_000;
+
+/** What an app's tool result is sent back as: a string as it is, anything else as JSON; "ok" for nothing. */
+export function toolReply(result: unknown): string {
+  if (result === undefined || result === null) return 'ok';
+  const text = typeof result === 'string' ? result : JSON.stringify(result);
+  return new TextEncoder().encode(text).length > MAX_TOOL_REPLY_BYTES ? 'error: the result was too large' : text;
+}
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 // The recogniser tags words said over the avatar's speech: "[interruption]" for
 // a turn that started there, "[backchannel]" for words it did not take as a
@@ -85,6 +103,16 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
   opts.onPhase?.('connecting');
 
   const room = new Room({ adaptiveStream: true, dynacast: true });
+  // The avatar's tool calls arrive as an RPC from its agent; registered before
+  // connecting so no early call finds nobody to answer it.
+  room.registerRpcMethod(TOOL_RPC, async ({ payload }) => {
+    if (!opts.onToolCall) return 'error: this page handles no tools';
+    try {
+      return toolReply(await opts.onToolCall(JSON.parse(payload) as ToolCall));
+    } catch (err) {
+      return `error: ${(err as Error).message}`;
+    }
+  });
   let linked = false;
   let lastState: string | undefined;
   let micTrack: { mute(): Promise<unknown>; unmute(): Promise<unknown> } | undefined;

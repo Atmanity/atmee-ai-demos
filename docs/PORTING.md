@@ -108,6 +108,31 @@ Fourteen apps run live on staging (each README has its run) settled these:
   invention, then your event. Stage it if it is predictable; otherwise the
   screen is the truth.
 
+### App tools: the avatar calls the app
+
+Where a session runs on Causeur, the avatar can call the app instead of racing
+it. Declare the functions on the app's server and answer them in the page:
+
+```ts
+// apps/<id>/server.ts
+appTools: {
+  instructions: 'When the player names a city, call check_guess and say only what it returns.',
+  tools: [{ type: 'function', name: 'check_guess', description: 'Judges a guess.',
+    parameters: { type: 'object', properties: { guess: { type: 'string' } }, required: ['guess'] },
+    'x-atmee': { mode: 'await', timeoutSeconds: 8 } }],
+},
+
+// apps/<id>/page/App.tsx
+useAvatar('<id>', { onToolCall: async ({ name, arguments: args }) => {
+  if (name === 'check_guess') return (await act({ text: String(args.guess) })).verdict;
+} });
+```
+
+`await` holds the avatar's reply (at most one filler line) until the page
+answers; `notify` does not wait. A returned string goes back as it is, anything
+else as JSON; a throw reaches the avatar as "error: …". Keep a control for
+every action anyway: a tool is called only when the avatar decides to.
+
 ## Telling the avatar (director.ts)
 
 - `NOTES`: the app's rules for the avatar, condensed from the old

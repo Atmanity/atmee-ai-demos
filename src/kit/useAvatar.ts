@@ -2,7 +2,7 @@
 // time; what it says before the avatar is live is kept and delivered once the
 // avatar can hear it (the latest state, every note, recent events).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AvatarError, joinAvatar, type AvatarSession, type Phase } from '../avatar/room.ts';
+import { AvatarError, joinAvatar, type AvatarSession, type Phase, type ToolCall } from '../avatar/room.ts';
 
 export type AvatarPhase = 'idle' | Phase | 'ended' | 'failed';
 export interface Line { id: number; who: 'avatar' | 'user'; text: string; typed?: boolean }
@@ -15,6 +15,8 @@ export interface AvatarHandlers {
   /** The avatar is in the room and hears the app. */
   onLive?: () => void;
   onEnded?: () => void;
+  /** A call of one of the app's tools; the return value is an `await` tool's result. */
+  onToolCall?: (call: ToolCall) => unknown | Promise<unknown>;
 }
 
 export interface Avatar {
@@ -125,6 +127,11 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
           handlersRef.current.onUserSaid?.(text, 'spoken');
         },
         onSpeaking: setSpeaking,
+        onToolCall: (call) => {
+          const handle = handlersRef.current.onToolCall;
+          if (!handle) throw new Error('this page handles no tools');
+          return handle(call);
+        },
         onAudioBlocked: (blocked, resume) => { setAudioBlocked(blocked); resumeRef.current = resume; },
         onEnd: () => {
           sessionRef.current = null;
