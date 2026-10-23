@@ -16,23 +16,23 @@ const PLAN_W = 1080;
 const TITLE_H = 96;
 
 // Planwright's drafting look, readable in print: graphite line work on white
-// paper, a non-photo-blue rule, redline for what is wrong, rooms as pale tints
+// paper, a blue-grey rule, red pencil for what is wrong, rooms as pale tints
 // by use (the same as on screen, so the sheet and the plan agree).
 const INK = '#22262a';
 const PAPER = '#fbfbf8';
-const RULE = '#cfd6d0';
+const RULE = '#cdd5df';
 const ACCENT = '#c23d24';
 const FURNITURE = '#d9c4a3';
 const FURNITURE_EDGE = '#8c7350';
 const GLASS = '#7cc0e8';
 
 export const ROOM_FILL: Record<string, string> = {
-  living: '#e4eee8', dining: '#ebefe0', kitchen: '#e0edee',
+  living: '#ece8df', dining: '#efe9dc', kitchen: '#e0edee',
   bedroom: '#e6ebf5', bedroom_single: '#e6ebf5', nursery: '#eee8f4',
   office: '#ebe8f3', bathroom: '#dceff2', shower_room: '#dceff2',
   wc: '#dceff2', utility: '#e4ecec', entry: '#f0f1ee',
   hall: '#f0f1ee', corridor: '#f0f1ee', stairs: '#e3e7e9',
-  storage: '#ecece8', closet: '#ecece8', balcony: '#e2f0e7',
+  storage: '#ecece8', closet: '#ecece8', balcony: '#e3edf2',
   other: '#efefeb',
 };
 

@@ -14,7 +14,7 @@ export function Logo() {
             <circle cx="39.5" cy="15" r="4.2" fill="#000" />
           </mask>
         </defs>
-        <circle cx="19.5" cy="21" r="17" fill="var(--ms-leaf)" mask="url(#ms-bite)" />
+        <circle cx="19.5" cy="21" r="17" fill="var(--ms-tomato)" mask="url(#ms-bite)" />
         <rect x="9" y="13.5" width="16" height="3.6" fill="#fff" />
         <rect x="9" y="20.5" width="21" height="2" fill="#fff" />
         <rect x="9" y="25.5" width="13" height="2" fill="#fff" />
