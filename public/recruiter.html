@@ -60,6 +60,11 @@
   .agenda li.done { color: var(--text); } .agenda li.done i { background: var(--accent); border-color: var(--accent); }
   .agenda li.done i::after { content: ""; width: 8px; height: 5px; border: 2px solid #fff; border-top: 0; border-right: 0; transform: rotate(-45deg) translate(1px, -1px); }
   .agenda li.now { color: var(--text); font-weight: 600; } .agenda li.now i { border-color: var(--accent); box-shadow: inset 0 0 0 4px var(--surface), inset 0 0 0 10px var(--accent); }
+  .notes { padding: 14px 18px; border-bottom: 1px solid var(--line); max-height: 34%; overflow: auto; flex: none; }
+  .notes h2 { font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; display: flex; justify-content: space-between; }
+  .notes dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 14px; }
+  .notes dt { color: var(--muted); white-space: nowrap; } .notes dd { margin: 0; animation: rise .3s ease-out; }
+  .notes .empty { color: var(--muted); font-size: 14px; margin: 0; }
   .panel .transcript { flex: 1; padding: 16px; }
   .panel form { padding: 12px; border-top: 1px solid var(--line); }
   .wrapup { max-width: 560px; margin: 10vh auto; padding: 36px; text-align: center; display: grid; gap: 14px; justify-items: center; }
@@ -123,6 +128,11 @@
       <h2>Today's agenda</h2>
       <ol id="agenda"></ol>
     </div>
+    <div class="notes" id="notesBox">
+      <h2>Screening notes <span id="noteCount"></span></h2>
+      <p class="empty" id="notesEmpty">Your recruiter's notes for the hiring team appear here as you talk.</p>
+      <dl id="notes"></dl>
+    </div>
     <div class="transcript" id="transcript"></div>
     <form class="composer" id="composer">
       <input id="text" placeholder="Type a reply instead of speaking…" maxlength="500" autocomplete="off" disabled>
@@ -156,13 +166,36 @@
     ['questions', 'Your questions', /any questions|questions for me|anything you'?d like to ask/i],
     ['wrap', 'Next steps', /next step|technical interview|thanks? (you )?for (your|taking)/i],
   ];
-  let at = 0, s, stopClock = () => {}, name = 'Alex Chen';
+  let at = 0, s, stopClock = () => {}, name = 'Alex Chen', toolsLive = false;
   const initials = (n) => n.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'You';
   $('name').oninput = () => { $('initials').textContent = initials($('name').value); };
   function paintAgenda() { $('agenda').innerHTML = AGENDA.map(([, label], i) => `<li class="${i < at ? 'done' : i === at ? 'now' : ''}"><i></i>${label}</li>`).join(''); }
-  // The agenda moves one item at a time: what the recruiter asks next marks
-  // the next topic (an echo of an earlier answer must not skip ahead).
-  function follow(text) { const next = AGENDA[at + 1]; if (next && next[2].test(text)) { at++; paintAgenda(); } }
+  // The recruiter marks the agenda (set_agenda_step) and writes the screening
+  // notes (record_answer) itself. Without tools the page follows its captions:
+  // what it asks next marks the next topic, one item at a time (an echo of an
+  // earlier answer must not skip ahead).
+  function follow(text) { if (toolsLive) return; const next = AGENDA[at + 1]; if (next && next[2].test(text)) { at++; paintAgenda(); } }
+  const TOPICS = { current_role: 'Current role', project: 'Project', years_experience: 'Experience', production_go: 'Go', postgresql: 'PostgreSQL', on_call: 'On-call', notice_period: 'Notice', location: 'Location', salary: 'Salary', candidate_questions: 'Asked about', other: 'Note' };
+  const notes = new Map();
+  function paintNotes() {
+    $('notes').innerHTML = [...notes].map(([t, line]) => `<dt>${UI.esc(TOPICS[t.replace(/-\d+$/, '')] || t)}</dt><dd>${UI.esc(line)}</dd>`).join('');
+    $('notesEmpty').hidden = notes.size > 0; $('noteCount').textContent = notes.size ? String(notes.size) : '';
+  }
+  const tools = {
+    set_agenda_step: ({ step }) => {
+      toolsLive = true;
+      const i = AGENDA.findIndex(([id]) => id === step);
+      if (i < 0) throw new Error(`no agenda step ${step}`);
+      at = i; paintAgenda();
+    },
+    record_answer: ({ topic, summary }) => {
+      toolsLive = true;
+      // One line per topic; a later answer on the same topic adds to it.
+      const before = topic !== 'other' && notes.get(topic);
+      notes.set(topic === 'other' ? `other-${notes.size}` : topic, before && before !== summary ? `${before}; ${summary}` : summary);
+      paintNotes();
+    },
+  };
   paintAgenda();
 
   const tr = UI.transcript($('transcript'), { avatar: 'Recruiter', user: 'You' });
@@ -195,7 +228,7 @@
   async function connect(mic) {
     try {
       s = await Atmee.join({
-        usecase: 'recruiter', video: $('video'), audio: $('audio'), mic,
+        usecase: 'recruiter', video: $('video'), audio: $('audio'), mic, tools,
         onPhase: (p, d) => overlay.phase(p, d),
         onCaption: (text, final) => { caption(text, final); tr.avatar(text, final); if (final) follow(text); },
         onSpeaking: (v) => { $('stage').classList.toggle('talking', v); sender.speaking(v); },

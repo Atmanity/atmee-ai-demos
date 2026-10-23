@@ -6,19 +6,41 @@
 // a note it keeps, an event it comments on when it has the floor, or
 // mute/unmute of the user's audio). A conductor, set through the API, is the
 // avatar's fixed agenda for the conversation.
+//
+// App tools go the other way: what the avatar makes the app do. A use case's
+// `appTools` ({ instructions, tools }) is sent with POST /v1/session; each call
+// the avatar makes arrives at the host page (LiveKit RPC `atmee.tool`), whose
+// handler updates the screen, and is passed on to `onTool(h, call)` here when
+// the server must react too. Tools are described in the avatar's own role: the
+// persona outweighs the tool instructions.
 const say = (text) => ({ type: "say", text });
 const state = (text) => ({ type: "app", message: { type: "state", text } });
 const note = (text) => ({ type: "app", message: { type: "note", text } });
 const event = (text, ttl_s = 20) => ({ type: "app", message: { type: "event", text, ttl_s } });
 const mute = () => ({ type: "app", message: { type: "mute" } });
 const unmute = () => ({ type: "app", message: { type: "unmute" } });
+// An app tool in OpenAI's function shape; mode notify (the avatar goes on at
+// once) or await (it waits for the page's answer, within timeoutSeconds).
+const tool = (name, description, properties, required = [], atmee = { mode: "notify" }) =>
+  ({ type: "function", name, description, parameters: { type: "object", properties, required, additionalProperties: false }, "x-atmee": atmee });
 
 // ---------------------------------------------------------------------------
 // 1. Live stream: one-way talking to a chatroom the host reads but never hears.
 // ---------------------------------------------------------------------------
+const POLL_SECONDS = 45;
 const livestream = {
   title: "Live stream host (chat-only)",
   page: "livestream-host.html",
+  appTools: {
+    instructions: "You run this stream's chat as its host. When a viewer writes something worth keeping on screen for everyone (a great question, the topic of the night, a recommendation people asked for), pin it with pin_message, in a few words. When the chat disagrees, or you want the audience's opinion, start a poll with start_poll (two to four short options) and tell viewers to vote in the chat; the result comes back to you as a chat event when it closes. One poll at a time.",
+    tools: [
+      tool("pin_message", "Pin a short line to the top of the stream chat for every viewer to see; it replaces the last pin.", { text: { type: "string", minLength: 1, maxLength: 140 } }, ["text"]),
+      tool("start_poll", `Start a chat poll viewers vote on for ${POLL_SECONDS} seconds; you hear the result when it closes.`, {
+        question: { type: "string", minLength: 1, maxLength: 120 },
+        options: { type: "array", minItems: 2, maxItems: 4, items: { type: "string", minLength: 1, maxLength: 40 } },
+      }, ["question", "options"]),
+    ],
+  },
   onLinked(h) { h.memo.lastDigest = Date.now(); return [mute(), streamState(h)]; },
   onViewerChat(h, entry) {
     // A message that asks the host is a user turn; the rest goes into the digest.
@@ -26,23 +48,59 @@ const livestream = {
     h.pending.push(entry);
     return [];
   },
-  tick(h) {
-    if (Date.now() - (h.memo.lastDigest || 0) < 20000 || !h.pending.length) return [];
+  // The host's tool calls are shown to the whole chat: the server keeps the pin
+  // and the poll, and counts the viewers' votes.
+  onTool(h, call, broadcast) {
+    if (call.error) return [];
+    if (call.name === "pin_message") { h.memo.pinned = call.arguments.text; broadcast({ type: "pin", text: h.memo.pinned }); return [streamState(h)]; }
+    if (call.name === "start_poll") {
+      const { question, options } = call.arguments;
+      h.memo.poll = { id: call.id, question, options, votes: options.map(() => 0), voters: new Map(), closesAt: Date.now() + POLL_SECONDS * 1000, open: true };
+      broadcast(pollMessage(h.memo.poll));
+      return [streamState(h)];
+    }
+    return [];
+  },
+  onEnd(h, broadcast) { const p = h.memo.poll; if (p && p.open) { p.open = false; broadcast(pollMessage(p)); } },
+  snapshot(h) { return [...(h.memo.pinned ? [{ type: "pin", text: h.memo.pinned }] : []), ...(h.memo.poll ? [pollMessage(h.memo.poll)] : [])]; },
+  onVote(h, name, option, broadcast) {
+    const p = h.memo.poll;
+    if (!p || !p.open || !Number.isInteger(option) || option < 0 || option >= p.options.length) return;
+    const before = p.voters.get(name);
+    if (before !== undefined) p.votes[before]--;
+    p.voters.set(name, option); p.votes[option]++;
+    broadcast(pollMessage(p));
+  },
+  tick(h, broadcast) {
+    const out = [];
+    const p = h.memo.poll;
+    if (p && p.open && Date.now() >= p.closesAt) {
+      p.open = false; broadcast(pollMessage(p));
+      const total = p.votes.reduce((a, b) => a + b, 0);
+      const result = p.options.map((o, i) => `"${o}" ${p.votes[i]}`).join(", ");
+      out.push(event(`Your poll "${p.question}" closed with ${total} vote(s): ${result}. Tell the chat the result in a sentence.`, 30), streamState(h));
+    }
+    if (Date.now() - (h.memo.lastDigest || 0) < 20000 || !h.pending.length) return out;
     const batch = h.pending.splice(0, h.pending.length);
     h.memo.lastDigest = Date.now();
     const summary = batch.slice(-6).map((m) => `${m.name}: "${m.text}"`).join("; ");
-    return [event(`New chat messages (${batch.length}): ${summary}. React to the chat in a sentence or two.`, 30), streamState(h)];
+    return [...out, event(`New chat messages (${batch.length}): ${summary}. React to the chat in a sentence or two.`, 30), streamState(h)];
   },
 };
+const pollMessage = (p) => ({ type: "poll", id: p.id, question: p.question, options: p.options, votes: p.votes, open: p.open, closesAt: p.closesAt });
 function streamState(h) {
   const recent = h.transcript.filter((m) => m.role === "viewer").slice(-5).map((m) => `${m.name}: ${m.text}`).join(" | ");
-  return state(`You are hosting a live stream. ${h.viewers.size} viewer(s) are watching and typing in the chatroom. You cannot hear or see them; you only read their chat. Address viewers by the name shown. Recent chat: ${recent || "(quiet so far)"}`);
+  const pinned = h.memo.pinned ? ` Pinned in the chat: "${h.memo.pinned}".` : "";
+  const poll = h.memo.poll && h.memo.poll.open ? ` A poll is open: "${h.memo.poll.question}".` : "";
+  return state(`You are hosting a live stream. ${h.viewers.size} viewer(s) are watching and typing in the chatroom. You cannot hear or see them; you only read their chat. Address viewers by the name shown. Recent chat: ${recent || "(quiet so far)"}.${pinned}${poll}`);
 }
 
 // ---------------------------------------------------------------------------
 // 2. Recruiter platform: a regular back-and-forth interview, with an agenda.
 // ---------------------------------------------------------------------------
 const JOB = "Senior backend engineer (Go), remote, payments team. Must-haves: 5+ years, production Go, PostgreSQL, on-call experience. Nice: Kubernetes, LiveKit/WebRTC.";
+const AGENDA_STEPS = ["greet", "background", "fit", "logistics", "questions", "wrap"];
+const NOTE_TOPICS = ["current_role", "project", "years_experience", "production_go", "postgresql", "on_call", "notice_period", "location", "salary", "candidate_questions", "other"];
 const recruiter = {
   title: "Recruiter screening call",
   page: "recruiter.html",
@@ -56,6 +114,16 @@ const recruiter = {
       { id: "logistics", instructions: "Ask about notice period, location/time zone and salary expectations, briefly.", edges: [{ to: "questions", when: "Logistics are covered." }, { to: "logistics" }] },
       { id: "questions", instructions: "Invite the candidate's questions about the role or the company and answer from the job description; say you will check what you do not know.", edges: [{ to: "wrap", when: "The candidate has no more questions." }, { to: "questions" }] },
       { id: "wrap", instructions: "Thank them, say the next step is a technical interview within a week, and close warmly.", emotion: "warm" },
+    ],
+  },
+  appTools: {
+    instructions: "You keep the hiring team's screening notes in the call app while you talk. Each time the call moves to a new part, mark it on the candidate's agenda with set_agenda_step. Each time the candidate has told you something the hiring team needs (current role, a project, years of experience, production Go, PostgreSQL, on-call, notice period, location or time zone, salary expectations, their questions), write it down in one short line with record_answer. Keep the conversation natural: never mention the agenda, the notes or marking them.",
+    tools: [
+      tool("set_agenda_step", "Mark the part of the call you are in now on the candidate's agenda: greet (introductions), background (current role and a project), fit (the must-haves), logistics (notice, location, salary), questions (the candidate's questions), wrap (next steps).", { step: { type: "string", enum: AGENDA_STEPS } }, ["step"]),
+      tool("record_answer", "Write one line in the hiring team's screening notes about what the candidate just told you.", {
+        topic: { type: "string", enum: NOTE_TOPICS },
+        summary: { type: "string", minLength: 1, maxLength: 160, description: "One short factual line, e.g. '6 years of Go, payments at a fintech'." },
+      }, ["topic", "summary"]),
     ],
   },
   onLinked(h) { return [state(`Job you are screening for: ${JOB} Candidate name: ${h.memo.candidate || "unknown"}.`)]; },
@@ -87,25 +155,36 @@ const training = {
     start: "intro",
     nodes: [
       { id: "intro", instructions: "You are the trainer for a 10-minute module on incident response. Welcome the trainee, say there are three short slides, then a quick Q&A and a two-question quiz. Then go straight into slide 1 without waiting.", edges: [{ to: "slide1", speak: true }] },
-      { id: "slide1", instructions: `Teach slide 1 in about four sentences, in your own words: "${SLIDES[0].body}" Then move on.`, edges: [{ to: "slide2", speak: true }] },
-      { id: "slide2", instructions: `Teach slide 2 in about four sentences: "${SLIDES[1].body}" Give one example of what goes wrong when one person takes two roles. Then move on.`, edges: [{ to: "slide3", speak: true }] },
-      { id: "slide3", instructions: `Teach slide 3 in about four sentences: "${SLIDES[2].body}" Then ask whether the trainee has questions before the quiz.`, edges: [{ to: "qna" }] },
+      { id: "slide1", instructions: `Put slide 1 up, then teach it in about four sentences, in your own words: "${SLIDES[0].body}" Then move on.`, edges: [{ to: "slide2", speak: true }] },
+      { id: "slide2", instructions: `Put slide 2 up, then teach it in about four sentences: "${SLIDES[1].body}" Give one example of what goes wrong when one person takes two roles. Then move on.`, edges: [{ to: "slide3", speak: true }] },
+      { id: "slide3", instructions: `Put slide 3 up, then teach it in about four sentences: "${SLIDES[2].body}" Then ask whether the trainee has questions before the quiz.`, edges: [{ to: "qna" }] },
       { id: "qna", instructions: "Answer the trainee's questions about the three slides. If they have none, say so and start the quiz.", edges: [{ to: "quiz1", when: "The trainee has no more questions, or asked to start the quiz." }, { to: "qna" }] },
-      { id: "quiz1", instructions: `Quiz question 1: "${QUIZ[0].q}" Wait for the answer. Begin your verdict with the word "Correct" or "Incorrect" (the answer is: ${QUIZ[0].a}), then say why in one sentence.`, edges: [{ to: "quiz2", when: "The trainee has answered question 1 and you have told them whether it was right." }, { to: "quiz1" }] },
-      { id: "quiz2", instructions: `Quiz question 2: "${QUIZ[1].q}" Wait for the answer. Begin your verdict with the word "Correct" or "Incorrect" (the answer is: ${QUIZ[1].a}).`, edges: [{ to: "wrap", when: "The trainee has answered question 2 and you have told them whether it was right." }, { to: "quiz2" }] },
+      { id: "quiz1", instructions: `Quiz question 1: "${QUIZ[0].q}" Wait for the answer. Record your verdict as question 1 (the answer is: ${QUIZ[0].a}), then begin your reply with the word "Correct" or "Incorrect" and say why in one sentence.`, edges: [{ to: "quiz2", when: "The trainee has answered question 1 and you have told them whether it was right." }, { to: "quiz1" }] },
+      { id: "quiz2", instructions: `Quiz question 2: "${QUIZ[1].q}" Wait for the answer. Record your verdict as question 2 (the answer is: ${QUIZ[1].a}), then begin your reply with the word "Correct" or "Incorrect".`, edges: [{ to: "wrap", when: "The trainee has answered question 2 and you have told them whether it was right." }, { to: "quiz2" }] },
       { id: "wrap", instructions: "Give the score out of two from the app state, one sentence of encouragement, and close the module.", emotion: "warm" },
+    ],
+  },
+  // The deck and the score are the course app's: the trainer puts each slide
+  // up and records each verdict, and the page shows both at once.
+  appTools: {
+    instructions: "You teach from the course app's slide deck on the trainee's screen, and the app keeps the quiz score. Put each lesson slide up with show_slide right before you teach it: slide 1, then 2, then 3. During the quiz, as soon as you have judged the trainee's answer, record it with grade_answer (the question number and whether it was right) before you tell them; that is how their score is counted. Never put a slide up during the quiz.",
+    tools: [
+      tool("show_slide", "Put lesson slide n (1 to 3) on the trainee's screen, right before you teach it.", { n: { type: "integer", minimum: 1, maximum: 3 } }, ["n"]),
+      tool("grade_answer", "Record your verdict on the trainee's answer to quiz question 1 or 2, so the course app counts their score. Once per question.", {
+        question: { type: "integer", minimum: 1, maximum: 2 },
+        correct: { type: "boolean" },
+        feedback: { type: "string", maxLength: 160, description: "One short line shown under the question, e.g. 'Only the incident commander decides.'" },
+      }, ["question", "correct"]),
     ],
   },
   slides: SLIDES,
   onLinked(h) { h.memo.score = 0; return [state(trainingState(h))]; },
   onUser(h, msg) {
     if (msg.kind === "slide") { h.memo.slide = Number(msg.text); return [state(trainingState(h))]; }
+    // The page counts the score (from grade_answer, or the verdict in the
+    // captions when the session has no tools) and the state carries it.
+    if (msg.kind === "score") { h.memo.score = Number(msg.text) || 0; return [state(trainingState(h))]; }
     if (msg.kind === "typed") return [say(msg.text)];
-    return [];
-  },
-  onAvatarSaid(h, text) {
-    // The app keeps score from what the trainer says, and shows it in state.
-    if (/^\W*(correct|spot on|that'?s right|exactly right|well done)/i.test(text) && (h.memo.score || 0) < 2) { h.memo.score = (h.memo.score || 0) + 1; return [state(trainingState(h))]; }
     return [];
   },
 };
@@ -117,6 +196,8 @@ function trainingState(h) {
 // ---------------------------------------------------------------------------
 // 4. Presence / companion: the avatar watches the user's screen (through an
 //    observer the app runs) and speaks up when something meaningful changes.
+//    No app tools: here information only flows from the app to the avatar
+//    (state and events); the companion has nothing to make the app do.
 // ---------------------------------------------------------------------------
 const presence = {
   title: "Presence / companion (screen observer)",
@@ -137,10 +218,19 @@ const presence = {
 const game = {
   title: "Interactive story (event-driven narrator)",
   page: "game.html",
+  // Only the oracle at the shrine uses them: the island's secrets are the
+  // game's, so the oracle asks the game (await) instead of guessing.
+  appTools: {
+    instructions: "These are the oracle's powers, used only while the player kneels at the oracle's shrine. The oracle does not know the island's layout by heart: when the player asks where something lies (the key, the chest, the map), always consult the island with reveal_clue first and answer from what it tells you, cryptic but true; the place then glows on the player's map. When the player asks for help, light or a blessing, you may grant one gift with give_item: the lantern lights the tiles around them, the charm brings luck. Never use these powers away from the shrine.",
+    tools: [
+      tool("reveal_clue", "As the oracle, ask the island where something lies; it is marked on the player's map and you are told where it is.", { seek: { type: "string", enum: ["key", "chest", "map"] } }, ["seek"], { mode: "await", timeoutSeconds: 5 }),
+      tool("give_item", "As the oracle, place a gift in the player's satchel: the lantern (lights the tiles around them) or the charm (luck).", { item: { type: "string", enum: ["lantern", "charm"] } }, ["item"]),
+    ],
+  },
   onLinked(h) { h.memo.talking = false; return [mute(), state("You are the narrator of a short treasure-hunt game on a 4x4 island map. You speak ONLY when the game tells you something happened, in one or two vivid sentences, and never ask the player questions, except at the oracle's shrine where the player may talk to you.")]; },
   onUser(h, msg) {
     if (msg.kind === "move") return [event(msg.text, 12)];
-    if (msg.kind === "enter_shrine") { h.memo.talking = true; return [unmute(), state("The player is at the oracle's shrine and may now talk to you. Answer as the oracle: cryptic but helpful, two sentences at most. When they leave, you go back to narrating only."), event("The player kneels at the oracle's shrine. Greet them as the oracle and invite one question.", 10)]; }
+    if (msg.kind === "enter_shrine") { h.memo.talking = true; return [unmute(), state("The player is at the oracle's shrine and may now talk to you. Answer as the oracle: cryptic but helpful, two sentences at most. You can reveal where the key, the chest or the map lies, and grant one gift. When they leave, you go back to narrating only."), event("The player kneels at the oracle's shrine. Greet them as the oracle and invite one question.", 10)]; }
     if (msg.kind === "leave_shrine") { h.memo.talking = false; return [mute(), state("The player left the shrine. Back to narrating only: speak only when the game tells you something happened.")]; }
     if (msg.kind === "typed" && h.memo.talking) return [say(msg.text)];
     return [];

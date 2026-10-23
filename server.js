@@ -8,7 +8,9 @@
 // The host page is the session's user participant: it relays what the server
 // decides into the room (lk.chat = a user turn the avatar answers, atmee.app
 // state/note/event/mute = context the avatar reads without a turn) and sends
-// the avatar's captions (lk.transcription) back.
+// the avatar's captions (lk.transcription) back. When the use case declares
+// app tools, the session is started with them (appTools); the avatar's calls
+// reach the host page, which answers them and passes each one back here.
 //
 //   ATMEE_BASE_URL     https://staging.atmanity.us
 //   ATMEE_API_KEY      an Avatar API key
@@ -43,7 +45,7 @@ function hub(name) {
   if (!hubs.has(name)) {
     hubs.set(name, {
       name, def, avatarId: process.env[`AVATAR_${name.toUpperCase()}`] || process.env.AVATAR_ID,
-      session: null, host: null, viewers: new Set(), transcript: [], pending: [], conductorSet: false,
+      session: null, host: null, viewers: new Set(), transcript: [], pending: [],
       memo: {}, // the use case's own scratch state (scores, scene, last observation)
     });
   }
@@ -59,11 +61,17 @@ function broadcast(h, msg) {
 // A policy returns relay messages for the host page: say (lk.chat) or app (atmee.app).
 function relay(h, messages) { for (const m of messages || []) toHost(h, m); }
 
+// The conductor is the avatar's, not the session's: when two use cases share
+// one avatar, each start sets its own agenda, or clears the other's.
+const conductorOf = new Map(); // avatarId -> the use case whose conductor it has
 async function ensureConductor(h) {
-  if (h.conductorSet || !h.def.conductor) return;
-  const r = await api("PUT", `/v1/avatars/${h.avatarId}/conductor`, { graph: h.def.conductor, speakAfterS: h.def.speakAfterS || 0.8 });
-  console.log(`[${h.name}] conductor -> ${r.status} ${r.json.nodes ? r.json.nodes + " nodes" : JSON.stringify(r.json).slice(0, 200)}`);
-  h.conductorSet = r.status === 200;
+  const owner = conductorOf.get(h.avatarId);
+  if (owner === h.name || (!h.def.conductor && owner === undefined)) return;
+  const r = h.def.conductor
+    ? await api("PUT", `/v1/avatars/${h.avatarId}/conductor`, { graph: h.def.conductor, speakAfterS: h.def.speakAfterS || 0.8 })
+    : await api("DELETE", `/v1/avatars/${h.avatarId}/conductor`);
+  console.log(`[${h.name}] conductor ${h.def.conductor ? "set" : "cleared"} -> ${r.status} ${r.json.nodes ? r.json.nodes + " nodes" : JSON.stringify(r.json).slice(0, 200)}`);
+  if (r.status < 300 || r.status === 404) conductorOf.set(h.avatarId, h.name);
 }
 
 async function startSession(h) {
@@ -72,6 +80,7 @@ async function startSession(h) {
   const r = await api("POST", "/v1/session", {
     avatarId: h.avatarId, maxDurationSeconds: Number(process.env.MAX_SECONDS || 900),
     language: h.def.language, metadata: { app: "atmee-usecase-demos", usecase: h.name },
+    ...(h.def.appTools ? { appTools: h.def.appTools } : {}),
   });
   if (r.status !== 201) {
     const err = new Error(`POST /v1/session -> ${r.status} ${r.json.error || ""} ${r.json.message || ""}`.trim());
@@ -79,12 +88,14 @@ async function startSession(h) {
   }
   h.session = { sessionId: r.json.sessionId, roomName: r.json.roomName, serverUrl: r.json.serverUrl, userToken: r.json.userToken, maxSeconds: r.json.actualDurationSeconds, startedAt: Date.now() };
   h.transcript = []; h.pending = []; h.memo = {};
-  console.log(`[${h.name}] session ${h.session.sessionId} room=${h.session.roomName} max=${h.session.maxSeconds}s`);
+  console.log(`[${h.name}] session ${h.session.sessionId} room=${h.session.roomName} max=${h.session.maxSeconds}s tools=${h.def.appTools ? h.def.appTools.tools.map((t) => t.name).join(",") : "none"}`);
   return h.session;
 }
 async function endSession(h) {
   if (!h.session) return;
   const id = h.session.sessionId; h.session = null;
+  if (h.def.onEnd) h.def.onEnd(h, (m) => broadcast(h, m)); // e.g. close the stream's open poll
+  h.memo = {}; // nothing of this session is shown to whoever connects next
   const r = await api("POST", `/v1/session/${id}/end`);
   console.log(`[${h.name}] end ${id} -> ${r.status}`);
 }
@@ -95,7 +106,7 @@ async function endSession(h) {
 const app = express();
 app.use(express.json({ limit: "6mb" }));
 app.use(express.static("public"));
-app.get("/api/usecases", (_req, res) => res.json(Object.fromEntries(Object.entries(USECASES).map(([k, v]) => [k, { title: v.title, page: v.page, avatarId: process.env[`AVATAR_${k.toUpperCase()}`] || null, conductor: !!v.conductor }]))));
+app.get("/api/usecases", (_req, res) => res.json(Object.fromEntries(Object.entries(USECASES).map(([k, v]) => [k, { title: v.title, page: v.page, avatarId: process.env[`AVATAR_${k.toUpperCase()}`] || null, conductor: !!v.conductor, tools: v.appTools ? v.appTools.tools.map((t) => t.name) : [] }]))));
 
 app.post("/api/:usecase/session", async (req, res) => {
   const h = hub(req.params.usecase);
@@ -143,6 +154,10 @@ wss.on("connection", (ws, req) => {
         if (msg.final) h.transcript.push(entry);
         broadcast(h, { type: "caption", ...entry });
         if (msg.final && h.def.onAvatarSaid) relay(h, h.def.onAvatarSaid(h, msg.text));
+      } else if (msg.type === "tool") {
+        // An app tool call the host page answered: the use case may react too.
+        console.log(`[${h.name}] tool ${msg.name} ${JSON.stringify(msg.arguments)} -> ${msg.error ? "error: " + msg.error : String(msg.result).slice(0, 120)}`);
+        if (h.def.onTool) relay(h, h.def.onTool(h, msg, (m) => broadcast(h, m)));
       } else if (msg.type === "linked") {
         relay(h, h.def.onLinked ? h.def.onLinked(h) : []);
       } else if (msg.type === "user") {
@@ -158,9 +173,11 @@ wss.on("connection", (ws, req) => {
   }
   h.viewers.add(ws);
   ws.send(JSON.stringify({ type: "history", transcript: h.transcript.slice(-50) }));
+  for (const m of h.def.snapshot ? h.def.snapshot(h) : []) ws.send(JSON.stringify(m)); // what is on screen now (a pin, a poll)
   broadcast(h, { type: "viewers", count: h.viewers.size });
   ws.on("message", (raw) => {
     const msg = JSON.parse(raw);
+    if (msg.type === "vote") { if (h.def.onVote) h.def.onVote(h, String(msg.name || "viewer").slice(0, 24), Number(msg.option), (m) => broadcast(h, m)); return; }
     if (msg.type !== "chat") return;
     const text = String(msg.text || "").slice(0, 300).trim();
     const name = String(msg.name || "viewer").slice(0, 24);
@@ -173,7 +190,7 @@ wss.on("connection", (ws, req) => {
   ws.on("close", () => { h.viewers.delete(ws); broadcast(h, { type: "viewers", count: h.viewers.size }); });
 });
 
-setInterval(() => { for (const h of hubs.values()) if (h.session && h.def.tick) relay(h, h.def.tick(h)); }, 5000);
+setInterval(() => { for (const h of hubs.values()) if (h.session && h.def.tick) relay(h, h.def.tick(h, (m) => broadcast(h, m))); }, 5000);
 
 process.on("SIGINT", async () => { for (const h of hubs.values()) await endSession(h).catch(() => {}); process.exit(0); });
 server.listen(PORT, () => console.log(`http://localhost:${PORT}/  (use cases: ${Object.keys(USECASES).join(", ")})`));

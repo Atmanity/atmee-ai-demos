@@ -121,5 +121,21 @@
     };
   }
 
-  window.UI = { $, esc, icon, tail, stage, transcript, captions, countdown, micButton, debugLog, politeSender };
+  // A chat poll the host started (app tool start_poll): the question, a bar
+  // per option, and, when onVote is given and the poll is open, a vote button.
+  // msg: { question, options, votes, open, closesAt }
+  function poll(el, msg, onVote, mine) {
+    const total = msg.votes.reduce((a, b) => a + b, 0);
+    const left = Math.max(0, Math.round((msg.closesAt - Date.now()) / 1000));
+    el.hidden = false; el.className = `poll${msg.open ? '' : ' closed'}`;
+    el.innerHTML = `<div class="q"><span>📊 ${esc(msg.question)}</span><small>${msg.open ? `${left} s left` : 'Final result'} · ${total} vote${total === 1 ? '' : 's'}</small></div>`
+      + msg.options.map((o, i) => {
+        const pct = total ? Math.round((msg.votes[i] / total) * 100) : 0;
+        const tag = onVote && msg.open ? 'button type="button"' : 'div';
+        return `<${tag} class="opt${mine === i ? ' mine' : ''}" data-i="${i}"><i style="width:${pct}%"></i><span>${esc(o)}</span><b>${pct}%</b></${tag.split(' ')[0]}>`;
+      }).join('');
+    if (onVote && msg.open) el.querySelectorAll('button.opt').forEach((b) => (b.onclick = () => onVote(Number(b.dataset.i))));
+  }
+
+  window.UI = { $, esc, icon, tail, stage, transcript, captions, countdown, micButton, debugLog, politeSender, poll };
 })();

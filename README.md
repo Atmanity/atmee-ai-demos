@@ -28,8 +28,9 @@ case has one (`PUT /v1/avatars/{id}/conductor`), and runs what the app needs aro
 | `lk.transcription` (in) | the avatar's words | captions, scoring, echo to a chatroom |
 
 `usecases/index.js` is the whole behaviour of all five apps: a conductor graph where the app
-needs an agenda, and three hooks (`onLinked`, `onUser`/`onViewerChat`, `tick`/`onAvatarSaid`)
-that return `say` / `app` messages for the host page to relay.
+needs an agenda, the app tools it declares (`appTools`, below), and hooks (`onLinked`,
+`onUser`/`onViewerChat`, `tick`, `onTool`) that return `say` / `app` messages for the host page
+to relay.
 
 ## The apps as products
 
@@ -40,15 +41,58 @@ the room.
 | product | page | what the user sees |
 |---|---|---|
 | **Ledger Academy** | `training.html` | a course lobby, a slide deck that follows the trainer, Lesson → Q&A → Quiz progress, live score, completion screen |
-| **Northwind Talent** | `recruiter.html` | a video-call pre-join with the job card, the recruiter on stage, a live agenda, transcript, call controls |
+| **Northwind Talent** | `recruiter.html` | a video-call pre-join with the job card, the recruiter on stage, a live agenda, the screening notes, transcript, call controls |
 | **Kin** | `presence.html` | a companion welcome with privacy wording, the shared screen in a monitor frame, a "what Kin noticed" feed, Kin floating in a bubble |
 | **Isle of Whispers** | `game.html` | a title screen, a fogged island map with keyboard moves, a framed narrator, a chronicle, satchel slots, the oracle's shrine, a victory screen |
 | **Nightcap Live** | `livestream-host.html`, `livestream-viewer.html` | a creator studio with LIVE badge, viewer count and stream chat, and a branded chat pop-out for viewers |
 
-Shared pieces: `public/common.js` (session, connection phases, warm-up retries, waiting for the
-avatar's video with a timeout, microphone), `public/kit.js` and `public/kit.css` (stage overlay,
+Shared pieces: `public/common.js` (session, connection phases, warm-up retries, going live when
+the avatar can talk, its face attached whenever it arrives, app tool calls dispatched by name,
+microphone), `public/kit.js` and `public/kit.css` (stage overlay,
 captions, transcript, countdown, mic button, typed turns held until the avatar finishes a
 sentence).
+
+## App tools
+
+Text streams carry what the app tells the avatar; app tools carry what the avatar makes the
+app do. A use case that has some declares them next to its policy in `usecases/index.js`
+(`appTools: { instructions, tools }`, OpenAI's function shape plus `x-atmee` mode), `server.js`
+sends them on `POST /v1/session`, and each call reaches the host page as the LiveKit RPC
+`atmee.tool`. The page passes a handler per tool name to `Atmee.join({ tools })`; an unknown
+name is answered with an error, `?debug` shows every call, and each call is also passed to the
+server's `onTool` hook.
+
+| app | tools | why |
+|---|---|---|
+| **Ledger Academy** | `show_slide {n}` notify, `grade_answer {question, correct, feedback?}` notify | the deck follows the trainer and the score is the trainer's own verdict, instead of the page guessing both from captions |
+| **Northwind Talent** | `set_agenda_step {step}` notify, `record_answer {topic, summary}` notify | the live agenda and a "Screening notes" panel filled by the recruiter as the candidate answers |
+| **Isle of Whispers** | `reveal_clue {seek}` **await**, `give_item {item}` notify | the oracle's powers, at the shrine only: the island's secrets are the game's, so the oracle asks where the key/chest/map lies and speaks from the answer while it glows on the map; it may gift a lantern (lights the tiles around you) or a charm |
+| **Nightcap Live** | `pin_message {text}` notify, `start_poll {question, options[2..4]}` notify | the host pins lines and runs polls in the stream chat; the server shows them to the studio and every viewer, counts votes, and tells the host the result when the poll closes |
+| **Kin** | none | information only flows from the app to the avatar (screen descriptions as `state`/`event`); the companion has nothing to make the app do |
+
+Every app still works when its tools are never called: the trainer's slides and verdicts and
+the recruiter's agenda fall back to following the captions (a caption verdict counts only if no
+`grade_answer` for that question arrives within 4 s; once a tool call has come, slide and agenda
+parsing stop). Tools are described in the avatar's own role: in testing the persona outweighed
+the tool instructions.
+
+Tools need session_service #182 and Causeur #121, **not yet on staging**: a deployment without
+them ignores `appTools` (the apps run on their caption fallbacks). To try them against a local
+stack, put a `.env.local` next to `.env.example` (gitignored) with `ATMEE_BASE_URL` pointing at
+the local session_service (e.g. `http://127.0.0.1:8091`), its API key and avatar ids, and run
+`PORT=3334 node --env-file=.env.local server.js`. One avatar can serve all five apps: the server
+sets each use case's conductor, or clears it, before the session starts (that needs a key
+allowed to write the avatar; without it the conductor call is refused with 403 and the session
+starts without an agenda).
+
+Tested on a local stack (session_service #182 + Causeur #121, no renderer, so voice only,
+2026-10-23), each page driven headless with its persona set for the app and no conductor (the
+local key could not write one): the trainer put slides 1–3 up and graded both quiz answers
+(score 1 of 2, feedback shown, module completed); the recruiter marked every agenda step and
+filled 12 screening notes; the oracle called `reveal_clue` (await) and spoke from the answer
+("iron buried just north of these ancient stones") while the key's tile glowed, then gave the
+lantern; the host pinned the topic, started a Rust-vs-Go poll that showed in the studio and the
+viewer page, counted a viewer's vote, and announced the result when it closed.
 
 ## The five apps, as tested on staging (2026-10-22)
 
@@ -56,7 +100,7 @@ sentence).
 |---|---|---|---|---|
 | **Live stream** | `livestream-host.html` + `livestream-viewer.html` | one-way host that only reads the chatroom | user muted; questions → `lk.chat`, the rest → `event` digest every 20 s, `state` carries viewer count + recent chat; captions echoed to viewers | ✅ answered viewers by name, captions in the chatroom |
 | **Recruiter screening** | `recruiter.html` | regular back-and-forth interview | conductor: greet → background → must-haves → logistics → questions → wrap; `state` = job description + candidate name; mic or typing | ✅ greeted, asked for the intro, followed up |
-| **Internal training** | `training.html` | lecture, Q&A, quiz | conductor with `speak` edges: the trainer talks through 3 slides on its own, waits for questions, asks 2 quiz questions; `state` = slide + score; verdicts start with "Correct"/"Incorrect" | ✅ full module incl. "perfect score two out of two" |
+| **Internal training** | `training.html` | lecture, Q&A, quiz | conductor with `speak` edges: the trainer talks through 3 slides on its own, waits for questions, asks 2 quiz questions; `state` = slide + score; verdicts start with "Correct"/"Incorrect" (before app tools) | ✅ full module incl. "perfect score two out of two" |
 | **Presence / companion** | `presence.html` | sits next to you, reacts to what you do | the page sends a frame when the screen changes; Gemini describes it (`usecases/observer.js`); description → `state`, anything noteworthy → `event`; share the real screen or run a simulated work session | ✅ "Oh, looks like that pytest run hit a snag! Was it that assertion error on the target silence duration?" |
 | **Interactive story** | `game.html` | narrator that speaks only on events; conversation only at the oracle's shrine | user muted; each move → `event`; entering the shrine → `unmute` + `state` + `lk.chat` allowed; leaving → `mute` | ✅ narrated moves, answered the oracle question |
 

@@ -1,22 +1,34 @@
 // The client side every app shares: start the use case's session through our
 // own server (the API key never reaches the browser), join the LiveKit room as
-// the session's user, wait until the avatar is actually on screen, relay what
-// the server decides into the room, and hand the avatar's words back.
+// the session's user, wait until the avatar can talk, relay what the server
+// decides into the room, answer the avatar's app tool calls, and hand the
+// avatar's words back.
 //
 //   const mic = await Atmee.requestMic();          // in the lobby, or null for typing only
-//   const s = await Atmee.join({ usecase, video, audio, mic,
-//     onPhase(phase, detail), onCaption(text, final), onSpeaking(bool),
+//   const s = await Atmee.join({ usecase, video, audio, mic, tools,
+//     onPhase(phase, detail), onCaption(text, final), onSpeaking(bool), onVideo(bool),
 //     onMessage(msg), onRelay(topic, text), onEnd() });
 //   s.user(kind, text)  tell the server what the user did (the use case decides)
 //   s.setMuted(bool)    mute or unmute the user's microphone
 //   s.end()
 //
+// tools: one function per app tool the use case declares (usecases/index.js),
+// given the call's arguments and { id }. What it returns is the result an
+// `await` tool gives the avatar (an object is sent as JSON, nothing as "ok");
+// what it throws, the avatar hears as "error: <message>". A `notify` tool's
+// answer is ignored, so it should return quickly. Every call is also passed to
+// the server, which may react to it (the stream's chat shows a poll).
+//
 // Phases: starting -> warming (the rendering pool is cold; retried) ->
 // connecting -> arriving (in the room, waiting for the avatar) -> live.
-// join() rejects with an Error whose .friendly says what to tell the user.
+// The avatar has arrived when it can talk (its voice or its first caption);
+// its face is attached whenever it comes, and until then the stage carries the
+// class `no-face` (onVideo(false)). join() rejects with an Error whose
+// .friendly says what to tell the user.
 (function () {
-  const { Room, RoomEvent, Track } = LivekitClient;
+  const { Room, RoomEvent, RpcError, Track } = LivekitClient;
   const CHAT_TOPIC = 'lk.chat', APP_TOPIC = 'atmee.app', TRANSCRIPTION_TOPIC = 'lk.transcription';
+  const TOOL_METHOD = 'atmee.tool'; // an app tool call, as an RPC; the reply is its result
   const ARRIVAL_TIMEOUT_MS = 90000, WARMING_LIMIT_MS = 6 * 60000;
   const debug = new URLSearchParams(location.search).has('debug');
 
@@ -89,9 +101,15 @@
       else if (opts.onMessage) opts.onMessage(msg);
     };
 
+    // The avatar has arrived when it can talk: its audio track, or its first
+    // caption. Its face is not a gate (a stack without a renderer still talks).
+    let arrived;
+    const arrival = new Promise((resolve) => { arrived = resolve; });
+
     room.registerTextStreamHandler(TRANSCRIPTION_TOPIC, async (reader, participant) => {
       const info = reader.info || {};
       if (participant && participant.identity === room.localParticipant.identity) return; // our own words
+      arrived();
       let text = '';
       try { for await (const chunk of reader) { text += chunk; opts.onCaption && opts.onCaption(text, false); } } catch (e) {}
       // One stream per sentence, and every stream is attributed interim, so a
@@ -101,18 +119,50 @@
       if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'caption', text, final: true, id: info.id }));
     });
 
-    // The avatar has arrived when its video is playing on the page.
-    let arrived;
-    const arrival = new Promise((resolve) => { arrived = resolve; });
+    // App tool calls arrive as an RPC to this participant; registered before
+    // connecting, so no call finds the page without a handler.
+    if (opts.tools) {
+      room.registerRpcMethod(TOOL_METHOD, async ({ payload }) => {
+        const { id, name, arguments: args } = JSON.parse(payload);
+        const run = Object.prototype.hasOwnProperty.call(opts.tools, name) ? opts.tools[name] : null;
+        if (debug) console.log('[atmee] tool', name, args);
+        opts.onRelay && opts.onRelay(`atmee.tool ${name}`, JSON.stringify(args || {}));
+        if (typeof run !== 'function') throw new RpcError(1500, `the app has no tool ${name}`);
+        let reply;
+        try {
+          const result = await run(args || {}, { id });
+          reply = result === undefined || result === null ? 'ok' : typeof result === 'string' ? result : JSON.stringify(result);
+        } catch (e) {
+          if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'tool', id, name, arguments: args, error: String(e.message || e) }));
+          throw new RpcError(1500, String((e && e.message) || e).slice(0, 200));
+        }
+        if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'tool', id, name, arguments: args, result: reply }));
+        return reply;
+      });
+    }
+
+    // The face: attached whenever it arrives; until it plays the stage shows
+    // a voice-only placeholder (class no-face).
+    const stageEl = opts.video && opts.video.closest('.stage');
+    let faceOn = null;
+    const showFace = (on) => {
+      if (on === faceOn) return; faceOn = on;
+      if (stageEl) stageEl.classList.toggle('no-face', !on);
+      opts.onVideo && opts.onVideo(on);
+    };
+    showFace(false);
     if (opts.video) {
       opts.video.muted = true; opts.video.playsInline = true;
-      opts.video.addEventListener('playing', () => arrived(), { once: true });
+      opts.video.addEventListener('playing', () => showFace(true));
     }
     room.on(RoomEvent.TrackSubscribed, (track) => {
       if (track.kind === Track.Kind.Video) {
-        if (opts.video) { track.attach(opts.video); opts.video.play().catch(() => {}); } else arrived();
+        if (opts.video) { track.attach(opts.video); opts.video.play().catch(() => {}); } else showFace(true);
       }
-      if (track.kind === Track.Kind.Audio && opts.audio) track.attach(opts.audio);
+      if (track.kind === Track.Kind.Audio) { if (opts.audio) track.attach(opts.audio); arrived(); }
+    });
+    room.on(RoomEvent.TrackUnsubscribed, (track) => {
+      if (track.kind === Track.Kind.Video) { if (opts.video) track.detach(opts.video); showFace(false); }
     });
     room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
       const avatarSpeaking = speakers.some((p) => p.identity !== room.localParticipant.identity);
@@ -131,7 +181,7 @@
       phase('arriving');
       const timedOut = sleep(ARRIVAL_TIMEOUT_MS).then(() => 'timeout');
       if ((await Promise.race([arrival.then(() => 'ok'), timedOut])) === 'timeout') {
-        throw failure('avatar did not arrive', 'The presenter did not arrive in time. This usually clears up on a second try.');
+        throw failure('avatar did not join', 'The presenter did not arrive in time. This usually clears up on a second try.');
       }
     } catch (e) {
       ended = true; releaseMic(); room.disconnect(); ws.close(); await endOnServer();
@@ -139,13 +189,13 @@
     }
 
     // The agent links the participant it listens to shortly after the avatar
-    // appears; what is sent before that is not heard, so it waits briefly.
+    // arrives; what is sent before that is not heard, so it waits briefly.
     await sleep(2500);
     linked = true;
     while (outbox.length) { const [t, x] = outbox.shift(); await room.localParticipant.sendText(x, { topic: t }); }
     const sendLinked = () => ws.send(JSON.stringify({ type: 'linked' }));
     if (ws.readyState === 1) sendLinked(); else ws.addEventListener('open', sendLinked, { once: true });
-    phase('live', { maxSeconds: s.maxSeconds });
+    phase('live', { maxSeconds: s.maxSeconds, video: !!faceOn });
     addEventListener('pagehide', () => { if (!ended) navigator.sendBeacon(`/api/${opts.usecase}/session/end`); });
     return api;
   }

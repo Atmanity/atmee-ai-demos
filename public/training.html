@@ -61,6 +61,7 @@
   .quizcard { margin-top: 6px; padding: 22px; border-radius: var(--radius); background: var(--surface-2); font-size: 22px; font-family: var(--font-display); }
   .verdict { margin-top: 14px; display: inline-flex; gap: 8px; align-items: center; font-weight: 600; padding: 6px 12px; border-radius: 99px; }
   .verdict.right { background: #e3f5ec; color: #17734f; } .verdict.wrong { background: #fdecef; color: #9b2338; }
+  .feedback { margin-top: 10px; color: var(--muted); font-size: 18px; max-width: 52ch; }
   .done-badge { width: 72px; height: 72px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; margin-bottom: 18px; }
   .done-badge svg { width: 34px; height: 34px; }
   .decknav { display: flex; align-items: center; justify-content: space-between; padding: 12px 4px 0; gap: 12px; }
@@ -179,7 +180,8 @@
     { q: 'By when should the first status update go out?', match: /status update|first update/i },
   ];
 
-  let s, stage = 'intro', slideNo = 0, score = 0, answered = 0, quizAt = -1, verdicts = [], finished = false, stopClock = () => {};
+  let s, stage = 'intro', slideNo = 0, score = 0, answered = 0, quizAt = -1, verdicts = [], feedback = [], finished = false, stopClock = () => {};
+  let toolsLive = false, verdictFallback = null; // toolsLive: the trainer has called a tool this session
   const tr = UI.transcript($('transcript'), { avatar: 'Trainer', user: 'You' });
   const caption = UI.captions($('caption'));
   const debug = UI.debugLog();
@@ -207,7 +209,7 @@
       const v = verdicts[quizAt];
       el.innerHTML = `<div class="num">QUIZ · QUESTION ${quizAt + 1} OF 2</div><h2>Check your understanding</h2>
         <div class="quizcard">${UI.esc(QUIZ[quizAt].q)}</div>
-        ${v === undefined ? '<p class="lede" style="margin-top:16px">Answer out loud, or type it below.</p>' : `<div class="verdict ${v ? 'right' : 'wrong'}">${v ? '✓ Correct' : '✗ Not quite'}</div>`}`;
+        ${v === undefined ? '<p class="lede" style="margin-top:16px">Answer out loud, or type it below.</p>' : `<div class="verdict ${v ? 'right' : 'wrong'}">${v ? '✓ Correct' : '✗ Not quite'}</div>${feedback[quizAt] ? `<p class="feedback">${UI.esc(feedback[quizAt])}</p>` : ''}`}`;
     } else if (stage === 'qna') {
       el.innerHTML = `<div class="num">Q&amp;A</div><h2>Any questions before the quiz?</h2><p class="lede">Ask anything about the three lessons. When you're ready, say "start the quiz".</p>`;
     } else if (!slideNo) {
@@ -231,21 +233,46 @@
   }
   $('prev').onclick = () => goto(slideNo - 1); $('next').onclick = () => goto(slideNo + 1);
 
-  // Follow the trainer: lessons, the Q&A, the quiz and its verdicts come from what it says.
+  // The trainer drives the deck and the score with its tools: show_slide puts a
+  // lesson up, grade_answer records a verdict. Without tools (a deployment that
+  // doesn't take them) the page follows what it says instead: "slide two", and
+  // a verdict that starts with "Correct"/"Incorrect", counted only if no
+  // grade_answer for that question comes within a few seconds.
+  const tools = {
+    show_slide: ({ n }) => {
+      toolsLive = true;
+      if (stage === 'quiz' || finished) return 'the quiz has started; slides stay down';
+      if (stage === 'intro') setStage('lesson');
+      goto(n, true); if (s) s.user('slide', String(n));
+    },
+    grade_answer: ({ question, correct, feedback: line }) => { toolsLive = true; grade(question, correct, line); },
+  };
+  function grade(question, right, line) {
+    const i = question - 1; if (i < 0 || i > 1 || finished) return;
+    if (stage !== 'quiz') setStage('quiz');
+    verdicts[i] = !!right; feedback[i] = line || ''; quizAt = i;
+    const before = score;
+    score = verdicts.filter(Boolean).length; answered = verdicts.filter((v) => v !== undefined).length;
+    renderSlide();
+    if (s && score !== before) s.user('score', String(score));
+    if (answered >= 2) setTimeout(finish, 9000);
+  }
   const WORDS = { one: 1, two: 2, three: 3, first: 1, second: 2, third: 3 };
   function follow(text) {
-    const m = text.match(/\b(?:slide|lesson)\s+(\d|one|two|three)\b|\b(first|second|third)\s+(?:slide|lesson)\b/i);
+    const m = !toolsLive && text.match(/\b(?:slide|lesson)\s+(\d|one|two|three)\b|\b(first|second|third)\s+(?:slide|lesson)\b/i);
     if (m && stage !== 'quiz') { const n = Number(m[1]) || WORDS[(m[1] || m[2]).toLowerCase()]; if (n && n !== slideNo) goto(n, true); if (stage === 'intro') setStage('lesson'); }
     if (stage === 'lesson' && slideNo === 3 && /question/i.test(text) && /\?/.test(text)) { setStage('qna'); renderSlide(); }
     if (stage !== 'quiz' && /quiz/i.test(text) && QUIZ[0].match.test(text)) { setStage('quiz'); quizAt = 0; renderSlide(); return; }
     if (stage === 'quiz') {
       const v = text.match(/^\W*(correct|incorrect|not quite|that'?s right|spot on|exactly)/i);
-      if (v && verdicts[quizAt] === undefined) {
-        const right = !/incorrect|not quite/i.test(v[1]); verdicts[quizAt] = right; answered++; if (right) score++;
-        renderSlide();
-        if (answered >= 2) setTimeout(finish, 9000);
+      const q = quizAt;
+      if (v && q >= 0 && verdicts[q] === undefined) {
+        const right = !/incorrect|not quite/i.test(v[1]);
+        clearTimeout(verdictFallback);
+        verdictFallback = setTimeout(() => { if (verdicts[q] === undefined) grade(q + 1, right); }, 4000);
       }
-      if (quizAt === 0 && verdicts[0] !== undefined && QUIZ[1].match.test(text) && /\?/.test(text)) { quizAt = 1; renderSlide(); }
+      // The next question: once question 1 has its verdict, the trainer's next question (any, when it grades with tools).
+      if (quizAt === 0 && verdicts[0] !== undefined && (toolsLive || QUIZ[1].match.test(text)) && /\?/.test(text)) { quizAt = 1; renderSlide(); }
     }
   }
   function finish() { if (finished) return; finished = true; setStage('done'); renderSlide(); }
@@ -261,7 +288,7 @@
   async function connect(mic) {
     try {
       s = await Atmee.join({
-        usecase: 'training', video: $('video'), audio: $('audio'), mic,
+        usecase: 'training', video: $('video'), audio: $('audio'), mic, tools,
         onPhase: (p, d) => overlay.phase(p, d),
         onCaption: (text, final) => { caption(text, final); tr.avatar(text, final); if (final) follow(text); },
         onSpeaking: (v) => { $('trainer').classList.toggle('talking', v); sender.speaking(v); $('hint').textContent = v && sender.waiting ? 'Your message will be sent when the trainer finishes the sentence.' : ''; },
