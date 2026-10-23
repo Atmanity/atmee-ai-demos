@@ -61,6 +61,21 @@ type StepInput = Omit<Step, 'forbidden' | 'forbiddenNote' | 'visual' | 'metronom
 
 const step = (s: StepInput): Step => Object.freeze({ forbidden: [], forbiddenNote: '', visual: 'scene', metronomeBpm: null, ...s });
 
+// Expected phrases are matched as substrings, so they say the action, not a
+// word that also turns up in a wrong one: a bare "2" took "push 2 inches" as
+// the breaths cycle, "five" took "five more back blows" as thrusts, "call"
+// took "call out to him" as calling 911, "breath" took "give rescue breaths"
+// as checking for breathing. tutor.test.ts pins the wrong answers per step.
+
+/** Calling for help, as people say it (not "call out to him", which is checking for a response). */
+const CALL_FOR_HELP = [
+  '911', 'nine one one', '112', '999', 'emergency', 'ambulance', 'paramedic', 'call for help', 'call someone', 'call an', 'call the',
+  'call 9', 'call nine', 'call 1', 'call one', 'phone', 'dial', 'get help', 'send for help', 'send someone', 'shout for help',
+] as const;
+
+/** Finding out whether someone responds and breathes (not giving rescue breaths). */
+const CHECK_RESPONSE = ['respon', 'shout', 'tap', 'shake', 'wake', 'breathing', 'breathes', 'for breath'] as const;
+
 export const ADULT_CARDIAC_ARREST: Scenario = {
   id: 'adult_cardiac_arrest',
   title: 'Adult collapse in a café',
@@ -80,7 +95,7 @@ export const ADULT_CARDIAC_ARREST: Scenario = {
       key: 'check_response',
       label: 'Check for response and normal breathing',
       prompt: 'The floor is clear. How do you find out whether he needs CPR?',
-      expected: ['respon', 'shout', 'tap', 'shake', 'breath', 'wake', 'are you ok', 'talk to him'],
+      expected: [...CHECK_RESPONSE, 'are you ok', 'talk to him'],
       teach: 'Tap his shoulders and shout. If there is no response, look at his chest for up to 10 seconds: no normal breathing, or only gasping, means cardiac arrest.',
       hint: 'Two things: can you wake him, and is he breathing normally?',
       forbidden: ['pulse', 'carotid', 'wrist'],
@@ -91,7 +106,7 @@ export const ADULT_CARDIAC_ARREST: Scenario = {
       key: 'call_911',
       label: 'Call 911 and send for an AED',
       prompt: 'No response, and he is only gasping. What now?',
-      expected: ['911', 'emergency', 'ambulance', 'aed', 'defib', 'call', 'help'],
+      expected: [...CALL_FOR_HELP, 'aed', 'defib'],
       teach: 'Call 911 — speaker on, phone down — and send someone specific for the nearest AED. Alone with a phone, call first, then start compressions.',
       hint: 'You need two things on their way before you are busy with your hands.',
       forbidden: ['compress', 'cpr', 'push', 'chest'],
@@ -112,7 +127,7 @@ export const ADULT_CARDIAC_ARREST: Scenario = {
       key: 'breaths',
       label: 'Add rescue breaths if you are trained and willing',
       prompt: 'You are trained and you have a barrier. What is the cycle?',
-      expected: ['30', '2', 'two breath', 'thirty', 'ratio', 'rescue breath', 'mouth'],
+      expected: ['30 to 2', '30:2', '30-2', '30/2', '30 2', '30 and 2', '30 compressions', '30 chest compressions', 'thirty to two', 'thirty and two', 'thirty compressions', 'thirty chest compressions', '2 breaths', 'two breaths', 'rescue breath'],
       teach: '30 compressions to 2 breaths. Tilt the head, lift the chin, each breath about 1 second, just enough to see the chest rise. Untrained or unwilling? Compression-only CPR is still good CPR.',
       hint: 'It is a ratio — compressions to breaths.',
       visual: 'airway',
@@ -121,7 +136,7 @@ export const ADULT_CARDIAC_ARREST: Scenario = {
       key: 'aed',
       label: 'Use the AED as soon as it arrives',
       prompt: 'Someone runs back with an AED. What do you do with it?',
-      expected: ['aed', 'defib', 'pads', 'shock', 'turn it on', 'switch it on'],
+      expected: ['turn it on', 'switch it on', 'turn on', 'switch on', 'power it on', 'pads', 'shock', 'what it says', 'follow the', 'follow its', 'prompts', 'instructions', 'use it', 'use the aed', 'use the defib', 'attach', 'stand clear'],
       teach: 'Turn it on and do what it says. Pads on bare, dry skin — upper right chest and lower left side. Stand clear for the analysis and the shock, then go straight back to compressions.',
       hint: 'It talks you through it — but what do you do first, and where do the pads go?',
       visual: 'aed_pads',
@@ -130,7 +145,7 @@ export const ADULT_CARDIAC_ARREST: Scenario = {
       key: 'continue_until',
       label: 'Keep going until help takes over',
       prompt: 'Two minutes in and your arms are burning. When do you stop?',
-      expected: ['until', 'takes over', 'paramedic', 'ems', 'swap', 'wakes', 'breath', 'tired', 'arrive'],
+      expected: ['takes over', 'take over', 'paramedic', 'ems takes', 'ems arrive', 'until ems', 'swap', 'switch', 'wakes', 'breathing normally', 'breathes normally', 'starts breathing', 'breathing on his own', 'help arrives', 'ambulance arrives', 'until help', 'until the ambulance', 'tells you to stop', 'says to stop'],
       teach: 'Keep going until EMS takes over, the AED tells you to stop, or he starts breathing normally. Swap rescuers about every 2 minutes — tired hands push shallow.',
       hint: 'There are three things that let you stop, and one that lets you rest.',
       visual: 'handover',
@@ -148,7 +163,7 @@ export const CHILD_CARDIAC_ARREST: Scenario = {
       key: 'scene_safe',
       label: 'Check the scene is safe',
       prompt: 'What is your first move as you reach her?',
-      expected: ['safe', 'danger', 'hazard', 'scene', 'wet', 'slip', 'pool'],
+      expected: ['safe', 'danger', 'hazard', 'scene', 'wet', 'slip', 'water edge', 'away from the water', 'away from the edge', 'clear of the water'],
       teach: 'Check the scene: slippery poolside, deep water, anything that could put you in the pool too. Move her clear of the water edge.',
       hint: 'Before anything else, what about where you both are?',
       visual: 'scene',
@@ -157,7 +172,7 @@ export const CHILD_CARDIAC_ARREST: Scenario = {
       key: 'check_response',
       label: 'Check for response and normal breathing',
       prompt: 'She is clear of the edge. How do you decide she needs CPR?',
-      expected: ['respon', 'shout', 'tap', 'shake', 'breath', 'wake', 'talk'],
+      expected: [...CHECK_RESPONSE, 'talk'],
       teach: 'Tap and shout. No response, and no normal breathing over up to 10 seconds — gasping does not count — means start CPR.',
       hint: 'Can you wake her, and is she breathing normally?',
       forbidden: ['pulse', 'carotid'],
@@ -172,7 +187,7 @@ export const CHILD_CARDIAC_ARREST: Scenario = {
       // of them is "call first", which substring-matched "first" and was graded
       // CORRECT, teaching the exact inverse of this step in a drill people take
       // to learn what to do to a child.
-      expected: ['cpr', 'compress', 'two minutes', '2 minutes', 'breath', 'start cpr'],
+      expected: ['cpr', 'compress', 'two minutes', '2 minutes', 'rescue breath', 'breaths first', 'give breaths', 'give her breaths', 'oxygen'],
       teach: "A child's arrest is usually a breathing problem, so oxygen comes first: give about 2 minutes — 5 cycles — of CPR before leaving her to call. If someone else is there, they call while you start.",
       hint: 'A child is not a small adult — what usually caused this arrest?',
       forbidden: ['call first', 'call 911 first', 'phone first', 'call before'],
@@ -183,7 +198,7 @@ export const CHILD_CARDIAC_ARREST: Scenario = {
       key: 'call_911',
       label: 'Call 911 and get an AED',
       prompt: 'Two minutes of CPR done. What now?',
-      expected: ['911', 'emergency', 'ambulance', 'call', 'aed', 'defib', 'help'],
+      expected: [...CALL_FOR_HELP, 'aed', 'defib'],
       teach: 'Now call 911 — speaker on — and get an AED if one is nearby. Then straight back to CPR.',
       hint: 'You have bought her two minutes of oxygen. What still has not happened?',
       visual: 'phone_aed',
@@ -202,16 +217,20 @@ export const CHILD_CARDIAC_ARREST: Scenario = {
       key: 'ratio_child',
       label: 'Use 30:2 alone, 15:2 with a second rescuer',
       prompt: 'A lifeguard arrives to help. Does your cycle change?',
-      expected: ['15', 'fifteen', '30', 'thirty', 'ratio', 'two rescuer', 'changes'],
+      // The answer is the change to 15:2: "30", "ratio" or "changes" alone took
+      // "no, it stays 30 to 2" and "nothing changes" as right.
+      expected: ['15', 'fifteen'],
       teach: 'Alone it is 30 compressions to 2 breaths. With a second trained rescuer on a child it becomes 15 to 2.',
       hint: 'The ratio is not the same alone as it is with help.',
+      forbidden: ['still 30', 'stays 30', 'stays at 30', 'stay at 30', 'keep 30', 'keep it at 30', 'keep going at 30', 'still thirty', 'stays thirty', 'stays at thirty', 'keep thirty', 'keep it at thirty', 'keep going at thirty', 'same ratio', 'ratio stays', 'ratio is the same'],
+      forbiddenNote: 'It does change: alone it is 30 to 2, but with a second trained rescuer on a child it becomes 15 to 2.',
       visual: 'airway',
     }),
     step({
       key: 'aed_pediatric',
       label: 'Use the AED with paediatric pads if available',
       prompt: 'The AED is here. Anything different for a child?',
-      expected: ['pediatric', 'paediatric', 'child pad', 'attenuat', 'adult pad', 'smaller', 'front', 'back'],
+      expected: ['pediatric', 'paediatric', 'child pad', 'children pad', "child's pad", 'kid pad', 'child setting', 'child mode', 'attenuat', 'adult pad', 'small pad', 'smaller pad', 'front and back', 'front to back', 'front-and-back'],
       teach: 'Use paediatric pads or the child setting if the AED has them. If it only has adult pads, use them — an unshocked shockable rhythm is worse. Keep the pads from touching: front and back is fine.',
       hint: 'The machine may have a second set of pads in the lid.',
       visual: 'aed_pads',
@@ -260,7 +279,7 @@ export const CHOKING_ADULT: Scenario = {
       key: 'abdominal_thrusts',
       label: 'Give 5 abdominal thrusts',
       prompt: 'Five back blows, still nothing. Next?',
-      expected: ['abdominal', 'thrust', 'heimlich', 'above the navel', 'belly', '5 thrust', 'five'],
+      expected: ['abdominal', 'thrust', 'heimlich', 'navel', 'belly', 'in and up', 'inward and upward'],
       teach: 'Stand behind her, fist just above the navel, other hand over it, and pull sharply inward and upward — up to 5 thrusts. For a pregnant or very large person, use chest thrusts instead.',
       hint: 'Get behind her; your fist goes just above the navel.',
       visual: 'abdo_thrusts',
@@ -278,7 +297,9 @@ export const CHOKING_ADULT: Scenario = {
       key: 'if_unresponsive',
       label: 'If she goes unresponsive, lower her down and start CPR',
       prompt: 'She goes limp in your arms. What changes?',
-      expected: ['cpr', 'compress', 'ground', 'floor', 'lower', '911', 'mouth', 'look'],
+      expected: ['cpr', 'compress', 'ground', 'floor', 'lower', '911', 'look in'],
+      forbidden: ['finger sweep', 'sweep her mouth', 'sweep the mouth', 'sweep out', 'blind sweep', 'fish around'],
+      forbiddenNote: 'Never a blind finger sweep. Lower her to the ground, make sure 911 is called and start CPR; look in the mouth and remove only what you can see.',
       teach: 'Lower her to the ground, make sure 911 is called, and start CPR with chest compressions. Look in the mouth before each set of breaths and remove anything you can see — never a blind finger sweep.',
       hint: 'An unresponsive choking casualty is treated like any other arrest.',
       visual: 'torso_hands',
@@ -306,7 +327,7 @@ export const RECOVERY_POSITION: Scenario = {
       key: 'call_911',
       label: 'Call 911',
       prompt: 'He is unresponsive and breathing normally. What now?',
-      expected: ['911', 'emergency', 'ambulance', 'call', 'help'],
+      expected: [...CALL_FOR_HELP],
       teach: 'Call 911. Unresponsive is an emergency even when breathing is normal — an overdose, a stroke and a head injury all look like this.',
       hint: 'He is breathing, which is good news — it is not a reason to wait.',
       visual: 'phone_aed',
@@ -326,7 +347,7 @@ export const RECOVERY_POSITION: Scenario = {
       key: 'open_airway',
       label: 'Tilt the head to keep the airway open',
       prompt: 'He is on his side. What do you do with his head?',
-      expected: ['tilt', 'head', 'chin', 'airway', 'mouth', 'drain', 'down'],
+      expected: ['tilt', 'head back', 'chin', 'airway', 'mouth', 'drain'],
       teach: 'Tilt the head back gently and keep the mouth pointing slightly down, so the airway stays open and anything that comes up drains out rather than in.',
       hint: 'The airway has to stay open, and anything that comes up has to go somewhere.',
       visual: 'airway',

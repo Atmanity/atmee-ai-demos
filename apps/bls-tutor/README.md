@@ -92,9 +92,12 @@ answer; and a spoken "show me" or scenario choice is no longer narrated twice.
 
 ## Tested
 
-- `npx vitest run apps/bls-tutor`: 280 tests. The engine's own, unchanged
+- `npx vitest run apps/bls-tutor`: 295 tests. The engine's own
   (scenarios, grading, phases, the review, the emergency watch and its
-  suppressions; only the staging tests went, with staging); `run()` for every
+  suppressions; only the staging tests went, with staging), plus each step
+  pinned against the wrong answers people give (keeping 30:2 with two
+  rescuers, "2 inches" for the breaths cycle, more back blows for thrusts, a
+  blind finger sweep), which loose expected words used to grade as right; `run()` for every
   tool and refusal; the tools and
   instructions against the API limits, and the state and every result never
   reaching a step the learner has not resolved, across every scenario; the
