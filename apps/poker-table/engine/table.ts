@@ -1,30 +1,53 @@
-// The table wired for the app: intents in, a masked view and the avatar's
-// event text out, and the opponent playing its own turns. Ported from the
-// original's `table.py` (the reducer and the turn driver) and `moves.py`
-// (`apply_user_turn`); the server (server.ts) only adds HTTP and the model.
+// The table wired for Blindside: the host's tool calls and the player's
+// buttons in, a masked view and the words Dex speaks from out, and Dex's own
+// moves played by the decider. Ported from the original's `table.py` (the
+// reducer and the turn driver) and `moves.py`; the server (server.ts) only
+// adds HTTP and the model.
 //
-// Three inputs reach the table, and none of them is the avatar:
-// * a button press (an Intent): applied, and the avatar hears only what it
-//   cannot see from its state (a new hand, a finished hand);
-// * a typed or spoken line: read by judge.ts (rules only), applied, and the
-//   ruling goes to the avatar as an event;
-// * the opponent's turn: a structured decision (decide.ts), applied, then the
-//   avatar is told the move it "made".
+// Four inputs reach the table:
+// * the host's `play_move(words)`: read by judge.ts (rules only), and played
+//   only when the player's own words, heard at this point in the hand, contain
+//   that very move. A tool call is a model output, not evidence; and words
+//   that already moved the table cannot move it again, so a bet never lands twice;
+// * a button (an Intent): exact, applied at once;
+// * a deal or a rematch, asked for by the host's tools or a button;
+// * Dex's turn: a structured decision (decide.ts), applied, and Dex is told
+//   the move "he" made.
 import { decide, DECISION_TIMEOUT_MS, safeAction, type Ask } from './decide.ts';
-import { say } from './director.ts';
-import { parseTurn } from './judge.ts';
+import { said, type Line } from './director.ts';
+import { backs, parseTurn, sameMove, type ParsedMove } from './judge.ts';
 import { ACTION_KINDS, IllegalMove, normalizeKind, PokerMatch, type MatchOptions } from './match.ts';
-import type { Intent, Outcome, Seat, TableView } from './types.ts';
+import type { Heard, Intent, Seat, TableView } from './types.ts';
 
-export type Source = 'click' | 'typed' | 'spoken';
+/** What one input did: the table as it now is, and what Dex should hear about it. */
+export interface Result {
+  view: TableView;
+  /** Whether the table accepted a change. */
+  changed: boolean;
+  /** For Dex. Absent when there is nothing to tell (a refused button, a turn that was not Dex's). */
+  line?: Line;
+  /** A refusal, for the table's message line. */
+  message?: string;
+  /** The move was not (yet) in the player's own words at this point in the hand: the page may wait for the transcript and ask again. */
+  unbacked?: boolean;
+}
+
+/** A button's move as the parser would have read it, to recognise the same move said aloud. */
+function asMove(intent: Intent): ParsedMove | null {
+  const kind = normalizeKind(intent.kind);
+  if (kind === 'raise') return { kind: 'raise', amount: 'amount' in intent && intent.amount != null ? intent.amount : undefined };
+  if (kind === 'fold' || kind === 'check' || kind === 'call' || kind === 'all_in') return { kind };
+  return null;
+}
 
 export class Table {
   readonly match: PokerMatch;
-  /** How the opponent's last move was chosen, for the server's log. */
+  /** How Dex's last move was chosen, for the server's log. */
   lastDecision: { kind: string; amount: number | null; source: 'model' | 'fallback' } | null = null;
-  private deciding: Promise<Outcome> | null = null;
-
+  private deciding: Promise<Result> | null = null;
   private readonly decisionTimeoutMs: number;
+  /** The player's last move the table played, and the table's seq once it had: to name a repeat. */
+  private lastPlayed: { move: ParsedMove; seq: number } | null = null;
 
   constructor(opts: MatchOptions & { decisionTimeoutMs?: number } = {}) {
     this.match = new PokerMatch(opts);
@@ -53,106 +76,110 @@ export class Table {
   }
 
   /** The opening hand, dealt by the table itself (never by asking the player). */
-  open(): Outcome {
+  open(): Result {
     if (this.match.phase === 'lobby') this.match.deal();
-    return { view: this.view(), handled: true, event: say.start(), ttl: 60 };
-  }
-
-  act(input: { intent?: Intent; text?: string }, source: Source): Outcome {
-    if (input.intent) return this.press(input.intent);
-    const text = (input.text ?? '').trim();
-    if (text) return this.userTurn(text);
-    return { view: this.view(), handled: false };
-  }
-
-  /** A button. The avatar sees the table in its state; it is told only what changed beyond a move. */
-  private press(intent: Intent): Outcome {
-    const kind = normalizeKind(intent.kind);
-    try {
-      this.reduce(intent, 'user');
-    } catch (err) {
-      if (err instanceof IllegalMove) return { view: this.view(), handled: true, message: err.message };
-      throw err;
-    }
     const view = this.view();
-    if (kind === 'deal' || kind === 'restart') return { view, handled: true, event: say.dealt(kind === 'restart'), ttl: 15 };
-    if (view.phase !== 'playing') return { view, handled: true, event: say.result(view), ttl: 30 };
-    return { view, handled: true };
+    return { view, changed: true, line: said.opening(view) };
   }
 
   /**
-   * What the player said or typed, applied before the avatar is told anything.
-   * The avatar heard a spoken line too and has already started its own reply;
-   * the ruling (what the table did, or why it did nothing) follows as an event.
+   * The host's `play_move`: the move in `words`, played only if the player's
+   * own lines heard at this seq contain it. `heard` lines from earlier seqs are
+   * words about a hand that has moved on (including the words that asked for
+   * the move that moved it), so they never count.
    */
-  private userTurn(text: string): Outcome {
+  playerMove(words: string, heard: readonly Heard[] = []): Result {
+    const before = this.view();
+    const text = String(words ?? '').trim().slice(0, 160);
     const parsed = parseTurn(text);
-    const rulings: string[] = [];
-    let message: string | undefined;
-    let ended = false;
+    if (!parsed.move) return { view: before, changed: false, line: said.unclear(text, parsed.unclear ?? 'there is no move in it') };
+    const move = parsed.move;
+    const fresh = heard.filter((h) => h.seq === before.seq).map((h) => h.text);
+    if (!backs(move, fresh)) {
+      const last = this.lastPlayed;
+      const repeat = last !== null && sameMove(last.move, move) && before.seq - last.seq <= 2;
+      return { view: before, changed: false, unbacked: true, line: repeat ? said.repeat(move) : said.unheard(text, fresh) };
+    }
+    return this.play(move, before);
+  }
 
-    if (parsed.move) {
-      const { kind } = parsed.move;
+  /** A button. Exact, so nothing is read; a refusal shows on the table and Dex need not hear it. */
+  press(intent: Intent): Result {
+    const kind = normalizeKind(intent.kind);
+    if (kind === 'deal' || kind === 'restart') {
+      const before = this.view();
       try {
-        this.reduce({ kind, amount: 'amount' in parsed.move ? parsed.move.amount : undefined } as Intent, 'user');
-        const view = this.view();
-        rulings.push(say.applied(view.last_action));
-        if (view.phase !== 'playing') {
-          ended = true;
-          // A new hand asked for in the same breath ("I fold. can we start a
-          // new hand?") follows at once; no need to invite it first.
-          const result = say.result(view);
-          rulings.push(parsed.wantsNewHand ? result.replace(/ They can deal the next hand\.$/, '') : result);
-        }
+        this.reduce({ kind } as Intent, 'user');
       } catch (err) {
         if (!(err instanceof IllegalMove)) throw err;
-        rulings.push(say.refused(kind, err.message, this.view()));
-        message = err.message;
+        return { view: before, changed: false, message: err.message };
       }
-    } else if (parsed.unclear) {
-      rulings.push(say.unclear(parsed.unclear));
-    }
-
-    if (parsed.wantsNewHand) {
-      const phase = this.match.phase;
-      // A hand in play is not refused out loud: they usually asked for a new
-      // hand in the same breath as folding, and the fold above ended it.
-      if (phase !== 'playing') {
-        const kind = phase === 'game-over' ? 'restart' : 'deal';
-        try {
-          this.reduce({ kind }, 'user');
-          rulings.push(say.dealt(kind === 'restart'));
-        } catch (err) {
-          if (!(err instanceof IllegalMove)) throw err;
-          rulings.push(say.dealRefused(err.message));
-          message = err.message;
-        }
-      }
-    }
-
-    if (parsed.asksOwnCards) {
-      // With the screen out of sight this is the only way to know your hand,
-      // and "I can't reveal any cards" (the answer a player got) is the
-      // card-secrecy rule aimed at the wrong player.
       const view = this.view();
-      rulings.push(view.phase === 'playing' && view.user_hand.length ? say.ownCards(view.user_hand) : say.noCards());
+      return { view, changed: true, line: said.dealt(view, kind === 'restart') };
     }
+    const move = asMove(intent);
+    if (!move) return { view: this.view(), changed: false, message: `'${String(intent.kind)}' is not something this table can do` };
+    const result = this.play(move, this.view());
+    return result.changed ? result : { view: result.view, changed: false, message: result.message };
+  }
 
-    if (!rulings.length) return { view: this.view(), handled: false };
-    return { view: this.view(), handled: true, event: rulings.join(' '), ttl: ended ? 30 : 15, message };
+  private play(move: ParsedMove, before: TableView): Result {
+    const amount = move.kind === 'raise' ? move.amount : undefined;
+    try {
+      this.reduce({ kind: move.kind, amount } as Intent, 'user');
+    } catch (err) {
+      if (!(err instanceof IllegalMove)) throw err;
+      const view = this.view();
+      return { view, changed: false, line: said.refused(move, err.message, view), message: err.message };
+    }
+    const after = this.view();
+    this.lastPlayed = { move, seq: after.seq };
+    return { view: after, changed: true, line: said.played(before, after, move.kind) };
+  }
+
+  /** The host's `deal_hand`: the next hand, only between hands. */
+  deal(): Result {
+    const view = this.view();
+    if (view.phase === 'playing') return { view, changed: false, line: said.handInPlay(view) };
+    if (view.phase === 'game-over') return { view, changed: false, line: said.matchOver(view) };
+    try {
+      this.reduce({ kind: 'deal' }, 'user');
+    } catch (err) {
+      if (!(err instanceof IllegalMove)) throw err;
+      const now = this.view();
+      return { view: now, changed: false, line: now.phase === 'game-over' ? said.matchOver(now) : said.handInPlay(now), message: err.message };
+    }
+    const after = this.view();
+    return { view: after, changed: true, line: said.dealt(after, false) };
+  }
+
+  /** The host's `new_match`: a rematch, only once a stack is empty. */
+  rematch(): Result {
+    const view = this.view();
+    if (view.phase !== 'game-over') return { view, changed: false, line: said.matchOn(view) };
+    this.reduce({ kind: 'restart' }, 'user');
+    const after = this.view();
+    return { view: after, changed: true, line: said.dealt(after, true) };
+  }
+
+  /** The host's `read_my_cards`: the player's own cards, which they are entitled to. Never Dex's. */
+  ownCards(): Result {
+    const view = this.view();
+    const line = view.phase === 'playing' && view.user_hand.length ? said.cards(view.user_hand) : said.noCards();
+    return { view, changed: false, line };
   }
 
   /**
-   * The opponent's turn, if it is one: decide (the model, or the safe action),
-   * apply, and say what was played. Concurrent calls share one decision; a
-   * table that moved while the model was thinking discards it.
+   * Dex's turn, if it is one: decide (the model, or the safe action), apply,
+   * and say what was played. Concurrent calls share one decision; a table that
+   * moved while the model was thinking discards it.
    */
-  async opponentTurn(ask: Ask | null): Promise<Outcome> {
+  async opponentTurn(ask: Ask | null, again = false): Promise<Result> {
     if (this.deciding) {
       await this.deciding.catch(() => undefined);
-      return { view: this.view(), handled: false };
+      return { view: this.view(), changed: false };
     }
-    this.deciding = this.playOpponent(ask);
+    this.deciding = this.playOpponent(ask, again);
     try {
       return await this.deciding;
     } finally {
@@ -160,12 +187,12 @@ export class Table {
     }
   }
 
-  private async playOpponent(ask: Ask | null): Promise<Outcome> {
-    if (this.match.actionTo() !== 'agent') return { view: this.view(), handled: false };
-    const seq = this.match.seq;
+  private async playOpponent(ask: Ask | null, again: boolean): Promise<Result> {
+    if (this.match.actionTo() !== 'agent') return { view: this.view(), changed: false };
+    const before = this.view();
     const request = this.match.decisionRequest();
     const decision = await decide(request, ask, this.decisionTimeoutMs);
-    if (this.match.seq !== seq || this.match.actionTo() !== 'agent') return { view: this.view(), handled: false };
+    if (this.match.seq !== before.seq || this.match.actionTo() !== 'agent') return { view: this.view(), changed: false };
     try {
       this.reduce({ kind: decision.kind, amount: decision.amount }, 'agent');
       this.lastDecision = decision;
@@ -176,9 +203,7 @@ export class Table {
       this.reduce(safe, 'agent');
       this.lastDecision = { ...safe, source: 'fallback' };
     }
-    const view = this.view();
-    const parts = [say.yourMove(view.last_action!)];
-    if (view.phase !== 'playing') parts.push(say.result(view));
-    return { view, handled: true, event: parts.join(' '), ttl: view.phase !== 'playing' ? 30 : 20 };
+    const after = this.view();
+    return { view: after, changed: true, line: said.yours(before, after, again) };
   }
 }

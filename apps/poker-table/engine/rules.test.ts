@@ -8,14 +8,14 @@
 //     -> "a high card beats nothing, while a royal flush beats everything!"
 //
 // There were no rules in the app. Now the same text is the How to play sheet
-// and the avatar's standing notes.
+// and the host's standing rules note.
 import { expect, test } from 'vitest';
-import { NOTES } from './director.ts';
+import { RULES_NOTE } from './director.ts';
 import { CATEGORY_NAMES } from './evaluator.ts';
 import { HAND_RANKINGS, RULE_SECTIONS, rankings } from './rules.ts';
 import { BIG_BLIND, SMALL_BLIND, STARTING_STACK } from './types.ts';
 
-const teaching = NOTES.slice(2).join(' ').toLowerCase();
+const teaching = RULES_NOTE.toLowerCase();
 
 test('"how do I play" teaches the game, not the three buttons', () => {
   // The shape of a hand, the moves, and what beats what: all three.

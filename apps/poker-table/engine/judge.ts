@@ -211,3 +211,54 @@ export function parseTurn(text: string): ParsedTurn {
   }
   return parsed;
 }
+
+// ---- the host's calls, checked against the player's own words --------------
+//
+// The host now calls `play_move` with the player's words, and a tool call is
+// a model output, not evidence: "purple banana forty seven?" once became a
+// 47-chip raise because the model was free to invent the arguments. So the
+// table plays a move only when the player's OWN words, heard at this point in
+// the hand, contain that very move. The same rule is what stops a bet landing
+// twice: once a move lands, the table has moved on, and the words that asked
+// for it belong to the hand as it was.
+
+/** Two readings name the same move (a raise only with the same amount). */
+export function sameMove(a: ParsedMove | null, b: ParsedMove | null): boolean {
+  if (!a || !b || a.kind !== b.kind) return false;
+  if (a.kind !== 'raise' || b.kind !== 'raise') return true;
+  return a.amount === b.amount;
+}
+
+/**
+ * Whether the player's own lines contain this move. Each line is read on its
+ * own and all of them together: a recogniser can split "raise to" from "sixty".
+ */
+export function backs(move: ParsedMove, lines: readonly string[]): boolean {
+  const said = lines.map((l) => l.trim()).filter(Boolean);
+  if (!said.length) return false;
+  const runOn = said.map((l) => l.replace(/[.!;,]+$/, '')).join(' ');
+  return [...said, said.join(' '), runOn].some((text) => sameMove(parseTurn(text).move, move));
+}
+
+/** The safety net's actions: safe to do twice, and never a move. */
+export type NetAction = 'deal_hand' | 'new_match' | 'read_my_cards';
+
+// Asking for a hand, narrower than NEW_HAND: "what's the deal with the
+// blinds?" between hands would otherwise deal one.
+const DEAL = /^(?:ok(?:ay)?,? |alright,? |right,? )?deal\b|\bdeal (?:me|us|them|'?em|again|it|another|the next)\b|\b(?:new|next|another) hand\b|\bone more hand\b/;
+const REMATCH = /\b(?:rematch|new match|another match|play (?:it )?again|run it back)\b/;
+
+/**
+ * The table action the player's words clearly ask for, among those safe to
+ * repeat: a second deal or rematch is refused while a hand is in play, and
+ * reading their cards twice costs nothing. Moves are never here: a bet the
+ * net played on top of the host's would be a bet applied twice.
+ */
+export function mustDo(text: string): NetAction | null {
+  const t = (text ?? '').trim().toLowerCase().replace(/[’]/g, "'");
+  if (!t) return null;
+  if (REMATCH.test(t)) return 'new_match';
+  if (DEAL.test(t)) return 'deal_hand';
+  if (parseTurn(t).asksOwnCards) return 'read_my_cards';
+  return null;
+}

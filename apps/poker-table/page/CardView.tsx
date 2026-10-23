@@ -1,56 +1,29 @@
-const SUIT_SYMBOLS: Record<string, string> = {
-  s: "\u2660",
-  h: "\u2665",
-  d: "\u2666",
-  c: "\u2663",
-};
+// A playing card: the table's code ("As", "Td") drawn on card stock, a face
+// down back, or an empty slot on the board.
+import { spokenCard } from '../engine/cards.ts';
 
-const SUIT_COLORS: Record<string, string> = {
-  s: "#1a1a2e",
-  h: "#dc2626",
-  d: "#dc2626",
-  c: "#1a1a2e",
-};
+// U+FE0E asks for the text glyph: some phones draw the bare suits as emoji.
+const SUITS: Record<string, string> = { s: '♠︎', h: '♥︎', d: '♦︎', c: '♣︎' };
+const RANKS: Record<string, string> = { T: '10' };
 
-const RANK_DISPLAY: Record<string, string> = {
-  A: "A",
-  K: "K",
-  Q: "Q",
-  J: "J",
-  T: "10",
-  "9": "9",
-  "8": "8",
-  "7": "7",
-  "6": "6",
-  "5": "5",
-  "4": "4",
-  "3": "3",
-  "2": "2",
-};
+export type CardSize = 'sm' | 'md' | 'lg';
 
-interface CardViewProps {
+export function CardView({ card, faceDown = false, size = 'md', className = '' }: {
   card?: string | null;
   faceDown?: boolean;
-  small?: boolean;
-}
-
-export function CardView({ card, faceDown, small }: CardViewProps) {
-  const size = small ? "card card--small" : "card";
-
-  if (faceDown || !card) {
-    return <div className={`${size} card--back`} />;
-  }
-
-  const rank = card[0] ?? "";
-  const suit = card[1] ?? "";
-  const symbol = SUIT_SYMBOLS[suit] ?? "?";
-  const color = SUIT_COLORS[suit] ?? "#000";
-  const display = RANK_DISPLAY[rank] ?? rank;
-
+  size?: CardSize;
+  className?: string;
+}) {
+  if (faceDown) return <span className={`bs-card is-back is-${size} ${className}`} role="img" aria-label="A face-down card" />;
+  if (!card) return <span className={`bs-card is-slot is-${size} ${className}`} aria-hidden="true" />;
+  const rank = card[0]?.toUpperCase() ?? '';
+  const suit = card[1]?.toLowerCase() ?? '';
+  const red = suit === 'h' || suit === 'd';
   return (
-    <div className={size} style={{ color }}>
-      <span className="card__rank">{display}</span>
-      <span className="card__suit">{symbol}</span>
-    </div>
+    <span className={`bs-card is-${size} ${red ? 'is-red' : ''} ${className}`} role="img" aria-label={spokenCard(card)}>
+      <span className="bs-card-rank" aria-hidden="true">{RANKS[rank] ?? rank}</span>
+      <span className="bs-card-suit" aria-hidden="true">{SUITS[suit] ?? '?'}</span>
+      <span className="bs-card-pip" aria-hidden="true">{SUITS[suit] ?? '?'}</span>
+    </span>
   );
 }

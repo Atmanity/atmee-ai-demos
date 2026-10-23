@@ -1,7 +1,7 @@
 // The parser, on the phrasings that broke the original live (ported from
 // test_user_turn_moves.py; the table-side halves are in table.test.ts).
 import { describe, expect, test } from 'vitest';
-import { parseTurn } from './judge.ts';
+import { backs, mustDo, parseTurn, sameMove } from './judge.ts';
 
 const move = (text: string) => parseTurn(text).move;
 
@@ -114,4 +114,49 @@ describe('asking for their own cards', () => {
       expect(parseTurn(text).asksOwnCards, text).toBe(false);
     }
   });
+});
+
+describe("the host's move, checked against the player's own words", () => {
+  test('the move must be in what they said, amount and all', () => {
+    expect(backs({ kind: 'call' }, ['I call'])).toBe(true);
+    expect(backs({ kind: 'raise', amount: 60 }, ['Raise it to sixty.'])).toBe(true);
+    expect(backs({ kind: 'raise', amount: 60 }, ['raise to 40'])).toBe(false);
+    expect(backs({ kind: 'call' }, ['nice hat'])).toBe(false);
+    expect(backs({ kind: 'call' }, [])).toBe(false);
+  });
+
+  test('gibberish with a number backs no raise, however the host words it', () => {
+    // "purple banana forty seven?" became a 47-chip raise when the model was
+    // free to write the move. The words have to carry it.
+    expect(backs({ kind: 'raise', amount: 47 }, ['purple banana forty seven?'])).toBe(false);
+  });
+
+  test('a question or a hedge backs nothing', () => {
+    for (const text of ['should I fold?', "I'm not folding this one", "I won't fold"]) expect(backs({ kind: 'fold' }, [text]), text).toBe(false);
+  });
+
+  test('a move split across two recognised lines still counts', () => {
+    expect(backs({ kind: 'raise', amount: 60 }, ['Raise to.', 'sixty.'])).toBe(true);
+  });
+
+  test('the same move, the same amount', () => {
+    expect(sameMove({ kind: 'raise', amount: 60 }, { kind: 'raise', amount: 60 })).toBe(true);
+    expect(sameMove({ kind: 'raise', amount: 60 }, { kind: 'raise', amount: 80 })).toBe(false);
+    expect(sameMove({ kind: 'call' }, { kind: 'check' })).toBe(false);
+    expect(sameMove(null, { kind: 'call' })).toBe(false);
+  });
+});
+
+test('what the safety net does when the host does not, and never a move', () => {
+  const cases: [string, ReturnType<typeof mustDo>][] = [
+    ['Deal.', 'deal_hand'], ['deal me in', 'deal_hand'], ["Deal 'em.", 'deal_hand'], ['deal em', 'deal_hand'], ['Okay, deal again', 'deal_hand'], ['next hand please', 'deal_hand'],
+    ['I fold. Can we start a new hand?', 'deal_hand'], ['one more hand', 'deal_hand'],
+    ['Rematch!', 'new_match'], ["let's play again", 'new_match'], ['run it back', 'new_match'],
+    ['what are my cards?', 'read_my_cards'], ['What am I holding?', 'read_my_cards'],
+    // Moves are never the net's: a bet it played on top of the host's would land twice.
+    ['I call', null], ['raise to 60', null], ['all in', null], ['I fold', null], ['check', null],
+    // Chatter that only sounds like a deal.
+    ["what's the deal with the blinds?", null], ['big deal', null], ["it's a deal", null], ["what's my stack?", null], ['', null],
+  ];
+  for (const [said, expected] of cases) expect(mustDo(said), said).toBe(expected);
 });

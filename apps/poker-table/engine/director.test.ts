@@ -1,19 +1,66 @@
-// What the avatar is told: within the limits, grounded in the table, and never
-// a hand it must not know (ported from test_agent_note.py and the note halves
-// of test_table.py and test_user_turn_moves.py).
+// What Dex is told: within the API's limits, grounded in the table, and never
+// a hand he must not know (ported from test_agent_note.py and the note halves
+// of test_table.py and test_user_turn_moves.py; the tool checks are new).
 import { expect, test } from 'vitest';
 import { spokenCard } from './cards.ts';
-import { chipFacts, NOTES, say, tableState } from './director.ts';
+import { chipFacts, INSTRUCTIONS, RULES_NOTE, said, speak, tableState, TOOLS } from './director.ts';
 import { PokerMatch } from './match.ts';
 import { Table } from './table.ts';
 
 const DECK = ['As', 'Kd', 'Ah', 'Kc', '2c', '7d', '9h', '3s', '5c', '5d', '8h', 'Jc', 'Qd'];
 
-/** Every way a card can be written in what the avatar is told. */
+/** Every way a card can be written in what Dex is told. */
 const mentions = (text: string, card: string) => text.includes(card) || text.toLowerCase().includes(spokenCard(card));
 
-test('every standing note fits 2,000 characters', () => {
-  for (const note of NOTES) expect(note.length).toBeLessThanOrEqual(2000);
+test('the tools fit the API: names, descriptions, schemas, modes and timeouts', () => {
+  expect(TOOLS.length).toBeLessThanOrEqual(30);
+  const names = TOOLS.map((t) => t.name);
+  expect(new Set(names).size).toBe(names.length);
+  for (const tool of TOOLS) {
+    expect(tool.type).toBe('function');
+    expect(tool.name).toMatch(/^[a-z][a-z0-9_]{0,47}$/);
+    expect(['web_search', 'lookup']).not.toContain(tool.name);
+    expect(tool.description.length).toBeGreaterThan(0);
+    expect(tool.description.length).toBeLessThanOrEqual(500);
+    expect(tool.parameters.type).toBe('object');
+    expect(JSON.stringify(tool.parameters).length).toBeLessThanOrEqual(4096);
+    const mode = tool['x-atmee']?.mode;
+    expect(['await', 'notify']).toContain(mode);
+    if (mode === 'await') {
+      expect(tool['x-atmee']!.timeoutSeconds!).toBeGreaterThanOrEqual(1);
+      expect(tool['x-atmee']!.timeoutSeconds!).toBeLessThanOrEqual(28);
+    }
+  }
+  expect(JSON.stringify(TOOLS).length).toBeLessThanOrEqual(24576);
+});
+
+test('everything Dex must speak about waits for the table; only the chart is fire-and-forget', () => {
+  const modes = Object.fromEntries(TOOLS.map((t) => [t.name, t['x-atmee']?.mode]));
+  expect(modes).toEqual({ play_move: 'await', deal_hand: 'await', new_match: 'await', read_my_cards: 'await', show_hand_rankings: 'notify' });
+  // The move's result can carry Dex's own move too: the decider's 4.5 s budget, twice, fits.
+  expect(TOOLS.find((t) => t.name === 'play_move')!['x-atmee']!.timeoutSeconds).toBeGreaterThanOrEqual(15);
+});
+
+test('the instructions fit 4,000 characters and name every tool', () => {
+  expect(INSTRUCTIONS.length).toBeLessThanOrEqual(4000);
+  for (const tool of TOOLS) expect(INSTRUCTIONS).toContain(tool.name);
+});
+
+test('the rules note fits 2,000 characters and teaches the whole game', () => {
+  expect(RULES_NOTE.length).toBeLessThanOrEqual(2000);
+  const note = RULES_NOTE.toLowerCase();
+  for (const words of ['two private cards', 'fold', 'check', 'call', 'raise', 'royal flush', 'high card', 'small blind']) expect(note).toContain(words);
+});
+
+test('the hard-won rules survive the move to tools', () => {
+  const all = INSTRUCTIONS.toLowerCase();
+  for (const rule of [
+    "you're checking? cute", 'never pick, round or fix an amount', 'their cards and they are entitled to them', 'never announce, preview or promise',
+    'never add up, estimate', 'never ask them to deal', 'ai, made by atmee', 'a question about a move', 'call the tool even when you think you know',
+    'changes only when a tool runs', 'new_match, only when they ask',
+  ]) {
+    expect(all, rule).toContain(rule.toLowerCase());
+  }
 });
 
 test('the busiest table still fits the 3,858-character state', () => {
@@ -31,9 +78,8 @@ test('the busiest table still fits the 3,858-character state', () => {
 });
 
 test("neither player's hole cards are in the state before a showdown", () => {
-  // The user's own cards are on their screen, not in the avatar's context:
-  // the avatar plays on the information a spectator has. Its own are the
-  // server's alone.
+  // The player's own cards are on their screen, not in Dex's context: he plays
+  // on the information a spectator has. His own are the server's alone.
   const match = new PokerMatch();
   match.deal(DECK);
   match.applyMove('user', 'call');
@@ -61,17 +107,24 @@ test('a fold reveals nothing; a showdown reveals both hands', () => {
   expect(atShowdown).toContain('you won 2000 with One Pair');
 });
 
-test('no event text ever names the opponent\'s live cards', async () => {
+test("no result Dex is handed ever names his live cards", async () => {
   const table = new Table();
-  table.match.deal(DECK);
+  table.open();
   const hidden = table.match.holeCards('agent');
+  const seq = () => table.view().seq;
   const texts = [
-    table.act({ text: 'what are my cards?' }, 'typed').event!,
-    table.act({ text: 'raise to 5' }, 'typed').event!,
-    table.act({ text: 'I call' }, 'spoken').event!,
+    speak([table.open().line]),
+    speak([table.ownCards().line]),
+    speak([table.playerMove('raise to 5', [{ text: 'raise to 5', seq: seq() }]).line]),
+    speak([table.playerMove('purple banana forty seven?', [{ text: 'purple banana forty seven?', seq: seq() }]).line]),
+    speak([table.playerMove('I call', [{ text: 'I call', seq: seq() }]).line]),
+    speak([table.deal().line, table.rematch().line]),
   ];
-  texts.push((await table.opponentTurn(async () => ({ action: 'check', amount: 0 }))).event!);
-  for (const text of texts) for (const card of hidden) expect(mentions(text, card), `${card} in: ${text}`).toBe(false);
+  texts.push(speak([(await table.opponentTurn(async () => ({ action: 'raise', amount: 60 }))).line]));
+  for (const text of texts) {
+    expect(text.length).toBeGreaterThan(0);
+    for (const card of hidden) expect(mentions(text, card), `${card} in: ${text}`).toBe(false);
+  }
 });
 
 test('the state forbids previewing a move the table has not played yet', () => {
@@ -98,6 +151,7 @@ test('the state carries the chip figures, and forbids any others', () => {
   expect(state).toContain(`your stack=${view.players.agent.stack}`);
   expect(state).toContain('NEVER state a chip, pot or stack number');
   expect(state).toContain('raise to anything from 40 up to 1000');
+  expect(state).toContain('only through play_move');
 });
 
 test('the owed figure names whoever is actually to act', () => {
@@ -111,15 +165,6 @@ test('the owed figure names whoever is actually to act', () => {
   expect(facts).not.toContain('they owe');
 });
 
-test('the figures track the table, not the conversation', () => {
-  const match = new PokerMatch();
-  match.deal(DECK);
-  const first = chipFacts(match.view());
-  match.applyMove('user', 'raise', 60);
-  expect(chipFacts(match.view())).not.toBe(first);
-  expect(chipFacts(match.view())).toContain('pot=80');
-});
-
 test('the session line: nothing until a hand finishes, then the count', () => {
   // "we've played one hand. You're down 20", said mid-first-hand.
   const match = new PokerMatch();
@@ -129,21 +174,51 @@ test('the session line: nothing until a hand finishes, then the count', () => {
   expect(tableState(match.view())).toContain('Session: 1 hand finished; you have won 1, they have won 0, and they are down 10 chips.');
 });
 
-test('the opening line never asks the player to deal', () => {
-  expect(say.start()).toContain('Do not ask them to deal');
-  expect(NOTES[0]).toContain('never ask them to deal');
+test('the opening never asks the player to deal, and names whose move it is', () => {
+  const table = new Table();
+  const text = speak([table.open().line]);
+  expect(text).toContain('never ask them to deal');
+  expect(text).toContain('Hand 1 is dealt');
+  expect(text).toContain('The action is on them: they can fold, call 10 or raise to anything from 40 up to 1000');
 });
 
-test("the commentary names the move that landed, and the avatar's own", () => {
-  const line = say.yourMove({ by: 'agent', kind: 'raise', amount: 40, applied: true });
-  expect(line.toLowerCase()).toContain('your own raise');
-  expect(line.toLowerCase()).toContain('nothing about the opponent');
-  expect(line).toContain('state no other chip amount');
+test('results never ask Dex to act on his own: the next hand and a rematch wait for the player', async () => {
+  const table = new Table({ startingStack: 20 });
+  table.match.deal(DECK);
+  const seq = table.view().seq;
+  // 20-chip stacks: the shove can only call the big blind, and Dex's aces take every chip.
+  const over = table.playerMove('all in', [{ text: "I'm all in", seq }]);
+  expect(over.view.phase).toBe('game-over');
+  expect(speak([over.line])).toContain('call new_match only if they say so');
+  const handOver = new Table();
+  handOver.match.deal(DECK);
+  const folded = handOver.playerMove('I fold', [{ text: 'I fold', seq: handOver.view().seq }]);
+  expect(speak([folded.line])).toContain('never deal it yourself');
 });
 
-test('the hard-won rules survive the condensing', () => {
-  const all = NOTES.join(' ');
-  for (const rule of ["you're checking? cute", 'never round their number up', 'card secrecy is about yours', 'never claim, announce or preview an action of your own', 'Never add up, estimate', 'AI avatar, created by Atmee']) {
-    expect(all.toLowerCase()).toContain(rule.toLowerCase());
-  }
+test("Dex's move is named as his own, as done, with the figures that landed", () => {
+  const match = new PokerMatch();
+  match.deal(DECK);
+  match.applyMove('user', 'call');
+  const before = match.view();
+  match.applyMove('agent', 'raise', 60);
+  const line = said.yours(before, match.view());
+  expect(line.facts).toContain('The table played your move: you raised to 60.');
+  expect(line.facts).toContain('The action is on them: they can fold, call 40 or raise to anything from 100 up to 1000');
+  expect(line.cue).toContain('never as a plan');
+  // Every figure in it is the table's.
+  for (const figure of line.facts.match(/\d+/g)!) expect(['60', '40', '100', '1000']).toContain(figure);
+});
+
+test('a move and the reply to it are spoken as one result, the last cue last', () => {
+  const match = new PokerMatch();
+  match.deal(DECK);
+  const before = match.view();
+  match.applyMove('user', 'call');
+  const mid = match.view();
+  match.applyMove('agent', 'raise', 60);
+  const text = speak([said.played(before, mid, 'call'), said.yours(mid, match.view())]);
+  expect(text.indexOf('The table played their call of 10.')).toBeLessThan(text.indexOf('you raised to 60'));
+  expect(text).not.toContain('say nothing about yours');
+  expect(text.endsWith(said.yours(mid, match.view()).cue)).toBe(true);
 });

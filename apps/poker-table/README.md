@@ -1,158 +1,109 @@
-# Poker Table
+# Blindside
 
-Heads-up no-limit Texas Hold'em against the avatar: 1,000 chips each, blinds
-10/20, the button alternates, and the match runs until one stack is empty.
-Play with the buttons, or say or type your move ("call", "raise to 60",
-"I fold", "all in"); the avatar plays its own hand and needles you about yours.
-"How to play" opens the hand rankings; ask the avatar anything about the rules.
+Heads-up no-limit hold'em against Dex, a sharp, talkative opponent on a live
+video call. 1,000 chips each, blinds 10 and 20, the button alternates, and the
+match runs until one stack is empty. Say your move, type it or tap it; the
+table rules on it, then plays Dex's hand, and Dex speaks from what landed. The
+dealer keeps Dex's cards face down even from him, so his table talk is bluff by
+construction. Rebuilt from the `poker-table` mini-app (a Python LiveKit agent
+on pokerkit, with a move parser, a separate decider and a React panel) as a
+standalone product on the Avatar API.
 
-Ported from `Atmanity/apps/apps/poker-table` (a Python LiveKit agent on
-pokerkit, with a parser for the player's moves, a separate decider for the
-avatar's, and a React panel) onto the Avatar API.
+Open it at `/apps/poker-table/`.
 
-## Where the table runs, and why
+## How it works
 
-On the server (`server.ts` + `engine/`). The avatar's hole cards are a secret,
-so the deck and both hands never leave the server: the page gets the masked
-view the original panel got (its own two cards; the opponent's only at a real
-showdown), and the avatar gets a state built from that same view. The avatar
-does not know its own cards either: its moves are decided by the app's own
-model call on the server, the way the original's `Decider` did it.
-
-```
-engine/holdem.ts     one hand's rules: blinds, betting rounds, min-raise, all-ins, uncalled bets
-                     (the subset of pokerkit's NoLimitTexasHoldem that engine.py used, for two seats)
-engine/evaluator.ts  the 7-card hand evaluator (pokerkit decided showdowns before)
-engine/match.ts      the match: stacks, button, session tally, the masked view (engine.py)
-engine/judge.ts      the player's words -> a move, rules only (moves.py)
-engine/decide.ts     the avatar's move: prompt, schema, safe fallback, normalising (decide.py)
-engine/table.ts      the reducer, the player's turn and the opponent's turn (table.py, apply_user_turn)
-engine/director.ts   the notes, the state, the event texts (instructions.py, state.py, the cues)
-engine/rules.ts      the teaching text and the How to play sheet (rules.py + the panel's rules.ts)
-page/                the original panel (felt, cards, chips, action bar, How to play, sounds)
-```
-
-## How it works on the API
-
-| Feature | Mechanism |
+| Part | Where |
 |---|---|
-| The table (dealing, betting, showdown, session tally) | `engine/` on the server; the 7 golden hands recorded from the engine users played against replay exactly |
-| The page | the masked view only; `user_hand` is the player's own cards, `revealed_hands` appears at a showdown |
-| The avatar's move | `POST /tables/:id/opponent`: a `structured()` call (Gemini) with the original's loose-aggressive prompt, the legal actions as an enum, a 4.5 s budget, then `normalizeDecision`; no key, a timeout or an error plays the original's safe action (check, else call) |
-| Fold / Check / Call / Bet-Raise, Deal Again, Restart | buttons -> `POST /tables/:id/act {intent}` |
-| Spoken and typed moves ("raise to forty", "I'm out", "all in") | `engine/judge.ts` (the original's parser: clauses, hedges, negated contractions, number words); no model is ever asked what the player did |
-| "Deal", "another hand", "play again" | the same parser; deals, or restarts after a finished match |
-| "What are my cards?" | parser -> an event with both cards in words |
-| "How do I play?", "what beats what?" | two standing `note`s carry the rules text (the original's `explain_the_game`), and the How to play sheet |
-| "Who's winning?", "what's the pot?" | `state`: the chip-facts line ("NEVER state a number not in this line") and the session line |
-| The table rules for the avatar (4,250 chars originally) | four `note`s, each under 2,000 characters |
-| "Action is on you" while the avatar's move is being decided | `state` |
-| The ruling on the player's spoken/typed move | an `event` (applied / refused with the legal range / could not read) |
-| The avatar's commentary on its own move, hand results, showdowns | `event`s naming only what the table already applied |
-| The opening ("the cards are out; don't ask them to deal") | an `event` once the table is dealt |
-| Typed lines | judged first; a table action is recorded and acted on, anything else goes to the avatar as a typed turn |
+| The table: blinds, betting rounds, min-raise, all-ins, showdowns, the match | `engine/holdem.ts`, `engine/evaluator.ts`, `engine/match.ts`, on the server. The seven golden hands recorded from the engine users played against replay exactly. |
+| Dex's hidden cards | Never leave the server. The page's view (`TableView`) carries the player's own two cards and Dex's only at a real showdown; Dex's state is built from that same view, so he never knows his hand. |
+| Dex's actions | Five tools (`engine/director.ts`): `play_move(words)` (await, 20 s), `deal_hand` (await, 15 s), `new_match` (await, 15 s, only when the player asks), `read_my_cards` (await, 8 s) and `show_hand_rankings` (notify: it opens the chart). The page answers each `atmee.tool` call by asking the server, and returns the words Dex speaks from. |
+| The player's move, said or typed | Dex calls `play_move` with their words. The server reads them with the original's parser (`engine/judge.ts`: clauses, hedges, negated contractions, number words; no model ever decides what the player did) and plays the move only if the player's **own** words, heard at this point in the hand, contain that very move (`backs`). A move Dex invented ("purple banana forty seven?" as a raise to 47) is refused. |
+| A bet never lands twice | Each line the page hears is tagged with the table's `seq` when it was said (a recognised line about 1.5 s before it arrived; a typed one at once). Words only count at the seq they were said at, so once a move lands the words that asked for it are spent: a second `play_move` for the same sentence, a tap plus the same move said aloud, or a late duplicate on the next street all play nothing ("Their call already landed"). A tool call delivered twice with one id is answered once. There is no safety net for moves. |
+| Dex's own moves | `engine/decide.ts` on the server: a `structured()` call (Gemini) with the original's loose-aggressive prompt and the legal actions as an enum, a 4.5 s budget, then `normalizeDecision`; no key, a timeout or an error plays the safe action (check, else call). The page plays Dex's turn right after the player's move, deal or rematch, so the **same** tool result carries both ("The table played their call of 10… The table played your move: you raised to 60"). |
+| Buttons | Fold, check or call, a sized bet or raise (Min, ½ pot, Pot, All in, a slider), Deal next hand, Rematch: exact intents, applied at once (`POST /tables/:id/act`). Dex cannot see the screen, so he is told with one event that includes his own answer. |
+| The safety net | `useToolNet` (kit) with `mustDo`: when the player clearly asks to deal, for a rematch, or for their cards and Dex does not call the tool within 7 s, the page does it and tells him. A deal or rematch the table no longer needs (a button already did it) is dropped silently. Never a move. |
+| Dex's rules | The session's tool `instructions` (the hard-won "never" rules of the original kept), a standing rules note for teaching (`RULES_NOTE`, the same text as the How to play sheet), and `state`: the live table with the only chip figures he may say. |
+| A turn of Dex's nothing played | If a request fails, or a call comes back mid-hand with the action on Dex, the page plays his turn after 3 s and tells him. |
+| The screens | The front door (`page/Lobby.tsx`); the felt with Dex's live video as his seat at the head of the table, his words in a bubble beside it, the board, the pot and the player's seat (`page/Felt.tsx`); the moves and the table talk beside it (`page/Controls.tsx`, the kit's `ChatPanel`); the rules sheet; a paused table after a call (resume, or start fresh); the match summary. Styled in `page/blindside.css`. |
 
-Keys: `GEMINI_API_KEY` (the avatar's decisions). Without it the avatar only
-checks and calls. No other key is used.
+Keys: `GEMINI_API_KEY` (Dex's decisions). Without it Dex only checks and calls.
 
 ## What changed from the original, on purpose
 
 - **A split pot is a split.** pokerkit's `[0, 0]` payoffs were read as a win
-  for the first seat ("Opponent wins 0"); now `winner.who` is `split`, the
-  pot is shared, and neither seat is credited a hand.
-- **A free fold is reported as the check it became** (the original kept the
-  courtesy but still called it a fold).
-- **"What are my cards?" is matched tightly.** The original pattern (never
-  acted on there) also matched "what's my stack?" and "I fold my hand".
-- **A model raise outside the legal range is pulled into it**; in the
-  original the table refused it and the avatar's turn stalled.
-- **A rematch only after a finished match** (the engine allowed a restart
-  between hands, which resets both stacks).
-- **The action bar follows `valid_actions`**: facing an all-in it no longer
-  offers a raise the table refuses.
-- **The avatar's commentary names the amount that landed** ("your raise to
-  60"): the original kept figures out because its line was built from the
-  decision, not the applied move. This one is built after the table applied it.
-- **No model fallback for the player's moves.** The original's `player_move`
-  tool was gated so it could only re-apply what the parser had already found;
-  there is nothing for it to do here.
+  for the first seat ("Opponent wins 0"); now `winner.who` is `split`.
+- **A free fold is played and said as a check**, and a call with nothing to
+  call is said as the check it is.
+- **"What are my cards?" is matched tightly** (the original's pattern also
+  matched "what's my stack?" and "I fold my hand").
+- **A model raise outside the legal range is pulled into it**; in the original
+  the table refused it and Dex's turn stalled.
+- **A rematch only after a finished match** (a restart between hands would
+  reset both stacks).
+- **The move tool is gated on the player's own words.** The original's
+  `player_move` tool survived only as a fallback gated on the turn's text;
+  here the host's call is the path, and the same gate is what makes it safe.
 
 ## What the API could not do
 
-Status after the live run of 2026-10-23 (below): **seen** = observed live,
-**expected** = not yet observed.
+**Expected**: not observed yet with this design. The first port's live run
+(2026-10-23, avatar `2cd3ec08`) is where most of these were first seen.
 
-1. **The ruling arrives after the avatar's own reply** — seen (the holding
-   line held; the worst case not seen).
-   The original applied "I fold" before the model wrote a word and handed it a
-   `[Table ruling]`. Here the avatar answers a spoken move on its own turn
-   while the app is still reading it, so "you're checking? cute" over a
-   refused check (the app's named worst failure) can come back despite a
-   standing note. Typed moves are ruled before the avatar hears anything, and
-   buttons are always exact. Live, every spoken move got "Right, copy that,
-   let's see." and then the ruling. When the line was not read at all
-   ("Raised to five.", see 6) the avatar said "let's see" and nothing
-   followed: a holding line is a promise only the app can keep.
-2. **Rulings and refusals are paraphrased and wait for the floor** — expected
-   (the rulings live kept their numbers). "The minimum raise is 100" may follow an improvised reply; the
-   table's message line shows the exact range.
-3. **Back-to-back events can be dropped or late** — seen once. A call and
-   the opponent's raise were both spoken live. But a typed "what beats what?"
-   that met the opponent's call event got only the event, and no answer in
-   that turn. A
-   spoken call then the avatar's own raise produce two events within seconds;
-   each waits for the floor and expires (15–30 s), so a commentary line can go
-   unsaid while the chips move on screen. The page softens it: the avatar's
-   move waits while the avatar is still speaking (up to 6 s), so its
-   commentary usually meets a free floor.
-4. **The ~10 s check-in prods a player who is sizing a bet** — seen ("Still
-   thinking over that forty to call, or are…"); it cannot be tuned.
-5. **The persona and greeting belong to the avatar** — seen. The livestream
-   test avatar opened with its own self-description ("I run on a test avatar
-   setup with a fixed four hundred millisecond prime lead…"), and the table's
-   opening was cut off by the player's first question. The
-   test avatar greets as itself before the table's opening; the 4,250
-   characters of table rules travel as four notes. `avatar.json` is the
-   dedicated opponent ("Dex") the app was written for.
-6. **No per-session speech hints** — seen. "Raise to five" arrived as
-   "Raised to five.", which the parser did not take as a raise (fixed: it now
-   does, with a test). Amounts are what the
-   avatar's recogniser heard ("fourteen" for "forty" becomes a refused raise
-   rather than a wrong one, since the table checks every amount).
-7. **The avatar cannot reason about its own hand.** By design here (it would
-   need the cards in its context, which the page and state must never carry);
-   its table talk is bluff by construction, while its moves come from the
-   server-side decider that does see them.
+1. **Tools are called when the host decides.** *Expected.* Dex may narrate a
+   move ("you call, nice") without calling `play_move`; then nothing moves on
+   the table. No safety net covers it, on purpose: a net that played the move
+   too could land a bet twice. The instructions push hard, the state says
+   "their move reaches the table only through play_move", and every move has a
+   button.
+2. **A tool call can beat the player's words to the page.** *Expected.* The page
+   waits up to 4 s for the line before the table rules; a move whose words
+   never arrive is refused ("the table did not hear…") and Dex asks again.
+3. **A very quick answer can count against the previous decision.** *Expected.*
+   A recognised line is dated 1.5 s before it arrives. A player who answers
+   within about a second of Dex's move landing may have to say it again.
+4. **No per-session speech hints.** *Expected* (seen in the first port: "Raise
+   to five" heard as "Raised to five."; the parser reads both). Amounts are what
+   the recogniser heard: "fourteen" for "forty" is refused (below the minimum),
+   never rounded.
+5. **The ~10 s check-in prods a player sizing a bet.** *Expected* (seen in the
+   first port); it cannot be tuned.
+6. **The persona and the greeting belong to the avatar.** *Expected* (seen in
+   the first port: the test avatar opened with its own self-description).
+   `avatar.json` is the host Blindside was written for.
+7. **An event and a user turn at the same moment: one wins.** *Expected.* Fewer
+   events now (a button press is one event with Dex's answer in it), but the
+   safety net's and the stuck-turn events can still meet a turn.
+8. **Dex cannot reason about his own hand.** By design: it would need his
+   cards in his context. His moves come from the decider, which sees them.
+
+Fixed by tools, compared with the first port: no more "let's see" holding
+lines (the ruling is in Dex's first reply); refusals and their legal range come
+back in that reply instead of a later event; Dex's own move is spoken in the
+same reply as the player's, instead of a second event that could expire; typed
+moves take the same path as spoken ones.
 
 ## Tested
 
-- `npx vitest run apps/poker-table`: 157 tests. Ported (about 89): the seven
-  golden hands and the engine parity cases, the parser cases from
-  `test_user_turn_moves.py`, the table and session cases from `test_table.py`
-  and `test_rules_and_session.py`, `test_decide.py`, the note cases from
-  `test_agent_note.py`, and the panel's `rules`, `ChipStack` and `PokerGame`
-  tests (the last against the props-driven component). New (about 68): the
-  hand evaluator, short-stack and uncalled-bet all-ins, split pots, the
-  opponent's turn (timeouts, races, stale decisions), the director's limits
-  and leak checks, and the tightened card question.
-- Not ported: the `llm_node` seam tests (there is no generation hook on the
-  API; the ruling is an event), the wire/envelope tests (no bridge), the
-  `player_move` gate tests (no tool), the panel's auto-deal tests (the server
-  deals), and `App.test.tsx` (the bridge handshake).
-- Live: one run on staging, below.
-
-### Live run (staging, avatar `2cd3ec08`, 2026-10-23)
-
-Spoken lines through `tools/live-test/harness.js`:
-
-- "I've never played poker before. How do I play?" → the rules from the state
-  (two private cards, blinds of 10 and 20, five shared cards…).
-- "I call." → "let's see", then "You're in for twenty…", then the opponent's
-  raise: "Bumped it up to 60, back on you now!" (pot 80).
-- "What's the pot right now?" → "80". "What are my cards?" → "the four of clubs
-  and the nine of clubs" (right). "Who's winning?" → "no hands have finished
-  yet".
-- "Raise to five." → heard as "Raised to five.", not read (gap 6, fixed).
-- "I fold. Can we start a new hand?" → "Fold accepted, that one goes to me for
-  40 chips! Cards are dealt for hand two…" (right: the uncalled 40 goes back).
-- Session `completed`, `ended_by_api`, 198 s billed.
+- `npx vitest run apps/poker-table`: 181 tests.
+  - The engine, kept from the port: the seven golden hands and parity cases,
+    the hand evaluator, all-ins, split pots, the decider, the parser's live
+    phrasings and the rules text.
+  - The tools against the API limits (names, descriptions, schemas, modes,
+    timeouts, 4,000-character instructions naming every tool, the 3,858
+    state, the rules note), and no result or state ever naming Dex's live cards.
+  - The table through `play_move`: questions, hedges and gibberish never move
+    chips; the host's wording may differ but the move must be the player's;
+    a bet never lands twice (repeat calls, a tap plus the same words, a late
+    duplicate on the next street); Dex's turns; the session tally.
+  - The safety net's phrases, moves excluded.
+  - The screens, rendered: the front door, the felt (Dex's cards face down
+    until a showdown), the moves and the sizer, between hands, paused, the
+    match summary, the rules sheet.
+  - The page and the server together, in memory (`page/App.test.tsx`): a
+    spoken move and Dex's reply in one result, a tap plus the same move said
+    aloud landing once (proved by mutation: without the 1.5 s dating it plays
+    a check on the flop), an invented move refused, a typed move, the safety
+    net dealing (and never playing a move), the chart and the other tools.
+- `npx tsc --noEmit`: clean for this app.
+- Live: not yet run with this design.

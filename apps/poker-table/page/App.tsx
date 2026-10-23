@@ -1,20 +1,37 @@
-// Poker Table: the avatar sits opposite; the server owns the table, reads the
-// player's moves and plays the opponent's. The page shows the masked view,
-// keeps the avatar's state in step with it, passes on what happened as
-// events, and asks the server to play the opponent whenever the action is on it.
+// Blindside: heads-up hold'em against Dex. Dex calls the table's tools (the
+// player's move, a deal, a rematch, their cards, the rankings chart) and
+// speaks from the results. The page answers those calls by asking the server
+// that owns the cards, plays Dex's own turns through the server's decider,
+// keeps Dex's picture of the table current, and tells him about buttons.
+//
+// The page also keeps the player's words, each tagged with the table as it
+// stood when it was said: the server plays a move only when those words
+// contain it, so an invented move never lands and a bet never lands twice.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AvatarStage, Composer, Transcript, useAvatar } from '../../../src/kit/index.ts';
-import { NOTES, say, tableState } from '../engine/director.ts';
-import type { Intent, Outcome, TableView } from '../engine/types.ts';
-import { PokerGame } from './PokerGame.tsx';
-import './poker.css';
+import { CallControls, ChatPanel, useAvatar, useToolNet, type ToolCall } from '../../../src/kit/index.ts';
+import { HOST, pressed, RULES_NOTE, said, speak, tableState, type Line } from '../engine/director.ts';
+import { mustDo } from '../engine/judge.ts';
+import type { Heard, Intent, TableView } from '../engine/types.ts';
+import { Controls, type Finished } from './Controls.tsx';
+import { Felt } from './Felt.tsx';
+import { HowToPlay } from './HowToPlay.tsx';
+import { Lobby, Logo } from './Lobby.tsx';
+import { isSoundMuted, primeAudio, setSoundMuted, sounds } from './sounds.ts';
+import './blindside.css';
 
 const API = '/api/apps/poker-table';
-const OPPONENT = 'Opponent';
-/** A beat before the opponent acts, so the player sees their own move land first. */
-const OPPONENT_BEAT_MS = 700;
-/** The longest the opponent's move waits for the avatar to stop speaking. */
-const HOLD_FOR_SPEECH_MS = 6000;
+/** A beat before Dex acts, so the player sees their own move land first. */
+const BEAT_MS = 700;
+/** How long a move waits for the player's words to reach the page: a tool call can beat the transcript. */
+const HEAR_WAIT_MS = 4000;
+/** A recognised line reaches the page about this long after the words began; it speaks for the table as it was then. */
+const SPOKEN_LAG_MS = 1500;
+/** A turn of Dex's left unplayed this long (a failed request, a call that just came back) is played by the page. */
+const STUCK_MS = 3000;
+
+/** What the server answers for any action. */
+interface Answer { view: TableView; changed: boolean; line?: Line; message?: string; unbacked?: boolean }
+interface Done { text: string; changed: boolean; view: TableView | null }
 
 async function post<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) });
@@ -22,115 +39,312 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
   return res.json();
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+async function until(ready: () => boolean, ms: number) {
+  const end = Date.now() + ms;
+  while (!ready() && Date.now() < end) await sleep(100);
+}
+
 export function App() {
   const [view, setView] = useState<TableView | null>(null);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
-  const [retry, setRetry] = useState(0);
-  const table = useRef<string | null>(null);
-  const sentState = useRef('');
-  const opponentAskedAt = useRef(-1);   // the view seq the opponent was last asked to play on
-  const turnSince = useRef({ seq: -1, at: 0 });   // when the action landed on the opponent
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [history, setHistory] = useState<Finished[]>([]);
+  const [muted, setMuted] = useState(() => isSoundMuted());
+  const [kick, setKick] = useState(0);
+  const tableId = useRef<string | null>(null);
+  const viewRef = useRef<TableView | null>(null);
+  const seqLog = useRef<{ seq: number; at: number }[]>([]);
+  const heard = useRef<(Heard & { at: number })[]>([]);
+  const heardCount = useRef(0);
+  const answers = useRef(new Map<string, Promise<string>>());
+  const dexPlaying = useRef(0);
+  const hostMet = useRef(false);   // a call went live, so the opening has been said
 
-  const avatar = useAvatar('poker-table', {
-    // The avatar hears the player too, and has already started its own reply
-    // by the time this arrives; the table's ruling follows as an event (the
-    // standing notes tell it to wait for that).
-    onUserSaid: (text, how) => { if (how === 'spoken') void act({ text, how: 'spoken' }); },
-  });
+  // The table as the server last answered it. Seqs only grow at one table;
+  // a late answer about an older table state is not drawn over a newer one.
+  const show = useCallback((next: TableView, note?: string) => {
+    const now = viewRef.current;
+    if (now && next.seq < now.seq) return;
+    viewRef.current = next;
+    const log = seqLog.current;
+    if (log[log.length - 1]?.seq !== next.seq) log.push({ seq: next.seq, at: Date.now() });
+    if (log.length > 200) log.splice(0, log.length - 200);
+    setView(next);
+    setMessage(note ?? '');
+  }, []);
 
-  const show = useCallback((outcome: Outcome) => {
-    setView(outcome.view);
-    if (outcome.handled) setMessage(outcome.message ?? '');
-    // State first, then the event: what the avatar says about it is grounded in the table.
-    const state = tableState(outcome.view);
-    if (state !== sentState.current) {
-      sentState.current = state;
-      avatar.state(state);
-    }
-    if (outcome.event) avatar.event(outcome.event, outcome.ttl ?? 20);
-  }, [avatar.state, avatar.event]);
+  /** The player's words, tagged with the table's seq when they were said. */
+  const hear = (text: string, how: 'spoken' | 'typed') => {
+    const now = Date.now();
+    const at = now - (how === 'spoken' ? SPOKEN_LAG_MS : 0);
+    const log = seqLog.current;
+    let seq = -1;
+    for (let i = log.length - 1; i >= 0; i--) if (log[i].at <= at) { seq = log[i].seq; break; }
+    heard.current = [...heard.current.filter((h) => now - h.at < 90_000).slice(-11), { text, seq, at: now }];
+    heardCount.current += 1;
+  };
+  const heardSoFar = (): Heard[] => heard.current.map(({ text, seq }) => ({ text, seq }));
 
-  async function act(body: { intent?: Intent; text?: string; how?: 'spoken' | 'typed' }): Promise<Outcome | null> {
-    if (!table.current) return null;
-    if (body.intent) setBusy(true);
+  /** Dex's turns while the action is his: each a server decision, drawn as it lands. */
+  const dexTurns = useCallback(async (): Promise<Line[]> => {
+    const lines: Line[] = [];
+    dexPlaying.current += 1;
     try {
-      const outcome = await post<Outcome>(`/tables/${table.current}/act`, body);
-      if (outcome.handled) show(outcome);
-      return outcome;
+      for (let i = 0; i < 4; i++) {
+        const id = tableId.current;
+        const v = viewRef.current;
+        if (!id || !v || v.phase !== 'playing' || v.action_to !== 'agent') break;
+        await sleep(BEAT_MS);
+        const res = await post<Answer>(`/tables/${id}/opponent`, { again: lines.length > 0 }).catch((err) => {
+          setKick((k) => k + 1);   // the stuck-turn check tries again
+          throw err;
+        });
+        if (tableId.current !== id) break;
+        show(res.view);
+        if (!res.line) break;   // not his turn after all, or another request played it
+        lines.push(res.line);
+      }
+    } finally {
+      dexPlaying.current -= 1;
+    }
+    return lines;
+  }, [show]);
+
+  /** The player's move, as Dex heard it: played only if their own words carry it. */
+  const playMove = async (id: string, words: string): Promise<Done> => {
+    const started = Date.now();
+    let res = await post<Answer>(`/tables/${id}/move`, { words, heard: heardSoFar() });
+    while (res.unbacked && Date.now() - started < HEAR_WAIT_MS) {
+      const seen = heardCount.current;
+      await until(() => heardCount.current > seen, HEAR_WAIT_MS - (Date.now() - started));
+      if (heardCount.current === seen) break;
+      res = await post<Answer>(`/tables/${id}/move`, { words, heard: heardSoFar() });
+    }
+    show(res.view, res.message);
+    const more = res.changed ? await dexTurns().catch(() => []) : [];
+    return { text: speak([res.line, ...more]), changed: res.changed, view: res.view };
+  };
+
+  /** One of Dex's tools, run the way his call runs it (the safety net runs them the same way). */
+  const act = async ({ name, arguments: args }: ToolCall): Promise<Done> => {
+    if (name === 'show_hand_rankings') {
+      setRulesOpen(true);
+      return { text: 'The hand rankings are open on their screen.', changed: false, view: viewRef.current };
+    }
+    const id = tableId.current;
+    if (!id) throw new Error('the cards are still being shuffled; try again in a moment');
+    if (name === 'play_move') return playMove(id, String(args?.words ?? ''));
+    const res = await post<Answer>(`/tables/${id}/tool`, { name });
+    show(res.view, res.message);
+    const more = res.changed ? await dexTurns().catch(() => []) : [];
+    return { text: speak([res.line, ...more]), changed: res.changed, view: res.view };
+  };
+  const actRef = useRef(act);
+  actRef.current = act;
+
+  // Dex's tool calls. The same call delivered twice is answered once.
+  const onToolCall = useCallback((call: ToolCall): Promise<string> => {
+    let answer = answers.current.get(call.id);
+    if (!answer) {
+      answer = actRef.current(call).then((done) => done.text);
+      answers.current.set(call.id, answer);
+      if (answers.current.size > 100) answers.current.delete(answers.current.keys().next().value!);
+    }
+    return answer;
+  }, []);
+
+  // If Dex says "new hand!" without dealing it, the table deals and tells him.
+  // Only for what is safe twice: never a move.
+  const net = useToolNet({
+    match: (text) => { const name = mustDo(text); return name ? { id: `net-${Date.now()}`, name, arguments: {} } : null; },
+    run: async (call) => {
+      const done = await actRef.current(call);
+      // Already done another way (a button dealt it, the match is still on): nothing to tell him.
+      if (call.name === 'read_my_cards' ? done.view?.phase !== 'playing' : !done.changed) throw new Error(`${call.name}: nothing to do`);
+      return done.text;
+    },
+    avatar: () => avatarRef.current!,
+  });
+  const avatar = useAvatar('poker-table', {
+    onToolCall: net.watch(onToolCall),
+    onUserSaid: (text, how) => { hear(text, how); net.heard(text); },
+  });
+  const avatarRef = useRef(avatar);
+  avatarRef.current = avatar;
+  const live = avatar.phase === 'live';
+
+  // A button acts at once; Dex cannot see the screen, so he is told, with his own answer if it is his turn.
+  async function press(intent: Intent, label: string) {
+    const id = tableId.current;
+    if (!id || busy) return;
+    primeAudio();
+    setBusy(true);
+    try {
+      if (intent.kind === 'deal' || intent.kind === 'restart') {
+        // A deal by button counts as the deal the player asked for out loud.
+        void net.watch(async () => '')({ id: `button-${Date.now()}`, name: intent.kind === 'deal' ? 'deal_hand' : 'new_match', arguments: {} });
+      }
+      const res = await post<Answer>(`/tables/${id}/act`, { intent });
+      show(res.view, res.message);
+      if (!res.changed) return;
+      const more = await dexTurns().catch(() => []);
+      avatar.event(pressed(label, speak([res.line, ...more])), 30);
     } catch (err) {
       console.warn(err);
-      return null;
+      setMessage('That didn’t reach the table. Try again.');
     } finally {
-      if (body.intent) setBusy(false);
+      setBusy(false);
     }
   }
 
-  // The table is dealt while the avatar is on its way; a second session at the same table carries on.
+  // The table is dealt while Dex is on his way. A later call at the same table carries on.
   useEffect(() => {
+    if (avatar.phase === 'live') hostMet.current = true;
     if (avatar.phase !== 'starting') return;
-    for (const note of NOTES) avatar.note(note);
-    if (table.current) {
-      avatar.event(say.resume(), 30);
+    avatar.note(RULES_NOTE);
+    const now = viewRef.current;
+    if (tableId.current && now) {
+      // A call that never went live still has the opening waiting to be said.
+      if (hostMet.current) avatar.event(speak([said.resume(now)]), 60);
       return;
     }
-    void post<{ id: string; outcome: Outcome }>('/tables').then(({ id, outcome }) => {
-      table.current = id;
-      show(outcome);
-    }).catch((err) => setMessage(`The table could not be set up (${(err as Error).message}).`));
+    void post<{ id: string; view: TableView; opening: string }>('/tables').then(({ id, view: first, opening }) => {
+      tableId.current = id;
+      viewRef.current = null;
+      seqLog.current = [];
+      heard.current = [];
+      show(first);
+      avatar.event(opening, 60);
+    }).catch((err) => {
+      console.warn(err);
+      setMessage('The table could not be set up. End the call and try again in a moment.');
+    });
   }, [avatar.phase]);
 
-  // The opponent plays whenever the action is on it, once the avatar is there
-  // to talk about it. While the avatar is still speaking (acknowledging the
-  // player's move, say) its move waits, up to a cap: an event that arrives on
-  // a busy floor can expire unsaid, and then the chips move with no word why.
-  useEffect(() => {
-    if (!view || !table.current || avatar.phase !== 'live') return;
-    if (view.phase !== 'playing' || view.action_to !== 'agent' || opponentAskedAt.current === view.seq) return;
-    const seq = view.seq;
-    if (turnSince.current.seq !== seq) turnSince.current = { seq, at: Date.now() };
-    const waited = Date.now() - turnSince.current.at;
-    if (avatar.speaking && waited < HOLD_FOR_SPEECH_MS) {
-      const recheck = setTimeout(() => setRetry((n) => n + 1), HOLD_FOR_SPEECH_MS - waited);
-      return () => clearTimeout(recheck);
-    }
-    const timer = setTimeout(() => {
-      opponentAskedAt.current = seq;
-      post<Outcome>(`/tables/${table.current}/opponent`)
-        .then((outcome) => { if (outcome.handled || outcome.view.seq !== seq) show(outcome); })
-        .catch((err) => {
-          console.warn(err);
-          opponentAskedAt.current = -1;
-          setTimeout(() => setRetry((n) => n + 1), 2000);
-        });
-    }, OPPONENT_BEAT_MS);
-    return () => clearTimeout(timer);
-  }, [view, avatar.phase, avatar.speaking, retry]);
+  // Dex's picture of the table follows the table.
+  useEffect(() => { if (view) avatar.state(tableState(view)); }, [view]);
 
-  // A typed line is read by the table first; only what isn't a table action goes to the avatar as a turn.
-  const onTyped = (text: string) => {
-    void act({ text, how: 'typed' }).then((outcome) => {
-      if (outcome?.handled) avatar.record(text);
-      else avatar.say(text);
+  // A turn of Dex's that nothing is playing (a request failed, or the call came back mid-hand).
+  useEffect(() => {
+    if (!view || !live || view.phase !== 'playing' || view.action_to !== 'agent') return;
+    const seq = view.seq;
+    const timer = setTimeout(() => {
+      const now = viewRef.current;
+      if (dexPlaying.current > 0 || now?.seq !== seq || now.action_to !== 'agent') return;
+      void dexTurns().then((lines) => { if (lines.length) avatar.event(speak(lines), 30); }).catch((err) => console.warn(err));
+    }, STUCK_MS);
+    return () => clearTimeout(timer);
+  }, [view, live, kick]);
+
+  // The match's hands, for the summary at the end.
+  useEffect(() => {
+    if (!view) return;
+    const played = view.session.hands_played;
+    setHistory((h) => {
+      if (played < h.length) return [];
+      if (view.winner && view.phase !== 'playing' && played > h.length) return [...h, { hand: played, winner: view.winner }];
+      return h;
     });
+  }, [view]);
+
+  useTableSounds(view);
+
+  const closeRules = useCallback(() => setRulesOpen(false), []);
+  const toggleSound = () => {
+    const next = !muted;
+    setMuted(next);
+    setSoundMuted(next);
+    if (!next) { primeAudio(); sounds.buttonTap(); }
+  };
+  const fresh = () => {
+    tableId.current = null;
+    viewRef.current = null;
+    hostMet.current = false;
+    setView(null);
+    setHistory([]);
+    setMessage('');
+    void avatar.start({ mic: avatar.micOn });
   };
 
+  if (avatar.phase === 'idle') return <Lobby onPlay={(mic) => void avatar.start({ mic })} />;
+
+  const hand = view ? view.session.hands_played + (view.phase === 'playing' ? 1 : 0) : 0;
+  const up = view?.session.chips_up_user ?? 0;
+  const left = live && avatar.secondsLeft !== null && avatar.secondsLeft < 180 ? avatar.secondsLeft : null;
+
   return (
-    <div className="kit-layout poker-layout">
-      <div className="kit-side">
-        <AvatarStage
-          avatar={avatar} name="Your opponent" startLabel="Sit down"
-          lobby={<><div className="kit-title">Poker Table</div><div className="kit-detail">Heads-up no-limit hold'em: 1,000 chips each, blinds 10/20. Say or type your moves ("call", "raise to 60", "I fold"), or use the buttons.</div></>}
-        />
-        <Composer avatar={avatar} placeholder='Type a move ("raise to 60") or ask anything…' onSubmit={(t) => { onTyped(t); }} />
-        <Transcript avatar={avatar} names={{ avatar: OPPONENT }} />
-      </div>
-      <div className="poker-shell">
-        <PokerGame
-          view={view} opponentName={OPPONENT} message={message} live={avatar.phase === 'live'} busy={busy}
-          onIntent={(intent) => void act({ intent })}
-        />
-      </div>
+    <div className="bs-app">
+      <header className="bs-top">
+        <Logo />
+        {view && hand > 0 && (
+          <p className="bs-match">
+            <span>Hand <b>{hand}</b></span>
+            <span className={up > 0 ? 'is-up' : up < 0 ? 'is-down' : ''}>
+              You <b>{up > 0 ? '+' : up < 0 ? '−' : '±'}{Math.abs(up).toLocaleString('en-US')}</b>
+            </span>
+          </p>
+        )}
+        <div className="bs-tools">
+          {left !== null && <span className="bs-clock" role="timer">Table closes in {Math.floor(left / 60)}:{String(left % 60).padStart(2, '0')}</span>}
+          <button type="button" className="bs-tool" onClick={() => setRulesOpen(true)}>Rules</button>
+          <button type="button" className="bs-icon-btn" onClick={toggleSound} aria-pressed={!muted} aria-label={muted ? 'Turn table sounds on' : 'Turn table sounds off'} title={muted ? 'Table sounds off' : 'Table sounds on'}>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M11 5 6 9H3v6h3l5 4z" />
+              {muted ? <path d="M22 9l-6 6M16 9l6 6" /> : <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />}
+            </svg>
+          </button>
+          <CallControls avatar={avatar} className="bs-call" />
+        </div>
+      </header>
+
+      <main className="bs-main">
+        <section className="bs-stage" aria-label="The table">
+          <Felt view={view} avatar={avatar} message={message} />
+        </section>
+
+        <aside className="bs-side">
+          <Controls
+            view={view} phase={avatar.phase} detail={avatar.detail} busy={busy} history={history}
+            onMove={(intent, label) => void press(intent, label)}
+            onCallAgain={() => void avatar.start({ mic: avatar.micOn })}
+            onFresh={fresh}
+          />
+          <section className="bs-talk" aria-label={`Table talk with ${HOST}`}>
+            <h2 className="bs-talk-head">Table talk</h2>
+            <ChatPanel
+              avatar={avatar} name={HOST} className="bs-chat" placeholder="Type a move (“raise to 60”) or a word for Dex…"
+              empty={<>Say your move out loud, type it here, or tap it above.</>}
+            />
+          </section>
+        </aside>
+      </main>
+
+      {rulesOpen && <HowToPlay onClose={closeRules} />}
     </div>
   );
+}
+
+/** The table's sounds, from what changed between two views. They are off until the player turns them on. */
+function useTableSounds(view: TableView | null) {
+  const prevRef = useRef<TableView | null>(null);
+  useEffect(() => {
+    const prev = prevRef.current;
+    prevRef.current = view;
+    if (!view || !prev || view.seq === prev.seq) return;
+    const action = view.last_action;
+    if (action && JSON.stringify(action) !== JSON.stringify(prev.last_action)) {
+      if (action.kind === 'deal') sounds.deal();
+      else if (action.kind === 'fold') sounds.fold();
+      else if (action.kind === 'check') sounds.check();
+      else if (action.kind === 'call') sounds.call();
+      else if (action.kind === 'raise') (prev.current_bet === 0 ? sounds.bet : sounds.raise)();
+    }
+    if (view.board.length > prev.board.length) {
+      const delay = action?.kind === 'fold' ? 80 : 280;
+      for (let i = 0; i < Math.min(3, view.board.length - prev.board.length); i++) setTimeout(() => sounds.cardFlip(), delay + i * 140);
+    }
+    if (view.winner && !prev.winner) setTimeout(() => (view.winner?.who === 'user' ? sounds.win() : sounds.lose()), 400);
+  }, [view]);
 }

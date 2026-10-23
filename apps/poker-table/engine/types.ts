@@ -79,15 +79,12 @@ export interface TableView {
   session: SessionLine;
 }
 
-/** What one input did to the table, and what the avatar should hear about it. */
-export interface Outcome {
-  view: TableView;
-  /** Whether the input was a table action; a typed line that wasn't goes to the avatar as a turn. */
-  handled: boolean;
-  /** For the avatar, in its own words. */
-  event?: string;
-  /** How long the event stays worth saying. */
-  ttl?: number;
-  /** A refusal or a note for the table's message line. */
-  message?: string;
+/**
+ * A line the player said (as recognised) or typed, as the page heard it,
+ * tagged with the table's `seq` at the moment it was said: words only ever
+ * speak for the hand as it stood when they were said.
+ */
+export interface Heard {
+  text: string;
+  seq: number;
 }

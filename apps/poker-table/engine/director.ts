@@ -1,32 +1,81 @@
-// What the avatar is told, and when. The table decides everything; the avatar
-// sits opposite and talks. It never sees its own cards (the server keeps them
-// and plays its moves) and it is never told the player's cards unless they
-// ask, so nothing here can leak a hand: the state is built from the public
-// view, and the events name only what the table already did.
+// Blindside's host: what Dex is told, and how he acts. The table decides
+// everything; Dex sits across the felt and talks. He never sees his own cards
+// (the server keeps them and the decider plays them) and is told the player's
+// only when they ask, so nothing here can leak a hand: the state is built from
+// the public view, and every result names only what the table already did.
 //
 // Condensed from the original's `instructions.py` (4,250 characters of table
-// rules) and the cues in `moves.py`, `tools.py`, `table.py` and `state.py`.
+// rules) and the cues in `moves.py`, `tools.py`, `table.py` and `state.py`;
+// the rules that came from live failures are kept, word for word where they
+// still apply.
+import type { AppTool } from '../../../server/app-server.ts';
 import { spokenCard, spokenCards } from './cards.ts';
+import type { ParsedMove } from './judge.ts';
 import { actions, basics, blinds, rankings, winning } from './rules.ts';
 import { BIG_BLIND, SMALL_BLIND, STARTING_STACK, type LastAction, type Seat, type TableView } from './types.ts';
 
-/** Standing rules, sent once as notes (each at most 2,000 characters). */
-export const NOTES = [
-  `You are playing heads-up no-limit Texas Hold'em against the person you are talking to: you are their opponent at this table, not a commentator. Needling them is part of heads-up poker; do it in your own voice, never personal, never cruel. Default to one sharp sentence under 18 words; teach longer only when asked how the game works. Output only what you say aloud: no labels, no stage directions.
-The table (the app) owns the cards, the chips and the rules, and deals by itself: never ask them to deal. Your state is the live table; treat it as the truth. Every chip figure you say (pot, stacks, bets, the minimum raise) must be copied from it. If a number is not there, you do not know it: say so. Never add up, estimate, or carry a figure over from earlier.
-You never see your own two cards: the table keeps them and plays your moves for you. Never claim, announce or preview an action of your own ("I'll check", "I raise you"): while the action is on you, say nothing about what you will do. The app tells you the move the table played once it has landed; only then comment on it. If they ask what you hold, bluff or deflect: hands are shown at a showdown. If asked whether you are real: you are an AI avatar, created by Atmee.`,
-  `The table reads the player's words itself. When they announce a move ("I call", "raise to 40", "I fold", "check", "all in"), you cannot know yet whether it landed: say only a few words like "Let's see" and stop. The app then tells you what the table did: applied, refused with the reason, or could not read. That is the truth about their move. NEVER acknowledge, praise or needle a move the app has not reported: saying "you're checking? cute" while their check was refused and the bet still stands is the worst thing you can do at this table. If the table could not read an action, ask whether they mean fold, check, call or raise to a number. Never guess an action or an amount for them, and never round their number up to the minimum: those are their chips. The same for a new hand ("deal", "another hand"): a few words, then wait for the app.
-"What are my cards?": say you will look, and wait; the app reads their cards to you. Those are THEIR cards and they are entitled to them; card secrecy is about yours.
-"Who's winning?", "how many hands have we played?": answer only from the session line in your state. A hand counts once it finishes; a live bet is not a result.`,
-  `Assume they have never played. Anything about how poker works ("how do I play", "what does raise mean", "what are the blinds") you answer from these words, keeping every number, never from memory. Asked "how do I play?", give the shape of a hand, the four moves and what beats what, not the buttons they can already see.
+export const HOST = 'Dex';
+
+/** Dex's rules: the session's tool instructions (at most 4,000 characters). */
+export const INSTRUCTIONS = `You are Dex, the player's opponent at Blindside: heads-up no-limit Texas Hold'em, ${STARTING_STACK} chips each, blinds ${SMALL_BLIND} and ${BIG_BLIND}, played until one stack is empty. You sit across the felt and talk: sharp, dry, a little playful. Needle, never personally, never cruelly. One short spoken line, two at most; teach longer only when asked. Say only what you would say aloud.
+The table owns the cards, the chips and the rules; you reach it only through its tools. The player's screen changes only when a tool runs: saying "you're in", "new hand" or "I raise" without one changes nothing and misleads them.
+- Their move: whenever they say or type a move of their own (fold, check, call, bet or raise to an amount, all in), call play_move with their words exactly as they said them, before reacting. Only its result tells you whether it landed. Never pick, round or fix an amount for them. If they give only a number, ask for the whole move ("raise to 60"). A question about a move ("should I fold?") is not a move.
+- Your own moves are played by the table, never chosen by you. Never announce, preview or promise one ("I'll call", "I check"). A result tells you the move the table played for you; only then name it, as done.
+- "Deal", "next hand", or a yes when you offer one: call deal_hand. "Rematch", "new match" once the match is over: call new_match, only when they ask for one; never on your own.
+- "What are my cards?": call read_my_cards and read them back. Those are THEIR cards and they are entitled to them. You never see your own: asked what you hold, bluff or deflect; hands are shown at a showdown.
+- "What beats what?", "show me the hand rankings": call show_hand_rankings (it opens the chart on their screen) and answer from the table's rules in your context.
+- The pot, the stacks, the board, whose turn it is, the score: answer from the live table in your context, no tool needed. Every chip figure you say is copied from the live table or a tool result; never add up, estimate or carry one over. If a number is not there, you do not know it.
+- Never invent an outcome (a ruling, a card, a winner, a move of yours): call the tool even when you think you know.
+- When the table refuses a move or cannot read it, say so and ask what they want to do. Never acknowledge, praise or needle a move the table has not played: "you're checking? cute" over a refused check is the worst thing you can do here.
+- When they press a button on screen, the table tells you what happened; carry on from that.
+- The table deals the first hand itself: never ask them to deal it.
+- Asked whether you are real: you are an AI, made by Atmee.`;
+
+/** The rules, for teaching: a standing note (at most 2,000 characters), the same text as the How to play sheet. */
+export const RULES_NOTE = `The rules, for teaching; assume they have never played. Answer anything about how poker works from these words, keeping every number. Asked "how do I play?", give the shape of a hand, the four moves and what beats what.
 ${basics()}
-${actions()}`,
-  `More of the rules, for the same questions ("what beats what", "what's a flush", "how does this end"). Say all ten rankings when asked what beats what, in this order:
+${actions()}
 ${rankings()}
 ${blinds()}
-${winning()}
-The How to play button on the table lists the hand rankings, if they want to look.`,
+${winning()}`;
+
+const noArgs = { type: 'object', properties: {}, additionalProperties: false };
+
+/** The table's tools. Each is answered by the page, which asks the server that owns the cards. */
+export const TOOLS: AppTool[] = [
+  {
+    type: 'function', name: 'play_move',
+    description: "Plays the player's own move at the table: fold, check, call, bet or raise to an amount, or all in. Call it whenever they say or type a move, before reacting, with their words exactly. The table checks the move against what they said and the rules, plays it or refuses it, then plays your move if the action is yours, and tells you what happened.",
+    parameters: {
+      type: 'object',
+      properties: { words: { type: 'string', minLength: 1, maxLength: 160, description: 'The player\'s move in their own words, exactly as they said or typed it: "raise to 60", "I call", "all in".' } },
+      required: ['words'], additionalProperties: false,
+    },
+    'x-atmee': { mode: 'await', timeoutSeconds: 20 },
+  },
+  {
+    type: 'function', name: 'deal_hand',
+    description: 'Deals the next hand when the player asks for one ("deal", "next hand", "another one"), then plays your move if you act first. It deals nothing while a hand is in play.',
+    parameters: noArgs, 'x-atmee': { mode: 'await', timeoutSeconds: 15 },
+  },
+  {
+    type: 'function', name: 'new_match',
+    description: 'Starts a rematch: both stacks back to 1,000 and a new first hand. Only once the match is over, and only when the player asks for one; never on your own.',
+    parameters: noArgs, 'x-atmee': { mode: 'await', timeoutSeconds: 15 },
+  },
+  {
+    type: 'function', name: 'read_my_cards',
+    description: "Tells you the player's own two hole cards, to read back to them. Call it when they ask what their cards are.",
+    parameters: noArgs, 'x-atmee': { mode: 'await', timeoutSeconds: 8 },
+  },
+  {
+    type: 'function', name: 'show_hand_rankings',
+    description: "Opens the hand-rankings chart on the player's screen. Call it when they ask what beats what or want to see the rankings.",
+    parameters: noArgs, 'x-atmee': { mode: 'notify' },
+  },
 ];
+
+// ---- the live table, as Dex's state ---------------------------------------------
 
 const name = (who: Seat | 'table') => (who === 'user' ? 'they' : who === 'agent' ? 'you' : 'the table');
 
@@ -38,15 +87,14 @@ export function describeAction(a: LastAction | null): string {
   return `${name(a.by)} ${verb}`;
 }
 
-/** The winner line as the avatar should say it, from its own seat. */
+/** The winner line as Dex should say it, from his own seat. */
 export function resultLine(v: TableView): string {
   const w = v.winner;
   if (!w) return '';
   const rank = w.hand_rank ? ` with ${w.hand_rank}` : '';
   if (w.who === 'split') return `the pot of ${w.amount} was split: both hands were ${w.hand_rank ?? 'equal'}`;
   const who = w.who === 'user' ? 'they won' : 'you won';
-  const how = v.revealed_hands ? `${who} ${w.amount}${rank}` : `${who} ${w.amount} when ${w.who === 'user' ? 'you' : 'they'} folded`;
-  return how;
+  return v.revealed_hands ? `${who} ${w.amount}${rank}` : `${who} ${w.amount} when ${w.who === 'user' ? 'you' : 'they'} folded`;
 }
 
 function showdownLine(v: TableView): string {
@@ -78,31 +126,37 @@ export function chipFacts(v: TableView): string {
   const raise = v.action_to && v.valid_actions.includes('raise') ? `, minimum raise-to=${v.min_raise_to}` : '';
   return (
     `Authoritative chip figures, from the table: pot=${v.pot}, their stack=${v.players.user.stack}, your stack=${v.players.agent.stack}, ${owe}${raise}, blinds=${SMALL_BLIND}/${BIG_BLIND}. ` +
-    'NEVER state a chip, pot or stack number that is not in this line, and never do arithmetic on one — if it is not here, do not say it.'
+    'NEVER state a chip, pot or stack number that is not in this line or a tool result, and never do arithmetic on one.'
   );
+}
+
+/** Who is ahead, from the hands that have finished. */
+export function standing(v: TableView): string {
+  const up = v.session.chips_up_user;
+  return up > 0 ? `they are up ${up} chips` : up < 0 ? `they are down ${-up} chips` : 'they are exactly even';
 }
 
 function sessionLine(v: TableView): string {
   const s = v.session;
   if (!s.hands_played) return 'Session: no hand has finished yet, so nobody is ahead: do not read a live bet or a blind as a result.';
-  const standing = s.chips_up_user > 0 ? `they are up ${s.chips_up_user} chips` : s.chips_up_user < 0 ? `they are down ${-s.chips_up_user} chips` : 'they are exactly even';
-  return `Session: ${s.hands_played} hand${s.hands_played === 1 ? '' : 's'} finished; you have won ${s.hands_won_agent}, they have won ${s.hands_won_user}, and ${standing}.`;
+  return `Session: ${s.hands_played} hand${s.hands_played === 1 ? '' : 's'} finished; you have won ${s.hands_won_agent}, they have won ${s.hands_won_user}, and ${standing(v)}.`;
 }
 
-/** The live table, as the avatar's state. Never a hole card before a showdown, and never the player's own cards. */
+const handNumber = (v: TableView) => v.session.hands_played + (v.phase === 'playing' ? 1 : 0);
+
+/** The live table, as Dex's state. Never a hole card before a showdown, and never the player's own cards. */
 export function tableState(v: TableView): string {
-  const parts = [`Heads-up hold'em, the live table. "They" are the player; "you" are their opponent; ${STARTING_STACK} chips each to start.`];
+  const parts = [`Blindside, the live table (heads-up hold'em). "They" are the player; "you" are Dex, their opponent; ${STARTING_STACK} chips each to start.`];
   if (v.phase === 'lobby') {
     parts.push('No hand is dealt yet: the cards are coming.');
   } else {
-    const hand = v.session.hands_played + (v.phase === 'playing' ? 1 : 0);
     const button = v.button === 'user' ? 'them (they posted the small blind and act first before the flop)' : 'you (you posted the small blind and act first before the flop)';
-    parts.push(`Hand ${hand}. The dealer button is on ${button}.`);
+    parts.push(`Hand ${handNumber(v)}. The dealer button is on ${button}.`);
     if (v.phase === 'playing') {
       parts.push(`Street: ${v.street?.toLowerCase()}. Board: ${v.board.length ? spokenCards(v.board) : 'no cards yet'}.`);
       parts.push(`Pot ${v.pot}. Their stack ${v.players.user.stack}, bet ${v.players.user.bet}; your stack ${v.players.agent.stack}, bet ${v.players.agent.bet}.`);
       parts.push(`Last action: ${describeAction(v.last_action)}.`);
-      if (v.action_to === 'user') parts.push(`Action is on them: they can ${actionWords(v)}.`);
+      if (v.action_to === 'user') parts.push(`Action is on them: they can ${actionWords(v)}. Their move reaches the table only through play_move.`);
       // Said from the state, not left to good intentions: live, the avatar
       // answered a call with "My turn now. I'll check." while the table had
       // played raise-to-40 a second earlier. A preview, not a claim, and wrong.
@@ -110,8 +164,8 @@ export function tableState(v: TableView): string {
     } else {
       parts.push(`Board: ${v.board.length ? spokenCards(v.board) : 'none'}. The hand is over: ${resultLine(v)}. ${showdownLine(v)}`);
       parts.push(v.phase === 'game-over'
-        ? `The match is over: ${v.players.user.stack > v.players.agent.stack ? 'they have' : 'you have'} every chip. They can restart the match for a rematch.`
-        : 'Next: they can deal the next hand (the Deal button, or "deal").');
+        ? `The match is over: ${v.players.user.stack > v.players.agent.stack ? 'they have' : 'you have'} every chip. A rematch (new_match) only if they ask for one.`
+        : 'Next: the next hand, when they ask for it (deal_hand) or press Deal.');
     }
   }
   parts.push(chipFacts(v));
@@ -119,48 +173,175 @@ export function tableState(v: TableView): string {
   return parts.join(' ');
 }
 
-const kindWords = (kind: string, amount?: number | null) =>
-  kind === 'all_in' ? 'all-in' : kind === 'raise' && amount !== undefined && amount !== null ? `raise to ${amount}` : kind;
+// ---- what a tool call or a button did, in words Dex speaks from ----------------
 
-/** Event texts: one per outcome, each an instruction about a fact the table already settled. */
-export const say = {
-  start: () =>
-    `A heads-up match starts: ${STARTING_STACK} chips each, blinds ${SMALL_BLIND} and ${BIG_BLIND}, and the first hand is already dealt. Greet the other player in one short line and tell them the cards are out. Do not ask them to deal, and do not describe any cards.`,
-  resume: () =>
-    'You are back at the table with the same player, mid-match; the table is in your state. Say one short line and carry on. Do not describe any cards.',
-  applied: (a: LastAction | null) =>
-    `The table has ALREADY applied their ${a && a.kind !== 'deal' ? kindWords(a.kind, a.amount) : 'move'} — it is done. Acknowledge it in one short in-character line.`,
-  refused: (kind: string, reason: string, v: TableView) => {
-    const range = kind === 'raise' && v.action_to === 'user' && v.valid_actions.includes('raise') ? ` A raise here is to a total from ${v.min_raise_to} to ${v.max_raise_to}.` : '';
-    return `They asked to ${kindWords(kind)} and the table refused it: ${reason}. NOTHING was applied.${range} Say that back in one short line and ask what they want to do; do not pick an amount for them.`;
-  },
-  unclear: (reason: string) =>
-    `The table could not read an action in that — ${reason}. NOTHING was applied and no chips moved. In one short in-character line, ask them whether they mean fold, check, call, or raise to a number. Do NOT guess an action or an amount for them, and do not say they bet.`,
-  dealt: (restart: boolean) =>
-    restart
-      ? `A NEW MATCH: stacks are back to ${STARTING_STACK} each and the first hand is dealt. Say one short line about the rematch. Do not describe any cards — you cannot see theirs.`
-      : 'A NEW HAND IS DEALT. Say one short line about it. Do not describe any cards — you cannot see theirs.',
-  dealRefused: (reason: string) => `They asked for a new hand and the table refused: ${reason}. Say that and nothing more.`,
-  ownCards: (cards: string[]) =>
-    `They asked what their cards are: their two hole cards are ${cards.map(spokenCard).join(' and ')}. Read both back to them exactly as written, in one short in-character line. Do not reveal or invent your own cards, and do not tell them what to do.`,
-  noCards: () => 'They asked what their cards are, but no hand is in play. Say so in one short line and do not name any card.',
-  /**
-   * The line after the table plays the opponent's move. It names the move the
-   * table APPLIED (so the figure is the one that landed), and nothing about the
-   * player's last move: live, a line here that opened "you called" left the
-   * avatar's own raise unsaid, and the player saw the chips move and never heard why.
-   */
-  yourMove: (a: LastAction) => {
-    const move = kindWords(a.kind, a.amount);
-    return `The table just played your ${move}. Say ONE short in-character line naming YOUR OWN ${a.kind}${a.amount !== undefined ? ` (to ${a.amount})` : ''}; state no other chip amount. Do not say you are about to do something: it is done. And say nothing about the opponent's last move: that was answered on its own turn.`;
-  },
-  result: (v: TableView) => {
-    if (!v.winner) return '';
-    const line = `The hand is over: ${resultLine(v)}. ${showdownLine(v)}`;
-    if (v.phase === 'game-over') {
-      const champion = v.players.user.stack > v.players.agent.stack ? 'they have won the match: you have no chips left' : 'you have won the match: they have no chips left';
-      return `${line} That ends it: ${champion}. Say one short line about it and offer a rematch (they can restart the match).`;
+/** One thing the table did: the facts, and how to say them. Several are spoken as one (`speak`). */
+export interface Line {
+  facts: string;
+  cue: string;
+}
+
+/** Lines in order, as one result: every fact, then the last line's cue. */
+export function speak(lines: readonly (Line | null | undefined)[]): string {
+  const said = lines.filter((l): l is Line => Boolean(l));
+  if (!said.length) return '';
+  return [...said.map((l) => l.facts), said[said.length - 1].cue].filter(Boolean).join(' ');
+}
+
+/** A button press, told to Dex: he cannot see the screen. */
+export const pressed = (button: string, outcome: string) => `The player pressed "${button}" on screen. ${outcome}`;
+
+const moveWords = (move: { kind: string; amount?: number | null }) =>
+  move.kind === 'all_in' ? 'go all in' : move.kind === 'raise' ? (move.amount != null ? `raise to ${move.amount}` : 'raise') : move.kind;
+
+/** "their call of 10", "your raise to 60, all in": the move that landed, from the view just before it. */
+function landed(a: LastAction, before: TableView, who: Seat): { noun: string; verb: string } {
+  const seat = before.players[who];
+  const owed = before.action_to === who ? before.to_call : 0;
+  switch (a.kind) {
+    case 'fold': return { noun: 'fold', verb: 'folded' };
+    case 'check': return { noun: 'check', verb: 'checked' };
+    case 'call': {
+      // A call with nothing to call is played as a check, and said as one.
+      if (owed === 0) return { noun: 'check', verb: 'checked' };
+      const paid = Math.min(owed, seat.stack);
+      const allIn = owed >= seat.stack ? ', all in' : '';
+      return { noun: `call of ${paid}${allIn}`, verb: `called ${paid}${allIn}` };
     }
-    return `${line} Say one short line about it, using only the figures on the table. They can deal the next hand.`;
+    case 'raise': {
+      const allIn = before.action_to === who && a.amount === before.max_raise_to ? ', all in' : '';
+      return before.current_bet === 0
+        ? { noun: `bet of ${a.amount}${allIn}`, verb: `bet ${a.amount}${allIn}` }
+        : { noun: `raise to ${a.amount}${allIn}`, verb: `raised to ${a.amount}${allIn}` };
+    }
+    default: return { noun: 'move', verb: 'moved' };
+  }
+}
+
+/** New board cards since `before`, said the way a dealer would. */
+function boardNews(before: TableView, after: TableView): string {
+  const fresh = after.board.slice(before.board.length);
+  if (!fresh.length || after.phase === 'lobby') return '';
+  if (after.phase !== 'playing') return `The board ran out: ${spokenCards(fresh)}.`;
+  if (after.board.length === 3) return `The flop is out: ${spokenCards(fresh)}.`;
+  if (after.board.length === 4) return `The turn is the ${spokenCard(fresh[0])}.`;
+  return `The river is the ${spokenCard(fresh[0])}.`;
+}
+
+function resultFacts(v: TableView): string {
+  const line = `The hand is over: ${resultLine(v)}. ${showdownLine(v)}`;
+  if (v.phase !== 'game-over') return line;
+  const champion = v.players.user.stack > v.players.agent.stack ? 'they have won the match: you have no chips left' : 'you have won the match: they have no chips left';
+  return `${line} That ends it: ${champion}.`;
+}
+
+/** Whose move it is now, or how the hand ended. */
+function nextUp(v: TableView): string {
+  if (v.phase === 'hand-over' || v.phase === 'game-over') return resultFacts(v);
+  if (v.action_to === 'user') return `The action is on them: they can ${actionWords(v)}.`;
+  if (v.action_to === 'agent') return 'The action is on you, and the table is playing your move now.';
+  return '';
+}
+
+const FIGURES = 'Quote no figure that is not here or on the live table.';
+
+function resultCue(v: TableView, mine: boolean): string {
+  const first = mine ? 'Name your own move as done, then say one short in-character line about the hand.' : 'Say one short in-character line about the hand.';
+  if (v.phase === 'game-over') return `${first} Ask whether they want a rematch, and call new_match only if they say so. ${FIGURES}`;
+  return `${first} ${FIGURES} The next hand comes when they ask for it (deal_hand) or press Deal; never deal it yourself.`;
+}
+
+/** The table's outcomes. Each is a fact the table already settled, and how to say it. */
+export const said = {
+  opening: (v: TableView): Line => ({
+    facts: `A heads-up match starts at Blindside: ${STARTING_STACK} chips each, blinds ${SMALL_BLIND} and ${BIG_BLIND}, until one stack is empty. Hand 1 is dealt. ${blindsPosted(v)} ${nextUp(v)}`,
+    cue: 'Welcome them in one or two short lines and tell them whose move it is. Do not describe any cards, and never ask them to deal.',
+  }),
+
+  resume: (v: TableView): Line => ({
+    facts: `The player is back at your table, mid-match: hand ${handNumber(v)}; ${v.session.hands_played ? standing(v) : 'no hand has finished yet'}. ${v.phase === 'playing' ? nextUp(v) : v.phase === 'game-over' ? resultFacts(v) : 'The last hand is over; the next comes when they ask for it.'}`,
+    cue: 'Say one short line to welcome them back and carry on from the live table. Do not describe any cards.',
+  }),
+
+  dealt: (v: TableView, rematch: boolean): Line => ({
+    facts: `${rematch ? `A rematch: both stacks are back to ${STARTING_STACK} and hand 1 is dealt.` : `Hand ${handNumber(v)} is dealt.`} ${blindsPosted(v)} ${nextUp(v)}`,
+    cue: v.action_to === 'agent'
+      ? 'Say a few words about the new hand at most, and nothing about your move: the table is playing it. Do not describe any cards.'
+      : 'Say one short in-character line about the new hand and tell them it is their move. Do not describe any cards: you cannot see theirs.',
+  }),
+
+  /** Their move landed (by voice or by a button). `asked` is what they asked for, when it differs from what was played. */
+  played: (before: TableView, after: TableView, asked?: string): Line => {
+    const a = after.last_action;
+    const move = a && a.by === 'user' ? landed(a, before, 'user').noun : 'move';
+    const courtesy = asked === 'fold' && a?.kind === 'check' ? ' (with nothing to call, a fold is played as a check)' : '';
+    const facts = [`The table played their ${move}${courtesy}.`, boardNews(before, after), nextUp(after)].filter(Boolean).join(' ');
+    if (after.phase !== 'playing') return { facts, cue: resultCue(after, false) };
+    if (after.action_to === 'agent') return { facts, cue: 'React to their move in a few words at most and say nothing about yours: the table is playing it.' };
+    return { facts, cue: `React in one short in-character line and tell them it is their move again. ${FIGURES}` };
   },
+
+  /** The table played Dex's move (the decider's). `again`: a second move in a row, on a new street. */
+  yours: (before: TableView, after: TableView, again = false): Line => {
+    const a = after.last_action!;
+    const facts = [`${again ? 'Then the table played your next move' : 'The table played your move'}: you ${landed(a, before, 'agent').verb}.`, boardNews(before, after), nextUp(after)].filter(Boolean).join(' ');
+    if (after.phase !== 'playing') return { facts, cue: resultCue(after, true) };
+    return { facts, cue: `In one or two short in-character lines: react to their last move if they just made one, then name your own move as done, never as a plan. ${FIGURES}` };
+  },
+
+  refused: (move: { kind: string; amount?: number | null }, reason: string, v: TableView): Line => {
+    const range = (move.kind === 'raise' || move.kind === 'all_in') && v.action_to === 'user' && v.valid_actions.includes('raise') ? ` A raise here is to a total from ${v.min_raise_to} to ${v.max_raise_to}.` : '';
+    return {
+      facts: `They asked to ${moveWords(move)} and the table refused it: ${reason}. NOTHING was applied.${range}`,
+      cue: 'Say that back in one short line and ask what they want to do; never pick an amount for them.',
+    };
+  },
+
+  unclear: (words: string, reason: string): Line => ({
+    facts: `The table could not read a move in "${words}" (${reason}). NOTHING was applied and no chips moved.`,
+    cue: 'Ask them in one short line whether they mean fold, check, call or raise to a number; never guess an action or an amount for them, and do not say they bet.',
+  }),
+
+  /** The move is not in the player's own words at this point in the hand. */
+  unheard: (words: string, heard: readonly string[]): Line => ({
+    facts: `NOTHING was applied: the table did not hear "${words}" from the player at this point in the hand.${heard.length ? ` What it heard from them since the last move: "${heard.join(' ').slice(0, 240)}".` : ' It has heard nothing from them since the last move.'}`,
+    cue: 'If they did mean a move, ask them to say it in full ("raise to 60") or tap it; never treat it as played.',
+  }),
+
+  /** The same move again, with nothing new from the player: it already landed. */
+  repeat: (move: ParsedMove): Line => ({
+    facts: `Their ${moveWords(move) === 'go all in' ? 'all-in' : moveWords(move)} already landed a moment ago: NOTHING more was applied.`,
+    cue: 'Do not treat it as a new move; carry on from the live table.',
+  }),
+
+  handInPlay: (v: TableView): Line => ({
+    facts: `A hand is already in play (hand ${handNumber(v)}): nothing was dealt. ${nextUp(v)}`,
+    cue: 'Tell them in a few words and carry on.',
+  }),
+
+  matchOver: (v: TableView): Line => ({
+    facts: `The match is over: ${v.players.user.stack > v.players.agent.stack ? 'they have' : 'you have'} every chip. Nothing was dealt.`,
+    cue: 'Ask whether they want a rematch; call new_match only if they say so.',
+  }),
+
+  matchOn: (v: TableView): Line => ({
+    facts: `The match is still on (hand ${handNumber(v)}; ${v.session.hands_played ? standing(v) : 'no hand has finished yet'}): a rematch comes only once a stack is empty. Nothing changed.`,
+    cue: 'Tell them in one short line.',
+  }),
+
+  cards: (cards: readonly string[]): Line => ({
+    facts: `Their two hole cards are the ${cards.map(spokenCard).join(' and the ')}.`,
+    cue: 'Read both back to them exactly as written, in one short in-character line. Do not reveal or invent your own cards, and do not tell them what to play.',
+  }),
+
+  noCards: (): Line => ({
+    facts: 'No hand is in play, so they hold no cards right now.',
+    cue: 'Say so in one short line and do not name any card.',
+  }),
 };
+
+function blindsPosted(v: TableView): string {
+  return v.button === 'user'
+    ? `They have the button and posted the small blind (${v.players.user.bet}); you posted the big blind (${v.players.agent.bet}).`
+    : `You have the button and posted the small blind (${v.players.agent.bet}); they posted the big blind (${v.players.user.bet}).`;
+}
