@@ -92,7 +92,7 @@ answer; and a spoken "show me" or scenario choice is no longer narrated twice.
 
 ## Tested
 
-- `npx vitest run apps/bls-tutor`: 550 tests. The engine's own
+- `npx vitest run apps/bls-tutor`: 601 tests. The engine's own
   (scenarios, grading, phases, the review, the emergency watch and its
   suppressions; only the staging tests went, with staging), plus, for every
   step of every drill, a table of the answers people give (`engine/answers.test.ts`:

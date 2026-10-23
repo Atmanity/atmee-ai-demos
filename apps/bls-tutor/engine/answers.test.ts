@@ -11,16 +11,27 @@ import { answerForm, grade } from './tutor.ts';
 
 type Table = Record<string, { right: string[]; wrong: string[] }>;
 
+/**
+ * Every response-and-breathing check: asking, and looking or listening for
+ * breathing, pass; giving breaths in any words fails (the mix-up the step is
+ * there to stop).
+ */
+const CHECK = {
+  right: ['is he ok?', 'is she ok', 'are you ok?', 'are they okay', 'can you hear me?', 'is he alright', 'look for breathing', 'listen to see if she breathes', 'feel for his breath on my cheek', 'is she breathing?'],
+  wrong: ['give him two breaths', 'breathe into his mouth', "I'd breathe for her", 'give her a couple of breaths', 'blow into his mouth', 'breathe for him twice'],
+};
+const withCheck = (rows: { right: string[]; wrong: string[] }) => ({ right: [...rows.right, ...CHECK.right], wrong: [...rows.wrong, ...CHECK.wrong] });
+
 const ANSWERS: Record<string, Table> = {
   adult_cardiac_arrest: {
     scene_safe: {
       right: ["I'd check the scene is safe", "make sure it's safe for me first", 'look around for danger', 'check for hazards', 'is it safe to go over'],
       wrong: ['start CPR', 'call 911', 'check his pulse', 'run over and shake him'],
     },
-    check_response: {
+    check_response: withCheck({
       right: ['tap his shoulders and shout', "I'd check if he's breathing", 'look, listen and feel for a breath', 'see if he responds', "ask him if he's okay", 'watch his chest rise', 'shake him and see if he wakes up', 'see if he breathes normally'],
       wrong: ['give him rescue breaths', 'two rescue breaths', 'start rescue breathing', 'do mouth to mouth', 'start compressions', 'call 911', 'check his pulse'],
-    },
+    }),
     call_911: {
       right: ['call 911', "I'd call nine one one", 'call 9-1-1 and get someone to grab the AED', 'call an ambulance', 'phone emergency services', 'shout for help and send someone for the defibrillator', 'dial 112', "I'll ring for an ambulance"],
       wrong: ['call out to him', 'start compressions', 'check his pulse again', 'keep going until help takes over', 'wait and see'],
@@ -47,10 +58,10 @@ const ANSWERS: Record<string, Table> = {
       right: ['check the scene is safe', "make sure the poolside isn't slippery", 'move her away from the pool', "get her away from the water's edge", 'look for danger', "make sure I won't slip in"],
       wrong: ['jump in the pool', 'start CPR', 'call 911', 'check her pulse'],
     },
-    check_response: {
+    check_response: withCheck({
       right: ['tap her and shout', "check if she's breathing normally", 'listen for a breath', 'see if she responds', 'talk to her and see if she wakes'],
       wrong: ['give her rescue breaths', 'start rescue breathing', 'check her pulse', 'start CPR'],
-    },
+    }),
     cpr_first: {
       right: ['start CPR', 'CPR first', 'two minutes of CPR, then call', 'give rescue breaths and compressions first', "I'd start compressions straight away", 'give 2 minutes of CPR then call 911'],
       wrong: ['call first', 'call 911 first', "I'd phone first", 'check for response and normal breathing', 'run and get my phone'],
@@ -99,10 +110,10 @@ const ANSWERS: Record<string, Table> = {
     },
   },
   recovery_position: {
-    check_response_breathing: {
+    check_response_breathing: withCheck({
       right: ["whether he's breathing normally", "check he's breathing and not responding", 'tap and shout, then look for normal breathing for 10 seconds', 'listen for a breath for ten seconds', 'see if he responds'],
       wrong: ['give him rescue breaths', 'check his pulse', 'start CPR', 'roll him on his side'],
-    },
+    }),
     call_911: {
       right: ['call 911', "I'd call an ambulance", 'phone for help', 'call nine one one now', 'phone for an ambulance'],
       wrong: ['keep checking his breathing until help arrives', 'wait to see if he wakes up', 'start CPR'],
@@ -159,6 +170,7 @@ describe('the normaliser', () => {
     ["I'd call", 'you would call'], ['tells me to stop', 'tells you to stop'], ["he's breathing", 'they is breathing'],
     ["the water's edge", 'water edge'], ['start rescue breathing', 'start rescue breaths'], ['do mouth to mouth', 'do rescue breaths'],
     ['Look, listen and feel for a breath.', 'look listen and feel for breath'],
+    ['Is she okay?', 'is they ok'], ['are you alright', 'are you ok'], ['is he all right', 'is they ok'],
   ])('%s → %s', (said, form) => {
     expect(answerForm(said)).toBe(form);
   });

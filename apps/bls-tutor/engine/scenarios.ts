@@ -76,8 +76,19 @@ const CALL_FOR_HELP = [
   'phone', 'dial', 'get help', 'send for help', 'send someone', 'shout for help',
 ] as const;
 
-/** Finding out whether someone responds and breathes (not giving rescue breaths). */
-const CHECK_RESPONSE = ['respon', 'shout', 'tap', 'shake', 'wake', 'breathing', 'breathes', 'breathe', 'for breath', 'chest ris', 'chest move', 'is ok', 'you ok', 'you alright', 'ask them'] as const;
+/**
+ * Finding out whether someone responds and breathes. Breathing counts only
+ * with a looking or listening word ("check + breathing": every part present),
+ * never "breathe" alone, which is how people say giving breaths ("breathe
+ * into his mouth"). Pronouns are in answerForm's form: "they ok" takes "is
+ * he ok", "you ok" takes "are you ok".
+ */
+const CHECK_RESPONSE = [
+  'respon', 'shout', 'tap', 'shake', 'wake', 'ask them', 'you ok', 'they ok', 'can you hear',
+  'check + breathing', 'check + breathes', 'look + breathing', 'look + breathes', 'listen + breathing', 'listen + breathes',
+  'feel + breathing', 'see + breathing', 'see + breathes', 'watch + breathing', 'whether + breathing', 'whether + breathes',
+  'they breathing', 'is breathing', 'for breath', 'for their breath', 'chest ris', 'chest move',
+] as const;
 
 /** Lay rescuers do not check a pulse: the same correction wherever it comes up. */
 const NO_PULSE = { forbidden: ['pulse', 'carotid', 'wrist'], forbiddenNote: 'Lay rescuers do not check for a pulse — it wastes time and is unreliable. Check response and normal breathing.' } as const;

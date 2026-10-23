@@ -311,7 +311,8 @@ export class BlsTutor {
 export function grade(step: Step, text: string): Verdict {
   const said = ` ${answerForm(text)} `;
   if (!said.trim()) return { ok: false, note: step.hint };
-  const has = (phrase: string) => said.includes(answerForm(phrase));
+  // "check + breathing": every part somewhere in the answer.
+  const has = (phrase: string) => phrase.split(' + ').every((part) => said.includes(answerForm(part)));
   if (step.forbidden.some(has)) return { ok: false, note: step.forbiddenNote || step.hint };
   if (step.expected.some(has)) return { ok: true, note: step.teach };
   return { ok: false, note: step.hint };
@@ -325,6 +326,7 @@ const NUMBERS: Record<string, string> = {
 const PRONOUNS: Record<string, string> = {
   i: 'you', me: 'you', we: 'you', us: 'you', my: 'your', our: 'your', myself: 'yourself',
   he: 'they', she: 'they', him: 'them', her: 'them', his: 'their', hers: 'their',
+  okay: 'ok', alright: 'ok',
 };
 
 /**
@@ -334,7 +336,9 @@ const PRONOUNS: Record<string, string> = {
  * "thirty two", "30 to two", "thirty-two", "32") becomes "30:2"; 9-1-1 and
  * "nine one one" become 911; contractions are expanded, possessives and
  * articles dropped, punctuation gone; first and second person become one
- * ("tells me to stop" is "tells you to stop"), and so do he, she, him, her;
+ * ("tells me to stop" is "tells you to stop"), and so do he, she, him, her
+ * (phrases are written in the same form: "they ok" takes "is he ok"); okay
+ * and alright are ok;
  * giving breaths ("rescue breathing", "mouth to mouth") becomes "rescue
  * breaths", which a breathing check does not contain.
  */
@@ -350,6 +354,7 @@ export function answerForm(text: string): string {
     .replace(/ 32 /g, ' 30:2 ').replace(/ 152 /g, ' 15:2 ')
     .replace(/ (15|30) (?:to |and |for |by )?2 /g, ' $1:2 ')
     .replace(/ rescue breathing /g, ' rescue breaths ').replace(/ mouth to mouth /g, ' rescue breaths ')
+    .replace(/ all right /g, ' ok ')
     .replace(/ (a|an|the) /g, ' ').replace(/ (a|an|the) /g, ' ');
   return t.split(' ').filter(Boolean).map((w) => PRONOUNS[w] ?? w).join(' ');
 }
