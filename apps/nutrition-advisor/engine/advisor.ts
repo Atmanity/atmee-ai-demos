@@ -143,6 +143,8 @@ export class Advisor {
   private tickets = 0;
   private clearedAt = 0;
   private frontAt = 0;
+  /** The ticket of the work that last wrote each food (row and whole card), by its folded name. */
+  private writtenAt = new Map<string, number>();
 
   // -- the order of work -----------------------------------------------------
 
@@ -226,6 +228,12 @@ export class Advisor {
    * starts describing the one that is actually on screen.
    */
   show(card: NutritionData, ticket = this.begin()): string[] {
+    const key = fold(card.product_name);
+    const others = () => this.shelf.filter((r) => fold(r.product_name) !== key).map((r) => r.product_name);
+    // Newer work already wrote this food: an older card of it writes nowhere,
+    // or the table and the cache would hold older figures than the label.
+    if ((this.writtenAt.get(key) ?? 0) > ticket) return others();
+    this.writtenAt.set(key, ticket);
     this.seq += 1;
     // Work overtaken by newer work files its food in the table, behind what is in front.
     if (this.mayFront(ticket)) {
@@ -238,9 +246,8 @@ export class Advisor {
     }
     this.rememberFood(card);
     this.cards.set(fold(card.product_name), card);
-    for (const key of this.cards.keys()) if (!this.shelf.some((r) => fold(r.product_name) === key)) this.cards.delete(key);
-    const name = fold(card.product_name);
-    return this.shelf.filter((r) => fold(r.product_name) !== name).map((r) => r.product_name);
+    for (const name of this.cards.keys()) if (!this.shelf.some((r) => fold(r.product_name) === name)) this.cards.delete(name);
+    return others();
   }
 
   // -- display_recipe_details -----------------------------------------------
@@ -330,6 +337,7 @@ export class Advisor {
     this.recipes = [];
     this.cards.clear();
     this.prepared.clear();
+    this.writtenAt.clear();
   }
 
   view(): View {

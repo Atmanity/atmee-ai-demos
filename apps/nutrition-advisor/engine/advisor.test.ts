@@ -308,6 +308,18 @@ describe('work that started before something newer', () => {
     expect(a.cardFor('kiwi')?.product_name).toBe('Medium kiwi');
   });
 
+  it('a late card of the same food writes nowhere the newer one did: not the row, not the cache', () => {
+    const a = new Advisor();
+    const older = a.begin();
+    const newer = a.begin();
+    a.show(food('Medium pear', { calories: 100 }), newer);
+    a.show(food('Medium pear', { calories: 50 }), older);
+    expect(a.nutrition?.calories).toBe(100);
+    expect(a.shelf).toHaveLength(1);
+    expect(a.shelf[0].calories).toBe(100);
+    expect(a.cardFor('pear')?.calories).toBe(100);
+  });
+
   it('cards from one piece of work all go up in turn, the last on the card', () => {
     const a = new Advisor();
     const t = a.begin();

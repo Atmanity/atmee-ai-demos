@@ -76,7 +76,7 @@ judge of every spoken and typed line, the staged recipes in the board and the
 
 ## Tested
 
-- `npx vitest run apps/nutrition-advisor`: 300 tests. The engine's suites kept
+- `npx vitest run apps/nutrition-advisor`: 302 tests. The engine's suites kept
   (the card rules, the advisor, %DV and provenance, the table's coercion, the
   bounded calls, the recipe view's races); the tools and instructions against
   the API limits and the rules learned live; the board and every tool result

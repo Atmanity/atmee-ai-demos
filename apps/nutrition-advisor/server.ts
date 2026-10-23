@@ -123,12 +123,19 @@ async function lookUp(v: Visit, foods: FoodAsk[]): Promise<Outcome> {
     if (!card) return void missing.push(asked(foods[i]));
     front = advisor.mayFront(ticket);
     advisor.show(card, ticket);
-    put.push(card);
+    // What the table holds for it now: newer work on the same food keeps its figures.
+    put.push(advisor.cardFor(card.product_name) ?? card);
   });
   const notice = missing.length ? `Couldn't find ${missing.join(' or ')} just now. Try again in a moment, or ask about another food.` : undefined;
   if (!put.length) return { view: advisor.view(), kind: 'failed', text: said.lookupFailed(missing), notice };
-  // Overtaken by a card asked for later: these joined the table behind it.
-  if (!front) return { view: advisor.view(), kind: 'card', card: false, text: said.filed(put, advisor.nutrition?.product_name ?? ''), notice };
+  // Overtaken by a card asked for later: these joined the table behind it (or
+  // were that very food, whose newer figures stand).
+  if (!front) {
+    const shown = advisor.nutrition;
+    const filed = put.filter((c) => c.product_name !== shown?.product_name);
+    const text = filed.length || !shown ? said.filed(filed.length ? filed : put, shown?.product_name ?? '') : said.cards([shown], [], true);
+    return { view: advisor.view(), kind: 'card', card: false, text, notice };
+  }
   const names = put.map((c) => c.product_name);
   const others = advisor.shelf.map((r) => r.product_name).filter((name) => !names.includes(name));
   const again = names.every((name) => before.has(name.toLowerCase()));
@@ -216,7 +223,12 @@ function photo(v: Visit, image: Image, sample: boolean): Promise<Outcome> {
     if ('card' in reading) {
       const front = advisor.mayFront(ticket);
       const others = advisor.show(reading.card, ticket);
-      if (!front) return { view: advisor.view(), kind: 'photo', card: false, text: said.filed([reading.card], advisor.nutrition?.product_name ?? '') };
+      if (!front) {
+        const kept = advisor.cardFor(reading.card.product_name) ?? reading.card;
+        const shown = advisor.nutrition;
+        const text = shown && kept.product_name === shown.product_name ? said.cards([shown], [], true) : said.filed([kept], shown?.product_name ?? '');
+        return { view: advisor.view(), kind: 'photo', card: false, text };
+      }
       return { view: advisor.view(), kind: 'photo', card: true, text: said.photo(reading.card, reading.seen, sample, others) };
     }
     if ('notFood' in reading) return { view: advisor.view(), kind: 'failed', text: said.notFood(reading.notFood), notice: "That photo doesn't look like a food or a food label. Try another, or just name the food." };

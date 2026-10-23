@@ -353,6 +353,28 @@ describe('work that finishes after something newer', () => {
     expect(body.text).toMatch(/^Done: "Medium kiwi" joined the comparison table; the card on screen stays "Medium pear"/);
   });
 
+  it('a slow lookup of the same food never replaces the newer figures in the table or the cache', async () => {
+    const { tool } = await open();
+    let calls = 0;
+    fake.respond = async (req) => {
+      const first = ++calls === 1;
+      await sleep(first ? 40 : 0);
+      return { ...(model(req) as object), calories: first ? 50 : 100 };
+    };
+    const slowKiwi = tool('look_up_food', { foods: ['kiwi'] });
+    await sleep(5);
+    await tool('look_up_food', { foods: ['kiwi'] });
+    const { body } = await slowKiwi;
+    expect(body.view.nutrition?.calories).toBe(100);
+    expect(body.view.shelf.items.map((r) => r.calories)).toEqual([100]);
+    // Rachel is told the figures on screen, not the late ones.
+    expect(body.text).toContain('100 calories');
+    expect(body.text).not.toContain('50 calories');
+    const again = await tool('look_up_food', { foods: ['kiwi'] });
+    expect(again.body.view.nutrition?.calories).toBe(100);
+    expect(calls).toBe(2);
+  });
+
   it('a recipe still being made when a newer card goes up is not opened over it', async () => {
     const { tool } = await open();
     await tool('look_up_food', { foods: ['banana'] });
