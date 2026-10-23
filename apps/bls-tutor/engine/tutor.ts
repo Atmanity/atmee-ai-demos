@@ -68,10 +68,14 @@ export class BlsTutor {
    * not one thing about what to go and revise.
    */
   private outcomes = new Map<string, StepOutcome>();
+  /** Bumped by every start and every leave: which run of a drill this is, for work that answers late. */
+  private _generation = 0;
 
   // ---------------------------------------------------------------- reads
 
   get phase(): Phase { return this._phase; }
+
+  get generation(): number { return this._generation; }
 
   get scenario(): Scenario | null { return this._scenario; }
 
@@ -87,6 +91,7 @@ export class BlsTutor {
     const scenario = find(scenarioId || DEFAULT_SCENARIO_ID);
     if (!scenario) throw new TutorRefusal(UNKNOWN_SCENARIO);
     this._scenario = scenario;
+    this._generation += 1;
     this.stepIndex = 0;
     this.attempts = 0;
     this.resolved = false;
@@ -118,6 +123,7 @@ export class BlsTutor {
     // the last verdict all belong to the scenario being left, and a menu still
     // showing "2 / 6" from an abandoned run is a number the learner cannot act on.
     this._scenario = null;
+    this._generation += 1;
     this.stepIndex = 0;
     this.attempts = 0;
     this.resolved = false;

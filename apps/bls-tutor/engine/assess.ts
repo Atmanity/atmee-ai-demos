@@ -10,9 +10,12 @@
 // one: the learner gets "Not yet" and the hint, as before.
 //
 // Server only: it reads the step's answer.
+import { said } from './director.ts';
+import { run } from './drill.ts';
 import { isRealEmergency } from './safety.ts';
 import type { Step } from './scenarios.ts';
 import { grade, type BlsTutor } from './tutor.ts';
+import type { Done } from './types.ts';
 
 /** The model call (server/llm.ts structured), injected so tests and keyless runs need no network. */
 export type Ask = (req: { system: string; user: string; schema: Record<string, unknown>; temperature: number }) => Promise<unknown>;
@@ -50,6 +53,22 @@ The right action: "${step.label}". What the instructor teaches for it: "${step.t
 ${wrong}
 The learner's answer, as speech recognition heard it: """${answer}"""
 Is the answer the right action for this step? correct is true only if it clearly describes that action; partly right, vague or mixed with a wrong action is false.`;
+}
+
+/** Which drill run and which step an answer was given for: a start or a leave bumps the generation. */
+export const drillMark = (tutor: BlsTutor) => `${tutor.generation}:${tutor.scenario?.id ?? ''}:${tutor.currentStep()?.key ?? ''}`;
+
+/**
+ * check_answer as the server runs it: the judge first (if the answer is
+ * open), then the drill. While the judge is out the drill can change under it
+ * (a button, or the safety net starting another drill); a grade that comes
+ * back to a different drill run or step changes nothing.
+ */
+export async function checkAnswer(tutor: BlsTutor, args: Record<string, unknown>, ask: Ask | null, timeoutMs = JUDGE_TIMEOUT_MS): Promise<Done> {
+  const mark = drillMark(tutor);
+  const judged = await judge(tutor, String(args.answer ?? ''), ask, timeoutMs);
+  if (drillMark(tutor) !== mark) return { applied: false, text: said.notGraded(), reason: 'The drill changed while that answer was being checked.' };
+  return run(tutor, 'check_answer', args, judged);
 }
 
 /**

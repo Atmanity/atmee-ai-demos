@@ -8,7 +8,7 @@
 import { randomBytes } from 'node:crypto';
 import type { AppServer } from '../../server/app-server.ts';
 import { llmAvailable, structured } from '../../server/llm.ts';
-import { judge, type Ask } from './engine/assess.ts';
+import { checkAnswer, type Ask } from './engine/assess.ts';
 import { BUTTON, INSTRUCTIONS, pressed, said, TOOLS } from './engine/director.ts';
 import { isAction, run, viewOf } from './engine/drill.ts';
 import { find } from './engine/scenarios.ts';
@@ -69,9 +69,9 @@ const app: AppServer = {
       const { name, arguments: raw } = (req.body ?? {}) as { name?: unknown; arguments?: Record<string, unknown> };
       if (!isAction(name)) return void res.status(400).json({ error: 'unknown_tool' });
       const args = raw && typeof raw === 'object' ? raw : {};
-      // An answer the phrase lists leave open is judged first (at most a few seconds).
-      const judged = name === 'check_answer' ? await judge(drill.tutor, String(args.answer ?? ''), ask()) : null;
-      const done = run(drill.tutor, name, args, judged);
+      // An answer the phrase lists leave open is judged first (at most a few
+      // seconds), and graded only if its drill is still the one on screen.
+      const done = name === 'check_answer' ? await checkAnswer(drill.tutor, args, ask()) : run(drill.tutor, name, args);
       if (done.emergency) console.warn('[%s] drill %s stopped for a possible real emergency (host)', ID, req.params.id.slice(0, 6));
       res.json({ view: viewOf(drill.tutor), result: done.text, hint: done.hint, emergency: done.emergency } satisfies ToolReply);
     });

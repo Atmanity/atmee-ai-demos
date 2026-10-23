@@ -92,10 +92,11 @@ answer; and a spoken "show me" or scenario choice is no longer narrated twice.
 
 ## Tested
 
-- `npx vitest run apps/bls-tutor`: 782 tests (the answer judge's own in
+- `npx vitest run apps/bls-tutor`: 786 tests (the answer judge's own in
   `engine/assess.test.ts`: it passes what the lists cannot know, is never asked
   about a match or a veto, and never passes on a model failure, stall or wrong
-  shape). The engine's own
+  shape; and `server.test.ts`: a grade that comes back after another drill, the
+  same drill again or the list took its place changes nothing). The engine's own
   (scenarios, grading, phases, the review, the emergency watch and its
   suppressions; only the staging tests went, with staging), plus, for every
   step of every drill, a table of the answers people give (`engine/answers.test.ts`:

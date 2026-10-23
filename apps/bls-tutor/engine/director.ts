@@ -136,6 +136,7 @@ export const said = {
   },
   keepCard: () => `Refused: the red card stays up: nothing the learner has said since it went up says plainly that nobody is in danger. Do not resume practice. Calmly tell them to call 911 (112 in Europe, or their local number) and stay on the line with the dispatcher; if this was only practice, they can tell you plainly that nobody is in danger, or press "Nobody is in danger" on the card.`,
   notStopped: () => 'Nothing to resume: the drill is not stopped; carry on from the live screen.',
+  notGraded: () => 'Not graded: the drill changed while that answer was being checked, so it was not counted. Ask them to answer the question on their screen now.',
 };
 
 /** A button press, told to Alex: he cannot see the screen. */
