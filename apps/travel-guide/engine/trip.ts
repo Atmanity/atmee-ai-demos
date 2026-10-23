@@ -47,6 +47,18 @@ export function rememberTraveler(state: TravelState, name: string): string {
 // ─── planning a trip ──────────────────────────────────────────────────────
 
 /**
+ * Claim the destination: the ticket moves exactly when the user's latest
+ * choice changes which destination should be on the map (a new country, a
+ * search, a tap, "surprise me", going back to one, or confirming the one
+ * already there), so any older lookup still running lands as overtaken. A
+ * continent alone, or a tab, changes no destination and claims nothing.
+ */
+export function claimDestination(state: TravelState): number {
+  state.destinationTicket += 1;
+  return state.destinationTicket;
+}
+
+/**
  * Resolve a country, put it on the map, and start fetching its headlines and
  * dishes in the background. A continent alone is not a destination (it has no
  * bounding box worth drawing), so that case asks to narrow down instead of
@@ -54,7 +66,7 @@ export function rememberTraveler(state: TravelState, name: string): string {
  */
 export async function chooseDestination(
   state: TravelState, lookups: Lookups, country: string,
-  { city = '', continent = '', how = 'user', ticket = ++state.destinationTicket }: { city?: string; continent?: string; how?: 'user' | 'picked'; ticket?: number } = {},
+  { city = '', continent = '', how = 'user', ticket: claimed }: { city?: string; continent?: string; how?: 'user' | 'picked'; ticket?: number } = {},
 ): Promise<string> {
   country = clean(country, 80);
   city = clean(city, 80);
@@ -68,6 +80,8 @@ export async function chooseDestination(
     return state.continent ? say.continentOnly(state.continent) : say.noDestination();
   }
 
+  // A country to place: the ticket a search, a tap or going back already claimed, or this choice's own.
+  const ticket = claimed ?? claimDestination(state);
   const resolved = await lookups.country(country);
   if (ticket !== state.destinationTicket) return say.overtaken(country);
   if (!resolved) return say.notFound(country);
@@ -93,7 +107,7 @@ export async function chooseDestination(
 export async function searchDestination(state: TravelState, lookups: Lookups, query: string): Promise<string> {
   const q = clean(query, 120);
   if (!q) return say.noDestination();
-  const ticket = ++state.destinationTicket;
+  const ticket = claimDestination(state);
   const named = countriesIn(q);
   if (named.length) {
     const city = q.split(',').map((part) => part.trim()).find((part) => part && !countriesIn(part).length) ?? '';
@@ -108,7 +122,7 @@ export async function searchDestination(state: TravelState, lookups: Lookups, qu
 /** "Plan a trip here" on the map: the country under the tap, and the town as the city. */
 export async function destinationAt(state: TravelState, lookups: Lookups, lat: number, lon: number): Promise<string> {
   if (!validCoordinates(lat, lon)) return say.badCoordinates();
-  const ticket = ++state.destinationTicket;
+  const ticket = claimDestination(state);
   const located = await lookups.reverse(lat, lon);
   if (ticket !== state.destinationTicket) return say.overtaken('the place they tapped');
   if (!located?.country) return say.noCountryThere();
@@ -202,13 +216,12 @@ export async function showDishes(state: TravelState): Promise<string> {
  */
 export async function revisitCountry(state: TravelState, lookups: Lookups, country: string): Promise<string> {
   const wanted = clean(country, 80);
-  // Going back is a choice of destination too: a lookup still running for an earlier one must not undo it.
-  const ticket = ++state.destinationTicket;
+  if (!wanted) return state.visited.length ? say.notOnTrip(state.visited.map((e) => e.country)) : say.nothingToGoBack();
+  // Going back, even to the country already there, is a choice of destination: a lookup still running for an earlier one must not undo it.
+  const ticket = claimDestination(state);
   if (!state.revisit(wanted)) {
-    if (wanted && norm(wanted) === norm(state.country)) return say.alreadyHere(state.country);
-    if (wanted) return chooseDestination(state, lookups, wanted, { ticket });
-    if (!state.visited.length) return say.nothingToGoBack();
-    return say.notOnTrip(state.visited.map((e) => e.country));
+    if (norm(wanted) === norm(state.country)) return say.alreadyHere(state.country);
+    return chooseDestination(state, lookups, wanted, { ticket });
   }
   state.bump();
   console.info('[Travel] revisited %s', state.country);

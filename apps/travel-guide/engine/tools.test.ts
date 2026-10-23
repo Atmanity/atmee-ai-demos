@@ -134,6 +134,48 @@ describe('choose_destination', () => {
   });
 });
 
+describe('which choices overtake a destination still being looked up', () => {
+  // The ticket moves exactly when the latest choice changes which destination should be on the map: a new
+  // country or going back to one (even the one already there) overtakes an older lookup still in flight; a
+  // continent alone, or a tab, leaves the map as it is and overtakes nothing.
+  type Act = (state: TravelState, lookups: Lookups) => Promise<string>;
+  const rows: [string, Act, string][] = [
+    ['a new country', (st, l) => runTool(st, l, 'choose_destination', { place: 'Peru' }), 'Peru'],
+    ['a city found by search', (st, l) => runAction(st, l, { kind: 'search', query: 'Bali' }), 'Indonesia'],
+    ['a tap on the map', (st, l) => runAction(st, { ...l, reverse: async () => ({ place: 'Cusco', country: 'Peru', isoCode: 'PE', lat: -13.5, lon: -72 }) }, { kind: 'destinationAt', lat: -13.5, lon: -72 }), 'Peru'],
+    ['surprise me', (st, l) => runAction(st, l, { kind: 'pick' }), 'picked'],
+    ['going back to a country on the route', (st, l) => runAction(st, l, { kind: 'revisit', country: 'Norway' }), 'Norway'],
+    ['confirming the country on the map', (st, l) => runTool(st, l, 'choose_destination', { place: 'Portugal' }), 'Portugal'],
+    ['coming back from its sights to its page', async (st, l) => { await runTool(st, l, 'explore_near', { place: 'Shibuya station' }); return runTool(st, l, 'choose_destination', { place: 'Portugal' }); }, 'Portugal'],
+    ['a continent alone', (st, l) => runTool(st, l, 'choose_destination', { place: 'somewhere in Asia' }), 'Japan'],
+    ['a continent chip', (st, l) => runAction(st, l, { kind: 'continent', continent: 'Asia' }), 'Japan'],
+    ['a tab', (st, l) => runAction(st, l, { kind: 'show', stage: 'around' }), 'Japan'],
+  ];
+  test.each(rows)('%s', async (_, act, lands) => {
+    const { lookups } = fakeLookups();
+    const state = new TravelState();
+    await runTool(state, lookups, 'choose_destination', { place: 'Norway' });
+    await runTool(state, lookups, 'choose_destination', { place: 'Portugal' });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const country = lookups.country;
+    const slow: Lookups = { ...lookups, country: async (name) => { if (name === 'Japan') await gate; return country(name); } };
+    const older = runTool(state, slow, 'choose_destination', { place: 'Japan' });
+    await act(state, lookups);
+    const after = state.country;
+    release();
+    const olderSaid = await older;
+    if (lands === 'Japan') {
+      expect(state.country).toBe('Japan');
+      expect(olderSaid).toMatch(/^Done: Japan is on the map/);
+    } else {
+      expect(state.country).toBe(lands === 'picked' ? after : lands);
+      expect(state.country).not.toBe('Japan');
+      expect(olderSaid).toMatch(/^Not done: overtaken/);
+    }
+  });
+});
+
 describe('show_food and show_news', () => {
   test('the dishes, with their words, for the country on the map', async () => {
     const state = new TravelState();

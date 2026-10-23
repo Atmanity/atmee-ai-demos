@@ -66,6 +66,8 @@ async function chooseDestination(state: TravelState, lookups: Lookups, place: st
   // "Kyoto, Japan": the city goes with it.
   if (place.split(',').some((part) => part.trim() && !countriesIn(part).length)) return trip.searchDestination(state, lookups, place);
   if (state.country && norm(country) === norm(state.country)) {
+    // Confirming the country on the map is the latest choice: an older lookup still running must not replace it.
+    trip.claimDestination(state);
     if (state.stage === 'around') return trip.apply(state, lookups, { kind: 'show', stage: 'planning' });
     return say.alreadyHere(state.country);
   }
