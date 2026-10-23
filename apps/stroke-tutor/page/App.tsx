@@ -19,12 +19,19 @@ import './hanshi.css';
 
 const API = '/api/apps/stroke-tutor';
 const OFFLINE = "That didn't reach your sheet. Check your connection and try again.";
+const RELAID = 'Your sheet had to be set up again, so your progress on it is gone. Pick a character to carry on.';
 
-async function post<T>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) });
+/** The server no longer has this lesson: it keeps lessons in memory, so a restart, a deploy or hours idle lose them. */
+class LessonGone extends Error {}
+
+async function call<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(API + path, init);
+  if (res.status === 404 && path.startsWith('/lessons/')) throw new LessonGone(path);
   if (!res.ok) throw new Error(`${path}: ${res.status}`);
   return res.json();
 }
+const post = <T,>(path: string, body?: unknown) => call<T>(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) });
+const get = <T,>(path: string) => call<T>(path);
 
 /** Every answer that moves the sheet carries the lesson's `seq`: only one newer than the sheet on screen may move it. */
 interface Acted { view: Snapshot; event?: string; refused?: string; seq?: number }
@@ -78,6 +85,40 @@ export function App() {
     }
   }, []);
 
+  /**
+   * A fresh lesson from the server; resolves with its opening once it is on
+   * screen, or null. A lay-out that lands after its call failed still lays out
+   * the sheet (the sheet outlives calls); one overtaken by a newer lay-out, or
+   * by the page going, is dropped.
+   */
+  const layOut = useCallback(async (): Promise<string | null> => {
+    const mine = ++setupGen.current;
+    lesson.current = null;
+    setBroken(false);
+    try {
+      const { id, view: first, opening, seq } = await post<{ id: string; view: Snapshot; opening: string; seq?: number }>('/lessons');
+      if (mine !== setupGen.current) return null;
+      lesson.current = id;
+      seqRef.current = seq ?? 0;
+      land(first);
+      setMiss(null);
+      setPicking(false);
+      return opening;
+    } catch (err) {
+      if (mine !== setupGen.current) return null;
+      console.warn(err);
+      setBroken(true);
+      return null;
+    }
+  }, [land]);
+
+  /** The server lost the lesson: a fresh sheet, and the learner is told why their progress is gone. */
+  const recover = useCallback(async (): Promise<boolean> => {
+    const laid = (await layOut()) !== null;
+    if (laid) setNotice(RELAID);
+    return laid;
+  }, [layOut]);
+
   // Ren's tool calls: the server acts, the sheet follows, the result is what Ren says.
   const onToolCall = useCallback(async ({ name, arguments: args }: ToolCall) => {
     if (!lesson.current) throw new Error('the sheet is still being laid out; try again in a moment');
@@ -93,10 +134,14 @@ export function App() {
         setPicking(false);
       }
       return result;
+    } catch (err) {
+      if (!(err instanceof LessonGone)) throw err;
+      await recover();
+      return say.relaid();
     } finally {
       setBusy(false);
     }
-  }, [coach, land]);
+  }, [coach, land, recover]);
 
   // If Ren narrates "let me show you" without calling it, the sheet does it and tells Ren.
   const net = useToolNet({
@@ -122,28 +167,24 @@ export function App() {
     coach.clear();
   }, [coach]);
 
-  // The lesson is laid out while Ren is on the way; calling Ren again carries on the same sheet.
+  // The lesson is laid out while Ren is on the way; calling Ren again carries on the same sheet,
+  // once the server confirms it still has it.
   useEffect(() => {
     if (avatar.phase !== 'starting') return;
-    const current = viewRef.current;
-    if (lesson.current && current) {
-      coach.push({ text: say.resume(current), ttlS: TTL.opening });
+    const id = lesson.current;
+    if (!id || !viewRef.current) {
+      void layOut().then((opening) => { if (opening) coach.push({ text: opening, ttlS: TTL.opening }); });
       return;
     }
-    setBroken(false);
-    const mine = ++setupGen.current;
-    void post<{ id: string; view: Snapshot; opening: string; seq?: number }>('/lessons').then(({ id, view: first, opening, seq }) => {
-      // A lay-out that lands after its call failed still lays out the sheet (the sheet outlives calls);
-      // one overtaken by a newer call's lay-out, or by the page going, is dropped.
-      if (mine !== setupGen.current || lesson.current) return;
-      lesson.current = id;
-      seqRef.current = seq ?? 0;
-      land(first);
-      coach.push({ text: opening, ttlS: TTL.opening });
-    }).catch((err) => {
-      if (mine !== setupGen.current) return;
-      console.warn(err);
-      setBroken(true);
+    const resume = () => coach.push({ text: say.resume(viewRef.current!), ttlS: TTL.opening });
+    void get<{ view: Snapshot; seq?: number }>(`/lessons/${id}`).then(({ view: now, seq }) => {
+      if (lesson.current !== id) return;
+      if (isNewest(seq)) land(now);
+      resume();
+    }, async (err) => {
+      if (lesson.current !== id) return;
+      if (!(err instanceof LessonGone)) return resume();   // a hiccup: carry on with the sheet on screen
+      if (await recover()) coach.push({ text: say.relaidOpening(), ttlS: TTL.opening });
     });
   }, [avatar.phase]);
 
@@ -164,6 +205,10 @@ export function App() {
       const cue = cueFor({ view: out.view, handled: true, event: out.event, refused: out.refused }, 'panel');
       if (cue) coach.push(cue);
     } catch (err) {
+      if (err instanceof LessonGone) {
+        if (await recover()) coach.push({ text: say.relaid(), ttlS: TTL.cue });
+        return;
+      }
       console.warn(err);
       setNotice(OFFLINE);
     } finally {
@@ -176,7 +221,10 @@ export function App() {
     if (!lesson.current) return;
     setPending(points);
     try {
-      const out = await post<Acted>(`/lessons/${lesson.current}/stroke`, { points });
+      // The stroke it was drawn on: the server grades it only against that one.
+      const on = viewRef.current;
+      const at = on?.character ? { character: on.character.id, stroke: on.stroke_index } : undefined;
+      const out = await post<Acted>(`/lessons/${lesson.current}/stroke`, { points, at });
       if (!isNewest(out.seq)) return;
       const graded = !out.refused;
       land(out.view, graded ? points : undefined);
@@ -185,6 +233,10 @@ export function App() {
       const cue = cueFor({ view: out.view, handled: true, event: out.event, refused: out.refused }, 'panel');
       if (cue) coach.push(cue);
     } catch (err) {
+      if (err instanceof LessonGone) {
+        if (await recover()) coach.push({ text: say.relaid(), ttlS: TTL.cue });
+        return;
+      }
       console.warn(err);
       setNotice(OFFLINE);
     } finally {
@@ -205,7 +257,7 @@ export function App() {
       </section>
     );
   } else if (!view || view.phase === 'intro' || picking) {
-    desk = <Picker view={view} busy={busy || !lesson.current} onPick={choose} onClose={picking && view?.character ? () => setPicking(false) : undefined} />;
+    desk = <Picker view={view} busy={busy || !lesson.current} notice={notice} onPick={choose} onClose={picking && view?.character ? () => setPicking(false) : undefined} />;
   } else if (view.phase === 'debrief') {
     desk = <Finished view={view} marks={marks} busy={busy} notice={notice} onCommand={(c) => void press(c)} onPick={() => setPicking(true)} onSave={() => { if (!saveSheet(view, marks)) setNotice("Your browser couldn't save the sheet."); }} />;
   } else {

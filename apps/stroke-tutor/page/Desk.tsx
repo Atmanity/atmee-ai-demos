@@ -79,9 +79,11 @@ function Head({ view, marks, eyebrow, title }: { view: Snapshot; marks: Marks; e
 
 // ------------------------------------------------------------------ menu
 
-export function Picker({ view, busy, onPick, onClose }: {
+export function Picker({ view, busy, notice = '', onPick, onClose }: {
   view: Snapshot | null;
   busy: boolean;
+  /** Why the learner is back at the menu, when it was not their choice. */
+  notice?: string;
   onPick: (id: string) => void;
   /** Mid-lesson, the way back to the character on the sheet. */
   onClose?: () => void;
@@ -101,6 +103,7 @@ export function Picker({ view, busy, onPick, onClose }: {
       <p className="hs-eyebrow">{onClose ? 'Change character' : 'Choose a character'}</p>
       <h1 id="hs-picker-title">What would you like to write?</h1>
       <p className="hs-lede">New to this? Start with 一 or A. You can also just tell {HOST} which one.</p>
+      {notice && <p className="hs-notice" role="alert">{notice}</p>}
       <ul className="hs-cards">
         {view.catalog.map((entry) => (
           <li key={entry.id}>
@@ -142,6 +145,8 @@ export function Lesson({ view, marks, busy, pending, miss, notice, onStroke, onC
   const n = view.stroke_index + 1;
   const last = n >= c.strokes_total;
   const verdict = view.last_verdict;
+  // A stroke being graded locks the sheet's buttons too: a reset racing it would have it graded against the fresh sheet.
+  const locked = busy || pending !== null;
   return (
     <section className="hs-desk" aria-label="Your practice sheet">
       <Head view={view} marks={marks} />
@@ -173,12 +178,12 @@ export function Lesson({ view, marks, busy, pending, miss, notice, onStroke, onC
         {notice && <p className="hs-notice" role="alert">{notice}</p>}
         <div className="hs-actions">
           {writing
-            ? <button type="button" className="hs-secondary" disabled={busy} onClick={() => onCommand('show')}>Show me</button>
-            : <button type="button" className="hs-primary" disabled={busy} onClick={() => onCommand('next')}>{last ? `Finish ${c.glyph}` : 'Next stroke'} <span aria-hidden="true">→</span></button>}
+            ? <button type="button" className="hs-secondary" disabled={locked} onClick={() => onCommand('show')}>Show me</button>
+            : <button type="button" className="hs-primary" disabled={locked} onClick={() => onCommand('next')}>{last ? `Finish ${c.glyph}` : 'Next stroke'} <span aria-hidden="true">→</span></button>}
         </div>
         <div className="hs-more">
-          <button type="button" className="hs-quiet" disabled={busy} onClick={() => onCommand('over')}>Start over</button>
-          <button type="button" className="hs-quiet" disabled={busy} onClick={onPick}>Change character</button>
+          <button type="button" className="hs-quiet" disabled={locked} onClick={() => onCommand('over')}>Start over</button>
+          <button type="button" className="hs-quiet" disabled={locked} onClick={onPick}>Change character</button>
         </div>
       </div>
     </section>

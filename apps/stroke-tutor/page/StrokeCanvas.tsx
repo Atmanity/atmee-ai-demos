@@ -104,7 +104,9 @@ export function StrokeCanvas({
 
   // A stroke Ren has just shown is drawn as a brush would draw it, start to
   // end: its direction is the lesson. Strokes already shown when the sheet
-  // appears are simply there.
+  // appears are simply there. `seen` is exactly the strokes shown now, so one
+  // that stops being shown (the character started over) is brushed in again
+  // when it is shown again.
   useEffect(() => {
     if (!character) return;
     const shown = strokes.filter((s) => s.status === 'done' && marks[markKey(character, s.index)]?.how === 'shown').map((s) => s.index);
@@ -114,7 +116,7 @@ export function StrokeCanvas({
       return;
     }
     const fresh = shown.filter((i) => !seen.current!.has(markKey(character, i)));
-    for (const key of keys) seen.current.add(key);
+    seen.current = new Set(keys);
     if (fresh.length && !reducedMotion()) setShowing({ index: fresh[fresh.length - 1], start: performance.now() });
   }, [strokes, marks, character]);
 
@@ -207,6 +209,7 @@ export function StrokeCanvas({
       className={`hs-canvas${writable ? ' is-writable' : ''}`}
       role="img"
       aria-label={label}
+      data-showing={showing?.index}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={finish}

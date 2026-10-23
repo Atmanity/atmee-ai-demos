@@ -5,7 +5,7 @@
 import { randomBytes } from 'node:crypto';
 import type { AppServer } from '../../server/app-server.ts';
 import { INSTRUCTIONS, pressed, say, TOOLS } from './engine/director.ts';
-import { perform, runTool, TOOL_NAMES } from './engine/lesson.ts';
+import { drawStroke, runTool, TOOL_NAMES } from './engine/lesson.ts';
 import { StrokeTutor } from './engine/tutor.ts';
 import type { Command, Snapshot } from './engine/types.ts';
 
@@ -60,7 +60,7 @@ const app: AppServer = {
     router.get('/lessons/:id', (req, res) => {
       const lesson = lessonOf(req.params.id);
       if (!lesson) return void res.status(404).json({ error: 'no_lesson' });
-      res.json(lesson.tutor.snapshot());
+      res.json({ view: lesson.tutor.snapshot(), seq: lesson.seq });
     });
 
     // Ren's tool calls: the result is what Ren says next.
@@ -90,10 +90,10 @@ const app: AppServer = {
     router.post('/lessons/:id/stroke', (req, res) => {
       const lesson = lessonOf(req.params.id);
       if (!lesson) return void res.status(404).json({ error: 'no_lesson' });
-      const points = (req.body as { points?: unknown } | undefined)?.points;
+      const { points, at } = (req.body ?? {}) as { points?: unknown; at?: { character?: unknown; stroke?: unknown } };
       if (!Array.isArray(points)) return void res.status(400).json({ error: 'no_points' });
       if (points.length > MAX_POINTS_ACCEPTED) return void res.status(413).json({ error: 'too_many_points' });
-      const outcome = perform(lesson.tutor, { kind: 'stroke', points }, 'panel');
+      const outcome = drawStroke(lesson.tutor, points, at && typeof at === 'object' ? at : undefined);
       res.json({ view: outcome.view, refused: outcome.refused, event: outcome.refused ? undefined : outcome.event, seq: ++lesson.seq });
     });
   },

@@ -129,6 +129,17 @@ describe('the lesson', () => {
     expect(done.commands).toEqual(['next']);
   });
 
+  it('while a stroke is being graded, nothing else on the sheet can be pressed', () => {
+    const { commands, picks } = lesson(snapshot(), { pending: [[500, 100], [500, 900]] });
+    for (const name of ['Show me', 'Start over', 'Change character']) {
+      const b = screen.getByRole('button', { name }) as HTMLButtonElement;
+      expect(b.disabled, name).toBe(true);
+      fireEvent.click(b);
+    }
+    expect(commands).toEqual([]);
+    expect(picks).toEqual([]);
+  });
+
   it('says "Finish" on the last stroke', () => {
     lesson(snapshot({ phase: 'coaching', strokes: [snapshot().strokes[0], { index: 1, status: 'done', points: [[500, 120], [500, 880]], name: 'the vertical', teach: 'T' }] }));
     expect(screen.getByRole('button', { name: /Finish 十/ })).toBeTruthy();

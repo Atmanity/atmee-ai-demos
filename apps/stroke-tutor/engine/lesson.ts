@@ -128,3 +128,20 @@ export function runTool(tutor: StrokeTutor, name: string, args: Record<string, u
   }
   throw new Error(`unknown tool ${name}`);
 }
+
+/** Said on screen when a stroke reaches the server after the sheet moved on under it. */
+export const SHEET_MOVED = "The sheet moved on before that stroke arrived; draw it again on the stroke that's live now.";
+
+/**
+ * A stroke the learner drew, graded only against the stroke they were drawing
+ * (`at`: the character and stroke on their screen). A stroke can reach the
+ * server after the sheet moved on under it (Ren started the character over, or
+ * moved to the next stroke, on a faster connection); graded against whatever
+ * is live by then, its verdict would land on a stroke the learner never drew.
+ */
+export function drawStroke(tutor: StrokeTutor, points: unknown, at?: { character?: unknown; stroke?: unknown }): Outcome {
+  if (at && (at.character !== (tutor.character?.id ?? null) || at.stroke !== tutor.snapshot().stroke_index)) {
+    return { view: tutor.snapshot(), handled: true, kind: 'stroke', refused: SHEET_MOVED, event: say.refused(SHEET_MOVED) };
+  }
+  return perform(tutor, { kind: 'stroke', points }, 'panel');
+}

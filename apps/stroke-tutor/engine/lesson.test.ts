@@ -7,7 +7,7 @@
 import { describe, expect, test } from 'vitest';
 import { CHARACTERS, EI, JUU, type Character } from './characters.ts';
 import { TOOLS } from './director.ts';
-import { perform, resolveCharacter, runTool, STROKE_IS_THE_USERS, TOOL_NAMES, type Source } from './lesson.ts';
+import { drawStroke, perform, resolveCharacter, runTool, SHEET_MOVED, STROKE_IS_THE_USERS, TOOL_NAMES, type Source } from './lesson.ts';
 import { resample } from './strokes.ts';
 import { ALREADY_RESOLVED, CHARACTER_FINISHED, STROKE_UNRESOLVED, StrokeTutor, UNKNOWN_CHARACTER } from './tutor.ts';
 import type { Intent } from './types.ts';
@@ -329,5 +329,28 @@ describe('every result opens with the plain outcome, so a filler cannot pre-judg
       runTool(tutor, 'next_character').text,
     ];
     for (const text of texts) expect(text, text).toMatch(OUTCOME);
+  });
+});
+
+describe('a stroke is graded only against the stroke the learner was drawing', () => {
+  test('the sheet moved on (start over, another stroke, another character) before it arrived: refused, nothing changes', () => {
+    const tutor = new StrokeTutor();
+    runTool(tutor, 'choose_character', { character: 'ten' });
+    runTool(tutor, 'show_stroke');
+    runTool(tutor, 'next_stroke');
+    runTool(tutor, 'start_over');
+    const before = JSON.stringify(tutor.snapshot());
+    const late = drawStroke(tutor, drawing(JUU, 0), { character: 'juu', stroke: 1 });
+    expect(late.refused).toBe(SHEET_MOVED);
+    expect(JSON.stringify(late.view)).toBe(before);
+    expect(drawStroke(tutor, drawing(JUU, 0), { character: 'ki', stroke: 0 }).refused).toBe(SHEET_MOVED);
+  });
+
+  test('aimed at the live stroke, it is graded as usual', () => {
+    const tutor = new StrokeTutor();
+    runTool(tutor, 'choose_character', { character: 'ten' });
+    const done = drawStroke(tutor, drawing(JUU, 0), { character: 'juu', stroke: 0 });
+    expect(done.refused).toBeUndefined();
+    expect(done.view.last_verdict?.ok).toBe(true);
   });
 });

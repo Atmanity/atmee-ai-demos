@@ -210,6 +210,12 @@ export const say = {
   drawn: (v: Snapshot) => `${say.verdict(v)} (This is the sheet's verdict on the stroke they just drew.)`,
 
   refused: (reason: string) => `Refused: ${reason} Say that to them in one calm line, in your own voice, and do not claim anything happened.`,
+
+  /** A new call finds the sheet lost (see `relaid`): no greeting again, the menu, an apology. */
+  relaidOpening: () => `${GREETED} Since you last spoke, the sheet had been lost and has been set up again, so the character menu is showing. In one short line, apologise briefly and ask which character they would like; put one up only when they choose.`,
+
+  /** The server no longer had their sheet (a restart, or hours idle), so a fresh one was laid out. */
+  relaid: () => `Not yet: the sheet had been lost and has been set up again, so nothing changed and the character menu is showing. Tell them in one short line, apologise briefly, and ask which character they would like; put one up only when they choose.`,
 };
 
 /** A button press, told to Ren: Ren cannot see the screen. */

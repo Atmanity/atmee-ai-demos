@@ -62,10 +62,24 @@ const holds: { match: (path: string) => boolean; fail?: boolean }[] = [];
 const held: (() => void)[] = [];
 const holdNext = (match: (path: string) => boolean, fail = false) => holds.push({ match, fail });
 const release = () => act(async () => { held.shift()?.(); });
+// A request that reaches the server late (another connection overtook it).
+const lateRequests: ((path: string) => boolean)[] = [];
+const arrivals: (() => void)[] = [];
+const arriveLate = (match: (path: string) => boolean) => lateRequests.push(match);
+const arrive = () => act(async () => { arrivals.shift()?.(); });
+// Lessons the server no longer has (a deploy, a restart, the idle sweep).
+const gone = new Set<string>();
+const lessonId = () => requests.map((r) => r.path.match(/^\/lessons\/([^/]+)/)?.[1]).filter(Boolean).pop()!;
 async function fakeFetch(url: string, init?: { method?: string; body?: string }) {
   const path = url.replace('/api/apps/stroke-tutor', '');
   const body = init?.body ? JSON.parse(init.body) : undefined;
   requests.push({ path, body });
+  if ([...gone].some((id) => path.startsWith(`/lessons/${id}`))) return { ok: false, status: 404, json: async () => ({ error: 'no_lesson' }) };
+  const late = lateRequests.findIndex((m) => m(path));
+  if (late >= 0) {
+    lateRequests.splice(late, 1);
+    await new Promise<void>((resolve) => arrivals.push(resolve));
+  }
   for (const [method, re, keys, fn] of routes) {
     const m = path.match(re);
     if (!m || method !== (init?.method ?? 'GET')) continue;
@@ -98,6 +112,9 @@ beforeEach(() => {
   requests.length = 0;
   holds.length = 0;
   held.length = 0;
+  lateRequests.length = 0;
+  arrivals.length = 0;
+  gone.clear();
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
@@ -303,5 +320,98 @@ describe('nothing started for one call acts on another', () => {
     view.unmount();
     await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
     expect(fake.events).toEqual([]);
+  });
+});
+
+describe('a sheet the server no longer has', () => {
+  const heading = () => screen.getByRole('heading', { level: 1 }).textContent;
+
+  it('a button on a lost sheet lays out a fresh one and says so, and the learner carries on', async () => {
+    await live();
+    await tool('choose_character', { character: 'ten' });
+    gone.add(lessonId());
+    fake.events.length = 0;
+    fireEvent.click(button('Show me'));
+    await settle();
+    expect(heading()).toBe('What would you like to write?');
+    expect(screen.getByRole('alert').textContent).toContain('Your sheet had to be set up again');
+    expect(fake.events.map((e) => e.text).join(' ')).toContain('the sheet had been lost and has been set up again');
+    fireEvent.click(button(/Tree, 4 strokes/));
+    await settle();
+    expect(heading()).toBe('Tree');
+  });
+
+  it("Ren's tool on a lost sheet lays out a fresh one and tells Ren, never an error", async () => {
+    await live();
+    await tool('choose_character', { character: 'ten' });
+    gone.add(lessonId());
+    expect(await tool('next_stroke')).toMatch(/^Not yet: the sheet had been lost and has been set up again/);
+    expect(heading()).toBe('What would you like to write?');
+    expect(await tool('choose_character', { character: 'river' })).toMatch(/^Done: 川 is on the sheet/);
+  });
+
+  it('a stroke on a lost sheet does the same', async () => {
+    await live();
+    await tool('choose_character', { character: 'ten' });
+    gone.add(lessonId());
+    await act(async () => { draw([[150, 450], [850, 450]], { samples: 40 }); });
+    await settle();
+    expect(heading()).toBe('What would you like to write?');
+    expect(screen.getByRole('alert').textContent).toContain('Your sheet had to be set up again');
+  });
+
+  it('calling Ren again after the sheet was lost lays out a fresh one, not a welcome back to the dead one', async () => {
+    const view = await live();
+    await tool('choose_character', { character: 'ten' });
+    fake.phase = 'ended';
+    view.rerender(<App />);
+    await settle();
+    gone.add(lessonId());
+    const layouts = requests.filter((r) => r.path === '/lessons').length;
+    fake.phase = 'starting';
+    view.rerender(<App />);
+    await settle();
+    fake.phase = 'live';
+    view.rerender(<App />);
+    await settle();
+    expect(requests.filter((r) => r.path === '/lessons').length).toBe(layouts + 1);
+    expect(heading()).toBe('What would you like to write?');
+    const said = fake.events.map((e) => e.text).join(' ');
+    expect(said).not.toContain('They are back at their sheet');
+    expect(said).toContain('the sheet had been lost and has been set up again');
+  });
+
+  it('calling Ren again on a sheet that is still there welcomes the learner back to it', async () => {
+    const view = await live();
+    await tool('choose_character', { character: 'ten' });
+    fake.phase = 'ended';
+    view.rerender(<App />);
+    await settle();
+    fake.phase = 'starting';
+    view.rerender(<App />);
+    await settle();
+    fake.phase = 'live';
+    view.rerender(<App />);
+    await settle();
+    expect(heading()).toBe('Ten');
+    expect(fake.events.map((e) => e.text).join(' ')).toContain('They are back at their sheet');
+  });
+});
+
+describe('a stroke in flight while the sheet moves on', () => {
+  it('a stroke that reaches the server after Ren started the character over is not graded on the fresh sheet', async () => {
+    await live();
+    await tool('choose_character', { character: 'ten' });
+    await tool('show_stroke');
+    await tool('next_stroke');                                                       // stroke 2 of 2 is live
+    arriveLate((p) => p.endsWith('/stroke'));
+    await act(async () => { draw([[150, 450], [850, 450]], { samples: 40 }); });   // aimed at stroke 2; slow to arrive
+    await settle();
+    await tool('start_over');                                                        // reaches the server first
+    await arrive();
+    await settle();
+    expect(screen.getByText(/Write stroke/).textContent).toContain('1 of 2');
+    expect(screen.queryByText('Correct')).toBeNull();                                // not graded against stroke 1
+    expect(screen.getByRole('alert').textContent).toContain('The sheet moved on before that stroke arrived');
   });
 });
