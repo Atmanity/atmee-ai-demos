@@ -7,7 +7,7 @@
 // compare butter), the food's name stays put while the numbers scroll, and
 // only the score column is ever marked "best".
 import { useState } from 'react';
-import type { Shelf, ShelfRow } from '../engine/shelf.ts';
+import { isCurrent, type Shelf, type ShelfRow } from '../engine/shelf.ts';
 
 /** The id "See them side by side" scrolls to. */
 export const TABLE_ANCHOR_ID = 'side-by-side';
@@ -78,7 +78,7 @@ export function FoodTable({ shelf, caption }: { shelf: Shelf; caption: string })
         </thead>
         <tbody>
           {shelf.items.map((row, index) => (
-            <tr key={row.product_name} className={row.product_name === shelf.current ? 'is-current' : undefined}>
+            <tr key={`${row.product_name}\u0000${row.serving_size}`} className={isCurrent(shelf, row) ? 'is-current' : undefined}>
               <th scope="row" className="ms-col-food">
                 <span className="ms-table-name">{row.product_name}</span>
                 {row.serving_size && <span className="ms-table-serving">{row.serving_size}</span>}

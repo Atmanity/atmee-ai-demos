@@ -2,7 +2,7 @@
 // shelf), test_parity.py (what a new card clears) and
 // test_the_tapped_recipe_spins_forever.py (recipe names and blurbs).
 import { describe, expect, it } from 'vitest';
-import { Advisor, matchRecipe, MAX_SHELF, namesTheSameRecipe, recipeKey, sameFood } from './advisor.ts';
+import { Advisor, cardKey, matchRecipe, MAX_SHELF, namesTheSameRecipe, recipeKey, sameFood } from './advisor.ts';
 import type { NutritionData, RecipeDetails } from './types.ts';
 
 function food(name: string, over: Omit<Partial<NutritionData>, 'nutrients'> & { nutrients?: Partial<NutritionData['nutrients']> } = {}): NutritionData {
@@ -347,26 +347,57 @@ describe('work that started before something newer', () => {
   });
 });
 
-describe('portions of one food', () => {
-  it('a plain ask finds the usual portion, never a stated one, and the newest of them', () => {
+describe('a card is a food at a portion', () => {
+  const usual = (name: string, serving: string, calories: number) => food(name, { serving_size: serving, calories, portion_assumed: true });
+  const stated = (name: string, serving: string, calories: number) => food(name, { serving_size: serving, calories, portion_assumed: false });
+  type Step = ['show', NutritionData] | ['ask', string, number | null];
+  const cases: [string, Step[], [string, string, number][]][] = [
+    ['same food, two portions: two rows, the plain ask finds the usual one', [
+      ['show', usual('Chicken breast', '1 breast (120 g)', 198)],
+      ['show', stated('Chicken breast', '200 g', 330)],
+      ['ask', 'chicken breast', 198],
+    ], [['Chicken breast', '1 breast (120 g)', 198], ['Chicken breast', '200 g', 330]]],
+    ['the stated portion first, then the usual one: the plain ask finds it (the cache is not missed)', [
+      ['show', stated('Chicken breast', '200 g', 330)],
+      ['show', usual('Chicken breast', '1 breast (120 g)', 198)],
+      ['ask', 'chicken breast', 198],
+      ['ask', 'a chicken breast', 198],
+    ], [['Chicken breast', '200 g', 330], ['Chicken breast', '1 breast (120 g)', 198]]],
+    ['a plain ask after only a stated portion finds nothing to reuse', [
+      ['show', stated('Large banana', '1 large (136 g)', 121)],
+      ['ask', 'banana', null],
+    ], [['Large banana', '1 large (136 g)', 121]]],
+    ['the same food at the same portion again is the same row, updated', [
+      ['show', usual('Chicken breast', '1 breast (120 g)', 198)],
+      ['show', usual('Chicken breast', '1 breast (120 g)', 200)],
+      ['ask', 'chicken breast', 200],
+    ], [['Chicken breast', '1 breast (120 g)', 200]]],
+    ['the usual portion of two sizes: the newest', [
+      ['show', usual('Medium banana', '1 medium (118 g)', 105)],
+      ['show', stated('Large banana', '1 large (136 g)', 121)],
+      ['ask', 'banana', 105],
+    ], [['Medium banana', '1 medium (118 g)', 105], ['Large banana', '1 large (136 g)', 121]]],
+  ];
+  it.each(cases)('%s', (_, steps, rows) => {
     const a = new Advisor();
-    a.show(food('Medium banana', { calories: 105 }));
-    a.show(food('Large banana', { calories: 121, portion_assumed: false }));
-    expect(a.cardFor('banana')?.calories).toBe(105);
-    const b = new Advisor();
-    b.show(food('Large banana', { calories: 121, portion_assumed: false }));
-    expect(b.cardFor('banana')).toBeNull();
+    for (const step of steps) {
+      if (step[0] === 'show') a.show(step[1]);
+      else expect(a.cardFor(step[1])?.calories ?? null, step[1]).toBe(step[2]);
+    }
+    expect(a.shelf.map((r) => [r.product_name, r.serving_size, r.calories])).toEqual(rows);
   });
 
-  it('the same name with another serving is a row of its own, named with its serving', () => {
+  it('the key: the food\'s words in any order or case, and the portion as written', () => {
+    expect(cardKey('Chicken breast', '200 g')).toBe(cardKey('chicken  BREAST', '200 G'));
+    expect(cardKey('Chicken breast', '200 g')).not.toBe(cardKey('Chicken breast', '1 breast (120 g)'));
+    expect(cardKey('Medium banana', '1 medium (118 g)')).not.toBe(cardKey('Banana bread', '1 medium (118 g)'));
+    expect(cardKey('food 1', '1 cup')).not.toBe(cardKey('food 11', '1 cup'));
+  });
+
+  it('the table marks the one row on the card, not every portion of its food', () => {
     const a = new Advisor();
-    a.show(food('Chicken breast', { serving_size: '1 breast (120 g)', calories: 198 }));
-    const placed = a.place(food('Chicken breast', { serving_size: '200 g', calories: 330, portion_assumed: false }));
-    expect(placed.card.product_name).toBe('Chicken breast, 200 g');
-    expect(a.nutrition?.product_name).toBe('Chicken breast, 200 g');
-    expect(a.shelf.map((r) => [r.product_name, r.calories])).toEqual([['Chicken breast', 198], ['Chicken breast, 200 g', 330]]);
-    // The same serving again is the same row, updated.
-    a.show(food('Chicken breast', { serving_size: '1 breast (120 g)', calories: 200 }));
-    expect(a.shelf.map((r) => r.calories)).toEqual([200, 330]);
+    a.show(usual('Chicken breast', '1 breast (120 g)', 198));
+    a.show(stated('Chicken breast', '200 g', 330));
+    expect(a.shelfPayload()).toMatchObject({ current: 'Chicken breast', current_serving: '200 g' });
   });
 });

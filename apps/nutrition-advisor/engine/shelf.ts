@@ -36,6 +36,12 @@ export interface ShelfRow {
 
 export interface Shelf {
   current: string;
+  /**
+   * The serving of the food on the card. Two portions of one food share a
+   * name ("Chicken breast", 1 breast and 200 g), so the name alone could
+   * mark both rows as the one on the card.
+   */
+  current_serving?: string;
   items: ShelfRow[];
   recipes: { recipe_name: string }[];
 }
@@ -87,6 +93,7 @@ export function parseShelf(value: unknown): Shelf {
   }
   return {
     current: typeof raw.current === 'string' ? raw.current : '',
+    ...(typeof raw.current_serving === 'string' ? { current_serving: raw.current_serving } : {}),
     items,
     recipes,
   };
@@ -102,4 +109,9 @@ function numOrNull(value: unknown): number | null {
   if (value === undefined || value === null || value === '') return null;
   const n = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+/** Whether a row is the food on the card: its name, and its serving when the shelf says which. */
+export function isCurrent(shelf: Shelf, row: ShelfRow): boolean {
+  return row.product_name === shelf.current && (shelf.current_serving === undefined || row.serving_size === shelf.current_serving);
 }

@@ -8,12 +8,14 @@ import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type { AppServer } from '../../server/app-server.ts';
 import { llmAvailable, structured } from '../../server/llm.ts';
-import { Advisor, recipeKey, sameFood } from './engine/advisor.ts';
+import { Advisor, cardKey, recipeKey } from './engine/advisor.ts';
 import { bounded, serial } from './engine/bounded.ts';
 import { CARD_SCHEMA, CARD_SYSTEM, cardFrom, cardPrompt, PHOTO_PROMPT, PHOTO_SCHEMA, RECIPE_SCHEMA, RECIPE_SYSTEM, recipeFrom, recipePrompt } from './engine/card.ts';
 import { started } from './engine/cook.ts';
 import { INSTRUCTIONS, pressed, said, SAMPLE_FAILED, SERVER_TOOLS, TOOLS } from './engine/director.ts';
 
+/** A card's identity, the food at a portion (engine/advisor.ts). */
+const keyOf = (card: { product_name: string; serving_size: string }) => cardKey(card.product_name, card.serving_size);
 const list = (names: string[]) => names.map((n) => `“${n}”`).join(' and ');
 import { builtInCard, SAMPLE_CARD } from './engine/fallback.ts';
 import { asked, foodsFrom, resolveRecipe } from './engine/judge.ts';
@@ -111,7 +113,7 @@ async function lookUp(v: Visit, foods: FoodAsk[]): Promise<Outcome> {
   const { advisor } = v;
   if (!foods.length) return { view: advisor.view(), kind: 'failed', text: said.noFood() };
   const ticket = advisor.begin();
-  const before = new Set(advisor.shelf.map((r) => r.product_name.toLowerCase()));
+  const before = new Set(advisor.shelf.map(keyOf));
   // A food already looked at comes back as it was (same figures, no second call), unless they said how much this time.
   const cards = await Promise.all(foods.map(async (f) => (f.quantity ? null : advisor.cardFor(f.name)) ?? cardForFood(f)));
   // Cleared while the cards were being made: they never come back.
@@ -132,40 +134,46 @@ async function lookUp(v: Visit, foods: FoodAsk[]): Promise<Outcome> {
   // were that very food, whose newer figures stand).
   if (!front) {
     const shown = advisor.nutrition;
-    const filed = put.filter((c) => c.product_name !== shown?.product_name);
+    const filed = put.filter((c) => !shown || keyOf(c) !== keyOf(shown));
     const text = filed.length || !shown ? said.filed(filed.length ? filed : put, shown?.product_name ?? '') : said.cards([shown], [], true);
     return { view: advisor.view(), kind: 'card', card: false, text, notice };
   }
-  const names = put.map((c) => c.product_name);
-  const others = advisor.shelf.map((r) => r.product_name).filter((name) => !names.includes(name));
-  const again = names.every((name) => before.has(name.toLowerCase()));
+  const keys = new Set(put.map(keyOf));
+  const others = advisor.shelf.filter((r) => !keys.has(keyOf(r))).map((r) => r.product_name);
+  const again = [...keys].every((key) => before.has(key));
   return { view: advisor.view(), kind: 'card', card: true, text: said.cards(put, others, again, missing), notice };
 }
 
 async function compare(v: Visit, foods: FoodAsk[]): Promise<Outcome> {
   const { advisor } = v;
   const ticket = advisor.begin();
-  const before = advisor.nutrition?.product_name ?? '';
-  // Only what the table lacks goes up: "compare it with an apple" is a request to display the apple.
-  const needed = foods.filter((f) => f.quantity || !advisor.onShelf(f.name));
-  const cards = await Promise.all(needed.map((f) => cardForFood(f)));
+  const before = advisor.nutrition ? keyOf(advisor.nutrition) : null;
+  // Each food at its portion. A stated amount is a card of its own; a plain
+  // name is the one on the table (its usual portion first), so "compare it
+  // with an apple" puts up only what the table lacks.
+  const reused = foods.map((f) => (f.quantity ? null : advisor.cardFor(f.name) ?? advisor.newestOf(f.name)));
+  const needed = foods.filter((_, i) => !reused[i]);
+  const made = await Promise.all(needed.map((f) => cardForFood(f)));
   if (!advisor.current(ticket)) return { view: advisor.view(), kind: 'failed', text: said.clearedMeanwhile(list(foods.map(asked))) };
   const put: string[] = [];
   const missing: string[] = [];
+  const wantedKeys: string[] = [];   // the cards the user asked about, by identity
   let front = false;
-  cards.forEach((card, i) => {
-    if (!card) return void missing.push(asked(needed[i]));
+  let next = 0;
+  foods.forEach((f, i) => {
+    const kept = reused[i];
+    if (kept) return void wantedKeys.push(keyOf(kept));
+    const card = made[next++];
+    if (!card) return void missing.push(asked(f));
     const placed = advisor.place(card, ticket);
     if (placed.front) front = true;
     put.push(placed.card.product_name);
+    wantedKeys.push(keyOf(placed.card));
   });
   const notice = missing.length ? `Couldn't find ${missing.join(' or ')} just now. Try again in a moment, or ask about another food.` : undefined;
   // "It" is the card that was up; the foods named are the rest. No foods named ("compare them"): the whole table.
-  const named = foods
-    .map((f) => advisor.shelf.find((r) => sameFood(r.product_name, f.name))?.product_name ?? put.find((p) => sameFood(p, f.name)))
-    .filter((name): name is string => Boolean(name));
-  const wanted = new Set(foods.length ? [...(foods.length < 2 && before ? [before] : []), ...named, ...put] : advisor.shelf.map((r) => r.product_name));
-  let rows = advisor.shelf.filter((r) => wanted.has(r.product_name));
+  const wanted = new Set(foods.length ? [...(foods.length < 2 && before ? [before] : []), ...wantedKeys] : advisor.shelf.map(keyOf));
+  let rows = advisor.shelf.filter((r) => wanted.has(keyOf(r)));
   if (rows.length < 2) {
     // A food that could not be found leaves nothing to compare it with: say so, never a verdict on something else.
     if (missing.length) return { view: advisor.view(), kind: 'failed', text: said.lookupFailed(missing), notice };
@@ -224,7 +232,7 @@ function photo(v: Visit, image: Image, sample: boolean): Promise<Outcome> {
       const placed = advisor.place(reading.card, ticket);
       if (!placed.front) {
         const shown = advisor.nutrition;
-        const text = shown && placed.card.product_name === shown.product_name ? said.cards([shown], [], true) : said.filed([placed.card], shown?.product_name ?? '');
+        const text = shown && keyOf(placed.card) === keyOf(shown) ? said.cards([shown], [], true) : said.filed([placed.card], shown?.product_name ?? '');
         return { view: advisor.view(), kind: 'photo', card: false, text };
       }
       return { view: advisor.view(), kind: 'photo', card: true, text: said.photo(placed.card, reading.seen, sample, placed.others) };

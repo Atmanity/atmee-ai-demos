@@ -158,19 +158,60 @@ describe('look_up_food', () => {
     expect(body.text).not.toContain('105 calories');
   });
 
-  it('two portions of one food are two rows; a later plain ask brings back the usual portion', async () => {
-    const { tool } = await open();
-    fake.respond = (req) => /said how much: "200 g"/.test(req.user)
-      ? cardJson('chicken', { product_name: 'Chicken breast', serving_size: '200 g', calories: 330 })
-      : cardJson('chicken', { product_name: 'Chicken breast', serving_size: '1 breast (120 g)', calories: 198 });
-    await tool('look_up_food', { foods: ['chicken breast'] });
-    const { body } = await tool('look_up_food', { foods: ['200 g chicken breast'] });
-    expect(body.text).toContain('330 calories');
-    expect(body.text).not.toContain('198 calories');
-    expect(body.view.shelf.items.map((r) => [r.product_name, r.calories])).toEqual([['Chicken breast', 198], ['Chicken breast, 200 g', 330]]);
-    const plain = await tool('look_up_food', { foods: ['chicken breast'] });
-    expect(plain.body.view.nutrition?.calories).toBe(198);
-    expect(calls(CARD_SCHEMA)).toBe(2);
+  describe('a card is a food at a portion', () => {
+    const chicken = (req: { user: string; schema: unknown }) => {
+      if (req.schema !== CARD_SCHEMA || !/chicken/.test(req.user)) return model(req);
+      return /said how much: "200 g"/.test(req.user)
+        ? cardJson('chicken', { product_name: 'Chicken breast', serving_size: '200 g', calories: 330 })
+        : cardJson('chicken', { product_name: 'Chicken breast', serving_size: '1 breast (120 g)', calories: 198 });
+    };
+    const rows = (body: Outcome) => body.view.shelf.items.map((r) => [r.product_name, r.serving_size, r.calories]);
+
+    it('two portions are two rows; a later plain ask brings back the usual one with no model call', async () => {
+      const { tool } = await open();
+      fake.respond = chicken;
+      await tool('look_up_food', { foods: ['chicken breast'] });
+      const { body } = await tool('look_up_food', { foods: ['200 g chicken breast'] });
+      expect(body.text).toContain('330 calories');
+      expect(body.text).not.toContain('198 calories');
+      expect(rows(body)).toEqual([['Chicken breast', '1 breast (120 g)', 198], ['Chicken breast', '200 g', 330]]);
+      expect(body.view.shelf).toMatchObject({ current: 'Chicken breast', current_serving: '200 g' });
+      const plain = await tool('look_up_food', { foods: ['chicken breast'] });
+      expect(plain.body.view.nutrition?.calories).toBe(198);
+      expect(calls(CARD_SCHEMA)).toBe(2);
+    });
+
+    it('the stated portion first: the plain ask after it is looked up once, then reused', async () => {
+      const { tool } = await open();
+      fake.respond = chicken;
+      await tool('look_up_food', { foods: ['200 g chicken breast'] });
+      await tool('look_up_food', { foods: ['chicken breast'] });
+      const again = await tool('look_up_food', { foods: ['chicken breast'] });
+      expect(again.body.view.nutrition?.calories).toBe(198);
+      expect(calls(CARD_SCHEMA)).toBe(2);
+    });
+
+    it('comparing a stated portion with another food is those two rows, not every portion', async () => {
+      const { tool } = await open();
+      fake.respond = chicken;
+      await tool('look_up_food', { foods: ['chicken breast'] });
+      const { body } = await tool('compare_foods', { foods: ['200 g chicken breast', 'an apple'] });
+      expect(body.kind).toBe('compare');
+      expect(body.text).toContain('Chicken breast, 200 g: 330 cal');
+      expect(body.text).toContain('Medium apple, 1 medium: 95 cal');
+      expect(body.text).not.toContain('198 cal');
+    });
+
+    it('comparing two portions of one food is exactly those two', async () => {
+      const { tool } = await open();
+      fake.respond = chicken;
+      await tool('look_up_food', { foods: ['apple'] });
+      await tool('look_up_food', { foods: ['chicken breast'] });
+      const { body } = await tool('compare_foods', { foods: ['chicken breast', '200 g chicken breast'] });
+      expect(body.text).toContain('Chicken breast, 1 breast (120 g): 198 cal');
+      expect(body.text).toContain('Chicken breast, 200 g: 330 cal');
+      expect(body.text).not.toMatch(/Side by side[^]*Medium apple, 1 medium: 95 cal[^]*Give a one-line verdict/);
+    });
   });
 
   it('two foods at once: both up, each with its figures', async () => {

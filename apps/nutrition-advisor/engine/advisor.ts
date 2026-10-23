@@ -118,6 +118,31 @@ export function sameFood(a: string, b: string): boolean {
   return left.every((w) => set.has(w));
 }
 
+/**
+ * A food's own words, in any order or case: "Chicken breast" and "breast,
+ * chicken" are one food, "Medium banana" is a banana. Unlike `sameFood` it
+ * keeps a bare number, which is part of a name ("7 Up", "Food 11"); a measure
+ * ("200g") is the portion's business, not the food's.
+ */
+export const foodKey = (name: string) =>
+  (name ?? '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((w) => w && !PORTION_WORDS.has(w) && !/^\d+([.,]\d+)?(g|ml|oz|mg|kg)$/.test(w))
+    .map(singular)
+    .sort()
+    .join(' ');
+
+/**
+ * A card's identity: the food at a portion. The one key the table, the cache
+ * and every lookup, comparison and photo use, so two portions of one food are
+ * two rows and the same portion again is the same row.
+ */
+export const cardKey = (name: string, serving: string) => `${foodKey(name)}\u0000${(serving ?? '').toLowerCase().replace(/\s+/g, ' ').trim()}`;
+const keyOf = (item: { product_name: string; serving_size: string }) => cardKey(item.product_name, item.serving_size);
+
 export class Advisor {
   /** The card that is up. */
   nutrition: NutritionData | null = null;
@@ -176,8 +201,8 @@ export class Advisor {
   rememberFood(data: NutritionData) {
     const row = shelfRow(data);
     if (!row.product_name) return;
-    const key = fold(row.product_name);
-    const index = this.shelf.findIndex((r) => fold(r.product_name) === key);
+    const key = keyOf(row);
+    const index = this.shelf.findIndex((r) => keyOf(r) === key);
     if (index >= 0) {
       this.shelf[index] = row;
       return;
@@ -198,6 +223,7 @@ export class Advisor {
   shelfPayload(): Shelf {
     return {
       current: this.nutrition?.product_name ?? '',
+      ...(this.nutrition ? { current_serving: this.nutrition.serving_size } : {}),
       items: this.shelf.map((row) => ({ ...row })),
       // The page needs to know one is there; the steps come with the recipe when it is opened.
       recipes: this.recipes.map((r) => ({ recipe_name: r.recipe_name })),
@@ -213,17 +239,24 @@ export class Advisor {
   cardFor(name: string): NutritionData | null {
     // A plain ask is for the usual portion (or the label read from a photo):
     // the newest such card of that food, never a card for an amount someone stated.
+    return this.newestOf(name, (card) => Boolean(card.portion_assumed || card.source === 'label'));
+  }
+
+  /** The newest card of a food at any portion (or the newest that `fits`), if one is on the table. */
+  newestOf(name: string, fits: (card: NutritionData) => boolean = () => true): NutritionData | null {
+    const food = foodKey(name);
+    if (!food) return null;
     for (const row of [...this.shelf].reverse()) {
-      if (!sameFood(row.product_name, name)) continue;
-      const card = this.cards.get(fold(row.product_name));
-      if (card && (card.portion_assumed || card.source === 'label')) return card;
+      if (foodKey(row.product_name) !== food) continue;
+      const card = this.cards.get(keyOf(row));
+      if (card && fits(card)) return card;
     }
     return null;
   }
 
   /** Whether a food the user names is already in the comparison table. */
   onShelf(name: string): boolean {
-    return this.shelf.some((r) => sameFood(r.product_name, name));
+    return this.newestOf(name) !== null;
   }
 
   // -- display_nutrition_info -----------------------------------------------
@@ -239,13 +272,13 @@ export class Advisor {
 
   /**
    * `show`, saying what happened: the card as it now stands in the table
-   * (renamed if another portion of the food holds its name), whether it was
-   * written at all, and whether it took the front.
+   * (the newer figures, when newer work already wrote this food at this
+   * portion), whether it was written at all, and whether it took the front.
    */
   place(given: NutritionData, ticket = this.begin()): { card: NutritionData; others: string[]; written: boolean; front: boolean } {
-    const card = this.distinct(given);
-    const key = fold(card.product_name);
-    const others = () => this.shelf.filter((r) => fold(r.product_name) !== key).map((r) => r.product_name);
+    const card = given;
+    const key = keyOf(card);
+    const others = () => this.shelf.filter((r) => keyOf(r) !== key).map((r) => r.product_name);
     // Newer work already wrote this food: an older card of it writes nowhere,
     // or the table and the cache would hold older figures than the label.
     if ((this.writtenAt.get(key) ?? 0) > ticket) return { card: this.cards.get(key) ?? card, others: others(), written: false, front: false };
@@ -263,20 +296,8 @@ export class Advisor {
     }
     this.rememberFood(card);
     this.cards.set(key, card);
-    for (const name of this.cards.keys()) if (!this.shelf.some((r) => fold(r.product_name) === name)) this.cards.delete(name);
+    for (const held of this.cards.keys()) if (!this.shelf.some((r) => keyOf(r) === held)) this.cards.delete(held);
     return { card, others: others(), written: true, front };
-  }
-
-  /**
-   * The card under a name that is its own: another portion of the same food
-   * ("Chicken breast", 1 breast) keeps its row, and this one ("Chicken
-   * breast", 200 g) becomes "Chicken breast, 200 g". The same serving again is
-   * the same row.
-   */
-  private distinct(card: NutritionData): NutritionData {
-    const row = this.shelf.find((r) => fold(r.product_name) === fold(card.product_name));
-    if (!row || !card.serving_size.trim() || fold(row.serving_size) === fold(card.serving_size)) return card;
-    return { ...card, product_name: `${card.product_name}, ${card.serving_size.trim()}`.slice(0, 120) };
   }
 
   // -- display_recipe_details -----------------------------------------------

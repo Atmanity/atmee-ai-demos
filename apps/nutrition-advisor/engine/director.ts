@@ -13,6 +13,7 @@
 import type { AppTool } from '../../../server/app-server.ts';
 import { stepsLabel, type Cook } from './cook.ts';
 import { DAILY_VALUES, dailyValue } from './nutrition.ts';
+import { isCurrent } from './shelf.ts';
 import type { Nutrients, NutritionData, RecipeDetails, ShelfRow, View } from './types.ts';
 
 /** The board's limit (the API's `state`). */
@@ -169,7 +170,7 @@ function compose(view: View, screen: Screen, b: Budget): string {
   const rows = view.shelf.items;
   if (rows.length >= 2) {
     // The oldest go first when the board is full; the food on the card never does.
-    const current = rows.findIndex((r) => r.product_name === view.shelf.current);
+    const current = rows.findIndex((r) => isCurrent(view.shelf, r));
     const keep = new Set<number>();
     if (current >= 0) keep.add(current);
     for (let i = rows.length - 1; i >= 0 && keep.size < b.rows; i--) keep.add(i);
