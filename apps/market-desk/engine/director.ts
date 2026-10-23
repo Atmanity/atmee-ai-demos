@@ -200,7 +200,13 @@ export const said = {
 
   focused(r: FocusReport, board: Board, now = nowS()): string {
     if (r.kind === 'missing') return `Not done: no listing matched "${r.said}". Ask for the ticker or the company's full name, and never guess one.`;
-    if (r.kind === 'added') return said.added(r.report, board, now, r.report.landed.length ? `${r.report.landed[0].quote.symbol} is front and centre now.` : '');
+    // Watch is read off the board, never assumed: a pull-up whose quote lands
+    // after the user put another stock on watch is added, not brought forward.
+    const watching = (symbol: string) => (board.focus === symbol
+      ? `${symbol} is front and centre now.`
+      : `${symbol} is on the board, but ${board.focus ?? 'nothing'} is on watch: say so, and bring ${symbol} forward only if they ask again.`);
+    if (r.kind === 'added') return said.added(r.report, board, now, r.report.landed.length ? watching(r.report.landed[0].quote.symbol) : '');
+    if (board.focus !== r.quote.symbol) return `Not done: ${watching(r.quote.symbol)} ${read(r.quote, now)}.`;
     return `Done: ${read(r.quote, now)} is front and centre now; the desk refreshes it every minute. Read its price and move in one short line, no view on it.`;
   },
 

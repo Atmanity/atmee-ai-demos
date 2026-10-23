@@ -189,6 +189,14 @@ test('every refresh outcome is said for what it is', () => {
   expect(said.refreshed({ kind: 'missing', symbol: 'TSLA' })).toContain('add it only if they say so');
 });
 
+test('a focus result claims watch only for the stock the board has on watch', () => {
+  const msft = quote({ symbol: 'MSFT' });
+  const b = boardOf([quote(), quote({ symbol: 'NVDA' }), msft], { focus: 'NVDA' });
+  expect(said.focused({ kind: 'added', report: report({ landed: [{ quote: msft }] }) }, b)).not.toContain('front and centre');
+  expect(said.focused({ kind: 'focused', quote: msft }, b)).toMatch(/^Not done: MSFT is on the board, but NVDA is on watch/);
+  expect(said.focused({ kind: 'added', report: report({ landed: [{ quote: msft }] }) }, { ...b, focus: 'MSFT' })).toContain('MSFT is front and centre now');
+});
+
 test('a stale row is read as the last number the desk got', () => {
   expect(said.focused({ kind: 'focused', quote: { ...entry(), stale: true } }, boardOf([entry()]), 0)).toContain('the last number the desk got');
 });

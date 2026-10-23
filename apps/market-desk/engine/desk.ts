@@ -318,7 +318,8 @@ export class Fetcher {
       if (board.find(result.board, symbol)) this.speaker.say(say.refreshed(entry, before?.as_of === entry.as_of), RESULT_TTL_S, asked.call);
       return outcome;
     }
-    if (board.find(result.board, symbol)) this.landed.push({ quote: board.find(result.board, symbol)!, said: asked.said, call: asked.call, front });
+    // The line claims watch only if the board has it there now.
+    if (board.find(result.board, symbol)) this.landed.push({ quote: board.find(result.board, symbol)!, said: asked.said, call: asked.call, front: front && result.board.focus === symbol });
     this.flushLanded();
     return outcome;
   }

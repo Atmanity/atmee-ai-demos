@@ -96,6 +96,21 @@ describe('the host\'s tools', () => {
     expect(s.board().focus).toBe('MSFT');
   });
 
+  test('focus_symbol says what the board did: a pull-up that lands after the user looked elsewhere is added, not on watch (Bugbot)', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const { s } = desk(async (symbol) => { if (symbol === 'MSFT') await gate; return fresh(symbol); });
+    await run(s, 'add_symbols', { stocks: ['AAPL', 'NVDA'] }, 'tool');
+    const pulling = run(s, 'focus_symbol', { stock: 'Microsoft' }, 'tool');
+    await settle();
+    await press(s, 'focus', 'NVDA');      // the user taps NVDA while MSFT's quote is on its way
+    release();
+    const done = await pulling;
+    expect(s.board().focus).toBe('NVDA');
+    expect(done.text).not.toContain('MSFT is front and centre');
+    expect(done.text).toContain('MSFT is on the board, but NVDA is on watch');
+  });
+
   test('refresh_quote: the one on watch by default; a stock not on the board is offered, never added', async () => {
     const { s, later } = desk();
     await run(s, 'add_symbols', { stocks: ['AAPL'] }, 'tool');
