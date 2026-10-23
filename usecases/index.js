@@ -108,16 +108,16 @@ const recruiter = {
   conductor: {
     start: "greet",
     nodes: [
-      { id: "greet", instructions: "You are the recruiter on a first screening call. Greet the candidate by name if you know it, say the call takes about ten minutes, and ask them to introduce themselves briefly.", edges: [{ to: "background", when: "The candidate has introduced themselves." }, { to: "greet" }] },
-      { id: "background", instructions: "Ask about their current role and the most relevant project for the job. One question at a time; follow up on specifics (scale, their own part, outcome).", edges: [{ to: "fit", when: "You have heard about their current role and one concrete project." }, { to: "background" }] },
-      { id: "fit", instructions: "Check the must-haves of the job one by one in conversation: years of experience, production Go, PostgreSQL, on-call. Do not read the list; weave it in.", edges: [{ to: "logistics", when: "All four must-haves have been discussed." }, { to: "fit" }] },
-      { id: "logistics", instructions: "Ask about notice period, location/time zone and salary expectations, briefly.", edges: [{ to: "questions", when: "Logistics are covered." }, { to: "logistics" }] },
-      { id: "questions", instructions: "Invite the candidate's questions about the role or the company and answer from the job description; say you will check what you do not know.", edges: [{ to: "wrap", when: "The candidate has no more questions." }, { to: "questions" }] },
-      { id: "wrap", instructions: "Thank them, say the next step is a technical interview within a week, and close warmly.", emotion: "warm" },
+      { id: "greet", instructions: "You are the recruiter on a first screening call. Mark this step with set_agenda_step greet. Greet the candidate by name if you know it, say the call takes about ten minutes, and ask them to introduce themselves briefly.", edges: [{ to: "background", when: "The candidate has introduced themselves." }, { to: "greet" }] },
+      { id: "background", instructions: "Mark this step with set_agenda_step background, then ask about their current role and the most relevant project for the job. One question at a time; follow up on specifics (scale, their own part, outcome).", edges: [{ to: "fit", when: "You have heard about their current role and one concrete project." }, { to: "background" }] },
+      { id: "fit", instructions: "Mark this step with set_agenda_step fit, then check the must-haves of the job one by one in conversation: years of experience, production Go, PostgreSQL, on-call. Do not read the list; weave it in.", edges: [{ to: "logistics", when: "All four must-haves have been discussed." }, { to: "fit" }] },
+      { id: "logistics", instructions: "Mark this step with set_agenda_step logistics, then ask about notice period, location/time zone and salary expectations, briefly.", edges: [{ to: "questions", when: "Logistics are covered." }, { to: "logistics" }] },
+      { id: "questions", instructions: "Mark this step with set_agenda_step questions, then invite the candidate's questions about the role or the company and answer from the job description; say you will check what you do not know.", edges: [{ to: "wrap", when: "The candidate has no more questions." }, { to: "questions" }] },
+      { id: "wrap", instructions: "First mark this step with set_agenda_step wrap, then thank them, say the next step is a technical interview within a week, and close warmly.", emotion: "warm" },
     ],
   },
   appTools: {
-    instructions: "You keep the hiring team's screening notes in the call app while you talk. Each time the call moves to a new part, mark it on the candidate's agenda with set_agenda_step. Each time the candidate has told you something the hiring team needs (current role, a project, years of experience, production Go, PostgreSQL, on-call, notice period, location or time zone, salary expectations, their questions), write it down in one short line with record_answer. Keep the conversation natural: never mention the agenda, the notes or marking them.",
+    instructions: "You keep the hiring team's screening notes in the call app while you talk. The candidate's agenda moves only when you mark it: each time the call moves to a new part, mark it with set_agenda_step, every step in order (greet, background, fit, logistics, questions, wrap), and always mark wrap before you thank the candidate and say goodbye. Each time the candidate has told you something the hiring team needs (current role, a project, years of experience, production Go, PostgreSQL, on-call, notice period, location or time zone, salary expectations, their questions), write it down in one short line with record_answer. Keep the conversation natural: never mention the agenda, the notes or marking them.",
     tools: [
       tool("set_agenda_step", "Mark the part of the call you are in now on the candidate's agenda: greet (introductions), background (current role and a project), fit (the must-haves), logistics (notice, location, salary), questions (the candidate's questions), wrap (next steps).", { step: { type: "string", enum: AGENDA_STEPS } }, ["step"]),
       tool("record_answer", "Write one line in the hiring team's screening notes about what the candidate just told you.", {
@@ -154,22 +154,24 @@ const training = {
   conductor: {
     start: "intro",
     nodes: [
-      { id: "intro", instructions: "You are the trainer for a 10-minute module on incident response. Welcome the trainee, say there are three short slides, then a quick Q&A and a two-question quiz. Then go straight into slide 1 without waiting.", edges: [{ to: "slide1", speak: true }] },
-      { id: "slide1", instructions: `Put slide 1 up, then teach it in about four sentences, in your own words: "${SLIDES[0].body}" Then move on.`, edges: [{ to: "slide2", speak: true }] },
-      { id: "slide2", instructions: `Put slide 2 up, then teach it in about four sentences: "${SLIDES[1].body}" Give one example of what goes wrong when one person takes two roles. Then move on.`, edges: [{ to: "slide3", speak: true }] },
-      { id: "slide3", instructions: `Put slide 3 up, then teach it in about four sentences: "${SLIDES[2].body}" Then ask whether the trainee has questions before the quiz.`, edges: [{ to: "qna" }] },
+      { id: "intro", instructions: "You are the trainer for a 10-minute module on incident response. Welcome the trainee, say there are three short slides, then a quick Q&A and a two-question quiz. Slide 1 is already on their screen: go straight into it without waiting.", edges: [{ to: "slide1", speak: true }] },
+      { id: "slide1", instructions: `Teach slide 1 (already on the screen) in about four sentences, in your own words: "${SLIDES[0].body}" Then move on.`, edges: [{ to: "slide2", speak: true }] },
+      { id: "slide2", instructions: `Put slide 2 up with show_slide, then teach it in about four sentences: "${SLIDES[1].body}" Give one example of what goes wrong when one person takes two roles. Then move on.`, edges: [{ to: "slide3", speak: true }] },
+      { id: "slide3", instructions: `Put slide 3 up with show_slide, then teach it in about four sentences: "${SLIDES[2].body}" Then put up slide 4, the closing questions slide, and ask whether the trainee has questions before the quiz.`, edges: [{ to: "qna" }] },
       { id: "qna", instructions: "Answer the trainee's questions about the three slides. If they have none, say so and start the quiz.", edges: [{ to: "quiz1", when: "The trainee has no more questions, or asked to start the quiz." }, { to: "qna" }] },
-      { id: "quiz1", instructions: `Quiz question 1: "${QUIZ[0].q}" Wait for the answer. Record your verdict as question 1 (the answer is: ${QUIZ[0].a}), then begin your reply with the word "Correct" or "Incorrect" and say why in one sentence.`, edges: [{ to: "quiz2", when: "The trainee has answered question 1 and you have told them whether it was right." }, { to: "quiz1" }] },
-      { id: "quiz2", instructions: `Quiz question 2: "${QUIZ[1].q}" Wait for the answer. Record your verdict as question 2 (the answer is: ${QUIZ[1].a}), then begin your reply with the word "Correct" or "Incorrect".`, edges: [{ to: "wrap", when: "The trainee has answered question 2 and you have told them whether it was right." }, { to: "quiz2" }] },
+      { id: "quiz1", instructions: `Show quiz question 1 with ask_quiz_question, then ask it: "${QUIZ[0].q}" Wait for the answer. Record your verdict with grade_answer as question 1 (the answer is: ${QUIZ[0].a}), then tell the trainee whether it was right and why in one sentence.`, edges: [{ to: "quiz2", when: "The trainee has answered question 1 and you have told them whether it was right." }, { to: "quiz1" }] },
+      { id: "quiz2", instructions: `Show quiz question 2 with ask_quiz_question, then ask it: "${QUIZ[1].q}" Wait for the answer. Record your verdict with grade_answer as question 2 (the answer is: ${QUIZ[1].a}), then tell the trainee whether it was right.`, edges: [{ to: "wrap", when: "The trainee has answered question 2 and you have told them whether it was right." }, { to: "quiz2" }] },
       { id: "wrap", instructions: "Give the score out of two from the app state, one sentence of encouragement, and close the module.", emotion: "warm" },
     ],
   },
-  // The deck and the score are the course app's: the trainer puts each slide
-  // up and records each verdict, and the page shows both at once.
+  // The deck, the quiz and the score are the course app's: the trainer puts
+  // each slide and quiz question up and records each verdict, and the page
+  // shows them at once. The deck opens on slide 1.
   appTools: {
-    instructions: "You teach from the course app's slide deck on the trainee's screen, and the app keeps the quiz score. Put each lesson slide up with show_slide right before you teach it: slide 1, then 2, then 3. During the quiz, as soon as you have judged the trainee's answer, record it with grade_answer (the question number and whether it was right) before you tell them; that is how their score is counted. Never put a slide up during the quiz.",
+    instructions: "You teach from the course app's slide deck on the trainee's screen, and the app runs the quiz and keeps the score; the screen changes only when you use these. Slide 1 is already up when you start. Put slide 2 and slide 3 up with show_slide as you move on to them, and slide 4, the closing questions slide, when you invite questions. Before you ask each quiz question, show it with ask_quiz_question. As soon as you have judged the trainee's answer, record it with grade_answer (the question number and whether it was right) before you tell them; that is how their score is counted.",
     tools: [
-      tool("show_slide", "Put lesson slide n (1 to 3) on the trainee's screen, right before you teach it.", { n: { type: "integer", minimum: 1, maximum: 3 } }, ["n"]),
+      tool("show_slide", "Put a slide on the trainee's screen as you move on to it: lesson slide 2 or 3, or 4, the closing questions slide before the quiz.", { n: { type: "integer", minimum: 1, maximum: 4 } }, ["n"]),
+      tool("ask_quiz_question", "Show quiz question n (1 or 2) on the trainee's screen, right before you ask it.", { n: { type: "integer", minimum: 1, maximum: 2 } }, ["n"]),
       tool("grade_answer", "Record your verdict on the trainee's answer to quiz question 1 or 2, so the course app counts their score. Once per question.", {
         question: { type: "integer", minimum: 1, maximum: 2 },
         correct: { type: "boolean" },
@@ -178,11 +180,10 @@ const training = {
     ],
   },
   slides: SLIDES,
-  onLinked(h) { h.memo.score = 0; return [state(trainingState(h))]; },
+  onLinked(h) { h.memo.score = 0; h.memo.slide = h.memo.slide || 1; return [state(trainingState(h))]; },
   onUser(h, msg) {
     if (msg.kind === "slide") { h.memo.slide = Number(msg.text); return [state(trainingState(h))]; }
-    // The page counts the score (from grade_answer, or the verdict in the
-    // captions when the session has no tools) and the state carries it.
+    // The page counts the score from grade_answer, and the state carries it.
     if (msg.kind === "score") { h.memo.score = Number(msg.text) || 0; return [state(trainingState(h))]; }
     if (msg.kind === "typed") return [say(msg.text)];
     return [];
@@ -190,7 +191,7 @@ const training = {
 };
 function trainingState(h) {
   const s = SLIDES.find((x) => x.id === h.memo.slide);
-  return `Training app state. Slide on screen: ${s ? `${s.id} "${s.title}"` : "title slide"}. Quiz score so far: ${h.memo.score || 0} of 2. The trainee answers by voice or by typing.`;
+  return `Training app state. Slide on screen: ${s ? `${s.id} "${s.title}"` : h.memo.slide === 4 ? '4, the closing "Questions?" slide' : "1"}. Quiz score so far: ${h.memo.score || 0} of 2. The trainee answers by voice or by typing.`;
 }
 
 // ---------------------------------------------------------------------------

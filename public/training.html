@@ -176,12 +176,12 @@
     { title: 'The first ten minutes', timeline: [['0', 'Declare the incident'], ['2', 'Assign the three roles'], ['5', 'Open the incident channel'], ['10', 'Post the first status update, even if it only says "investigating"']] },
   ];
   const QUIZ = [
-    { q: 'Who is the only person allowed to decide to roll back during an incident?', match: /roll ?back/i },
-    { q: 'By when should the first status update go out?', match: /status update|first update/i },
+    'Who is the only person allowed to decide to roll back during an incident?',
+    'By when should the first status update go out?',
   ];
 
-  let s, stage = 'intro', slideNo = 0, score = 0, answered = 0, quizAt = -1, verdicts = [], feedback = [], finished = false, stopClock = () => {};
-  let toolsLive = false, verdictFallback = null; // toolsLive: the trainer has called a tool this session
+  // stage: lesson (slides 1-3) -> qna (the closing "Questions?" slide) -> quiz -> done
+  let s, stage = 'lesson', slideNo = 1, score = 0, answered = 0, quizAt = -1, verdicts = [], feedback = [], finished = false, stopClock = () => {};
   const tr = UI.transcript($('transcript'), { avatar: 'Trainer', user: 'You' });
   const caption = UI.captions($('caption'));
   const debug = UI.debugLog();
@@ -195,7 +195,7 @@
 
   function setStage(next) {
     stage = next; $('tracker').hidden = false;
-    const order = ['lesson', 'qna', 'quiz'], at = order.indexOf(next === 'intro' ? 'lesson' : next === 'done' ? 'end' : next);
+    const order = ['lesson', 'qna', 'quiz'], at = order.indexOf(next);
     [...$('tracker').children].forEach((el, i) => { el.className = next === 'done' || i < at ? 'done' : i === at ? 'now' : ''; });
   }
 
@@ -208,12 +208,10 @@
     } else if (stage === 'quiz' && quizAt >= 0) {
       const v = verdicts[quizAt];
       el.innerHTML = `<div class="num">QUIZ · QUESTION ${quizAt + 1} OF 2</div><h2>Check your understanding</h2>
-        <div class="quizcard">${UI.esc(QUIZ[quizAt].q)}</div>
+        <div class="quizcard">${UI.esc(QUIZ[quizAt])}</div>
         ${v === undefined ? '<p class="lede" style="margin-top:16px">Answer out loud, or type it below.</p>' : `<div class="verdict ${v ? 'right' : 'wrong'}">${v ? '✓ Correct' : '✗ Not quite'}</div>${feedback[quizAt] ? `<p class="feedback">${UI.esc(feedback[quizAt])}</p>` : ''}`}`;
     } else if (stage === 'qna') {
       el.innerHTML = `<div class="num">Q&amp;A</div><h2>Any questions before the quiz?</h2><p class="lede">Ask anything about the three lessons. When you're ready, say "start the quiz".</p>`;
-    } else if (!slideNo) {
-      el.innerHTML = `<div class="num">MODULE 1</div><h2>Incident response, in ten minutes</h2><p class="lede">Three short lessons, a Q&amp;A with your trainer, and a two-question quiz.</p>`;
     } else {
       const sl = SLIDES[slideNo];
       const body = sl.points
@@ -226,26 +224,30 @@
     $('prev').disabled = slideNo <= 1 || finished; $('next').disabled = slideNo >= 3 || finished;
     $('score').textContent = score;
   }
+  // The trainee can page back through the lessons at any time (reviewing);
+  // the trainer's show_slide also brings the deck back to the lessons.
   function goto(n, fromTrainer) {
     if (n < 1 || n > 3) return;
-    slideNo = n; if (!fromTrainer && (stage === 'qna' || stage === 'quiz')) { /* reviewing */ } else if (stage === 'intro') setStage('lesson');
-    renderSlide(); if (s && !fromTrainer) s.user('slide', String(n));
+    slideNo = n; if (fromTrainer) setStage('lesson');
+    renderSlide(); if (s) s.user('slide', String(n));
   }
   $('prev').onclick = () => goto(slideNo - 1); $('next').onclick = () => goto(slideNo + 1);
 
-  // The trainer drives the deck and the score with its tools: show_slide puts a
-  // lesson up, grade_answer records a verdict. Without tools (a deployment that
-  // doesn't take them) the page follows what it says instead: "slide two", and
-  // a verdict that starts with "Correct"/"Incorrect", counted only if no
-  // grade_answer for that question comes within a few seconds.
+  // The trainer drives the deck, the quiz and the score with its tools. The
+  // deck opens on slide 1; show_slide puts up slides 2-3 and the closing
+  // "Questions?" slide (4), ask_quiz_question shows a quiz question, and
+  // grade_answer records the verdict that counts toward the score.
   const tools = {
     show_slide: ({ n }) => {
-      toolsLive = true;
-      if (stage === 'quiz' || finished) return 'the quiz has started; slides stay down';
-      if (stage === 'intro') setStage('lesson');
-      goto(n, true); if (s) s.user('slide', String(n));
+      if (stage === 'quiz' || finished) return 'the quiz has started; the slides stay down';
+      if (n === 4) { setStage('qna'); renderSlide(); if (s) s.user('slide', '4'); return; }
+      goto(n, true);
     },
-    grade_answer: ({ question, correct, feedback: line }) => { toolsLive = true; grade(question, correct, line); },
+    ask_quiz_question: ({ n }) => {
+      if (finished) return 'the module is complete';
+      setStage('quiz'); quizAt = n - 1; renderSlide();
+    },
+    grade_answer: ({ question, correct, feedback: line }) => grade(question, correct, line),
   };
   function grade(question, right, line) {
     const i = question - 1; if (i < 0 || i > 1 || finished) return;
@@ -257,31 +259,13 @@
     if (s && score !== before) s.user('score', String(score));
     if (answered >= 2) setTimeout(finish, 9000);
   }
-  const WORDS = { one: 1, two: 2, three: 3, first: 1, second: 2, third: 3 };
-  function follow(text) {
-    const m = !toolsLive && text.match(/\b(?:slide|lesson)\s+(\d|one|two|three)\b|\b(first|second|third)\s+(?:slide|lesson)\b/i);
-    if (m && stage !== 'quiz') { const n = Number(m[1]) || WORDS[(m[1] || m[2]).toLowerCase()]; if (n && n !== slideNo) goto(n, true); if (stage === 'intro') setStage('lesson'); }
-    if (stage === 'lesson' && slideNo === 3 && /question/i.test(text) && /\?/.test(text)) { setStage('qna'); renderSlide(); }
-    if (stage !== 'quiz' && /quiz/i.test(text) && QUIZ[0].match.test(text)) { setStage('quiz'); quizAt = 0; renderSlide(); return; }
-    if (stage === 'quiz') {
-      const v = text.match(/^\W*(correct|incorrect|not quite|that'?s right|spot on|exactly)/i);
-      const q = quizAt;
-      if (v && q >= 0 && verdicts[q] === undefined) {
-        const right = !/incorrect|not quite/i.test(v[1]);
-        clearTimeout(verdictFallback);
-        verdictFallback = setTimeout(() => { if (verdicts[q] === undefined) grade(q + 1, right); }, 4000);
-      }
-      // The next question: once question 1 has its verdict, the trainer's next question (any, when it grades with tools).
-      if (quizAt === 0 && verdicts[0] !== undefined && (toolsLive || QUIZ[1].match.test(text)) && /\?/.test(text)) { quizAt = 1; renderSlide(); }
-    }
-  }
   function finish() { if (finished) return; finished = true; setStage('done'); renderSlide(); }
 
   async function begin(withMic) {
     $('lobbyError').hidden = true;
     let mic = null;
     if (withMic) { try { mic = await Atmee.requestMic(); } catch (e) { $('lobbyError').textContent = e.friendly; $('lobbyError').hidden = false; return; } }
-    $('lobby').hidden = true; $('room').hidden = false; setStage('intro'); renderSlide();
+    $('lobby').hidden = true; $('room').hidden = false; setStage('lesson'); renderSlide();
     tr.clear(); tr.note(mic ? 'You joined with your microphone' : 'You joined without a microphone');
     connect(mic);
   }
@@ -290,7 +274,7 @@
       s = await Atmee.join({
         usecase: 'training', video: $('video'), audio: $('audio'), mic, tools,
         onPhase: (p, d) => overlay.phase(p, d),
-        onCaption: (text, final) => { caption(text, final); tr.avatar(text, final); if (final) follow(text); },
+        onCaption: (text, final) => { caption(text, final); tr.avatar(text, final); },
         onSpeaking: (v) => { $('trainer').classList.toggle('talking', v); sender.speaking(v); $('hint').textContent = v && sender.waiting ? 'Your message will be sent when the trainer finishes the sentence.' : ''; },
         onRelay: debug,
         onEnd: () => { stopClock(); overlay.ended('<div class="title">The lesson has ended</div><button class="btn primary" onclick="location.reload()">Start again</button>'); lock(true); },

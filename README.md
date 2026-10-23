@@ -25,7 +25,7 @@ case has one (`PUT /v1/avatars/{id}/conductor`), and runs what the app needs aro
 | `atmee.app` `note` | context kept, never replaced | pinned facts |
 | `atmee.app` `event` | something to comment on, spoken when the avatar has the floor, with a `ttl_s` | chat digests, game moves, screen changes |
 | `atmee.app` `mute` / `unmute` | the user is heard as silence, or heard again | the narrator ignores the player except at the shrine |
-| `lk.transcription` (in) | the avatar's words | captions, scoring, echo to a chatroom |
+| `lk.transcription` (in) | the avatar's words | captions and transcripts, echo to a chatroom (display only: no app state is read from them) |
 
 `usecases/index.js` is the whole behaviour of all five apps: a conductor graph where the app
 needs an agenda, the app tools it declares (`appTools`, below), and hooks (`onLinked`,
@@ -64,44 +64,26 @@ server's `onTool` hook.
 
 | app | tools | why |
 |---|---|---|
-| **Ledger Academy** | `show_slide {n}` notify, `grade_answer {question, correct, feedback?}` notify | the deck follows the trainer and the score is the trainer's own verdict, instead of the page guessing both from captions |
+| **Ledger Academy** | `show_slide {n: 1..4}`, `ask_quiz_question {n: 1..2}`, `grade_answer {question, correct, feedback?}`, all notify | the deck opens on slide 1; the trainer puts up slides 2–3 and the closing "Questions?" slide (4), shows each quiz question, and records each verdict, which is the score |
 | **Northwind Talent** | `set_agenda_step {step}` notify, `record_answer {topic, summary}` notify | the live agenda and a "Screening notes" panel filled by the recruiter as the candidate answers |
 | **Isle of Whispers** | `reveal_clue {seek}` **await**, `give_item {item}` notify | the oracle's powers, at the shrine only: the island's secrets are the game's, so the oracle asks where the key/chest/map lies and speaks from the answer while it glows on the map; it may gift a lantern (lights the tiles around you) or a charm |
 | **Nightcap Live** | `pin_message {text}` notify, `start_poll {question, options[2..4]}` notify | the host pins lines and runs polls in the stream chat; the server shows them to the studio and every viewer, counts votes, and tells the host the result when the poll closes |
 | **Kin** | none | information only flows from the app to the avatar (screen descriptions as `state`/`event`); the companion has nothing to make the app do |
 
-Every app still works when its tools are never called: the trainer's slides and verdicts and
-the recruiter's agenda fall back to following the captions (a caption verdict counts only if no
-`grade_answer` for that question arrives within 4 s; once a tool call has come, slide parsing
-stops, while the agenda keeps moving forward on captions too, for a step the recruiter forgot to
-mark). Tools are described in the avatar's own role: in testing the persona outweighed
-the tool instructions.
+Tools are the only way the avatar changes what the app shows: no app reads its captions for
+state (captions and transcripts are display only), so a slide, a quiz card or an agenda step
+that the avatar does not mark with its tool stays where it was. Tools are described in the
+avatar's own role, and the conductors name the tool at each step: in testing the persona
+outweighed the tool instructions.
 
-Tools need session_service #182 and Causeur #121, **not yet on staging**: a deployment without
-them ignores `appTools` (the apps run on their caption fallbacks). To try them against a local
-stack, put a `.env.local` next to `.env.example` (gitignored) with `ATMEE_BASE_URL` pointing at
-the local session_service (e.g. `http://127.0.0.1:8091`), its API key and avatar ids, and run
+Tools are required: they need session_service #182 and Causeur #121, on staging since
+2026-10-23. To try them against a local stack instead, put a `.env.local` next to
+`.env.example` (gitignored) with `ATMEE_BASE_URL` pointing at the local session_service (e.g.
+`http://127.0.0.1:8091`), its API key and avatar ids, and run
 `PORT=3334 node --env-file=.env.local server.js`. One avatar can serve all five apps: the server
 sets each use case's conductor, or clears it, before the session starts (that needs a key
 allowed to write the avatar; without it the conductor call is refused with 403 and the session
 starts without an agenda).
-
-Tested on a local stack (session_service #182 + Causeur #121, no renderer, so voice only,
-2026-10-23), each page driven headless with its persona set for the app and no conductor (the
-local key could not write one): the trainer put slides 1–3 up and graded both quiz answers
-(score 1 of 2, feedback shown, module completed); the recruiter marked every agenda step and
-filled 12 screening notes; the oracle called `reveal_clue` (await) and spoke from the answer
-("iron buried just north of these ancient stones") while the key's tile glowed, then gave the
-lantern; the host pinned the topic, started a Rust-vs-Go poll that showed in the studio and the
-viewer page, counted a viewer's vote, and announced the result when it closed.
-
-Tested again on staging (2026-10-23, conductors set, the staging avatars' own personas, face
-on): the same four flows passed with the agendas running. The trainer taught through the
-conductor and graded both answers, and the quiz card followed it to question 2. The recruiter
-filled the notes without mentioning them, but closed the call without marking "Next steps"
-(the captions now catch that). The oracle once described handing over the lantern without
-calling `give_item`, which is why its description now says that saying so is not enough. No
-typed turn was lost.
 
 ## The five apps, as tested on staging (2026-10-22)
 

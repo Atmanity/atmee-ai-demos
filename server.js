@@ -153,7 +153,6 @@ wss.on("connection", (ws, req) => {
         const entry = { role: "avatar", text: msg.text, final: msg.final, id: msg.id, ts: Date.now() };
         if (msg.final) h.transcript.push(entry);
         broadcast(h, { type: "caption", ...entry });
-        if (msg.final && h.def.onAvatarSaid) relay(h, h.def.onAvatarSaid(h, msg.text));
       } else if (msg.type === "tool") {
         // An app tool call the host page answered: the use case may react too.
         console.log(`[${h.name}] tool ${msg.name} ${JSON.stringify(msg.arguments)} -> ${msg.error ? "error: " + msg.error : String(msg.result).slice(0, 120)}`);

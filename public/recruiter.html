@@ -159,23 +159,19 @@
   $('send').innerHTML = icon.send; $('hangup').innerHTML = icon.end; $('tick').innerHTML = icon.check;
 
   const AGENDA = [
-    ['greet', 'Introductions', /introduce|tell me (a bit )?about yourself|welcome/i],
-    ['background', 'Your background', /current (role|position|job)|recent project|working on|what was your part/i],
-    ['fit', 'Must-haves', /how many years|years of|production|on-?call|postgres/i],
-    ['logistics', 'Logistics', /notice|time ?zone|location|salary|compensation|start date/i],
-    ['questions', 'Your questions', /any questions|questions for me|anything you'?d like to ask/i],
-    ['wrap', 'Next steps', /next step|technical interview|thanks? (you )?for (your|taking)/i],
+    ['greet', 'Introductions'],
+    ['background', 'Your background'],
+    ['fit', 'Must-haves'],
+    ['logistics', 'Logistics'],
+    ['questions', 'Your questions'],
+    ['wrap', 'Next steps'],
   ];
   let at = 0, s, stopClock = () => {}, name = 'Alex Chen';
   const initials = (n) => n.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'You';
   $('name').oninput = () => { $('initials').textContent = initials($('name').value); };
   function paintAgenda() { $('agenda').innerHTML = AGENDA.map(([, label], i) => `<li class="${i < at ? 'done' : i === at ? 'now' : ''}"><i></i>${label}</li>`).join(''); }
   // The recruiter marks the agenda (set_agenda_step) and writes the screening
-  // notes (record_answer) itself. Its captions move the agenda too, one item
-  // forward at a time (an echo of an earlier answer must not skip ahead): the
-  // whole agenda without tools, and a step the recruiter forgot to mark with
-  // them (on staging it closed the call without marking "Next steps").
-  function follow(text) { const next = AGENDA[at + 1]; if (next && next[2].test(text)) { at++; paintAgenda(); } }
+  // notes (record_answer) itself; nothing else moves them.
   const TOPICS = { current_role: 'Current role', project: 'Project', years_experience: 'Experience', production_go: 'Go', postgresql: 'PostgreSQL', on_call: 'On-call', notice_period: 'Notice', location: 'Location', salary: 'Salary', candidate_questions: 'Asked about', other: 'Note' };
   const notes = new Map();
   function paintNotes() {
@@ -229,7 +225,7 @@
       s = await Atmee.join({
         usecase: 'recruiter', video: $('video'), audio: $('audio'), mic, tools,
         onPhase: (p, d) => overlay.phase(p, d),
-        onCaption: (text, final) => { caption(text, final); tr.avatar(text, final); if (final) follow(text); },
+        onCaption: (text, final) => { caption(text, final); tr.avatar(text, final); },
         onSpeaking: (v) => { $('stage').classList.toggle('talking', v); sender.speaking(v); },
         onRelay: debug,
         onEnd: () => finish(),
