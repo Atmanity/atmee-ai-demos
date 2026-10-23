@@ -78,6 +78,19 @@ to Artifact Registry and bumps the tag there (`.github/workflows/publish.yml`).
 - ends it (`POST /v1/session/{id}/end`);
 - runs what the app needs around the room (a chatroom, a screen observer, a game log).
 
+**Every visitor gets a session of their own.** In training, recruiter, Kin and the game, each
+visitor who starts the app gets their own session, state, agenda, notes and tool calls. The
+start returns a random key that only that visitor's page holds. The page's WebSocket, its end
+call and Kin's screen frames all carry that key, so one page cannot reach or end another
+visitor's session. A session ends when its page ends it, when its socket closes (tab closed or
+reloaded, page crashed, network lost; pings catch a page that disappeared silently), 30 s after
+start if the page never connects, and one minute after its time limit at the latest. The live
+stream is one-to-many: one streamer's page owns the session and any number of viewers share
+its chatroom. A second would-be streamer is told "Someone is already streaming. Join as a
+viewer." and offered the viewer page. If the API refuses a start because the avatar is busy
+(409), the page says the demo is in use and when to try again: the time left on the session
+holding the avatar when that session is ours, otherwise the API's `Retry-After`.
+
 The page joins the room as the session's **user participant** (`public/common.js`) and uses
 these channels:
 
@@ -217,7 +230,10 @@ For the five apps; the fourteen mini-apps' findings, with live evidence, are in
    `POST /v1/avatars/{id}/avatar_sessions`, renders a face into your own room but has no
    persona, voice or text streams.
 2. **Session length and concurrency.** Session length is capped by the plan, and the whole
-   length is reserved at start; there is one live session per avatar at a time.
+   length is reserved at start. The API is documented as one live session per avatar
+   (409 `avatar_busy`), which would cap each app at one visitor at a time. On staging on
+   2026-10-23 it accepted two concurrent training sessions on the same avatar, and both
+   trainees were taught at once.
 3. **The avatar speaks up on its own.** Causeur's check-in after about 10 s of silence isn't
    tunable per session, and it continues after a conductor's final step.
 4. **Mid-turn messages are refused, not queued.** The apps work around it with the relay hold

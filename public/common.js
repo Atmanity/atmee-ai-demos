@@ -74,7 +74,12 @@
         await sleep(wait * 1000);
         continue;
       }
-      if (res.status === 409) throw failure(body.error, 'This presenter is already in another session. Try again in a minute.');
+      if (res.status === 409 && body.error === 'stream_live') throw Object.assign(failure(body.error, 'Someone is already streaming. Join as a viewer.'), { code: 'stream_live' });
+      if (res.status === 409) {
+        // The Avatar API runs one live session per avatar: another visitor has this one.
+        const mins = Math.ceil((body.retryAfter || 0) / 60);
+        throw Object.assign(failure(body.error, `This demo is in use by another visitor right now. Try again in ${mins > 1 ? `about ${mins} minutes` : mins === 1 ? 'about a minute' : 'a few minutes'}.`), { code: 'avatar_busy', retryAfter: body.retryAfter || 0 });
+      }
       throw failure(body.error || `session ${res.status}`, 'The session could not be started. Please try again.');
     }
   }
@@ -100,9 +105,11 @@
     });
     const floorTimer = setInterval(floor.flush, 250);
     if (debug) window.__atmeeFloor = floor.snapshot;
-    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/?usecase=${opts.usecase}&role=host`);
+    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/?usecase=${opts.usecase}&role=host&key=${encodeURIComponent(s.key)}`);
     const releaseMic = () => { if (opts.mic) opts.mic.getTracks().forEach((t) => t.stop()); };
-    const endOnServer = () => fetch(`/api/${opts.usecase}/session/end`, { method: 'POST', keepalive: true }).catch(() => {});
+    // This visitor's session only: the key its start returned names it.
+    const endUrl = `/api/${opts.usecase}/session/end?key=${encodeURIComponent(s.key)}`;
+    const endOnServer = () => fetch(endUrl, { method: 'POST', keepalive: true }).catch(() => {});
 
     const api = {
       session: s, room, debug,
@@ -246,7 +253,7 @@
     const sendLinked = () => ws.send(JSON.stringify({ type: 'linked' }));
     if (ws.readyState === 1) sendLinked(); else ws.addEventListener('open', sendLinked, { once: true });
     phase('live', { maxSeconds: s.maxSeconds, video: !!faceOn });
-    addEventListener('pagehide', () => { if (!ended) navigator.sendBeacon(`/api/${opts.usecase}/session/end`); });
+    addEventListener('pagehide', () => { if (!ended) navigator.sendBeacon(endUrl); });
     return api;
   }
 

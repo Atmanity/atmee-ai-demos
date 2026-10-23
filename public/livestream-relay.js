@@ -8,7 +8,7 @@
 // the viewer's connection id. Public STUN only: this works where the browsers
 // can reach each other directly (a LAN, a tailnet), not behind strict NATs.
 //
-//   const relay = StreamRelay.streamer({ room, onCount(watching, max) });  // studio, once live
+//   const relay = StreamRelay.streamer({ room, key, onCount(watching, max) });  // studio, once live; key = its session's
 //   relay.stop();
 //
 //   const watch = StreamRelay.viewer({ video, send, onState(state, detail) }); // viewer page
@@ -26,7 +26,7 @@
   // ---------------------------------------------------------------------------
   // The studio: one sending peer connection per watching viewer.
   // ---------------------------------------------------------------------------
-  function streamer({ room, onCount = () => {} }) {
+  function streamer({ room, key, onCount = () => {} }) {
     const { RoomEvent, Track } = LivekitClient;
     const peers = new Map(); // viewer id -> { pc, id, video, audio }
     let tracks = { video: null, audio: null }, max = 0, stopped = false, ws = null, retry = null;
@@ -88,7 +88,7 @@
 
     function connect() {
       if (stopped) return;
-      ws = new WebSocket(wsUrl('streamer'));
+      ws = new WebSocket(`${wsUrl('streamer')}&key=${encodeURIComponent(key)}`); // the server binds it to this studio's session
       ws.onmessage = (ev) => {
         const msg = JSON.parse(ev.data);
         if (msg.type === 'watchers') { max = msg.max; msg.ids.forEach(open); count(); }

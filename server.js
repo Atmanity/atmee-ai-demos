@@ -1,10 +1,15 @@
 // Five sample apps on the Atmee Avatar API, one small server.
 //
-// The server is the only place that holds the API key. Per use case it starts
-// the avatar's session (POST /v1/session), sets the avatar's conductor (the
+// The server is the only place that holds the API key. For each visitor of a
+// one-to-one app (training, recruiter, presence, game) it starts that
+// visitor's own session (POST /v1/session), sets the avatar's conductor (the
 // conversation agenda, PUT /v1/avatars/{id}/conductor) when the use case has
-// one, hands the room's LiveKit token to ONE host page, and runs whatever the
-// use case needs around the room: a chatroom, a screen observer, a game log.
+// one, hands the room's LiveKit token to that visitor's page only, and runs
+// whatever the use case needs around the room: a screen observer, a game log.
+// The live stream is one-to-many: one streamer's page owns its session and
+// any number of viewers share its chatroom; a second would-be streamer is
+// sent to the viewer page. Each session is ended when its page leaves (the
+// page ends it, or its socket closes) or its time is up.
 // The host page is the session's user participant: it relays what the server
 // decides into the room (lk.chat = a user turn the avatar answers, atmee.app
 // state/note/event/mute = context the avatar reads without a turn) and sends
@@ -22,7 +27,7 @@
 // Settings come from the environment: `node --env-file=.env server.js` locally,
 // the pod's env in a container.
 import express from "express";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -56,21 +61,54 @@ async function api(method, path, body) {
 }
 
 // ---------------------------------------------------------------------------
-// One hub per use case: its session, its host page, its audience, its state.
+// One hub per session: its session, its host page, its audience, its state.
 // ---------------------------------------------------------------------------
-const hubs = new Map();
-function hub(name) {
+// A one-to-one app gets a new hub for every visitor who starts it. A shared
+// use case (the live stream) has one hub that outlives its sessions, because
+// its viewers' chatroom does; one streamer at a time claims it. Each live
+// claim has a random key, which only its host page learns: the page's
+// WebSocket, its end call and its observer frames name it, so no page can
+// reach or end another visitor's session.
+const rooms = new Map(); // key -> the hub of a live (or starting) session
+const sharedHubs = new Map(); // use case -> its one shared hub
+const JOIN_GRACE_MS = 30000; // a started session whose page never connects is ended
+const avatarIdOf = (name) => process.env[`AVATAR_${name.toUpperCase()}`] || process.env.AVATAR_ID;
+function newHub(name, def) {
+  return {
+    name, def, avatarId: avatarIdOf(name),
+    key: null, session: null, host: null, viewers: new Set(), transcript: [], pending: [],
+    streamer: null, watchers: new Map(), // the video relay (live stream): the studio's socket, and viewer id -> socket
+    memo: {}, // the use case's own scratch state (scores, scene, last observation)
+  };
+}
+function sharedHub(name) {
   const def = USECASES[name];
-  if (!def) return null;
-  if (!hubs.has(name)) {
-    hubs.set(name, {
-      name, def, avatarId: process.env[`AVATAR_${name.toUpperCase()}`] || process.env.AVATAR_ID,
-      session: null, host: null, viewers: new Set(), transcript: [], pending: [],
-      streamer: null, watchers: new Map(), // the video relay: the studio's socket, and viewer id -> socket
-      memo: {}, // the use case's own scratch state (scores, scene, last observation)
-    });
+  if (!def || !def.shared) return null;
+  if (!sharedHubs.has(name)) sharedHubs.set(name, newHub(name, def));
+  return sharedHubs.get(name);
+}
+const shortKey = (key) => String(key).slice(0, 8);
+function room(name, key) { const h = key && rooms.get(String(key)); return h && h.name === name ? h : null; }
+
+// Ends a session's claim: the API session, the host page's socket, the key.
+async function closeRoom(h, key, why) {
+  if (!key || h.key !== key) return; // already closed, or a newer claim
+  h.key = null; rooms.delete(key); clearTimeout(h.joinTimer);
+  console.log(`[${h.name}] visitor ${shortKey(key)} closed (${why})`);
+  const host = h.host; h.host = null;
+  await endSession(h);
+  if (host && host.readyState === host.OPEN) host.close(1000, "session ended");
+}
+
+// The Avatar API runs one live session per avatar (409 avatar_busy). When the
+// session holding it is one of ours, its time left says when to try again.
+function busyFor(h, apiRetryAfter) {
+  let left = 0;
+  for (const other of rooms.values()) {
+    if (other === h || other.avatarId !== h.avatarId || !other.session) continue;
+    left = Math.max(left, Math.ceil(other.session.maxSeconds - (Date.now() - other.session.startedAt) / 1000));
   }
-  return hubs.get(name);
+  return Math.max(0, left) || apiRetryAfter || 0;
 }
 
 function toHost(h, msg) { if (h.host && h.host.readyState === h.host.OPEN) h.host.send(JSON.stringify(msg)); }
@@ -202,7 +240,7 @@ async function loadPortrait(avatarId) {
 }
 app.get("/api/avatars/:usecase/portrait", async (req, res) => {
   const name = req.params.usecase;
-  const avatarId = USECASES[name] ? hub(name).avatarId : null;
+  const avatarId = USECASES[name] ? avatarIdOf(name) : null;
   if (!avatarId) return res.status(404).set("Cache-Control", "no-store").json({ error: "no avatar for this use case" });
   let entry = portraits.get(name);
   if (!entry || entry.avatarId !== avatarId || Date.now() - entry.at > PORTRAIT_TTL_MS) {
@@ -228,24 +266,46 @@ app.get("/api/avatars/:usecase/portrait", async (req, res) => {
 });
 
 app.post("/api/:usecase/session", async (req, res) => {
-  const h = hub(req.params.usecase);
-  if (!h) return res.status(404).json({ error: "unknown use case" });
-  console.log(`[${h.name}] session requested`);
+  const name = req.params.usecase, def = USECASES[name];
+  if (!def) return res.status(404).json({ error: "unknown use case" });
+  const h = def.shared ? sharedHub(name) : newHub(name, def);
+  if (def.shared && h.key) {
+    console.log(`[${name}] second streamer refused: visitor ${shortKey(h.key)} is live`);
+    return res.status(409).json({ error: "stream_live", message: "Someone is already streaming. Join as a viewer." });
+  }
+  const key = randomUUID();
+  h.key = key; rooms.set(key, h); // claimed before the first await, so a second streamer finds it taken
+  console.log(`[${name}] session requested by visitor ${shortKey(key)}`);
   try {
-    if (!h.session) await startSession(h);
+    await startSession(h);
+    if (h.key !== key) { await endSession(h); return res.status(410).json({ error: "closed", message: "The session was closed while it started." }); }
+    // A page that never connects its socket (closed during the start) does not keep the avatar.
+    h.joinTimer = setTimeout(() => { if (!h.host) closeRoom(h, key, "page never connected"); }, JOIN_GRACE_MS);
     const { sessionId, serverUrl, userToken, roomName, maxSeconds } = h.session;
-    res.json({ sessionId, serverUrl, userToken, roomName, maxSeconds, avatarId: h.avatarId });
+    res.json({ key, sessionId, serverUrl, userToken, roomName, maxSeconds, avatarId: h.avatarId });
   } catch (err) {
-    console.log(`[${h.name}] start failed: ${err.message}${err.retryAfter ? ` (retry after ${err.retryAfter} s)` : ""}`);
-    res.status(err.status === 503 || err.status === 409 ? err.status : 502).json({ error: String(err.message), retryAfter: err.retryAfter || 0 });
+    if (h.key === key) { h.key = null; rooms.delete(key); }
+    console.log(`[${name}] start failed: ${err.message}${err.retryAfter ? ` (retry after ${err.retryAfter} s)` : ""}`);
+    if (err.status === 409) {
+      const retryAfter = busyFor(h, err.retryAfter);
+      return res.status(409).json({ error: "avatar_busy", message: String(err.message), retryAfter });
+    }
+    res.status(err.status === 503 ? 503 : 502).json({ error: String(err.message), retryAfter: err.retryAfter || 0 });
   }
 });
-app.post("/api/:usecase/session/end", async (req, res) => { const h = hub(req.params.usecase); if (h) await endSession(h); res.json({ ok: true }); });
+// Ends only the caller's own session: the key its start returned (sendBeacon posts it in the query).
+app.post("/api/:usecase/session/end", async (req, res) => {
+  const key = String(req.query.key || (req.body && req.body.key) || "");
+  const h = room(req.params.usecase, key);
+  if (h) await closeRoom(h, key, "page ended it");
+  res.json({ ok: true });
+});
 
 // The presence use case's eyes: the page posts a JPEG when the screen changed;
 // the observer describes it and the policy turns that into state and events.
 app.post("/api/presence/frame", async (req, res) => {
-  const h = hub("presence");
+  const h = room("presence", req.body.key);
+  if (!h) return res.status(410).json({ error: "no live session" });
   try {
     const seen = await describeFrame(req.body.image, h.memo.lastDescription, req.body.hint);
     h.memo.lastDescription = seen.description;
@@ -267,8 +327,8 @@ const MAX_WATCHERS = Number(process.env.LIVESTREAM_MAX_WATCHERS || 8);
 let nextViewerId = 1;
 const sendTo = (ws, msg) => { if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg)); };
 
-function onStreamer(h, ws) {
-  if (!h.session) return ws.close(4000, "no live session");
+function onStreamer(h, ws, key) {
+  if (!h.session || h.key !== key) return ws.close(4000, "no live session");
   if (h.streamer && h.streamer !== ws) h.streamer.close(4001, "replaced");
   h.streamer = ws;
   console.log(`[${h.name}] streamer connected, ${h.watchers.size} watcher(s) waiting`);
@@ -310,12 +370,16 @@ const wss = new WebSocketServer({
   verifyClient: ({ req }) => !PASSWORD || hasTicket(req) || hasPassword(req),
 });
 wss.on("connection", (ws, req) => {
+  ws.isAlive = true; ws.on("pong", () => { ws.isAlive = true; });
   const q = new URL(req.url, "http://x").searchParams;
-  const h = hub(q.get("usecase") || "livestream");
-  if (!h) return ws.close();
+  const name = q.get("usecase") || "livestream";
   const role = q.get("role") || "viewer";
   if (role === "host") {
-    h.host = ws;
+    // The host page of one session: the key its start returned.
+    const key = q.get("key") || "";
+    const h = room(name, key);
+    if (!h || (h.host && h.host !== ws)) { ws.close(4410, "no such session"); return; }
+    h.host = ws; clearTimeout(h.joinTimer);
     ws.send(JSON.stringify({ type: "history", transcript: h.transcript.slice(-50) }));
     ws.on("message", (raw) => {
       const msg = JSON.parse(raw);
@@ -337,10 +401,15 @@ wss.on("connection", (ws, req) => {
         if (h.def.onUser) relay(h, h.def.onUser(h, msg));
       }
     });
-    ws.on("close", () => { if (h.host === ws) h.host = null; });
+    // The page left (closed, reloaded, crashed, lost its network): its session ends with it.
+    ws.on("close", () => { if (h.host === ws) closeRoom(h, key, "page left"); });
     return;
   }
-  if (role === "streamer") return onStreamer(h, ws);
+  // Viewers: only a shared use case has an audience.
+  const h = sharedHub(name);
+  if (!h) return ws.close();
+  // The studio's video relay socket: bound to the live stream's own session by its key.
+  if (role === "streamer") return onStreamer(h, ws, q.get("key") || "");
   ws.viewerId = nextViewerId++;
   h.viewers.add(ws);
   ws.send(JSON.stringify({ type: "history", transcript: h.transcript.slice(-50) }));
@@ -363,11 +432,27 @@ wss.on("connection", (ws, req) => {
   ws.on("close", () => { onWatcherClose(h, ws); h.viewers.delete(ws); broadcast(h, { type: "viewers", count: h.viewers.size }); });
 });
 
-setInterval(() => { for (const h of hubs.values()) if (h.session && h.def.tick) relay(h, h.def.tick(h, (m) => broadcast(h, m))); }, 5000);
+// Every 5 s: the use cases' ticks, and a session past its time limit (plus a
+// minute) is ended here too, whatever its page is doing.
+setInterval(() => {
+  for (const [key, h] of rooms) {
+    if (!h.session) continue;
+    if (Date.now() - h.session.startedAt > (h.session.maxSeconds + 60) * 1000) { closeRoom(h, key, "time limit"); continue; }
+    if (h.def.tick) relay(h, h.def.tick(h, (m) => broadcast(h, m)));
+  }
+}, 5000);
+// A page that vanished without closing its socket (a laptop lid, a dropped
+// network) stops answering pings; terminating the socket ends its session.
+setInterval(() => {
+  for (const ws of wss.clients) {
+    if (!ws.isAlive) { ws.terminate(); continue; }
+    ws.isAlive = false; ws.ping();
+  }
+}, 25000);
 
 // Ctrl-C locally, SIGTERM from Kubernetes on a rollout: end the live sessions first.
 export async function shutdown() {
-  for (const h of hubs.values()) await endSession(h).catch(() => {});
+  await Promise.all([...rooms].map(([key, h]) => closeRoom(h, key, "shutdown").catch(() => {})));
 }
 // Run on its own (`node server.js`) it listens and handles the signals itself;
 // the site's server (server/index.ts) mounts the same app and WebSocket beside

@@ -36,6 +36,9 @@ const POLL_SECONDS = 45;
 const livestream = {
   title: "Live stream host",
   page: "livestream-host.html",
+  // One streamer's session, shared by every viewer in the chatroom; the other
+  // apps give each visitor a session of their own.
+  shared: true,
   appTools: {
     instructions: "You run this stream's chat as its host, and the chat only shows what your tools put there. When a viewer asks you to pin something, or writes something worth keeping on screen for everyone (a great question, the topic of the night, a recommendation people asked for), pin it with pin_message, in a few words. When a viewer asks for a poll, or the chat disagrees and you want the audience's opinion, call start_poll right away in that turn (two to four short options), then tell viewers to vote: do not offer a poll, or say you might start one, without starting it. A pin or a poll exists only once its tool is called, so call it before you speak of it. The result comes back to you as a chat event when the poll closes. One poll at a time.",
     tools: [
