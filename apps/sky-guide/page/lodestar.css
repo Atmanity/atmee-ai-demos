@@ -1,0 +1,300 @@
+/* Lodestar: a star atlas at night. Prussian-indigo sky, starlight text, brass
+   for what is marked (a planisphere's rim), aurora for constellation lines,
+   dusk for the chart's refusals. Atlas italics for names, a mono for clocks.
+   Layout: the chart is the page; Mira stands at its side with the conversation;
+   on a phone she rides along at the top while you scroll the sky.
+   Red light turns everything torch-red, so dark-adapted eyes stay adapted. */
+:root {
+  --ls-night: #0b1331;
+  --ls-deep: #141e4a;
+  --ls-star: #f2eee1;
+  --ls-haze: #9aa7cf;
+  --ls-brass: #e3b45c;
+  --ls-dusk: #ef8c6c;
+  --ls-aurora: #8fd6ca;
+
+  --ls-line: color-mix(in srgb, var(--ls-haze) 24%, transparent);
+  --ls-soft: color-mix(in srgb, var(--ls-deep) 70%, transparent);
+  --ls-strip: linear-gradient(90deg, #7fa3d6 0%, #e7976a 23%, #3a3a7c 31%, #0a1030 50%, #3a3a7c 69%, #e59a8c 77%, #7fa3d6 100%);
+  --ls-display: "Instrument Serif", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --ls-body: "Hanken Grotesk", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --ls-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  /* the kit's parts, in Lodestar's colours */
+  --call-accent: var(--ls-brass);
+  --call-accent-ink: #1c1405;
+  --call-bg: #060a1f;
+  --call-surface: var(--ls-deep);
+  --call-ink: var(--ls-star);
+  --call-muted: var(--ls-haze);
+  --call-line: var(--ls-line);
+  --call-font: var(--ls-body);
+  --accent: var(--ls-brass);
+  --page: var(--ls-night);
+  --ink: var(--ls-star);
+  --muted: var(--ls-haze);
+  --line: var(--ls-line);
+  --surface: var(--ls-deep);
+  --font: var(--ls-body);
+  color-scheme: dark;
+}
+
+/* Red light: an observer's torch. Every colour above, in red. */
+:root[data-light="red"] {
+  --ls-night: #0d0303;
+  --ls-deep: #1d0807;
+  --ls-star: #ff7a66;
+  --ls-haze: #b8564a;
+  --ls-brass: #ff9175;
+  --ls-dusk: #ff6a55;
+  --ls-aurora: #e0604c;
+  --ls-strip: linear-gradient(90deg, #4a120d 0%, #8a2a20 23%, #2a0806 31%, #120302 50%, #2a0806 69%, #8a2a20 77%, #4a120d 100%);
+  --call-accent-ink: #1a0503;
+  --call-bg: #080101;
+}
+
+html, body { background: var(--ls-night); color: var(--ls-star); }
+body {
+  font-family: var(--ls-body);
+  -webkit-font-smoothing: antialiased;
+  /* a few faint stars behind everything, nothing that competes with the chart */
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, color-mix(in srgb, var(--ls-star) 55%, transparent), transparent 60%),
+    radial-gradient(1px 1px at 68% 8%, color-mix(in srgb, var(--ls-star) 40%, transparent), transparent 60%),
+    radial-gradient(1.5px 1.5px at 84% 42%, color-mix(in srgb, var(--ls-star) 45%, transparent), transparent 60%),
+    radial-gradient(1px 1px at 32% 76%, color-mix(in srgb, var(--ls-star) 35%, transparent), transparent 60%),
+    linear-gradient(180deg, color-mix(in srgb, var(--ls-deep) 45%, var(--ls-night)) 0%, var(--ls-night) 60%);
+  background-attachment: fixed;
+  background-size: 520px 520px, 640px 640px, 760px 760px, 580px 580px, 100% 100%;
+}
+button, input, select { font: inherit; }
+:focus-visible { outline: 2px solid var(--ls-brass); outline-offset: 2px; }
+em { font-style: normal; color: var(--ls-star); }
+
+/* ── shared ─────────────────────────────────────────────────────────────── */
+.ls-logo { display: inline-flex; align-items: center; gap: 10px; color: var(--ls-star); text-decoration: none; font: 400 28px/1 var(--ls-display); letter-spacing: .01em; }
+.ls-eyebrow, .ls-kicker { margin: 0; font: 500 11px/1.4 var(--ls-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ls-haze); }
+.ls-eyebrow { color: var(--ls-brass); }
+.ls-primary, .ls-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 10px; padding: 11px 18px; font-weight: 650; font-size: 15px; cursor: pointer; transition: transform .08s, filter .15s, background .15s, border-color .15s; }
+.ls-primary { background: var(--ls-brass); color: var(--call-accent-ink); border: 1.5px solid var(--ls-brass); }
+.ls-primary:hover:not(:disabled) { filter: brightness(1.08); }
+.ls-secondary { background: transparent; color: var(--ls-star); border: 1.5px solid color-mix(in srgb, var(--ls-star) 55%, transparent); }
+.ls-secondary:hover:not(:disabled) { border-color: var(--ls-star); background: color-mix(in srgb, var(--ls-star) 6%, transparent); }
+.ls-primary:active, .ls-secondary:active { transform: translateY(1px); }
+.ls-primary:disabled, .ls-secondary:disabled { opacity: .45; cursor: default; }
+.ls-primary.is-big, .ls-secondary.is-big { padding: 14px 24px; font-size: 16px; }
+.ls-quiet { background: none; border: 0; padding: 8px 2px; color: var(--ls-haze); font-weight: 600; font-size: 14px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.ls-quiet:hover { color: var(--ls-star); }
+.ls-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 5px 13px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--ls-haze) 45%, transparent); background: transparent; color: var(--ls-star); font-size: 13.5px; font-weight: 550; cursor: pointer; transition: border-color .15s, background .15s; }
+.ls-chip:hover:not(:disabled) { border-color: var(--ls-star); background: color-mix(in srgb, var(--ls-star) 6%, transparent); }
+.ls-chip:disabled { opacity: .45; cursor: default; }
+.ls-chip.is-solid { background: var(--ls-brass); border-color: var(--ls-brass); color: var(--call-accent-ink); }
+.ls-chip.is-solid:hover:not(:disabled) { filter: brightness(1.08); background: var(--ls-brass); }
+.ls-input { min-height: 34px; padding: 5px 10px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--ls-haze) 40%, transparent); background: color-mix(in srgb, var(--ls-night) 70%, black); color: var(--ls-star); font-size: 14px; }
+.ls-input::placeholder { color: var(--ls-haze); }
+
+/* ── front door ─────────────────────────────────────────────────────────── */
+.ls-lobby { max-width: 1180px; margin: 0 auto; padding: 22px max(20px, env(safe-area-inset-right)) 56px max(20px, env(safe-area-inset-left)); }
+.ls-hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: 56px; align-items: center; padding: 44px 0 48px; }
+.ls-hero h1 { margin: 16px 0 20px; font: 400 clamp(46px, 6.6vw, 88px)/.96 var(--ls-display); letter-spacing: -.01em; text-wrap: balance; }
+.ls-lede { margin: 0; max-width: 44ch; font-size: 18px; line-height: 1.6; color: color-mix(in srgb, var(--ls-star) 82%, var(--ls-haze)); }
+.ls-guide { display: flex; align-items: center; gap: 14px; max-width: 46ch; margin: 26px 0 0; padding-top: 18px; border-top: 1px solid var(--ls-line); font-size: 15px; line-height: 1.5; color: var(--ls-haze); }
+.ls-guide img { flex: none; width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 2px solid var(--ls-night); box-shadow: 0 0 0 1.5px var(--ls-brass), 0 0 0 5px color-mix(in srgb, var(--ls-brass) 18%, transparent); }
+:root[data-light="red"] .ls-guide img { filter: grayscale(1) sepia(1) saturate(5) hue-rotate(-38deg) brightness(.75); }
+.ls-guide b { color: var(--ls-star); font: italic 400 20px/1 var(--ls-display); }
+.ls-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+.ls-small { margin: 14px 0 0; font-size: 13px; color: var(--ls-haze); }
+.ls-preview { margin: 0; display: grid; gap: 14px; justify-items: center; }
+.ls-preview-dome { width: min(100%, 480px); }
+.ls-preview-dome .sg-dome { aspect-ratio: 1 / 1; }
+.ls-preview figcaption { display: grid; gap: 4px; justify-items: center; text-align: center; }
+.ls-preview-place { display: inline-flex; align-items: baseline; gap: 8px; font: 400 22px var(--ls-display); color: var(--ls-haze); }
+.ls-preview-place select { appearance: none; border: 0; border-bottom: 1.5px dashed color-mix(in srgb, var(--ls-brass) 70%, transparent); background: transparent; color: var(--ls-star); font: italic 400 24px var(--ls-display); padding: 0 18px 0 2px; cursor: pointer; background-image: linear-gradient(45deg, transparent 50%, var(--ls-brass) 50%), linear-gradient(135deg, var(--ls-brass) 50%, transparent 50%); background-position: right 6px top 55%, right 1px top 55%; background-size: 5px 5px; background-repeat: no-repeat; }
+.ls-preview-place select option { background: var(--ls-deep); color: var(--ls-star); font: 15px var(--ls-body); }
+.ls-preview-meta { font: 500 13px var(--ls-mono); color: var(--ls-haze); }
+.ls-preview-meta b { color: var(--ls-star); font-weight: 500; }
+.ls-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; border-top: 1px solid var(--ls-line); padding-top: 28px; }
+.ls-steps article { display: grid; gap: 6px; align-content: start; }
+.ls-step-n { font: 500 12px var(--ls-mono); color: var(--ls-brass); letter-spacing: .1em; }
+.ls-steps h2 { margin: 0; font: 400 28px/1.1 var(--ls-display); }
+.ls-steps p { margin: 0; color: var(--ls-haze); line-height: 1.55; }
+
+/* ── the app ────────────────────────────────────────────────────────────── */
+.ls-app { max-width: 1440px; margin: 0 auto; padding: 14px max(20px, env(safe-area-inset-right)) 28px max(20px, env(safe-area-inset-left)); min-height: 100vh; }
+.ls-top { display: flex; align-items: center; gap: 14px; padding: 4px 0 14px; }
+.ls-top .ls-logo { margin-right: auto; }
+.ls-red { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--ls-line); background: transparent; color: var(--ls-haze); font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.ls-red:hover { color: var(--ls-star); border-color: color-mix(in srgb, var(--ls-haze) 60%, transparent); }
+.ls-red.is-on { color: var(--ls-star); border-color: var(--ls-brass); background: color-mix(in srgb, var(--ls-brass) 14%, transparent); }
+
+.ls-main {
+  display: grid; gap: 18px 24px; align-items: start;
+  grid-template-columns: minmax(0, 1fr) 272px 340px;
+  grid-template-areas: "sky side host" "sky side chat";
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.ls-sky { grid-area: sky; display: grid; gap: 14px; min-width: 0; }
+.ls-side { grid-area: side; display: grid; gap: 18px; align-content: start; min-width: 0; }
+.ls-host { grid-area: host; display: grid; gap: 10px; }
+.ls-chat { grid-area: chat; min-height: 220px; max-height: 420px; }
+
+/* where and when */
+.ls-sky-head { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 26px; }
+.ls-place { display: grid; gap: 2px; min-width: 0; }
+.ls-place-select { appearance: none; max-width: 100%; border: 0; background: transparent; color: var(--ls-star); font: 400 40px/1.05 var(--ls-display); padding: 0 26px 2px 0; cursor: pointer; border-bottom: 1px dashed transparent; background-image: linear-gradient(45deg, transparent 50%, var(--ls-brass) 50%), linear-gradient(135deg, var(--ls-brass) 50%, transparent 50%); background-position: right 9px top 60%, right 3px top 60%; background-size: 6px 6px; background-repeat: no-repeat; }
+.ls-place-select:hover { border-bottom-color: color-mix(in srgb, var(--ls-brass) 70%, transparent); }
+.ls-place-select option { background: var(--ls-deep); color: var(--ls-star); font: 15px var(--ls-body); }
+.ls-coords { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.ls-coords .ls-input { width: 164px; }
+.ls-clock { margin: 0; display: grid; gap: 1px; padding-bottom: 4px; }
+.ls-clock b { font: 500 22px/1 var(--ls-mono); color: var(--ls-star); }
+.ls-clock span { font-size: 13px; color: var(--ls-haze); }
+.ls-up { margin: 0 0 0 auto; padding-bottom: 6px; color: var(--ls-haze); font-size: 14px; font-variant-numeric: tabular-nums; }
+.ls-up b { font: 500 18px var(--ls-mono); color: var(--ls-star); margin-right: 2px; }
+.ls-working { color: var(--ls-aurora); animation: ls-breathe 1.6s ease-in-out infinite; }
+
+/* the dome */
+.ls-dome { position: relative; width: min(100%, 720px, max(320px, calc(100svh - 280px))); justify-self: center; }
+.sg-dome { position: relative; width: 100%; aspect-ratio: 1 / 1; }
+.sg-canvas { display: block; touch-action: manipulation; cursor: crosshair; }
+.sg-reachable { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.ls-dome-note { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); margin: 0; width: min(80%, 340px); display: grid; gap: 10px; justify-items: center; text-align: center; padding: 16px 18px; border-radius: 12px; background: color-mix(in srgb, var(--ls-night) 82%, transparent); border: 1px solid var(--ls-line); backdrop-filter: blur(4px); font-size: 15px; line-height: 1.45; }
+.ls-dome-key { position: absolute; left: 0; bottom: 0; margin: 0; font: 500 10.5px var(--ls-mono); letter-spacing: .06em; color: color-mix(in srgb, var(--ls-haze) 80%, transparent); }
+
+/* the chart's own word */
+.ls-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 10px 14px; border-left: 3px solid var(--ls-dusk); background: color-mix(in srgb, var(--ls-dusk) 10%, transparent); border-radius: 0 10px 10px 0; animation: ls-in .25s ease-out; }
+.ls-notice p { margin: 0; flex: 1 1 260px; line-height: 1.45; }
+.ls-notice-actions { display: flex; gap: 8px; }
+
+/* the night strip: noon to noon, dusk to dawn */
+.ls-time { display: grid; gap: 10px; }
+.ls-strip-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+.ls-step { min-width: 52px; min-height: 40px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--ls-haze) 45%, transparent); background: transparent; color: var(--ls-star); font: 500 13px var(--ls-mono); cursor: pointer; }
+.ls-step:hover { border-color: var(--ls-star); background: color-mix(in srgb, var(--ls-star) 6%, transparent); }
+.ls-strip { position: relative; padding-bottom: 18px; }
+.ls-strip input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 26px; margin: 0; background: transparent; cursor: pointer; }
+.ls-strip input[type="range"]::-webkit-slider-runnable-track { height: 10px; border-radius: 999px; background: var(--ls-strip); border: 1px solid var(--ls-line); }
+.ls-strip input[type="range"]::-moz-range-track { height: 10px; border-radius: 999px; background: var(--ls-strip); border: 1px solid var(--ls-line); }
+.ls-strip input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -7px; border-radius: 50%; background: var(--ls-brass); border: 3px solid var(--ls-night); box-shadow: 0 0 0 1.5px var(--ls-brass); }
+.ls-strip input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--ls-brass); border: 3px solid var(--ls-night); box-shadow: 0 0 0 1.5px var(--ls-brass); }
+.ls-strip input[type="range"]:focus-visible { outline: 2px solid var(--ls-brass); outline-offset: 4px; border-radius: 6px; }
+.ls-ticks { position: absolute; left: 11px; right: 11px; bottom: 0; height: 14px; font: 500 10.5px var(--ls-mono); color: var(--ls-haze); }
+.ls-ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.ls-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ls-date { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; font-size: 13px; color: var(--ls-haze); }
+
+/* the side: the marked star or your night, then the figures */
+.ls-tabs { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--ls-line); }
+.ls-tabs button { min-height: 40px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--ls-haze); font-size: 14px; font-weight: 600; cursor: pointer; margin-bottom: -1px; }
+.ls-tabs button[aria-pressed="true"] { color: var(--ls-star); border-bottom-color: var(--ls-brass); }
+.ls-tabs button:hover { color: var(--ls-star); }
+.ls-card { display: grid; gap: 8px; align-content: start; }
+.ls-card-lede { margin: 0; line-height: 1.5; color: var(--ls-haze); }
+.ls-quick { display: grid; gap: 8px; margin-top: 6px; }
+.ls-quick > span { font: 500 11px var(--ls-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ls-haze); }
+.ls-quick > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.ls-star-name { margin: 0; font: italic 400 44px/1 var(--ls-display); color: var(--ls-brass); animation: ls-in .3s ease-out; }
+.ls-star-where { margin: 0; display: flex; align-items: center; gap: 8px; font-weight: 600; text-transform: capitalize; }
+.ls-arrow { color: var(--ls-brass); flex: none; }
+.ls-star-fact { display: grid; gap: 8px; padding-left: 12px; border-left: 1px solid var(--ls-line); }
+.ls-star-fact p { margin: 0; line-height: 1.5; font-size: 14.5px; }
+.ls-star-fact p:last-child { color: var(--ls-haze); font-size: 13px; }
+.ls-card.is-star .ls-quiet { justify-self: start; }
+.ls-night-group { display: grid; gap: 8px; }
+.ls-night-group + .ls-night-group { margin-top: 10px; }
+.ls-night-group ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ls-night-group li { display: grid; gap: 1px; padding-left: 12px; border-left: 2px solid var(--ls-brass); }
+.ls-night-group li.is-figure { border-left-color: var(--ls-aurora); }
+.ls-night-group li b { font: italic 400 22px/1.1 var(--ls-display); }
+.ls-night-where { font-size: 13.5px; font-weight: 600; }
+.ls-night-note { font-size: 13px; color: var(--ls-haze); line-height: 1.4; }
+.ls-card.is-night .ls-secondary { justify-self: start; margin-top: 6px; padding: 9px 14px; font-size: 14px; }
+.ls-figures { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--ls-line); }
+.ls-figures h3 span { float: right; letter-spacing: .04em; text-transform: none; }
+.ls-figure-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.ls-figure { min-height: 32px; padding: 3px 11px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--ls-aurora) 55%, transparent); background: transparent; color: var(--ls-star); font: italic 400 16px/1.2 var(--ls-display); cursor: pointer; transition: background .15s, border-color .15s; }
+.ls-figure:hover { border-color: var(--ls-aurora); background: color-mix(in srgb, var(--ls-aurora) 10%, transparent); }
+.ls-figure.is-down { color: var(--ls-haze); border-style: dashed; border-color: var(--ls-line); }
+.ls-figure.is-lit { color: var(--call-accent-ink); background: var(--ls-aurora); border-color: var(--ls-aurora); }
+
+/* Mira */
+.ls-host-video { aspect-ratio: 4 / 5; width: 100%; box-shadow: 0 0 0 1px var(--ls-line), 0 24px 60px rgba(0, 0, 0, .45); }
+:root[data-light="red"] .ls-host-video video, :root[data-light="red"] .ls-host-video .call-poster { filter: grayscale(1) sepia(1) saturate(5) hue-rotate(-38deg) brightness(.75); }
+.ls-nameplate { display: grid; gap: 4px; }
+.ls-nameplate p { margin: 0; display: flex; align-items: baseline; gap: 8px; color: var(--ls-haze); font-size: 14px; }
+.ls-nameplate b { font: 400 26px/1 var(--ls-display); color: var(--ls-star); }
+.ls-onair { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font: 500 11px var(--ls-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ls-aurora); }
+.ls-onair::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ls-aurora); animation: ls-breathe 1.8s ease-in-out infinite; }
+.ls-nameplate .ls-caption-line { display: none; }
+.ls-chat .call-empty em { color: var(--ls-star); }
+
+/* the end of the call: your night, to keep */
+.ls-done { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 18px 36px; align-items: start; margin-bottom: 20px; padding: 26px 28px; border-radius: 16px; border: 1px solid color-mix(in srgb, var(--ls-brass) 45%, transparent); background: linear-gradient(135deg, color-mix(in srgb, var(--ls-deep) 92%, var(--ls-brass)) 0%, var(--ls-deep) 60%); animation: ls-in .35s ease-out; }
+.ls-done-head h2 { margin: 8px 0 8px; font: 400 clamp(32px, 4vw, 48px)/1 var(--ls-display); }
+.ls-done-sub { margin: 0; color: var(--ls-haze); line-height: 1.5; max-width: 42ch; }
+.ls-done-list { list-style: none; margin: 0; padding: 0; display: grid; border-top: 1px solid var(--ls-line); max-height: 300px; overflow-y: auto; }
+.ls-done-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 14px; padding: 10px 0; border-bottom: 1px solid var(--ls-line); }
+.ls-done-name { font: italic 400 22px/1.1 var(--ls-display); }
+.ls-done-name small { margin-left: 8px; font: 500 10.5px var(--ls-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ls-aurora); font-style: normal; }
+.ls-done-where { font-weight: 600; font-size: 14px; align-self: center; text-align: right; }
+.ls-done-when { grid-column: 1 / -1; font: 500 11.5px var(--ls-mono); color: var(--ls-haze); }
+.ls-done-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+
+@keyframes ls-in { from { opacity: 0; transform: translateY(4px); } }
+@keyframes ls-breathe { 50% { opacity: .4; } }
+
+/* ── narrower: the side goes under the chart ───────────────────────────── */
+@media (max-width: 1240px) {
+  .ls-main { grid-template-columns: minmax(0, 1fr) 320px; grid-template-areas: "sky host" "sky chat" "side chat"; grid-template-rows: auto auto minmax(0, 1fr); }
+  .ls-side { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+  .ls-side .ls-tabs, .ls-side .ls-card { grid-column: 1; }
+  .ls-side .ls-figures { grid-column: 2; grid-row: 1 / span 2; border-top: 0; padding-top: 0; }
+  .ls-chat { max-height: 560px; }
+}
+
+/* ── tablet and phone: one column, Mira first ──────────────────────────── */
+@media (max-width: 900px) {
+  .ls-hero { grid-template-columns: minmax(0, 1fr); padding: 28px 0 36px; gap: 32px; }
+  .ls-preview-dome { width: min(100%, 380px); }
+  .ls-steps { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .ls-main { grid-template-columns: minmax(0, 1fr); grid-template-areas: "host" "sky" "side" "chat"; grid-template-rows: none; }
+  .ls-dome { width: min(100%, 560px); }
+  .ls-host { grid-template-columns: 148px minmax(0, 1fr); align-items: end; gap: 14px; }
+  .ls-side { grid-template-columns: minmax(0, 1fr); }
+  .ls-side .ls-figures { grid-column: auto; grid-row: auto; border-top: 1px solid var(--ls-line); padding-top: 14px; }
+  .ls-chat { max-height: 380px; }
+  .ls-done { grid-template-columns: minmax(0, 1fr); padding: 20px; }
+  /* Calling, ended or failed: a frame big enough for what the call has to say. */
+  html:not([data-call="live"]) .ls-host { grid-template-columns: minmax(0, 1fr); }
+  html:not([data-call="live"]) .ls-host-video { aspect-ratio: 16 / 10; max-width: 520px; }
+  /* Live, the frame is small: her words sit beside it rather than over it. */
+  html[data-call="live"] .ls-host .call-caption { display: none; }
+  html[data-call="live"] .ls-nameplate .ls-caption-line { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin: 0; font-size: 14px; line-height: 1.45; color: var(--ls-star); }
+}
+
+@media (max-width: 640px) {
+  .ls-app { padding-top: 8px; }
+  .ls-top { gap: 8px; padding-bottom: 8px; }
+  .ls-logo { font-size: 24px; }
+  .ls-red span { display: none; }
+  .ls-red { width: 44px; padding: 0; justify-content: center; }
+  /* While Mira is live she rides along at the top as you scroll the sky. */
+  html[data-call="live"] .ls-host { position: sticky; top: 0; z-index: 6; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: 12px; margin: 0 -20px; padding: 8px 20px; background: color-mix(in srgb, var(--ls-night) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--ls-line); }
+  html[data-call="live"] .ls-nameplate .ls-caption-line { -webkit-line-clamp: 2; font-size: 13.5px; line-height: 1.4; }
+  html[data-call="live"] .ls-nameplate b { font-size: 22px; }
+  .ls-place-select { font-size: 32px; }
+  .ls-sky-head { gap: 6px 18px; }
+  .ls-up { margin-left: 0; }
+  .ls-strip-row { gap: 8px; }
+  .ls-step { min-width: 44px; }
+  .ls-ticks span:nth-child(2), .ls-ticks span:nth-child(4) { display: none; }
+  .ls-date { margin-left: 0; }
+  .ls-dome-key { position: static; margin-top: 4px; }
+  .ls-done-where { text-align: left; grid-column: 1 / -1; }
+  .ls-done-list li { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ls-working, .ls-onair::before, .ls-notice, .ls-star-name, .ls-done { animation: none; }
+  .ls-primary, .ls-secondary, .ls-chip, .ls-figure { transition: none; }
+}
