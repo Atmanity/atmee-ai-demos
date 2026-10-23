@@ -30,6 +30,13 @@
   const CHAT_TOPIC = 'lk.chat', APP_TOPIC = 'atmee.app', TRANSCRIPTION_TOPIC = 'lk.transcription';
   const TOOL_METHOD = 'atmee.tool'; // an app tool call, as an RPC; the reply is its result
   const ARRIVAL_TIMEOUT_MS = 90000, WARMING_LIMIT_MS = 6 * 60000;
+  // What the app relays waits for the avatar's turn to end: it is between turns
+  // once it has stopped speaking, no caption is streaming, and that has lasted
+  // TURN_QUIET_MS (a sentence boundary is shorter); the agent's own
+  // lk.agent.state counts too, but only once it has been seen to change
+  // (staging sets it to "speaking" once and leaves it). Nothing waits longer
+  // than HOLD_MAX_MS.
+  const TURN_QUIET_MS = 1500, HOLD_MAX_MS = 15000;
   const debug = new URLSearchParams(location.search).has('debug');
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -72,32 +79,62 @@
 
     const room = new Room({ adaptiveStream: true, dynacast: true });
     let linked = false, ended = false, lastState = null, micTrack = null;
-    const outbox = [];
-    const sendToRoom = async (topic, text) => {
-      if (!linked) { outbox.push([topic, text]); return; }
-      await room.localParticipant.sendText(text, { topic });
-    };
+    const stamp = () => new Date().toISOString().slice(11, 23);
+
+    // The floor. Staging refuses a typed turn and drops commentary that lands
+    // in the middle of the avatar's turn, so every lk.chat and atmee.app message
+    // is queued, in order, until the turn has ended (and until the agent has
+    // linked this participant). A flush sends up to and including the first
+    // lk.chat, which starts the avatar's next turn; the rest waits for that one
+    // to end. A newer state replaces a queued one.
+    let avatarSpeaking = false, agentState = '', agentStateLive = false, openCaptions = 0, lastActivity = Date.now(), sending = false;
+    const queue = [];
+    const inTurn = () => avatarSpeaking || openCaptions > 0 || (agentStateLive && (agentState === 'speaking' || agentState === 'thinking'));
+    const activity = () => { lastActivity = Date.now(); };
+    function enqueue(topic, text, label, message) {
+      if (message && message.type === 'state') for (let i = queue.length - 1; i >= 0; i--) if (queue[i].state) queue.splice(i, 1);
+      queue.push({ topic, text, label, state: !!(message && message.type === 'state'), stateText: message && message.text, at: Date.now() });
+      if (debug) console.log(`[atmee] ${stamp()} queued ${label}${inTurn() ? ' (avatar in turn)' : ''}`);
+      flush();
+    }
+    async function flush() {
+      if (sending || !linked || !queue.length || ended) return;
+      const now = Date.now(), held = now - queue[0].at;
+      const free = !inTurn() && now - lastActivity >= TURN_QUIET_MS;
+      if (!free && held < HOLD_MAX_MS) return;
+      sending = true;
+      try {
+        while (queue.length) {
+          const m = queue.shift();
+          if (m.state) { if (m.stateText === lastState) continue; lastState = m.stateText; }
+          await room.localParticipant.sendText(m.text, { topic: m.topic });
+          const waited = Date.now() - m.at;
+          if (debug) console.log(`[atmee] ${stamp()} sent ${m.label} after ${waited} ms${free ? '' : ' (max wait, avatar still in turn)'}`);
+          opts.onRelay && opts.onRelay(m.label, `${m.topic === CHAT_TOPIC ? m.text : (JSON.parse(m.text).text || '')} [${stamp()}, held ${waited} ms]`);
+          if (m.topic === CHAT_TOPIC) { activity(); break; } // a turn starts: the rest waits for it
+        }
+      } finally { sending = false; }
+    }
+    const floorTimer = setInterval(flush, 250);
+    if (debug) window.__atmeeFloor = () => ({ avatarSpeaking, agentState, agentStateLive, openCaptions, quietMs: Date.now() - lastActivity, queued: queue.length });
     const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/?usecase=${opts.usecase}&role=host`);
     const releaseMic = () => { if (opts.mic) opts.mic.getTracks().forEach((t) => t.stop()); };
     const endOnServer = () => fetch(`/api/${opts.usecase}/session/end`, { method: 'POST', keepalive: true }).catch(() => {});
 
     const api = {
       session: s, room, debug,
-      say: (text) => sendToRoom(CHAT_TOPIC, text),
-      app: (message) => {
-        if (message.type === 'state') { if (message.text === lastState) return; lastState = message.text; }
-        return sendToRoom(APP_TOPIC, JSON.stringify(message));
-      },
+      say: (text) => enqueue(CHAT_TOPIC, text, 'lk.chat'),
+      app: (message) => enqueue(APP_TOPIC, JSON.stringify(message), `atmee.app ${message.type}`, message),
       user: (kind, text) => { if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'user', kind, text })); },
       setMuted: async (muted) => { if (micTrack) { if (muted) await micTrack.mute(); else await micTrack.unmute(); } },
       hasMic: () => !!micTrack,
-      end: async () => { ended = true; releaseMic(); await endOnServer(); ws.close(); room.disconnect(); },
+      end: async () => { ended = true; clearInterval(floorTimer); releaseMic(); await endOnServer(); ws.close(); room.disconnect(); },
     };
 
     ws.onmessage = async (ev) => {
       const msg = JSON.parse(ev.data);
-      if (msg.type === 'say') { opts.onRelay && opts.onRelay('lk.chat', msg.text); await api.say(msg.text); }
-      else if (msg.type === 'app') { opts.onRelay && opts.onRelay(`atmee.app ${msg.message.type}`, msg.message.text || ''); await api.app(msg.message); }
+      if (msg.type === 'say') api.say(msg.text);
+      else if (msg.type === 'app') api.app(msg.message);
       else if (opts.onMessage) opts.onMessage(msg);
     };
 
@@ -110,8 +147,10 @@
       const info = reader.info || {};
       if (participant && participant.identity === room.localParticipant.identity) return; // our own words
       arrived();
+      openCaptions++; activity();
       let text = '';
-      try { for await (const chunk of reader) { text += chunk; opts.onCaption && opts.onCaption(text, false); } } catch (e) {}
+      try { for await (const chunk of reader) { text += chunk; activity(); opts.onCaption && opts.onCaption(text, false); } } catch (e) {}
+      openCaptions--; activity();
       // One stream per sentence, and every stream is attributed interim, so a
       // completed stream is a finished sentence.
       if (!text.trim()) return;
@@ -165,10 +204,16 @@
       if (track.kind === Track.Kind.Video) { if (opts.video) track.detach(opts.video); showFace(false); }
     });
     room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
-      const avatarSpeaking = speakers.some((p) => p.identity !== room.localParticipant.identity);
+      avatarSpeaking = speakers.some((p) => p.identity !== room.localParticipant.identity); activity();
       opts.onSpeaking && opts.onSpeaking(avatarSpeaking);
     });
-    room.on(RoomEvent.Disconnected, () => { linked = false; if (!ended) { ended = true; releaseMic(); opts.onEnd && opts.onEnd(); } });
+    // The agent's own turn state (LiveKit agents: listening / thinking / speaking).
+    room.on(RoomEvent.ParticipantAttributesChanged, (_changed, participant) => {
+      if (!participant || participant.identity === room.localParticipant.identity) return;
+      const st = participant.attributes && participant.attributes['lk.agent.state'];
+      if (st !== undefined && st !== agentState) { if (agentState) agentStateLive = true; agentState = st; activity(); if (debug) console.log(`[atmee] ${stamp()} agent ${st}`); }
+    });
+    room.on(RoomEvent.Disconnected, () => { linked = false; clearInterval(floorTimer); if (!ended) { ended = true; releaseMic(); opts.onEnd && opts.onEnd(); } });
 
     try {
       await room.connect(s.serverUrl, s.userToken);
@@ -184,7 +229,7 @@
         throw failure('avatar did not join', 'The presenter did not arrive in time. This usually clears up on a second try.');
       }
     } catch (e) {
-      ended = true; releaseMic(); room.disconnect(); ws.close(); await endOnServer();
+      ended = true; clearInterval(floorTimer); releaseMic(); room.disconnect(); ws.close(); await endOnServer();
       throw e.friendly ? e : failure(e.message, 'The connection failed. Check your network and try again.');
     }
 
@@ -192,7 +237,7 @@
     // arrives; what is sent before that is not heard, so it waits briefly.
     await sleep(2500);
     linked = true;
-    while (outbox.length) { const [t, x] = outbox.shift(); await room.localParticipant.sendText(x, { topic: t }); }
+    flush();
     const sendLinked = () => ws.send(JSON.stringify({ type: 'linked' }));
     if (ws.readyState === 1) sendLinked(); else ws.addEventListener('open', sendLinked, { once: true });
     phase('live', { maxSeconds: s.maxSeconds, video: !!faceOn });

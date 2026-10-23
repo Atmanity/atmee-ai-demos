@@ -29,8 +29,20 @@ const KEY = process.env.ATMEE_API_KEY;
 if (!KEY) throw new Error("ATMEE_API_KEY is required");
 const headers = { "X-Api-Key": KEY, "Content-Type": "application/json" };
 
+// A network error before any answer (staging showed "fetch failed" on a cold
+// connection) is retried once for the calls that are safe to repeat (setting
+// or clearing a conductor, ending a session); a session start is not
+// repeated, since it may have gone through.
 async function api(method, path, body) {
-  const res = await fetch(`${BASE}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  const send = () => fetch(`${BASE}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  let res;
+  try { res = await send(); } catch (err) {
+    const why = err.cause ? `${err.message}: ${err.cause.code || err.cause.message}` : err.message;
+    if (method === "POST" && !path.endsWith("/end")) throw new Error(`${method} ${path} -> ${why}`);
+    console.log(`${method} ${path} -> ${why}; retrying once`);
+    await new Promise((r) => setTimeout(r, 1000));
+    res = await send();
+  }
   const json = await res.json().catch(() => ({}));
   return { status: res.status, json, retryAfter: Number(res.headers.get("retry-after") || 0) };
 }
@@ -61,8 +73,10 @@ function broadcast(h, msg) {
 // A policy returns relay messages for the host page: say (lk.chat) or app (atmee.app).
 function relay(h, messages) { for (const m of messages || []) toHost(h, m); }
 
-// The conductor is the avatar's, not the session's: when two use cases share
-// one avatar, each start sets its own agenda, or clears the other's.
+// The conductor is the avatar's, not the session's. Each app has its own
+// avatar, so this sets the agenda once per avatar per server run; it still
+// clears one that another app left, for a setup that points two apps at the
+// same avatar (one avatar for all five apps, as on a local test stack).
 const conductorOf = new Map(); // avatarId -> the use case whose conductor it has
 async function ensureConductor(h) {
   const owner = conductorOf.get(h.avatarId);
@@ -96,8 +110,13 @@ async function endSession(h) {
   const id = h.session.sessionId; h.session = null;
   if (h.def.onEnd) h.def.onEnd(h, (m) => broadcast(h, m)); // e.g. close the stream's open poll
   h.memo = {}; // nothing of this session is shown to whoever connects next
-  const r = await api("POST", `/v1/session/${id}/end`);
-  console.log(`[${h.name}] end ${id} -> ${r.status}`);
+  try {
+    const r = await api("POST", `/v1/session/${id}/end`);
+    console.log(`[${h.name}] end ${id} -> ${r.status}`);
+  } catch (err) {
+    // The session still ends on its own (the user left the room); the server stays up.
+    console.log(`[${h.name}] end ${id} failed: ${err.message}`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -111,11 +130,13 @@ app.get("/api/usecases", (_req, res) => res.json(Object.fromEntries(Object.entri
 app.post("/api/:usecase/session", async (req, res) => {
   const h = hub(req.params.usecase);
   if (!h) return res.status(404).json({ error: "unknown use case" });
+  console.log(`[${h.name}] session requested`);
   try {
     if (!h.session) await startSession(h);
     const { sessionId, serverUrl, userToken, roomName, maxSeconds } = h.session;
     res.json({ sessionId, serverUrl, userToken, roomName, maxSeconds, avatarId: h.avatarId });
   } catch (err) {
+    console.log(`[${h.name}] start failed: ${err.message}${err.retryAfter ? ` (retry after ${err.retryAfter} s)` : ""}`);
     res.status(err.status === 503 || err.status === 409 ? err.status : 502).json({ error: String(err.message), retryAfter: err.retryAfter || 0 });
   }
 });

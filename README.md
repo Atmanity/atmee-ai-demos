@@ -48,7 +48,9 @@ the room.
 
 Shared pieces: `public/common.js` (session, connection phases, warm-up retries, going live when
 the avatar can talk, its face attached whenever it arrives, app tool calls dispatched by name,
-microphone), `public/kit.js` and `public/kit.css` (stage overlay,
+every `lk.chat` and `atmee.app` message held in order until the avatar's turn has ended, since
+staging refuses typed turns and commentary that land mid-turn; at most 15 s; `?debug` shows how
+long each was held, microphone), `public/kit.js` and `public/kit.css` (stage overlay,
 captions, transcript, countdown, mic button, typed turns held until the avatar finishes a
 sentence).
 
@@ -80,7 +82,9 @@ Tools are required: they need session_service #182 and Causeur #121, on staging 
 2026-10-23. To try them against a local stack instead, put a `.env.local` next to
 `.env.example` (gitignored) with `ATMEE_BASE_URL` pointing at the local session_service (e.g.
 `http://127.0.0.1:8091`), its API key and avatar ids, and run
-`PORT=3334 node --env-file=.env.local server.js`. One avatar can serve all five apps: the server
+`PORT=3334 node --env-file=.env.local server.js`. (On a network where IPv6 is unreachable and
+IPv4 connects are slow, Node's `fetch` can fail with `ETIMEDOUT` while curl works; add
+`--network-family-autoselection-attempt-timeout=2000` to the node command.) One avatar can serve all five apps: the server
 sets each use case's conductor, or clears it, before the session starts (that needs a key
 allowed to write the avatar; without it the conductor call is refused with 403 and the session
 starts without an agenda).
