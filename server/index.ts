@@ -54,6 +54,8 @@ if (production) {
 
 const app = express();
 app.disable('x-powered-by');
+// One index for every app: the home page.
+app.get(['/apps', '/apps/'], (_req, res) => res.redirect(302, '/'));
 app.use((req, res, next) => (isMiniAppPath(req.path, production) ? miniapps(req, res, next) : fiveApps(req, res, next)));
 
 const server = createServer(app);

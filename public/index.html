@@ -31,10 +31,6 @@
   .extra { font-size: 14px; color: var(--muted); }
   .extra a { color: inherit; }
   footer { margin-top: 40px; color: var(--muted); font-size: 14px; }
-  /* The mini-apps, when the site's server runs them: the same cards, under their own heading. */
-  .more { margin-top: 56px; display: grid; gap: 14px; }
-  .more h2 { font-size: clamp(24px, 3vw, 30px); font-weight: 800; letter-spacing: -.02em; margin: 0; }
-  .more > p { color: var(--muted); margin: 0 0 6px; max-width: 720px; }
 </style>
 </head>
 <body>
@@ -44,7 +40,7 @@
     <h1 id="headline">Five products, one avatar platform.</h1>
     <p>Each of these is a complete app with its own brand and flow. Behind every one is the same conversational avatar, steered by what the app knows.</p>
   </header>
-  <section class="grid">
+  <section class="grid" id="apps">
     <a class="app" href="training.html">
       <div class="art" style="background:linear-gradient(150deg,#2c2463,#4b3fd1)"><img class="face" data-usecase="training" alt="" hidden><span class="glyph">🎓</span><b>Ledger Academy</b></div>
       <div class="body"><p>A live trainer teaches a short incident-response course, takes your questions, and quizzes you at the end.</p><div class="tags"><span class="chip">Training</span><span class="chip">Lesson plan</span><span class="chip">Quiz</span></div><span class="open">Start the course →</span></div>
@@ -67,12 +63,7 @@
     </a>
   </section>
   <p class="extra" style="margin-top:16px">Viewers of Nightcap Live chat from the <a href="livestream-viewer.html">chat page</a>.</p>
-  <section class="more" id="more" hidden aria-labelledby="more-title">
-    <h2 id="more-title">Fourteen more, each with its own host</h2>
-    <p>Games, tutors and advisors, each a product of its own. The host acts through the app's tools, so every verdict, clue and number comes from the app.</p>
-    <div class="grid" id="more-grid"></div>
-  </section>
-  <footer>Add <code>?debug</code> to any app's address to see what it sends the avatar.</footer>
+  <footer>Add <code>?debug</code> to the address of Ledger Academy, Northwind Talent, Kin, Isle of Whispers or Nightcap Live to see what it sends the avatar.</footer>
 </div>
 <script>
   // Each card's avatar face, from the server (it keeps the API key and the image); without one the emoji stays.
@@ -83,36 +74,58 @@
     img.src = `/api/avatars/${img.dataset.usecase}/portrait`;
   }
 
-  // The mini-apps, when the site's server runs them (npm run dev, the container): their cards, from its list.
+  // The other apps, when the site's server runs them (npm run dev, the container): the same
+  // cards in the same grid, from its list. The card copy is here, beside the cards above.
+  const CARDS = {
+    "guess-the-city": ["📮", ["Game", "Geography", "Clues"], "Play with Marco"],
+    "chess-opponent": ["♟️", ["Game", "Chess"], "Play Sasha"],
+    "poker-table": ["🃏", ["Game", "Hold'em"], "Sit down with Dex"],
+    "stroke-tutor": ["🖌️", ["Lesson", "Calligraphy"], "Write with Ren"],
+    "bls-tutor": ["⛑️", ["Training", "First aid", "Drills"], "Train with Alex"],
+    "quadratic-whiteboard": ["✏️", ["Lesson", "Algebra"], "Solve with Ada"],
+    "trajectory-coach": ["🎯", ["Lesson", "Physics"], "Aim with Theo"],
+    "sky-guide": ["🔭", ["Explore", "Astronomy"], "Stargaze with Mira"],
+    "nutrition-advisor": ["🥗", ["Advisor", "Nutrition"], "Ask Rachel"],
+    "fashion-advisor": ["👗", ["Advisor", "Style"], "Ask Emery"],
+    "fitness-coach": ["🏋️", ["Coach", "Workout"], "Train with Sammy"],
+    "market-desk": ["📈", ["Markets", "Live quotes"], "Call Reese"],
+    "travel-guide": ["🗺️", ["Travel", "Live map"], "Plan with Lumi"],
+    "room-planner": ["🏠", ["Home", "Floor plan"], "Draw with Iris"],
+  };
   const NUMBER = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen", "Twenty"];
-  const darker = (hex) => "#" + hex.replace("#", "").match(/../g).map((c) => Math.round(parseInt(c, 16) * 0.6).toString(16).padStart(2, "0")).join("");
+  const darker = (hex, k) => "#" + hex.slice(1).match(/../g).map((c) => Math.round(parseInt(c, 16) * k).toString(16).padStart(2, "0")).join("");
+  const light = (hex) => { const [r, g, b] = hex.slice(1).match(/../g).map((c) => parseInt(c, 16) / 255); return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.5; };
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
   fetch("/api/apps").then((r) => (r.ok ? r.json() : [])).then((list) => {
     if (!Array.isArray(list) || !list.length) return;
-    const grid = document.getElementById("more-grid");
-    // Games, then tutors, then advisors, as the catalogue (/apps/) shelves them.
-    const ORDER = ["guess-the-city", "chess-opponent", "poker-table", "stroke-tutor", "bls-tutor", "quadratic-whiteboard", "trajectory-coach", "sky-guide", "nutrition-advisor", "fashion-advisor", "fitness-coach", "market-desk", "travel-guide", "room-planner"];
-    const rank = (id) => (ORDER.includes(id) ? ORDER.indexOf(id) : ORDER.length);
+    const ids = Object.keys(CARDS);
+    const rank = (id) => (ids.includes(id) ? ids.indexOf(id) : ids.length);
     list.sort((x, y) => rank(x.id) - rank(y.id));
+    const grid = document.getElementById("apps");
     for (const a of list) {
-      const color = /^#[0-9a-f]{6}$/i.test(a.brand?.color || "") ? a.brand.color : "#2b3150";
-      const card = document.createElement("a");
-      card.className = "app";
+      const [glyph, tags, open] = CARDS[a.id] ?? ["", [], `Open ${a.title}`];
+      // White titles on every card, as on the five: a light brand colour is deepened to carry them.
+      const brand = /^#[0-9a-f]{6}$/i.test(a.brand?.color || "") ? a.brand.color : "#2b3150";
+      const color = light(brand) ? darker(brand, 0.7) : brand;
+      const card = el("a", "app");
       card.href = `/apps/${a.id}/`;
-      card.innerHTML = `<div class="art"><img class="face" alt=""><b></b></div><div class="body"><p></p><div class="tags"></div><span class="open"></span></div>`;
-      const art = card.querySelector(".art");
-      art.style.background = `linear-gradient(150deg,${darker(color)},${color})`;
-      art.style.color = a.brand?.ink || "#fff";
-      art.querySelector("b").textContent = a.title;
-      card.querySelector("p").textContent = a.tagline;
-      if (a.host) { const chip = document.createElement("span"); chip.className = "chip"; chip.textContent = `Hosted by ${a.host}`; card.querySelector(".tags").append(chip); }
-      card.querySelector(".open").textContent = `Open ${a.title} →`;
-      const img = card.querySelector(".face");
+      const art = el("div", "art");
+      art.style.background = `linear-gradient(150deg,${darker(color, 0.6)},${color})`;
+      const img = el("img", "face");
+      img.alt = "";
       img.addEventListener("load", () => art.classList.add("has-face"));
       img.addEventListener("error", () => img.remove());
       img.src = `/api/apps/${a.id}/portrait`;
+      art.append(img);
+      if (glyph) art.append(el("span", "glyph", glyph));
+      art.append(el("b", "", a.title));
+      const tagRow = el("div", "tags");
+      for (const t of tags) tagRow.append(el("span", "chip", t));
+      const body = el("div", "body");
+      body.append(el("p", "", a.tagline), tagRow, el("span", "open", `${open} →`));
+      card.append(art, body);
       grid.append(card);
     }
-    document.getElementById("more").hidden = false;
     const total = document.querySelectorAll(".app").length;
     document.getElementById("headline").textContent = `${NUMBER[total] || total} products, one avatar platform.`;
   }).catch(() => {});
