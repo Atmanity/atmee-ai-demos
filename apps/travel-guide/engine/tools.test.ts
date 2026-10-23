@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, test, vi } from 'vitest';
 import type { GeoCountry, RawSpot } from './geo.ts';
 import { TravelState } from './state.ts';
 import { isToolName, runAction, runTool, TOOL_NAMES } from './tools.ts';
+import * as trip from './trip.ts';
 import type { Lookups } from './trip.ts';
 import { tools } from './director.ts';
 
@@ -143,7 +144,9 @@ describe('which choices overtake a destination still being looked up', () => {
     ['a new country', (st, l) => runTool(st, l, 'choose_destination', { place: 'Peru' }), 'Peru'],
     ['a city found by search', (st, l) => runAction(st, l, { kind: 'search', query: 'Bali' }), 'Indonesia'],
     ['a tap on the map', (st, l) => runAction(st, { ...l, reverse: async () => ({ place: 'Cusco', country: 'Peru', isoCode: 'PE', lat: -13.5, lon: -72 }) }, { kind: 'destinationAt', lat: -13.5, lon: -72 }), 'Peru'],
-    ['surprise me', (st, l) => runAction(st, l, { kind: 'pick' }), 'picked'],
+    // The button's own path (runAction pick runs pickForThem) with a fixed draw, not Math.random: index 0 of the
+    // ideas left is Japan, the very country still in flight, which is the hardest case for "overtaken".
+    ['surprise me', (st, l) => trip.pickForThem(st, l, () => 0), 'picked'],
     ['going back to a country on the route', (st, l) => runAction(st, l, { kind: 'revisit', country: 'Norway' }), 'Norway'],
     ['confirming the country on the map', (st, l) => runTool(st, l, 'choose_destination', { place: 'Portugal' }), 'Portugal'],
     ['coming back from its sights to its page', async (st, l) => { await runTool(st, l, 'explore_near', { place: 'Shibuya station' }); return runTool(st, l, 'choose_destination', { place: 'Portugal' }); }, 'Portugal'],
@@ -169,8 +172,8 @@ describe('which choices overtake a destination still being looked up', () => {
       expect(state.country).toBe('Japan');
       expect(olderSaid).toMatch(/^Done: Japan is on the map/);
     } else {
+      // Whatever was drawn or chosen stays; the older lookup lands as overtaken.
       expect(state.country).toBe(lands === 'picked' ? after : lands);
-      expect(state.country).not.toBe('Japan');
       expect(olderSaid).toMatch(/^Not done: overtaken/);
     }
   });
