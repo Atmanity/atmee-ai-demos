@@ -4,7 +4,7 @@
 // server, draws the board, keeps Lumi's picture of it current, and tells Lumi
 // about the user's own presses.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CallControls, CallStatus, ChatPanel, HostVideo, clock, useAvatar, useToolNet, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
+import { CallControls, CallStatus, ChatPanel, HostVideo, clock, useAvatar, useToolNet, BackToApps, useCaptionToggle, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
 import { boardState, pressed, say, tools } from '../engine/director.ts';
 import { mustDo, netContext, stillNeeded, type NetTool } from '../engine/judge.ts';
 import { isNewer, parseSnapshot } from '../engine/messages.ts';
@@ -178,6 +178,8 @@ export function App() {
     run: async (call) => (held.current && !stillNeeded({ name: call.name as NetTool, arguments: call.arguments }, netContext(held.current)) ? null : onToolCall(call)),
     avatar: () => avatarRef.current!,
   });
+  // The host's words over the video: off by default, since the chat carries them.
+  const cc = useCaptionToggle('travel-guide', false);
   const avatar = useAvatar('travel-guide', {
     onToolCall: net.watch(onToolCall),
     onUserSaid: (text) => net.heard(text),
@@ -281,7 +283,7 @@ export function App() {
   return (
     <div className="yd-app">
       <header className="yd-top">
-        <Logo />
+        <BackToApps avatar={avatar} name={HOST} /><Logo />
         {live && <p className="yd-callline"><span className="yd-livedot" aria-hidden="true" />On the line{avatar.secondsLeft !== null && <span> · {clock(avatar.secondsLeft)} left</span>}</p>}
         <button type="button" className="yd-tripbtn" aria-pressed={showTrip} onClick={() => setShowTrip((v) => !v)}>
           Your trip{size > 0 && <span className="yd-badge" aria-label={`${size} saved`}>{size}</span>}
@@ -308,7 +310,7 @@ export function App() {
             )}
           </div>
           <figure className={`yd-host ${live ? 'is-live' : 'is-waiting'}`} aria-label={`${HOST}, your guide`}>
-            <HostVideo avatar={avatar} name={HOST} poster={portrait} className="yd-host-video">
+            <HostVideo avatar={avatar} captions={cc.on} onToggleCaptions={cc.toggle} name={HOST} poster={portrait} className="yd-host-video">
               <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} />
             </HostVideo>
             <figcaption className="yd-nameplate"><b>{HOST}</b><span>your guide</span>{live && <span className="yd-onair">Live</span>}</figcaption>

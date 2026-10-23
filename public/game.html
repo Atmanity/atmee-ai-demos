@@ -18,7 +18,7 @@
   .btn.primary { background: linear-gradient(180deg, #e9bb5c, #c58d2c); box-shadow: 0 0 0 1px #f3d48a inset, 0 6px 20px rgb(217 164 65 / .25); }
 
   /* Title screen */
-  .title-screen { min-height: 100vh; display: grid; place-items: center; text-align: center; padding: 24px max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .title-screen { position: relative; min-height: 100vh; display: grid; place-items: center; text-align: center; padding: 24px max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
   .title-screen .inner { display: grid; gap: 20px; justify-items: center; max-width: 620px; }
   .crest { font-size: 64px; filter: drop-shadow(0 0 24px rgb(217 164 65 / .35)); }
   .title-screen h1 { font-size: clamp(40px, 7vw, 76px); color: var(--accent); letter-spacing: .06em; text-shadow: 0 2px 30px rgb(217 164 65 / .25); }
@@ -31,6 +31,9 @@
   .play { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 24px; padding: 20px max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); max-width: 1320px; margin: 0 auto; }
   .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
   .head h2 { color: var(--accent); font-size: 22px; letter-spacing: .08em; }
+  .head-l { display: flex; align-items: center; gap: 14px; }
+  .corner { position: absolute; top: 16px; left: max(16px, env(safe-area-inset-left, 0px)); }
+  .back-link { font-family: var(--font-display); letter-spacing: .06em; }
   .board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; aspect-ratio: 1; max-height: calc(100vh - 180px); margin: 0 auto; }
   .tile { position: relative; border-radius: 12px; border: 1px solid #33404f; cursor: default; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 6px;
     background: linear-gradient(160deg, #22394a, #142231); transition: transform .12s, box-shadow .2s, border-color .2s; text-align: center; color: var(--text); }
@@ -54,6 +57,7 @@
   .narrator { aspect-ratio: 1; border-radius: 10px; }
   .narrator .tag { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 1; font-family: var(--font-display); font-size: 12px; letter-spacing: .12em; color: #f3d48a; background: rgb(0 0 0 / .45); padding: 3px 12px; border-radius: 99px; }
   .narrator.talking { box-shadow: 0 0 30px rgb(217 164 65 / .45); }
+  .narrator .caption { font-size: 16px; }
   .inventory { display: flex; gap: 10px; align-items: center; }
   .inventory .slot { width: 52px; height: 52px; border-radius: 10px; border: 1px dashed #3c4757; display: grid; place-items: center; font-size: 26px; background: var(--surface); }
   .inventory .slot.full { border-style: solid; border-color: var(--accent); background: var(--accent-soft); }
@@ -82,6 +86,7 @@
 </head>
 <body>
 <main id="titleScreen" class="title-screen">
+  <div class="corner" id="titleBack"></div>
   <div class="inner">
     <div class="crest">🏝️</div>
     <h1>Isle of Whispers</h1>
@@ -92,13 +97,12 @@
       <div><b>Consult</b>Only at the oracle's shrine will the voice answer your questions.</div>
     </div>
     <button class="btn primary lg" id="begin" type="button">Begin the tale</button>
-    <a href="/" class="muted" style="font-size:15px">Back to all apps</a>
   </div>
 </main>
 
 <main id="play" class="play" hidden>
   <section>
-    <div class="head"><h2>The island</h2><span class="muted" id="where">Washed ashore</span></div>
+    <div class="head"><div class="head-l" id="playBack"><h2>The island</h2></div><span class="muted" id="where">Washed ashore</span></div>
     <div class="board" id="board"></div>
     <div class="legend"><span>Click a glowing tile, or use <kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd></span><span id="steps">0 steps</span></div>
   </section>
@@ -140,6 +144,10 @@
   let s, here = [0, 0], steps = 0, atShrine = false, won = false;
   const visited = new Set(['0,0']), inv = new Set(), clues = new Set();
   const debug = UI.debugLog();
+  UI.backLink($('titleBack'));
+  UI.backLink($('playBack'), { getSession: () => s, what: 'game' });
+  // The chronicle carries the narrator's words, so the overlay on the video starts off (CC turns it on).
+  const caption = UI.captionOverlay($('narrator'), { id: 'game', defaultOn: false });
   const overlay = UI.stage($('overlay'), {
     starting: ['The tale is being prepared…', 'Summoning your narrator.'],
     warming: ['The narrator is clearing their throat…', 'The first tale of the day takes a minute or two.'],
@@ -248,7 +256,7 @@
       s = await Atmee.join({
         usecase: 'game', video: $('video'), audio: $('audio'), mic: null, tools,
         onPhase: (p, d) => overlay.phase(p, d),
-        onCaption: narrate,
+        onCaption: (text, final) => { caption(text, final); narrate(text, final); },
         onSpeaking: (v) => { $('narrator').classList.toggle('talking', v); sender.speaking(v); },
         onRelay: debug,
         onEnd: () => { s = null; render(); overlay.ended('<div class="title">The tale has ended</div><button class="btn primary" onclick="location.reload()">Begin anew</button>'); },

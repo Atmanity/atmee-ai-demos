@@ -1,4 +1,5 @@
 // Kibitz's front door: what it is, how a game goes, and the way in.
+import { BackToApps } from '../../../src/kit/index.ts';
 import { Chessboard } from 'react-chessboard';
 import sasha from '../host/portrait.jpg';
 import { BoardBoundary, DARK_SQUARE, LIGHT_SQUARE } from './ChessBoard.tsx';
@@ -58,7 +59,7 @@ function DemoBoard() {
 export function Lobby({ onPlay }: { onPlay: (mic: boolean) => void }) {
   return (
     <div className="kb-lobby">
-      <header className="kb-top is-lobby"><Logo /></header>
+      <header className="kb-top is-lobby"><BackToApps /><Logo /></header>
       <main className="kb-hero">
         <div className="kb-hero-copy">
           <p className="kb-player-card">

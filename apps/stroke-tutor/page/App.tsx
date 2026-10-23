@@ -4,7 +4,7 @@
 // page answers Ren's calls, draws the sheet, keeps Ren's picture of it
 // current, and tells Ren about strokes and button presses as they land.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
+import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, BackToApps, useCaptionToggle, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
 import { boardState, firstTries, say, TTL } from '../engine/director.ts';
 import { mustDo } from '../engine/judge.ts';
 import type { Command, Snapshot } from '../engine/types.ts';
@@ -163,6 +163,8 @@ export function App() {
     run: async (call) => String(await onToolCall(call)),
     avatar: () => avatarRef.current!,
   });
+  // The host's words over the video: off by default, since the chat carries them.
+  const cc = useCaptionToggle('stroke-tutor', false);
   const avatar = useAvatar('stroke-tutor', { onToolCall: net.watch(onToolCall), onUserSaid: (text) => net.heard(text) });
   avatarRef.current = avatar;
   const live = avatar.phase === 'live';
@@ -286,7 +288,7 @@ export function App() {
   return (
     <div className="hs-app">
       <header className="hs-top">
-        <Logo />
+        <BackToApps avatar={avatar} name={HOST} /><Logo />
         {written.length > 0 && (
           <p className="hs-written" aria-label={`Written so far: ${written.map((w) => w.glyph).join(', ')}`}>
             <span>Written</span>
@@ -303,7 +305,7 @@ export function App() {
         <div className="hs-deskwrap">{desk}</div>
 
         <aside className="hs-teacher" aria-label={`${HOST}, your teacher`}>
-          <HostVideo avatar={avatar} name={HOST} poster={ren} className="hs-video">
+          <HostVideo avatar={avatar} captions={cc.on} onToggleCaptions={cc.toggle} name={HOST} poster={ren} className="hs-video">
             <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} />
           </HostVideo>
           <div className="hs-nameplate">

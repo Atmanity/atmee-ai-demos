@@ -8,7 +8,7 @@
 // stood when it was said: the server plays a move only when those words
 // contain it, so an invented move never lands and a bet never lands twice.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CallControls, ChatPanel, useAvatar, useToolNet, type ToolCall } from '../../../src/kit/index.ts';
+import { CallControls, ChatPanel, useAvatar, useToolNet, BackToApps, type ToolCall } from '../../../src/kit/index.ts';
 import { HOST, pressed, RULES_NOTE, said, speak, tableState, type Line } from '../engine/director.ts';
 import { mustDo } from '../engine/judge.ts';
 import type { Heard, Intent, TableView } from '../engine/types.ts';
@@ -317,7 +317,7 @@ export function App() {
   return (
     <div className="bs-app">
       <header className="bs-top">
-        <Logo />
+        <BackToApps avatar={avatar} name={HOST} /><Logo />
         {view && hand > 0 && (
           <p className="bs-match">
             <span>Hand <b>{hand}</b></span>

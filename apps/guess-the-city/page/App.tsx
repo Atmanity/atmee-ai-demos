@@ -3,7 +3,7 @@
 // page answers those calls, shows the postcard and the clues, keeps Marco's
 // picture of the board current, and tells him about button presses.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, type ToolCall } from '../../../src/kit/index.ts';
+import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, BackToApps, useCaptionToggle, type ToolCall } from '../../../src/kit/index.ts';
 import { boardState } from '../engine/director.ts';
 import { mustDo, type Command } from '../engine/judge.ts';
 import type { View } from '../engine/types.ts';
@@ -45,6 +45,8 @@ export function App() {
     run: async (call) => String(await onToolCall(call)),
     avatar: () => avatarRef.current!,
   });
+  // The host's words over the video: off by default, since the chat carries them.
+  const cc = useCaptionToggle('guess-the-city', false);
   const avatar = useAvatar('guess-the-city', { onToolCall: net.watch(onToolCall), onUserSaid: (text) => net.heard(text) });
   const avatarRef = useRef(avatar);
   avatarRef.current = avatar;
@@ -99,7 +101,7 @@ export function App() {
   return (
     <div className="pm-app">
       <header className="pm-top">
-        <Logo />
+        <BackToApps avatar={avatar} name={HOST} /><Logo />
         {view && !view.over && (
           <ol className="pm-rounds" aria-label={`Round ${Math.min(view.round, view.rounds)} of ${view.rounds}`}>
             {Array.from({ length: view.rounds }, (_, i) => {
@@ -120,7 +122,7 @@ export function App() {
         </div>
 
         <aside className="pm-host" aria-label={`${HOST}, your host`}>
-          <HostVideo avatar={avatar} name={HOST} poster={marco} className="pm-host-video">
+          <HostVideo avatar={avatar} captions={cc.on} onToggleCaptions={cc.toggle} name={HOST} poster={marco} className="pm-host-video">
             <CallStatus avatar={avatar} name={HOST} again="Call Marco again" />
           </HostVideo>
           <p className="pm-nameplate"><b>{HOST}</b> your host{live && <span className="pm-onair">On air</span>}</p>

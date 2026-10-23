@@ -65,6 +65,7 @@
   .kin.talking .stage { border-color: var(--accent); }
   .speech { max-width: 300px; background: #fff; border-radius: 18px 18px 4px 18px; padding: 12px 16px; box-shadow: var(--shadow); font-size: 16px; margin-bottom: 30px; animation: rise .2s ease-out; }
   .speech:empty { display: none; }
+  .kin .cc-btn { position: absolute; top: -4px; right: -4px; z-index: 11; }
 
   @media (max-width: 960px) {
     .welcome { grid-template-columns: 1fr; }
@@ -135,6 +136,9 @@
   let s, source = null, lastSent = null, timer = null, mode = 'screen', stopClock = () => {};
   const debug = UI.debugLog();
   const sender = UI.politeSender(() => s);
+  UI.backLink(document.querySelector('.topbar'), { getSession: () => s, what: 'session' });
+  // Kin's speech bubble is the only place its words appear, so it starts on; CC hides it.
+  UI.captionToggle({ id: 'presence', defaultOn: true, mount: $('kin'), onChange: (on) => { $('speech').hidden = !on; } });
   const overlay = UI.stage($('overlay'), {
     starting: ['Waking Kin…', ''], warming: ['Kin is stretching…', ''], connecting: ['Connecting…', ''], arriving: ['Kin is coming…', ''],
   });

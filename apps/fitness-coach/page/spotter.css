@@ -274,7 +274,7 @@ button.sp-move:disabled { cursor: default; }
   /* Live: Sammy stays in view, pinned, while the plan scrolls under her. */
   .sp-coach.is-live { position: sticky; top: 0; z-index: 5; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 12px; margin: 0 -20px; padding: 8px 20px; background: rgba(245, 245, 242, .94); backdrop-filter: blur(6px); border-bottom: 1px solid var(--sp-mat); }
   .sp-coach.is-live .sp-coach-video { width: 96px; aspect-ratio: 4 / 5; box-shadow: none; }
-  .sp-coach.is-live .call-caption { display: none; }
+  .sp-coach.is-live .call-caption, .sp-coach.is-live .call-cc { display: none; }
   .sp-coach.is-live .call-hear { width: 84px; padding: 6px; font-size: 11px; line-height: 1.2; }
   .sp-coach.is-live .sp-nameplate { align-self: start; padding-top: 4px; }
   .sp-nameplate > p:first-child { flex-wrap: wrap; }

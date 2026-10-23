@@ -8,7 +8,7 @@
 // The range runs in this page (engine/range.ts owns the clock that lands each
 // shot); `Controls` is the one way into it, for tools and buttons alike.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
+import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, BackToApps, useCaptionToggle, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
 import type { Interpret, Press } from '../engine/controls.ts';
 import { rangeState, said } from '../engine/director.ts';
 import { contextOf, mustDo } from '../engine/judge.ts';
@@ -79,6 +79,8 @@ export function App() {
     run: (call) => { setView('range'); return controls.tool(call.name, call.arguments, 'net'); },
     avatar: () => avatarRef.current!,
   });
+  // The host's words over the video: off by default, since the chat carries them.
+  const cc = useCaptionToggle(ID, false);
   const avatar = useAvatar(ID, { onToolCall: net.watch(onToolCall), onUserSaid: (text) => net.heard(text) });
   avatarRef.current = avatar;
   const live = avatar.phase === 'live';
@@ -114,7 +116,7 @@ export function App() {
   return (
     <div className="aw-app">
       <header className="aw-top">
-        <Logo />
+        <BackToApps avatar={avatar} name={HOST} /><Logo />
         <Pips state={state} />
         {view === 'logbook'
           ? <button type="button" className="aw-tab" onClick={() => setView('range')} aria-label="Back to the range"><span aria-hidden="true">←</span> Range</button>
@@ -140,7 +142,7 @@ export function App() {
 
         <div className="aw-side">
           <aside className={`aw-coach ${live ? 'is-live' : ''}`} aria-label={`${HOST}, your coach`}>
-            <HostVideo avatar={avatar} name={HOST} poster={portrait} className="aw-coach-video">
+            <HostVideo avatar={avatar} captions={cc.on} onToggleCaptions={cc.toggle} name={HOST} poster={portrait} className="aw-coach-video">
               <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} onAgain={again} />
             </HostVideo>
             <div className="aw-coach-meta">

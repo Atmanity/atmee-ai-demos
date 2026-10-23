@@ -1,4 +1,5 @@
 // Blindside's front door: what it is, how a match goes, and the way in.
+import { BackToApps } from '../../../src/kit/index.ts';
 import { BIG_BLIND, SMALL_BLIND, STARTING_STACK } from '../engine/types.ts';
 import dex from '../host/portrait.jpg';
 import { CardView } from './CardView.tsx';
@@ -34,7 +35,7 @@ const STEPS: [string, string][] = [
 export function Lobby({ onPlay }: { onPlay: (mic: boolean) => void }) {
   return (
     <div className="bs-lobby">
-      <header className="bs-top is-lobby"><Logo /></header>
+      <header className="bs-top is-lobby"><BackToApps /><Logo /></header>
       <main className="bs-hero">
         <div className="bs-hero-copy">
           <p className="bs-seat-chip"><img src={dex} alt="" /><span>Across the felt tonight: <b>Dex</b></span></p>

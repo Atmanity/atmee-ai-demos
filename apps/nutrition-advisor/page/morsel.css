@@ -278,7 +278,7 @@ q { quotes: "“" "”"; font-weight: 600; }
   .ms-side { display: contents; }
   .ms-host { position: sticky; top: 0; z-index: 20; order: 1; grid-template-columns: 84px minmax(0, 1fr); align-items: center; gap: 12px; padding: 8px 0 10px; background: var(--ms-page); border-bottom: 1.5px solid var(--ms-ink); }
   .ms-host-video { aspect-ratio: 4 / 5; box-shadow: 4px 4px 0 var(--ms-ink); }
-  .ms-host .call-caption { display: none; }
+  .ms-host .call-caption, .ms-host .call-cc { display: none; }
   .ms-stage { order: 2; }
   .ms-chat { order: 3; min-height: 260px; max-height: 70vh; }
   /* Calling, ended, failed: the tile is wide enough for its message. */

@@ -1,5 +1,6 @@
 // Lodestar's front door: what it is, how it works, and the way in, beside
 // the real sky over the chosen place tonight (the same chart the call opens on).
+import { BackToApps } from '../../../src/kit/index.ts';
 import portrait from '../host/portrait.jpg';
 import type { SkyView } from '../engine/types.ts';
 import { PLACES } from '../engine/sky.ts';
@@ -37,7 +38,7 @@ export function Lobby({ view, host, palette, onPlace, onStart }: {
   const [clock, date] = s.when.label.split(', ');
   return (
     <div className="ls-lobby">
-      <header className="ls-top is-lobby"><Logo /></header>
+      <header className="ls-top is-lobby"><BackToApps /><Logo /></header>
       <main className="ls-hero">
         <div className="ls-hero-copy">
           <p className="ls-eyebrow">A stargazing guide for anywhere on Earth</p>

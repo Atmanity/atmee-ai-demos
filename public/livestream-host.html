@@ -101,6 +101,9 @@
   $('share').innerHTML = '🔗 Copy viewer link';
   let s, relay = null, msgs = 0, liveEl = null, stopClock = () => {};
   const debug = UI.debugLog();
+  UI.backLink(document.querySelector('.topbar'), { getSession: () => s, what: 'stream' });
+  // The chat carries the host's words, so the overlay on the video starts off (CC turns it on).
+  const caption = UI.captionOverlay($('player'), { id: 'livestream', defaultOn: false });
   const overlay = UI.stage($('overlay'), {
     starting: ['Starting your stream…', 'Booking your co-host.'],
     warming: ['Warming up the studio…', 'The first stream of the day takes a minute or two.'],
@@ -141,7 +144,7 @@
         usecase: 'livestream', video: $('video'), audio: $('audio'), mic: null, tools,
         onPhase: (p, d) => overlay.phase(p, d),
         onSpeaking: (v) => $('player').classList.toggle('talking', v),
-        onCaption: hostSays,
+        onCaption: (text, final) => { caption(text, final); hostSays(text, final); },
         onRelay: debug,
         onMessage: (m) => {
           if (m.type === 'chat') { msgs++; $('statMsgs').textContent = msgs; line(/\?\s*$/.test(m.text) ? 'q' : '', m.name, m.text); }

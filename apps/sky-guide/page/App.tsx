@@ -5,7 +5,7 @@
 // is pure), keeps Mira's picture of the chart current, and tells her about
 // what the user does with the chart's own controls.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, type ToolCall } from '../../../src/kit/index.ts';
+import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, BackToApps, useCaptionToggle, type ToolCall } from '../../../src/kit/index.ts';
 import { isToolName, runTool, type Notice } from '../engine/actions.ts';
 import { SkyChart } from '../engine/chart.ts';
 import { figureName, said, skyState, told } from '../engine/director.ts';
@@ -110,6 +110,8 @@ export function App() {
     run: async (call) => String(await onToolCall(call)),
     avatar: () => avatarRef.current!,
   });
+  // The host's words over the video: off by default, since the chat carries them.
+  const cc = useCaptionToggle('sky-guide', false);
   const avatar = useAvatar('sky-guide', {
     onToolCall: net.watch(onToolCall),
     onUserSaid: (text) => net.heard(text),
@@ -190,7 +192,7 @@ export function App() {
   return (
     <div className="ls-app">
       <header className="ls-top">
-        <Logo />
+        <BackToApps avatar={avatar} name={HOST} /><Logo />
         <button
           type="button" className={`ls-red ${red ? 'is-on' : ''}`} aria-pressed={red} onClick={() => setRed(!red)}
           title="Red light keeps your eyes used to the dark"
@@ -213,7 +215,7 @@ export function App() {
         <Side view={view} night={night} tab={tab} host={HOST} onTab={setTab} onIntent={control} />
 
         <aside className="ls-host" aria-label={`${HOST}, your guide`}>
-          <HostVideo avatar={avatar} name={HOST} poster={portrait} className="ls-host-video">
+          <HostVideo avatar={avatar} captions={cc.on} onToggleCaptions={cc.toggle} name={HOST} poster={portrait} className="ls-host-video">
             <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} onAgain={callAgain} />
           </HostVideo>
           <div className="ls-nameplate">

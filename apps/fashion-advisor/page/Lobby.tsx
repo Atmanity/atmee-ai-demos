@@ -1,7 +1,7 @@
 // Notch's front door: what it is, how a fitting goes, and the way in. The
 // visual is the product itself: the mirror, the tape that scores the look,
 // and the tag with the one fix.
-import { MicIcon } from '../../../src/kit/index.ts';
+import { MicIcon, BackToApps } from '../../../src/kit/index.ts';
 import { HOST } from '../engine/director.ts';
 import portrait from '../host/portrait.jpg';
 import exampleOutfit from './sample-outfit.jpg';
@@ -36,7 +36,7 @@ const STEPS: [string, string][] = [
 export function Lobby({ onStart }: { onStart: (mic: boolean) => void }) {
   return (
     <div className="nt-lobby">
-      <header className="nt-top is-lobby"><Logo /></header>
+      <header className="nt-top is-lobby"><BackToApps /><Logo /></header>
       <main className="nt-hero">
         <div className="nt-hero-copy">
           <p className="nt-stylist">

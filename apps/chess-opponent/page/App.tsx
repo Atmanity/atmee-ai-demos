@@ -5,7 +5,7 @@
 // speaks from what they return: a move's result already carries her reply.
 // Moves made by hand and buttons act at once, and she is told by an event.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
+import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, BackToApps, useCaptionToggle, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
 import { actionFor, boardState, pressed, say } from '../engine/director.ts';
 import { ChessMatch } from '../engine/game.ts';
 import { mustDo, readsAsMove, typedMove } from '../engine/judge.ts';
@@ -171,6 +171,8 @@ export function App() {
     },
     avatar: () => avatarRef.current!,
   });
+  // The host's words over the video: off by default, since the chat carries them.
+  const cc = useCaptionToggle(ID, false);
   const avatar = useAvatar(ID, { onToolCall: net.watch(onToolCall), onUserSaid: (text) => net.heard(text) });
   avatarRef.current = avatar;
   const live = avatar.phase === 'live';
@@ -254,7 +256,7 @@ export function App() {
   return (
     <div className="kb-app">
       <header className="kb-top">
-        <Logo />
+        <BackToApps avatar={avatar} name={HOST} /><Logo />
         <p className="kb-game-line">{gameLine(snapshot)}</p>
         <SoundToggle />
         <CallControls avatar={avatar} className="kb-call-controls" />
@@ -262,7 +264,7 @@ export function App() {
 
       <main className="kb-main">
         <section className={`kb-host${avatar.audioBlocked ? ' is-blocked' : ''}`} aria-label={`${HOST}, your opponent`}>
-          <HostVideo avatar={avatar} name={HOST} poster={portrait} className="kb-host-video">
+          <HostVideo avatar={avatar} captions={cc.on} onToggleCaptions={cc.toggle} name={HOST} poster={portrait} className="kb-host-video">
             <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} />
           </HostVideo>
           <div className="kb-nameplate">

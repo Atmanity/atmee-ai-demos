@@ -13,6 +13,7 @@
     keyboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M18 13h.01M8 16h8"/></svg>',
     retry: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>',
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+    back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>',
     screen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>',
   };
 
@@ -126,6 +127,65 @@
     };
   }
 
+  // The viewer's choice to show the avatar's words over its video, kept per
+  // app in this browser (the mini-apps use the same keys). defaultOn: on where
+  // the overlay is the only place the words appear, off where a chat or a log
+  // already carries them. The button goes in `mount` (the stage, by default).
+  // It only shows or hides the overlay: the relay hold reads the caption
+  // streams themselves, whatever is on screen.
+  function captionToggle({ id, defaultOn, mount, onChange }) {
+    const key = `atmee-captions:${id}`;
+    let on = defaultOn;
+    try { const v = localStorage.getItem(key); if (v === '1' || v === '0') on = v === '1'; } catch (e) {}
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'cc-btn'; btn.textContent = 'CC'; btn.setAttribute('aria-label', 'Captions');
+    const paint = () => { btn.classList.toggle('on', on); btn.setAttribute('aria-pressed', String(on)); btn.title = on ? 'Hide captions' : 'Show captions'; onChange && onChange(on); };
+    btn.onclick = () => { on = !on; try { localStorage.setItem(key, on ? '1' : '0'); } catch (e) {} paint(); };
+    mount.appendChild(btn); paint();
+    return { get on() { return on; }, button: btn };
+  }
+  // The caption overlay on a stage, behind a CC button: render(text, final)
+  // takes every caption, and shows it only while the viewer wants captions.
+  function captionOverlay(stageEl, { id, defaultOn }) {
+    const el = document.createElement('div'); el.className = 'caption';
+    const overlay = stageEl.querySelector('.overlay');
+    stageEl.insertBefore(el, overlay || null);
+    const render = captions(el);
+    const cc = captionToggle({ id, defaultOn, mount: stageEl, onChange: (on) => { el.hidden = !on; } });
+    return Object.assign(render, { toggle: cc });
+  }
+
+  // "← All apps" for the app's header, before its brand. getSession returns
+  // the live session (or nothing); while one is live, leaving asks first, in
+  // the page, then ends it before going. `what` names it: "lesson", "call"...
+  function backLink(container, { getSession, what = 'session' } = {}) {
+    const wrap = document.createElement('span'); wrap.className = 'back-wrap';
+    wrap.innerHTML = `<a class="back-link" href="/" aria-label="All apps">${icon.back}<span class="label">All apps</span></a>`;
+    container.prepend(wrap);
+    const a = wrap.querySelector('a');
+    let ask = null;
+    const live = () => { const s = getSession && getSession(); return !!(s && (!s.isLive || s.isLive())); };
+    const close = () => { if (ask) { ask.remove(); ask = null; a.removeAttribute('aria-expanded'); } };
+    document.addEventListener('pointerdown', (e) => { if (ask && !wrap.contains(e.target)) close(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+    a.onclick = (e) => {
+      if (!live()) return; // nothing to end: a plain link
+      e.preventDefault();
+      if (ask) return close();
+      ask = document.createElement('div'); ask.className = 'back-ask'; ask.setAttribute('role', 'dialog'); ask.setAttribute('aria-label', 'Leave this app?');
+      ask.innerHTML = `<div>End the ${esc(what)} and go to all apps?</div><div class="row"><button type="button" class="stay">Stay</button><button type="button" class="go">End ${esc(what)}</button></div>`;
+      wrap.appendChild(ask); a.setAttribute('aria-expanded', 'true');
+      ask.querySelector('.stay').onclick = close;
+      const go = ask.querySelector('.go'); go.focus();
+      go.onclick = async () => {
+        go.disabled = true; go.textContent = 'Ending…';
+        try { const s = getSession(); if (s) await s.end(); } catch (err) {}
+        location.assign('/');
+      };
+    };
+    return wrap;
+  }
+
   // Counts down the session's time limit; onLow fires once near the end.
   function countdown(el, maxSeconds, onLow) {
     const until = Date.now() + maxSeconds * 1000; let warned = false;
@@ -182,5 +242,5 @@
     if (onVote && msg.open) el.querySelectorAll('button.opt').forEach((b) => (b.onclick = () => onVote(Number(b.dataset.i))));
   }
 
-  window.UI = { $, esc, icon, tail, stage, transcript, captions, countdown, micButton, debugLog, politeSender, poll };
+  window.UI = { $, esc, icon, tail, stage, transcript, captions, captionToggle, captionOverlay, backLink, countdown, micButton, debugLog, politeSender, poll };
 })();

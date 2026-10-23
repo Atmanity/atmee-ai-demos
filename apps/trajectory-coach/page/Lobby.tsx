@@ -1,5 +1,6 @@
 // Arcwise's front door: what it is, how a shot works, the six challenges, and
 // the way in by voice or by typing.
+import { BackToApps } from '../../../src/kit/index.ts';
 import { CHALLENGES } from '../engine/challenges.ts';
 import portrait from '../host/portrait.jpg';
 
@@ -28,7 +29,7 @@ const STEPS: [string, string][] = [
 export function Lobby({ onStart }: { onStart: (mic: boolean) => void }) {
   return (
     <div className="aw-lobby">
-      <header className="aw-top is-lobby"><Logo /></header>
+      <header className="aw-top is-lobby"><BackToApps /><Logo /></header>
       <main className="aw-hero">
         <div className="aw-hero-copy">
           <p className="aw-coach-card">

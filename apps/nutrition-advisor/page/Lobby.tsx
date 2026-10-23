@@ -1,4 +1,5 @@
 // Morsel's front door: what it is, how it works, and the way in.
+import { BackToApps } from '../../../src/kit/index.ts';
 import { builtInCard } from '../engine/fallback.ts';
 import portrait from '../host/portrait.jpg';
 import { Label } from './Label.tsx';
@@ -36,7 +37,7 @@ const AVOCADO = builtInCard('avocado');
 export function Lobby({ host, onStart }: { host: string; onStart: (mic: boolean) => void }) {
   return (
     <div className="ms-lobby">
-      <header className="ms-top is-lobby"><Logo /></header>
+      <header className="ms-top is-lobby"><BackToApps /><Logo /></header>
       <main className="ms-hero">
         <div className="ms-hero-copy">
           <p className="ms-eyebrow">A nutritionist you can talk to</p>

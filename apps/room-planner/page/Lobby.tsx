@@ -1,5 +1,6 @@
 // Planwright's front door: what it is, how it works, and the way in, with a
 // real plan (laid out and traded by the planner itself) as the picture.
+import { BackToApps } from "../../../src/kit/index.ts";
 import { useMemo } from "react";
 
 import portrait from "../host/portrait.jpg";
@@ -38,7 +39,7 @@ export function Lobby({ onStart, host = "Iris" }: { onStart: (mic: boolean) => v
   const sample = useMemo(() => lobbySample(), []);
   return (
     <div className="pw-lobby">
-      <header className="pw-top is-lobby"><Logo /></header>
+      <header className="pw-top is-lobby"><BackToApps /><Logo /></header>
       <main className="pw-hero">
         <div className="pw-hero-copy">
           {/* Who you will be talking to, pinned like a photo on the board. */}

@@ -5,7 +5,7 @@
 // current, and tells her about every button press. The board works with or
 // without her: a photo, an occasion and a verdict need no call.
 import { useEffect, useRef, useState } from 'react';
-import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, type ToolCall } from '../../../src/kit/index.ts';
+import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, BackToApps, useCaptionToggle, type ToolCall } from '../../../src/kit/index.ts';
 import { boardState, HOST, said } from '../engine/director.ts';
 import type { Ran, Step } from '../engine/fitting.ts';
 import { mustDo } from '../engine/judge.ts';
@@ -130,6 +130,9 @@ export function App() {
     run: (call) => onToolCall(call),
     avatar: () => avatarRef.current!,
   });
+
+  // The host's words over the video: off by default, since the chat carries them.
+  const cc = useCaptionToggle('fashion-advisor', false);
 
   const avatar = useAvatar('fashion-advisor', {
     onToolCall: net.watch(onToolCall),
@@ -296,7 +299,7 @@ export function App() {
   return (
     <div className="nt-app">
       <header className="nt-top">
-        <Logo />
+        <BackToApps avatar={avatar} name={HOST} /><Logo />
         {view?.target && (
           <button type="button" className="nt-pill" onClick={() => setPicking((p) => !p)} aria-expanded={picking} disabled={!ready}>
             <span className="nt-label">Dressing for</span> {view.target} <PencilIcon />
@@ -328,7 +331,7 @@ export function App() {
         </div>
 
         <aside className="nt-host" aria-label={`${HOST}, your stylist`}>
-          <HostVideo avatar={avatar} name={HOST} poster={portrait} className="nt-host-video">
+          <HostVideo avatar={avatar} captions={cc.on} onToggleCaptions={cc.toggle} name={HOST} poster={portrait} className="nt-host-video">
             <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} />
           </HostVideo>
           <div className="nt-nameplate">

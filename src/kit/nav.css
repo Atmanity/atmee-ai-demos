@@ -1,0 +1,23 @@
+/* The way back to every app, and the captions button. The link takes the
+   header's own color and font, so it reads as part of each brand. */
+.call-back-wrap { position: relative; display: inline-flex; flex: none; }
+.call-back { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px 6px 8px; border-radius: 999px; border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  color: inherit; opacity: .78; font-family: inherit; font-size: 13px; font-weight: 600; line-height: 1; text-decoration: none; white-space: nowrap; transition: opacity .15s, background .15s; }
+.call-back:hover, .call-back[aria-expanded="true"] { opacity: 1; background: color-mix(in srgb, currentColor 8%, transparent); }
+.call-back:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; opacity: 1; }
+.call-back svg { flex: none; }
+@media (max-width: 560px) { .call-back { padding: 6px 7px; } .call-back-label { display: none; } }
+
+.call-back-ask { position: absolute; left: 0; top: calc(100% + 8px); z-index: 50; width: max-content; max-width: min(300px, calc(100vw - 32px)); display: grid; gap: 10px; padding: 12px 14px;
+  border-radius: 12px; background: #fff; color: #1b1d24; font: 500 14px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif; text-align: left; box-shadow: 0 12px 32px rgba(0, 0, 0, .22), 0 0 0 1px rgba(0, 0, 0, .06); }
+.call-back-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.call-back-actions button { border: 1px solid #d9dbe3; background: #fff; color: #1b1d24; border-radius: 999px; padding: 7px 14px; font: 600 13px system-ui, -apple-system, 'Segoe UI', sans-serif; cursor: pointer; }
+.call-back-actions .call-back-go { background: #d93a3a; border-color: #d93a3a; color: #fff; }
+.call-back-actions button:disabled { opacity: .6; cursor: default; }
+
+/* CC: on the video, top right, while the call is live. */
+.call-cc { position: absolute; top: 10px; right: 10px; z-index: 3; min-width: 34px; height: 24px; padding: 0 7px; border-radius: 6px; border: 1.5px solid rgba(255, 255, 255, .7);
+  background: rgba(0, 0, 0, .45); color: rgba(255, 255, 255, .85); font: 700 11px/1 system-ui, -apple-system, 'Segoe UI', sans-serif; letter-spacing: .04em; cursor: pointer; transition: background .15s, color .15s; }
+.call-cc:hover { background: rgba(0, 0, 0, .65); color: #fff; }
+.call-cc.is-on { background: rgba(255, 255, 255, .92); border-color: transparent; color: #111; }
+.call-cc:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }

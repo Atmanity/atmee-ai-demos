@@ -1,4 +1,5 @@
 // Yonder's front door: who your guide is, what it is, how it works, and the two ways in.
+import { BackToApps } from '../../../src/kit/index.ts';
 import { useId } from 'react';
 import portrait from '../host/portrait.jpg';
 
@@ -67,7 +68,7 @@ const STEPS: [string, string][] = [
 export function Lobby({ host, onStart }: { host: string; onStart: (mic: boolean) => void }) {
   return (
     <div className="yd-lobby">
-      <header className="yd-lobby-top"><Logo /></header>
+      <header className="yd-lobby-top"><BackToApps /><Logo /></header>
       <main className="yd-hero">
         <div className="yd-hero-copy">
           <p className="yd-guide-tag"><img src={portrait} alt="" /><span>Your guide <b>{host}</b><small>has been almost everywhere</small></span></p>

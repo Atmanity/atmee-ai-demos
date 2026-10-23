@@ -232,7 +232,7 @@ button { font: inherit; }
   .aw-chat { grid-area: chat; max-height: 380px; }
   .aw-nameplate { align-items: baseline; }
   .aw-coach-caption { display: -webkit-box; }
-  .aw-coach-video .call-caption { display: none; }   /* his words sit beside the video instead */
+  .aw-coach-video .call-caption, .aw-coach-video .call-cc { display: none; }   /* his words sit beside the video instead */
   .aw-coach-video .call-status { padding: 8px; gap: 6px; }
   .aw-coach-video .call-status strong { font-size: 14px; }
   .aw-coach-video .call-status span { font-size: 12px; }

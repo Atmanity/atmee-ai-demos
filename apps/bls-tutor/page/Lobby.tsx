@@ -1,6 +1,7 @@
 // Bystander's front door: what it is, how a drill goes, which drill to start
 // with, and the way in. The real-emergency numbers are on it too: someone who
 // lands here in the middle of one needs a dispatcher, not a drill.
+import { BackToApps } from '../../../src/kit/index.ts';
 import { SAFETY_LINE } from '../engine/lines.ts';
 import portrait from '../host/portrait.jpg';
 import { DRILLS, PREVIEW } from './drills.ts';
@@ -30,7 +31,7 @@ export function Lobby({ choice, onChoose, onStart }: { choice: string; onChoose:
   return (
     <div className="by-lobby">
       <header className="by-top is-lobby">
-        <Logo />
+        <BackToApps /><Logo />
         <p className="by-top-sos"><span>Someone needs help right now?</span> <Dial number="911" /></p>
       </header>
 

@@ -5,6 +5,7 @@
 // never a session, an avatar or a room. Style them with your own classes and
 // the --call-* variables (parts.css).
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { CaptionsButton } from './nav.tsx';
 import type { Avatar } from './useAvatar.ts';
 import './parts.css';
 
@@ -22,13 +23,15 @@ export function callCopy(avatar: Avatar, name: string): { title: string; detail:
 }
 
 /** The host's video, with live captions, a speaking ring and "tap to hear" when the browser blocks sound. */
-export function HostVideo({ avatar, name, poster, captions = true, className = '', children }: {
+export function HostVideo({ avatar, name, poster, captions = true, onToggleCaptions, className = '', children }: {
   avatar: Avatar;
   name: string;
   /** The host's portrait, shown until their video plays (the app's host/portrait.jpg). */
   poster?: string;
   /** Show the host's words over the video. */
   captions?: boolean;
+  /** Given, the video carries a CC button that calls it (useCaptionToggle's toggle). */
+  onToggleCaptions?: () => void;
   className?: string;
   /** Laid over the video (a lobby, a status). */
   children?: ReactNode;
@@ -40,6 +43,7 @@ export function HostVideo({ avatar, name, poster, captions = true, className = '
       <video ref={avatar.videoRef} playsInline muted aria-label={`${name}'s video`} />
       <audio ref={avatar.audioRef} autoPlay />
       {live && captions && <Caption text={avatar.caption} />}
+      {live && onToggleCaptions && <CaptionsButton on={captions} onToggle={onToggleCaptions} />}
       {live && avatar.audioBlocked && (
         <button type="button" className="call-hear" onClick={avatar.resumeAudio}>Tap to hear {name}</button>
       )}
