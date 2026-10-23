@@ -83,6 +83,8 @@ async function showFood(state: TravelState): Promise<string> {
       // The built-in dishes get their one-line description with their photo: worth a short wait, not a long one.
       if (entry.dishes.some((d) => !d.description)) await Promise.race([detail.photos, sleep(DESCRIPTION_WAIT_MS)]);
     }
+    // They moved on meanwhile: the dishes asked for are not the ones a show would now put up.
+    if (state.here !== entry) return say.overtaken(`${entry.country}'s dishes`);
   }
   return trip.showDishes(state);
 }

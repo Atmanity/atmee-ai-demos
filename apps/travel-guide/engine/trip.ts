@@ -13,7 +13,7 @@ import { say } from './director.ts';
 import { cleanText, distancePhrase, haversineM, mapsUrl, type GeoCountry, type GeoPlace, type RawSpot, type WikiSummary } from './geo.ts';
 import { isAName } from './judge.ts';
 import { countryOutline, MAX_SILHOUETTE_BYTES, primaryBbox } from './rings.ts';
-import { spotOf, type TravelState, type TripEntry } from './state.ts';
+import { spotOf, type QueuedSpot, type TravelState, type TripEntry } from './state.ts';
 import type { Action, Headline } from './types.ts';
 
 /** A dish the app may suggest; `wiki` names the Wikipedia article when the name alone would miss it. */
@@ -54,7 +54,7 @@ export function rememberTraveler(state: TravelState, name: string): string {
  */
 export async function chooseDestination(
   state: TravelState, lookups: Lookups, country: string,
-  { city = '', continent = '', how = 'user' }: { city?: string; continent?: string; how?: 'user' | 'picked' } = {},
+  { city = '', continent = '', how = 'user', ticket = ++state.destinationTicket }: { city?: string; continent?: string; how?: 'user' | 'picked'; ticket?: number } = {},
 ): Promise<string> {
   country = clean(country, 80);
   city = clean(city, 80);
@@ -69,6 +69,7 @@ export async function chooseDestination(
   }
 
   const resolved = await lookups.country(country);
+  if (ticket !== state.destinationTicket) return say.overtaken(country);
   if (!resolved) return say.notFound(country);
 
   // Fit the map to the main landmass, not to everything the country
@@ -92,22 +93,26 @@ export async function chooseDestination(
 export async function searchDestination(state: TravelState, lookups: Lookups, query: string): Promise<string> {
   const q = clean(query, 120);
   if (!q) return say.noDestination();
+  const ticket = ++state.destinationTicket;
   const named = countriesIn(q);
   if (named.length) {
     const city = q.split(',').map((part) => part.trim()).find((part) => part && !countriesIn(part).length) ?? '';
-    return chooseDestination(state, lookups, named[0], { city });
+    return chooseDestination(state, lookups, named[0], { city, ticket });
   }
   const located = await lookups.place(q);
+  if (ticket !== state.destinationTicket) return say.overtaken(q);
   if (!located?.country) return say.notFound(q);
-  return chooseDestination(state, lookups, located.country, { city: norm(located.place) === norm(located.country) ? '' : located.place });
+  return chooseDestination(state, lookups, located.country, { city: norm(located.place) === norm(located.country) ? '' : located.place, ticket });
 }
 
 /** "Plan a trip here" on the map: the country under the tap, and the town as the city. */
 export async function destinationAt(state: TravelState, lookups: Lookups, lat: number, lon: number): Promise<string> {
   if (!validCoordinates(lat, lon)) return say.badCoordinates();
+  const ticket = ++state.destinationTicket;
   const located = await lookups.reverse(lat, lon);
+  if (ticket !== state.destinationTicket) return say.overtaken('the place they tapped');
   if (!located?.country) return say.noCountryThere();
-  return chooseDestination(state, lookups, located.country, { city: norm(located.place) === norm(located.country) ? '' : located.place });
+  return chooseDestination(state, lookups, located.country, { city: norm(located.place) === norm(located.country) ? '' : located.place, ticket });
 }
 
 /** "Surprise me": the app picks within their continent, somewhere not yet on the trip. */
@@ -165,6 +170,8 @@ export async function showHeadlines(state: TravelState): Promise<string> {
   const entry = state.here;
   if (!entry) return say.noCountryForNews();
   await state.detail.get(entry.country)?.news;
+  // They moved on while the headlines loaded: they were never on screen, and the host must not say they are.
+  if (state.here !== entry) return say.overtaken(`${entry.country}'s headlines`);
   entry.headlinesShown = true;
   state.bump();
   if (!entry.headlines.length) return say.noNews(entry.country);
@@ -177,6 +184,7 @@ export async function showDishes(state: TravelState): Promise<string> {
   const entry = state.here;
   if (!entry) return say.noCountryForFood();
   await state.detail.get(entry.country)?.dishes;
+  if (state.here !== entry) return say.overtaken(`${entry.country}'s dishes`);
   entry.dishesShown = true;
   state.bump();
   if (!entry.dishes.length) return say.noFood(entry.country);
@@ -194,9 +202,11 @@ export async function showDishes(state: TravelState): Promise<string> {
  */
 export async function revisitCountry(state: TravelState, lookups: Lookups, country: string): Promise<string> {
   const wanted = clean(country, 80);
+  // Going back is a choice of destination too: a lookup still running for an earlier one must not undo it.
+  const ticket = ++state.destinationTicket;
   if (!state.revisit(wanted)) {
     if (wanted && norm(wanted) === norm(state.country)) return say.alreadyHere(state.country);
-    if (wanted) return chooseDestination(state, lookups, wanted);
+    if (wanted) return chooseDestination(state, lookups, wanted, { ticket });
     if (!state.visited.length) return say.nothingToGoBack();
     return say.notOnTrip(state.visited.map((e) => e.country));
   }
@@ -220,6 +230,7 @@ export async function explorePlace(state: TravelState, lookups: Lookups, place: 
   if (isCountryName(query)) return say.countryNotTown(canonicalCountry(query));
   const ticket = ++state.exploreTicket;
   const located = await lookups.place(query);
+  if (ticket !== state.exploreTicket) return say.overtaken(query);
   if (!located) return say.placeNotFound(query);
   return loadSpots(state, lookups, ticket, located.place, located.lat, located.lon);
 }
@@ -235,18 +246,23 @@ export async function exploreCoordinates(state: TravelState, lookups: Lookups, l
 /**
  * Replace the sights and describe the first, inside the same lock as next and
  * previous: a Next pressed while the first is still being described waits its
- * turn instead of moving the queue under it. The lookup itself runs outside
- * the lock; an explore that a later one overtook replaces nothing.
+ * turn instead of moving the queue under it. The lookup runs outside the
+ * lock; the first sight is described on a copy, off the board, and the queue
+ * is published only if no later explore overtook this one during either wait.
  */
 async function loadSpots(state: TravelState, lookups: Lookups, ticket: number, place: string, lat: number, lon: number): Promise<string> {
   const spots = await lookups.nearby(lat, lon);
   return state.spotTurn.run(async () => {
-    if (ticket !== state.exploreTicket) return say.superseded(place);
-    state.setSpots(place, [lat, lon], spots);
+    if (ticket !== state.exploreTicket) return say.overtaken(place);
+    const queue: QueuedSpot[] = (spots ?? []).map((s) => ({ ...s }));
+    if (queue.length) await describeSpot(queue[0], [lat, lon], lookups);
+    if (ticket !== state.exploreTicket) return say.overtaken(place);
+    state.setSpots(place, [lat, lon], spots === null ? null : queue);
     state.bump();
     if (spots === null) return say.lookupDown(place);
-    if (!spots.length) return say.quiet(place);
-    return presentSpot(state, lookups, true);
+    if (!queue.length) return say.quiet(place);
+    console.info('[Travel] spot 1/%d near %s photo=%s', queue.length, place, Boolean(queue[0].imageUrl));
+    return say.firstSpot(place, spotOf(queue[0]), queue.length);
   });
 }
 
@@ -267,7 +283,7 @@ export function nextSpot(state: TravelState, lookups: Lookups, from?: number): P
     if (moved) return moved;
     if (!state.spots.length) return state.aroundPlace ? say.nothingQueued(state.aroundPlace) : say.askWhereToLook();
     if (!state.advanceSpot()) return say.lastSpot();
-    return presentSpot(state, lookups, false);
+    return presentSpot(state, lookups);
   });
 }
 
@@ -278,7 +294,7 @@ export function previousSpot(state: TravelState, lookups: Lookups, from?: number
     if (moved) return moved;
     if (!state.spots.length) return say.notLookedYet();
     if (!state.rewindSpot()) return say.firstAlready(state.aroundPlace);
-    return presentSpot(state, lookups, false);
+    return presentSpot(state, lookups);
   });
 }
 
@@ -287,7 +303,7 @@ export function gotoSpot(state: TravelState, lookups: Lookups, index: number): P
   return state.spotTurn.run(async () => {
     if (!state.spots.length) return say.notLookedYet();
     if (!state.gotoSpot(index)) return '';
-    return presentSpot(state, lookups, false);
+    return presentSpot(state, lookups);
   });
 }
 
@@ -297,11 +313,18 @@ export function gotoSpot(state: TravelState, lookups: Lookups, index: number): P
  * queue and the place are taken before the Wikipedia wait, so what is said is
  * always the sight this call started with.
  */
-async function presentSpot(state: TravelState, lookups: Lookups, first: boolean): Promise<string> {
+async function presentSpot(state: TravelState, lookups: Lookups): Promise<string> {
   const spot = state.spot;
   if (!spot) return say.nothingToShow();
   const [place, position, total] = [state.aroundPlace, state.spotIndex + 1, state.spots.length];
-  const origin = state.origin ?? [spot.lat, spot.lon];
+  await describeSpot(spot, state.origin ?? [spot.lat, spot.lon], lookups);
+  state.bump();
+  console.info('[Travel] spot %d/%d near %s photo=%s', position, total, place, Boolean(spot.imageUrl));
+  return say.anotherSpot(spotOf(spot), position, total);
+}
+
+/** A sight's distance from where they are looking, its maps link, and (once) its photo and a line from Wikipedia. */
+async function describeSpot(spot: QueuedSpot, origin: [number, number], lookups: Lookups): Promise<void> {
   spot.distance = distancePhrase(haversineM(origin[0], origin[1], spot.lat, spot.lon));
   spot.mapsUrl = mapsUrl(spot.name, spot.lat, spot.lon);
   if (spot.imageUrl === undefined) {
@@ -315,10 +338,6 @@ async function presentSpot(state: TravelState, lookups: Lookups, first: boolean)
       spot.summary = found.extract;
     }
   }
-  state.bump();
-  console.info('[Travel] spot %d/%d near %s photo=%s', position, total, place, Boolean(spot.imageUrl));
-  const view = spotOf(spot);
-  return first ? say.firstSpot(place, view, total) : say.anotherSpot(view, position, total);
 }
 
 // ─── one entry point ──────────────────────────────────────────────────────

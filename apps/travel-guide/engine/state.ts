@@ -87,8 +87,13 @@ export class TravelState {
   visited: TripEntry[] = [];
 
   aroundPlace = '';
-  /** Moves on with every explore: only the latest one may replace the sights (an older lookup can answer last). */
+  /**
+   * Move on with every explore and every choice of destination: after each
+   * lookup a request checks it still holds the latest ticket, and one a newer
+   * request overtook changes nothing (an older lookup can answer last).
+   */
   exploreTicket = 0;
+  destinationTicket = 0;
   origin: [number, number] | null = null;
   spots: QueuedSpot[] = [];
   spotIndex = 0;

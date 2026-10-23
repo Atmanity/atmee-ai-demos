@@ -128,6 +128,38 @@ describe('planning a trip', () => {
     expect(await trip.destinationAt(state, lookups, -30, -20)).toContain('no country');
   });
 
+  test('of two destinations, the later one stays on the map, whichever lookup answers last', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const { lookups } = fakeLookups();
+    const country = lookups.country;
+    lookups.country = async (name) => { if (name === 'Japan') await gate; return country(name); };
+    const state = new TravelState();
+    const older = trip.chooseDestination(state, lookups, 'Japan');
+    const newer = await trip.chooseDestination(state, lookups, 'Peru');
+    release();
+    expect(await older).toMatch(/^Not done: overtaken/);
+    expect(newer).toMatch(/^Done: Peru is on the map/);
+    expect(state.country).toBe('Peru');
+    expect(state.visited.map((e) => e.country)).toEqual(['Peru']);
+  });
+
+  test('going back to a country while a new one is still being looked up keeps the one gone back to', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const { lookups } = fakeLookups();
+    const state = new TravelState();
+    await trip.chooseDestination(state, lookups, 'Japan');
+    await trip.chooseDestination(state, lookups, 'Norway');
+    const country = lookups.country;
+    lookups.country = async (name) => { if (name === 'Peru') await gate; return country(name); };
+    const pending = trip.chooseDestination(state, lookups, 'Peru');
+    expect(await trip.revisitCountry(state, lookups, 'Japan')).toMatch(/^Done: Japan is back/);
+    release();
+    expect(await pending).toMatch(/^Not done: overtaken/);
+    expect(state.country).toBe('Japan');
+  });
+
   test('"surprise me" picks within their continent, somewhere not yet on the trip', async () => {
     const state = new TravelState();
     const { lookups } = fakeLookups();
@@ -188,6 +220,20 @@ describe('headlines and dishes: fetched at once, shown when asked', () => {
     // The one mention in the host's rules forbids it.
     const rules = instructions(true);
     for (const m of rules.matchAll(/today/gi)) expect(rules.slice(Math.max(0, m.index! - 20), m.index)).toMatch(/never call them $/);
+  });
+
+  test('headlines that land after they moved on are not reported as on screen', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const { lookups } = fakeLookups({ headlines: async (iso) => { if (iso === 'JP') await gate; return [{ title: `News ${iso}`, source: 'x', url: '', publishDate: '' }]; } });
+    const state = new TravelState(true);
+    await trip.chooseDestination(state, lookups, 'Japan');
+    const asked = trip.showHeadlines(state);
+    await trip.chooseDestination(state, lookups, 'Peru');
+    release();
+    expect(await asked).toMatch(/^Not done: overtaken/);
+    expect(state.country).toBe('Peru');
+    expect(state.snapshot().news!.shown).toBe(false); // Peru's, untouched
   });
 
   test('news before a destination is a prompt, not a lookup', async () => {
@@ -422,7 +468,33 @@ describe('what is around them', () => {
     const olderSaid = await older;
     expect([state.aroundPlace, state.spot!.name]).toEqual(['Lisbon', 'São Jorge Castle']);
     expect(newer).toContain('São Jorge Castle');
-    expect(olderSaid).toMatch(/^Not done: .*somewhere else/);
+    expect(olderSaid).toMatch(/^Not done: overtaken/);
+  });
+
+  test('an explore overtaken while its first sight is being described publishes nothing and says so', async () => {
+    // Codex: the first explore set its sights, then waited on Wikipedia, and never checked again: the board
+    // showed the old place and the host heard "Done" for it before the newer explore ran.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const { lookups } = fakeLookups({
+      place: async (q) => (q === 'Kyoto' ? { place: 'Kyoto', country: 'Japan', isoCode: 'JP', lat: 35, lon: 135.77 } : { place: 'Lisbon', country: 'Portugal', isoCode: 'PT', lat: 38.7, lon: -9.1 }),
+      nearby: async (lat) => (lat === 35 ? kyotoSpots() : [{ name: 'São Jorge Castle', category: 'castle', lat: 38.7139, lon: -9.1335 }]),
+      summary: async (t) => { if (t === 'Kiyomizu-dera') await gate; return summaryOf(t); },
+    });
+    const state = new TravelState();
+    const shown: string[] = [];
+    const bump = state.bump.bind(state);
+    state.bump = () => { bump(); shown.push(state.aroundPlace); };
+    const older = trip.explorePlace(state, lookups, 'Kyoto');
+    await new Promise((r) => setTimeout(r, 0)); // Kyoto is describing its first sight
+    const newer = trip.explorePlace(state, lookups, 'Lisbon');
+    await new Promise((r) => setTimeout(r, 0));
+    release();
+    const [olderSaid, newerSaid] = await Promise.all([older, newer]);
+    expect(olderSaid).toMatch(/^Not done: overtaken/);
+    expect(newerSaid).toContain('São Jorge Castle');
+    expect(state.aroundPlace).toBe('Lisbon');
+    expect(shown).not.toContain('Kyoto');
   });
 
   test('next spot before looking anywhere asks where they are', async () => {
