@@ -134,6 +134,23 @@ The mini-apps from `Atmanity/apps`, each rebuilt as a product with its own name,
 host. The host acts through app tools; the app owns the rules, the facts and the screen.
 Each was run live on staging; its README has the runs and what the API could not do.
 
+| app | product | what it is | README |
+|---|---|---|---|
+| guess-the-city | **Postmark** | one photo, three clues: guess the city with Marco | [apps/guess-the-city](apps/guess-the-city/README.md) |
+| chess-opponent | **Kibitz** | chess with Sasha, a club player who plays her own moves and says why | [apps/chess-opponent](apps/chess-opponent/README.md) |
+| poker-table | **Blindside** | heads-up hold'em against Dex: say your move, he talks back | [apps/poker-table](apps/poker-table/README.md) |
+| stroke-tutor | **Hanshi** | stroke order with Ren, a calligraphy teacher who watches every stroke | [apps/stroke-tutor](apps/stroke-tutor/README.md) |
+| bls-tutor | **Bystander** | CPR and first-aid drills with Alex, a calm paramedic | [apps/bls-tutor](apps/bls-tutor/README.md) |
+| quadratic-whiteboard | **Chalkline** | an equation's working, one exact line at a time, read out by Ada | [apps/quadratic-whiteboard](apps/quadratic-whiteboard/README.md) |
+| trajectory-coach | **Arcwise** | a projectile range: aim, fire, and Theo explains where it landed | [apps/trajectory-coach](apps/trajectory-coach/README.md) |
+| sky-guide | **Lodestar** | any sky on Earth at any hour, with Mira naming the stars | [apps/sky-guide](apps/sky-guide/README.md) |
+| nutrition-advisor | **Morsel** | what is in any food, from Rachel, a nutritionist | [apps/nutrition-advisor](apps/nutrition-advisor/README.md) |
+| fashion-advisor | **Notch** | Emery rates your outfit for the occasion and names the one fix | [apps/fashion-advisor](apps/fashion-advisor/README.md) |
+| fitness-coach | **Spotter** | a workout built around you, coached by Sammy | [apps/fitness-coach](apps/fitness-coach/README.md) |
+| market-desk | **Outcry** | call out a ticker; Reese reads the tape and never gives advice | [apps/market-desk](apps/market-desk/README.md) |
+| travel-guide | **Yonder** | dream up a trip on a live map with Lumi | [apps/travel-guide](apps/travel-guide/README.md) |
+| room-planner | **Planwright** | talk your home into shape with Iris, an architect who draws as you talk | [apps/room-planner](apps/room-planner/README.md) |
+
 ### Run them
 
 ```
@@ -170,13 +187,19 @@ apps/<app>/
   avatar.json        its host: persona and avatarId
   host/portrait.jpg  the host's face, shown before the video plays
 tools/live-test/     a synthetic microphone and helpers for live runs
+tools/report/        the generator of docs/apps-report.html
 ```
 
 The rule every app follows: **the app decides, the host performs.** The host acts through the
 app's tools and says what their results say; results lead with the outcome; tool schemas are
-lenient and the app normalises what arrives. `docs/PORTING.md` is the guide to building one.
+lenient and the app normalises what arrives. `docs/PORTING.md` is the guide to building one,
+`docs/API-GAPS.md` what the API still lacks, with each app's live results, and
+`docs/apps-report.html` the report on all fourteen.
 
 ## What the API cannot do yet (found while building these)
+
+For the five apps; the fourteen mini-apps' findings, with live evidence, are in
+`docs/API-GAPS.md`.
 
 
 1. **No audience in the room.** `POST /v1/session` gives exactly one user token for a room in
