@@ -153,7 +153,8 @@ describe('look_up_food', () => {
     await tool('look_up_food', { foods: ['banana'] });
     const { body } = await tool('look_up_food', { foods: ['a large banana'] });
     expect(body.view.nutrition?.product_name).toBe('Large banana');
-    expect(body.text).toContain('the nutrition card for "Large banana"');
+    // Two cards of one food now: each is named with its serving.
+    expect(body.text).toContain('the nutrition card for "Large banana (1 large (136 g))"');
     expect(body.text).toContain('121 calories');
     expect(body.text).not.toContain('105 calories');
   });
@@ -200,6 +201,27 @@ describe('look_up_food', () => {
       expect(body.text).toContain('Chicken breast, 200 g: 330 cal');
       expect(body.text).toContain('Medium apple, 1 medium: 95 cal');
       expect(body.text).not.toContain('198 cal');
+    });
+
+    it('a card titled with its weight is reused for a plain ask: no second call, no second row', async () => {
+      const { tool } = await open();
+      fake.respond = (req) => (req.schema === CARD_SCHEMA && /asked about: "banana"/.test(req.user) ? cardJson('banana', { product_name: 'Medium banana (118 g)', serving_size: '1 medium (118 g)' }) : model(req));
+      await tool('look_up_food', { foods: ['apple'] });
+      await tool('look_up_food', { foods: ['banana'] });
+      await tool('look_up_food', { foods: ['apple'] });
+      const { body } = await tool('look_up_food', { foods: ['banana'] });
+      expect(calls(CARD_SCHEMA)).toBe(2);
+      expect(body.view.shelf.items).toHaveLength(2);
+      expect(body.view.nutrition?.product_name).toBe('Medium banana (118 g)');
+    });
+
+    it('two portions of one food are told apart wherever Rachel hears them', async () => {
+      const { tool } = await open();
+      fake.respond = chicken;
+      await tool('look_up_food', { foods: ['chicken breast'] });
+      await tool('look_up_food', { foods: ['200 g chicken breast'] });
+      const { body } = await tool('look_up_food', { foods: ['apple'] });
+      expect(body.text).toContain('alongside "Chicken breast (1 breast (120 g))" and "Chicken breast (200 g)"');
     });
 
     it('comparing two portions of one food is exactly those two', async () => {

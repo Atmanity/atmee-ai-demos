@@ -8,14 +8,16 @@ import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type { AppServer } from '../../server/app-server.ts';
 import { llmAvailable, structured } from '../../server/llm.ts';
-import { Advisor, cardKey, recipeKey } from './engine/advisor.ts';
+import { Advisor, identity, recipeKey } from './engine/advisor.ts';
 import { bounded, serial } from './engine/bounded.ts';
 import { CARD_SCHEMA, CARD_SYSTEM, cardFrom, cardPrompt, PHOTO_PROMPT, PHOTO_SCHEMA, RECIPE_SCHEMA, RECIPE_SYSTEM, recipeFrom, recipePrompt } from './engine/card.ts';
 import { started } from './engine/cook.ts';
 import { INSTRUCTIONS, pressed, said, SAMPLE_FAILED, SERVER_TOOLS, TOOLS } from './engine/director.ts';
 
 /** A card's identity, the food at a portion (engine/advisor.ts). */
-const keyOf = (card: { product_name: string; serving_size: string }) => cardKey(card.product_name, card.serving_size);
+const keyOf = identity;
+/** Cards as Rachel hears them: each named with its serving when another portion of its food is on the table. */
+const spoken = (advisor: Advisor, cards: NutritionData[]) => cards.map((c) => ({ ...c, product_name: advisor.label(c) }));
 const list = (names: string[]) => names.map((n) => `“${n}”`).join(' and ');
 import { builtInCard, SAMPLE_CARD } from './engine/fallback.ts';
 import { asked, foodsFrom, resolveRecipe } from './engine/judge.ts';
@@ -135,13 +137,13 @@ async function lookUp(v: Visit, foods: FoodAsk[]): Promise<Outcome> {
   if (!front) {
     const shown = advisor.nutrition;
     const filed = put.filter((c) => !shown || keyOf(c) !== keyOf(shown));
-    const text = filed.length || !shown ? said.filed(filed.length ? filed : put, shown?.product_name ?? '') : said.cards([shown], [], true);
+    const text = filed.length || !shown ? said.filed(spoken(advisor, filed.length ? filed : put), shown ? advisor.label(shown) : '') : said.cards(spoken(advisor, [shown]), [], true);
     return { view: advisor.view(), kind: 'card', card: false, text, notice };
   }
   const keys = new Set(put.map(keyOf));
-  const others = advisor.shelf.filter((r) => !keys.has(keyOf(r))).map((r) => r.product_name);
+  const others = advisor.shelf.filter((r) => !keys.has(keyOf(r))).map((r) => advisor.label(r));
   const again = [...keys].every((key) => before.has(key));
-  return { view: advisor.view(), kind: 'card', card: true, text: said.cards(put, others, again, missing), notice };
+  return { view: advisor.view(), kind: 'card', card: true, text: said.cards(spoken(advisor, put), others, again, missing), notice };
 }
 
 async function compare(v: Visit, foods: FoodAsk[]): Promise<Outcome> {
@@ -167,7 +169,7 @@ async function compare(v: Visit, foods: FoodAsk[]): Promise<Outcome> {
     if (!card) return void missing.push(asked(f));
     const placed = advisor.place(card, ticket);
     if (placed.front) front = true;
-    put.push(placed.card.product_name);
+    put.push(advisor.label(placed.card));
     wantedKeys.push(keyOf(placed.card));
   });
   const notice = missing.length ? `Couldn't find ${missing.join(' or ')} just now. Try again in a moment, or ask about another food.` : undefined;
@@ -180,7 +182,7 @@ async function compare(v: Visit, foods: FoodAsk[]): Promise<Outcome> {
     const card = advisor.nutrition;
     if (!card) return { view: advisor.view(), kind: 'failed', text: said.noFood() };
     // Nothing to compare against yet: it is a card like any other.
-    if (advisor.shelf.length < 2) return { view: advisor.view(), kind: 'card', card: front, text: said.cards([card], [], put.length === 0), notice };
+    if (advisor.shelf.length < 2) return { view: advisor.view(), kind: 'card', card: front, text: said.cards(spoken(advisor, [card]), [], put.length === 0), notice };
     rows = advisor.shelf;
   }
   return { view: advisor.view(), kind: 'compare', card: front, text: said.compare(rows, put, advisor.shelf.length, missing), notice };
@@ -201,7 +203,7 @@ async function openRecipe(v: Visit, idea: RecipeIdea, talk: boolean): Promise<Ou
     if (!made) return { view: advisor.view(), kind: 'failed', text: said.recipeFailed(idea.name), notice: `Couldn't open the recipe “${idea.name}” just now. Try again in a moment.` };
     // Titled with the name the user chose, whatever the model called it.
     recipe = advisor.open({ ...made, recipe_name: idea.name, description: full.description }, ticket);
-    if (!recipe) return { view: advisor.view(), kind: 'failed', text: said.recipeOvertaken(idea.name, advisor.nutrition?.product_name ?? 'a newer card') };
+    if (!recipe) return { view: advisor.view(), kind: 'failed', text: said.recipeOvertaken(idea.name, advisor.nutrition ? advisor.label(advisor.nutrition) : 'a newer card') };
   }
   const text = talk ? said.recipe(recipe, food, started(recipe.preparation_steps.length)) : said.recipeTapped(recipe);
   return { view: advisor.view(), kind: kept ? 'kept' : 'recipe', recipe, text };
@@ -232,10 +234,10 @@ function photo(v: Visit, image: Image, sample: boolean): Promise<Outcome> {
       const placed = advisor.place(reading.card, ticket);
       if (!placed.front) {
         const shown = advisor.nutrition;
-        const text = shown && keyOf(placed.card) === keyOf(shown) ? said.cards([shown], [], true) : said.filed([placed.card], shown?.product_name ?? '');
+        const text = shown && keyOf(placed.card) === keyOf(shown) ? said.cards(spoken(advisor, [shown]), [], true) : said.filed(spoken(advisor, [placed.card]), shown ? advisor.label(shown) : '');
         return { view: advisor.view(), kind: 'photo', card: false, text };
       }
-      return { view: advisor.view(), kind: 'photo', card: true, text: said.photo(placed.card, reading.seen, sample, placed.others) };
+      return { view: advisor.view(), kind: 'photo', card: true, text: said.photo(spoken(advisor, [placed.card])[0], reading.seen, sample, placed.others) };
     }
     if ('notFood' in reading) return { view: advisor.view(), kind: 'failed', text: said.notFood(reading.notFood), notice: "That photo doesn't look like a food or a food label. Try another, or just name the food." };
     if ('noVision' in reading) return { view: advisor.view(), kind: 'failed', text: said.noVision(), notice: "Photo reading isn't available right now. Name the food instead and its card comes up." };

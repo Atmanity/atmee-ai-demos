@@ -2,7 +2,7 @@
 // shelf), test_parity.py (what a new card clears) and
 // test_the_tapped_recipe_spins_forever.py (recipe names and blurbs).
 import { describe, expect, it } from 'vitest';
-import { Advisor, cardKey, matchRecipe, MAX_SHELF, namesTheSameRecipe, recipeKey, sameFood } from './advisor.ts';
+import { Advisor, cardKey, foodKey, matchRecipe, MAX_SHELF, namesTheSameRecipe, recipeKey, sameFood } from './advisor.ts';
 import type { NutritionData, RecipeDetails } from './types.ts';
 
 function food(name: string, over: Omit<Partial<NutritionData>, 'nutrients'> & { nutrients?: Partial<NutritionData['nutrients']> } = {}): NutritionData {
@@ -372,6 +372,21 @@ describe('a card is a food at a portion', () => {
       ['show', usual('Chicken breast', '1 breast (120 g)', 200)],
       ['ask', 'chicken breast', 200],
     ], [['Chicken breast', '1 breast (120 g)', 200]]],
+    ['a title with its weight is the same food as a plain ask', [
+      ['show', usual('Medium banana (118 g)', '1 medium (118 g)', 105)],
+      ['ask', 'banana', 105],
+      ['show', usual('Banana', '1 medium (118 g)', 106)],
+    ], [['Banana', '1 medium (118 g)', 106]]],
+    ['a label and an estimate of one food at its usual portion are one row, the newer winning', [
+      ['show', usual('Oat milk', '1 cup (240 ml)', 120)],
+      ['show', food('Oat milk', { serving_size: '240 ml', calories: 130, portion_assumed: false, source: 'label' })],
+      ['ask', 'oat milk', 130],
+    ], [['Oat milk', '240 ml', 130]]],
+    ['a number that is part of the name stays part of the food', [
+      ['show', usual('Food 1', '1 cup', 10)],
+      ['show', usual('Food 11', '1 cup', 11)],
+      ['ask', 'food 11', 11],
+    ], [['Food 1', '1 cup', 10], ['Food 11', '1 cup', 11]]],
     ['the usual portion of two sizes: the newest', [
       ['show', usual('Medium banana', '1 medium (118 g)', 105)],
       ['show', stated('Large banana', '1 large (136 g)', 121)],
@@ -387,11 +402,23 @@ describe('a card is a food at a portion', () => {
     expect(a.shelf.map((r) => [r.product_name, r.serving_size, r.calories])).toEqual(rows);
   });
 
-  it('the key: the food\'s words in any order or case, and the portion as written', () => {
-    expect(cardKey('Chicken breast', '200 g')).toBe(cardKey('chicken  BREAST', '200 G'));
-    expect(cardKey('Chicken breast', '200 g')).not.toBe(cardKey('Chicken breast', '1 breast (120 g)'));
-    expect(cardKey('Medium banana', '1 medium (118 g)')).not.toBe(cardKey('Banana bread', '1 medium (118 g)'));
-    expect(cardKey('food 1', '1 cup')).not.toBe(cardKey('food 11', '1 cup'));
+  it('the key: the food without its portion words or weights, and the portion (usual, or the amount stated)', () => {
+    expect(foodKey('Medium banana (118 g)')).toBe(foodKey('banana'));
+    expect(foodKey('Chicken breast, 200 g')).toBe(foodKey('breast, CHICKEN'));
+    expect(foodKey('Banana (1 medium)')).toBe(foodKey('bananas'));
+    expect(foodKey('Food 11')).not.toBe(foodKey('Food 1'));
+    expect(foodKey('Banana bread')).not.toBe(foodKey('Banana'));
+    expect(cardKey('Chicken breast', 'usual')).toBe(cardKey('chicken  BREAST', 'usual'));
+    expect(cardKey('Chicken breast', '200 g')).toBe(cardKey('Chicken breast', ' 200 G'));
+    expect(cardKey('Chicken breast', '200 g')).not.toBe(cardKey('Chicken breast', 'usual'));
+  });
+
+  it('every name said for a card carries its serving when two cards share a food', () => {
+    const a = new Advisor();
+    a.show(usual('Chicken breast', '1 breast (120 g)', 198));
+    a.show(stated('Chicken breast', '200 g', 330));
+    expect(a.place(usual('Medium apple', '1 medium (182 g)', 95)).others).toEqual(['Chicken breast (1 breast (120 g))', 'Chicken breast (200 g)']);
+    expect(a.label(a.shelf[2])).toBe('Medium apple');
   });
 
   it('the table marks the one row on the card, not every portion of its food', () => {

@@ -37,8 +37,12 @@ export function shelfRow(data: NutritionData): ShelfRow {
     sugar_g: n.sugar_g || 0,
     sodium_mg: n.sodium_mg || 0,
     health_score: data.health_score || 0,
+    stated: !usualPortion(data),
   };
 }
+
+/** The food's usual serving (the portion was not stated) or a label's own: not an amount the user named. */
+const usualPortion = (card: NutritionData) => Boolean(card.portion_assumed || card.source === 'label');
 
 const fold = (name: string) => (name ?? '').trim().toLowerCase();
 
@@ -118,30 +122,55 @@ export function sameFood(a: string, b: string): boolean {
   return left.every((w) => set.has(w));
 }
 
+/** Measures: a number before one of these is a weight or a portion, not part of a food's name. */
+const UNITS = new Set([
+  'g', 'gram', 'grams', 'kg', 'mg', 'ml', 'l', 'oz', 'ounce', 'ounces', 'lb', 'lbs', 'pound', 'pounds', 'cal', 'kcal',
+  'cup', 'cups', 'tbsp', 'tsp', 'slice', 'slices', 'piece', 'pieces', 'serving', 'servings', 'pot', 'pots', 'can', 'cans',
+  'bowl', 'bowls', 'bar', 'bars', 'small', 'medium', 'large', 'whole', 'handful', 'handfuls', 'scoop', 'scoops',
+]);
+
 /**
- * A food's own words, in any order or case: "Chicken breast" and "breast,
- * chicken" are one food, "Medium banana" is a banana. Unlike `sameFood` it
- * keeps a bare number, which is part of a name ("7 Up", "Food 11"); a measure
- * ("200g") is the portion's business, not the food's.
+ * The food a card is about: its name without portion words and weights, in
+ * any order or case. "Medium banana (118 g)" and "banana" are one food,
+ * "Chicken breast, 200 g" and "breast, chicken" another; a number that is
+ * part of a name ("Food 11", "7 Up") stays, one that measures ("118 g",
+ * "1 medium") goes.
  */
-export const foodKey = (name: string) =>
-  (name ?? '')
+export const foodKey = (name: string): string => {
+  const words = (name ?? '')
     .toLowerCase()
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter((w) => w && !PORTION_WORDS.has(w) && !/^\d+([.,]\d+)?(g|ml|oz|mg|kg)$/.test(w))
-    .map(singular)
-    .sort()
-    .join(' ');
+    .split(/[^\p{L}\p{N}.]+/u)
+    .map((w) => w.replace(/^\.+|\.+$/g, ''))
+    .filter(Boolean);
+  const kept: string[] = [];
+  words.forEach((w, i) => {
+    if (PORTION_WORDS.has(w) || UNITS.has(w) && /^\d/.test(words[i - 1] ?? '')) return;
+    if (/^\d+([.,]\d+)?[a-z]+$/.test(w)) return;                     // "118g", "2cups"
+    if (/^\d+([.,]\d+)?$/.test(w) && UNITS.has(words[i + 1] ?? '')) return; // "118 g", "1 medium"
+    kept.push(singular(w));
+  });
+  return kept.sort().join(' ');
+};
+
+/** A portion as part of an identity: "usual", or the amount stated, as written. */
+const portionKey = (portion: string) => (portion ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
 
 /**
- * A card's identity: the food at a portion. The one key the table, the cache
- * and every lookup, comparison and photo use, so two portions of one food are
- * two rows and the same portion again is the same row.
+ * A card's identity: the food at a portion, the portion being "usual" (the
+ * food's usual serving, or a label's) or the amount the user stated. The one
+ * key the table, the cache and every lookup, comparison and photo use, so two
+ * portions of one food are two rows and the same portion again is the same row.
  */
-export const cardKey = (name: string, serving: string) => `${foodKey(name)}\u0000${(serving ?? '').toLowerCase().replace(/\s+/g, ' ').trim()}`;
-const keyOf = (item: { product_name: string; serving_size: string }) => cardKey(item.product_name, item.serving_size);
+export const cardKey = (name: string, portion: string) => `${foodKey(name)}\u0000${portionKey(portion)}`;
+
+/** The identity of a card or of its row in the table. */
+export function identity(item: NutritionData | ShelfRow): string {
+  const stated = 'nutrients' in item ? !usualPortion(item) : Boolean(item.stated);
+  return cardKey(item.product_name, stated ? item.serving_size : 'usual');
+}
+const keyOf = identity;
 
 export class Advisor {
   /** The card that is up. */
@@ -259,6 +288,18 @@ export class Advisor {
     return this.newestOf(name) !== null;
   }
 
+  /**
+   * A card's name as Rachel says it: with its serving when another card of the
+   * same food is on the table ("Chicken breast (200 g)"), so two portions are
+   * never "Chicken breast and Chicken breast".
+   */
+  label(item: NutritionData | ShelfRow): string {
+    const food = foodKey(item.product_name);
+    const key = keyOf(item);
+    const shared = this.shelf.some((r) => foodKey(r.product_name) === food && keyOf(r) !== key);
+    return shared && item.serving_size.trim() ? `${item.product_name} (${item.serving_size.trim()})` : item.product_name;
+  }
+
   // -- display_nutrition_info -----------------------------------------------
 
   /**
@@ -278,7 +319,7 @@ export class Advisor {
   place(given: NutritionData, ticket = this.begin()): { card: NutritionData; others: string[]; written: boolean; front: boolean } {
     const card = given;
     const key = keyOf(card);
-    const others = () => this.shelf.filter((r) => keyOf(r) !== key).map((r) => r.product_name);
+    const others = () => this.shelf.filter((r) => keyOf(r) !== key).map((r) => this.label(r));
     // Newer work already wrote this food: an older card of it writes nowhere,
     // or the table and the cache would hold older figures than the label.
     if ((this.writtenAt.get(key) ?? 0) > ticket) return { card: this.cards.get(key) ?? card, others: others(), written: false, front: false };

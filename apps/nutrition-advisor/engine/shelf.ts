@@ -32,6 +32,12 @@ export interface ShelfRow {
    */
   sodium_mg: number | null;
   health_score: number;
+  /**
+   * The portion is an amount the user stated ("200 g"), not the food's usual
+   * serving or a label's. Part of the row's identity (engine/advisor.ts
+   * `identity`); the page has no use for it.
+   */
+  stated?: boolean;
 }
 
 export interface Shelf {
