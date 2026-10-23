@@ -5,7 +5,17 @@ import { hintCost, roundValue } from '../engine/game.ts';
 import type { Command } from '../engine/judge.ts';
 import type { View } from '../engine/types.ts';
 
-export function Postcard({ view }: { view: View | null }) {
+export function Postcard({ view, failed = false, onRetry }: { view: View | null; failed?: boolean; onRetry?: () => void }) {
+  if (!view && failed) {
+    return (
+      <figure className="pm-card is-failed">
+        <div className="pm-photo">
+          <span className="pm-dealing">The cities didn't arrive.</span>
+          {onRetry && <button type="button" className="pm-primary" onClick={onRetry}>Deal again</button>}
+        </div>
+      </figure>
+    );
+  }
   if (!view) {
     return (
       <figure className="pm-card is-loading" aria-busy="true">

@@ -67,20 +67,29 @@ export function App() {
 
   // Every call is a new game, dealt while Marco is on his way (both take a while).
   // Only the newest deal may install its game: one from a call that failed and
-  // was placed again can answer last.
+  // was placed again can answer last. A newest deal that fails is tried once
+  // more, then offered as "Deal again", so a live call is never left gameless.
   const deal = useRef(0);
-  useEffect(() => {
-    if (avatar.phase !== 'starting') return;
+  const [dealFailed, setDealFailed] = useState(false);
+  const dealGame = useCallback(async (retry = true) => {
     const mine = ++deal.current;
     game.current = null;
     setView(null);
-    void post<{ id: string; view: View; opening: string }>('/games').then(({ id, view: first, opening }) => {
+    setDealFailed(false);
+    try {
+      const { id, view: first, opening } = await post<{ id: string; view: View; opening: string }>('/games');
       if (mine !== deal.current) return;
       game.current = id;
       setView(first);
-      avatar.event(opening, 60);
-    }).catch((err) => console.warn(err));
-  }, [avatar.phase]);
+      avatarRef.current.event(opening, 60);
+    } catch (err) {
+      if (mine !== deal.current) return;
+      console.warn(err);
+      if (retry) return dealGame(false);
+      setDealFailed(true);
+    }
+  }, []);
+  useEffect(() => { if (avatar.phase === 'starting') void dealGame(); }, [avatar.phase]);
 
   // Marco's picture of the board follows the board.
   useEffect(() => { if (view) avatar.state(boardState(view)); }, [view]);
@@ -106,7 +115,7 @@ export function App() {
 
       <main className="pm-main">
         <div className="pm-board">
-          {view?.over ? <Summary view={view} live={live} busy={busy} onAgain={() => (live ? void press('new') : void avatar.start({ mic: avatar.micOn }))} /> : <Postcard view={view} />}
+          {view?.over ? <Summary view={view} live={live} busy={busy} onAgain={() => (live ? void press('new') : void avatar.start({ mic: avatar.micOn }))} /> : <Postcard view={view} failed={dealFailed} onRetry={() => void dealGame()} />}
           <Clues view={view} busy={busy} live={live} onCommand={(command) => void press(command)} />
         </div>
 
