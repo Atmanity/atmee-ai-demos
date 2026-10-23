@@ -118,7 +118,8 @@ function circulationIssues(level: Level, upstairs = false): Ranked[] {
     if (!doors.length) {
       out.push([NO_DOOR, { room: room.id, kind: 'no_door', note: `The ${name} has no door — there's no way into it` }]);
     } else if (!canReach.has(room.id)) {
-      out.push([UNREACHABLE, { room: room.id, kind: 'unreachable', note: `You can't get to the ${name} from the front door` }]);
+      // Upstairs the way in is the stairs, and the floor has no front door to name.
+      out.push([UNREACHABLE, { room: room.id, kind: 'unreachable', note: `You can't get to the ${name} from the ${upstairs ? 'stairs' : 'front door'}` }]);
     } else if (!room.spec.circulation) {
       const through = [...neighboursViaDoors(level, room.id)].filter((id) => level.rooms.has(id)).map((id) => level.rooms.get(id)!);
       if (through.length === 1 && through.every((other) => !other.spec.circulation && !other.spec.wet)) {

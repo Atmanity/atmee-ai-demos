@@ -216,7 +216,7 @@ export function Studio({
           {message && (
             <div className="pw-redline" role="status">
               <span className="pw-redline-mark" aria-hidden="true">✕</span>
-              <span>{message}</span>
+              <span>{noteIn(message, state.unit)}</span>
               <button type="button" className="pw-quiet" onClick={() => setMessage("")} aria-label="Dismiss">OK</button>
             </div>
           )}

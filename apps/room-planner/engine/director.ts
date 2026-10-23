@@ -231,7 +231,11 @@ export const areaIn = (m2: number, unit: Unit) => {
 };
 
 /** A check's note in the client's unit: "1.5 square metres of the floor isn't in any room" in square feet. */
-export const noteIn = (note: string, unit: Unit) => (unit === 'ft2' ? note.replace(/(\d+(?:\.\d+)?) square metres?/g, (_, n: string) => areaIn(Number(n), 'ft2')) : note);
+export const noteIn = (note: string, unit: Unit) => (unit === 'ft2'
+  // "down to 4 square metres — under 5, which is too small": the bare limit is an area too.
+  ? note.replace(/(\d+(?:\.\d+)?) square metres?(\s+—\s+under\s+)(\d+(?:\.\d+)?)/g, (_, a: string, mid: string, b: string) => `${areaIn(Number(a), 'ft2')}${mid}${areaIn(Number(b), 'ft2')}`)
+    .replace(/(\d+(?:\.\d+)?) square metres?/g, (_, n: string) => areaIn(Number(n), 'ft2'))
+  : note);
 
 /** A list that stops before `max` characters, saying how many it left out. */
 function clip(items: string[], max: number, sep = '; '): string {
@@ -289,8 +293,9 @@ export function planState(snap: PlanSnapshot): string {
   sections.push(openings);
   if (snap.comparing) {
     const c = snap.comparing;
-    const deltas = c.deltas.map((d) => `${d.name} ${d.delta_m2 > 0 ? '+' : ''}${fmtG(d.delta_m2)}`);
-    sections.push(`The client is comparing the plan with saved scheme "${c.name}" (read-only): room by room, plan minus scheme, in square metres: ${clip(deltas, 300, ', ') || 'no difference'}; hall ${c.circulation_pct ?? 0} percent then, ${table.circulation_pct} now.`);
+    const delta = (m2: number) => (unit === 'ft2' ? Math.round(m2 * 10.7639) : Number(fmtG(m2)));
+    const deltas = c.deltas.map((d) => `${d.name} ${d.delta_m2 > 0 ? '+' : ''}${delta(d.delta_m2)}`);
+    sections.push(`The client is comparing the plan with saved scheme "${c.name}" (read-only): room by room, plan minus scheme, in ${unit === 'ft2' ? 'square feet' : 'square metres'}: ${clip(deltas, 300, ', ') || 'no difference'}; hall ${c.circulation_pct ?? 0} percent then, ${table.circulation_pct} now.`);
   }
   if (snap.schemes.length) sections.push(`Saved schemes (up to three): ${snap.schemes.map((s) => `"${s.name}" (${s.rooms} rooms, ${areaIn(s.total_m2, unit)}, hall ${s.circulation_pct} percent)`).join('; ')}.`);
   for (const other of snap.others ?? []) {
@@ -472,7 +477,7 @@ export function asked(intent: Intent, snap: PlanSnapshot): string {
     case 'merge_rooms': return `knock the ${nameOf(intent.a)} and the ${nameOf(intent.b)} together`;
     case 'split_room': return `divide the ${nameOf(intent.id)}`;
     case 'move_wall': return `move the wall between the ${nameOf(intent.a)} and the ${nameOf(intent.b)}`;
-    case 'trade_area': return `move ${areaIn(Number(intent.m2), 'm2')} from the ${nameOf(intent.from)} to the ${nameOf(intent.to)}`;
+    case 'trade_area': return `move ${areaIn(Number(intent.m2), snap.unit)} from the ${nameOf(intent.from)} to the ${nameOf(intent.to)}`;
     case 'grow_room': return `make the ${nameOf(intent.id)} bigger`;
     case 'mark_structural': return `mark the wall between the ${nameOf(intent.a)} and the ${nameOf(intent.b)} load-bearing`;
     case 'add_door': return `put a door between the ${nameOf(intent.a)} and the ${nameOf(intent.b)}`;
@@ -531,8 +536,8 @@ export function resultFor(steps: Step[], fresh: Issue[], snap: PlanSnapshot): st
   if (refused && !refused.result.applied) {
     const what = asked(refused.intent, snap);
     out = facts.length
-      ? `Done: ${facts.map((f) => f.fact).join('; ')}. The rest was refused and has NOT changed: they asked to ${what}, and the plan says: "${refused.result.reason}" Say in one or two short lines which part worked and which did not, and suggest a fix for the refused part; make it only if they agree.`
-      : `Refused: nothing has changed. They asked to ${what}, and the plan says: "${refused.result.reason}"${roomNumbers(refused.intent, snap)} Tell them so in one short line in your own words and suggest a fix; make it only if they agree. Never describe it as done.`;
+      ? `Done: ${facts.map((f) => f.fact).join('; ')}. The rest was refused and has NOT changed: they asked to ${what}, and the plan says: "${noteIn(refused.result.reason, snap.unit)}" Say in one or two short lines which part worked and which did not, and suggest a fix for the refused part; make it only if they agree.`
+      : `Refused: nothing has changed. They asked to ${what}, and the plan says: "${noteIn(refused.result.reason, snap.unit)}"${roomNumbers(refused.intent, snap)} Tell them so in one short line in your own words and suggest a fix; make it only if they agree. Never describe it as done.`;
   } else if (facts.length) {
     out = `Done: ${facts.map((f) => f.fact).join('; ')}. ${facts[facts.length - 1].say}`;
   } else {

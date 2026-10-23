@@ -171,6 +171,21 @@ describe('the state', () => {
     expect(planState(p.snapshot())).toContain('Laid out as "Open plan living".');
   });
 
+  test('a comparison is given in the unit the client reads too', () => {
+    const p = twoBed();
+    p.apply({ kind: 'save_scheme', name: 'A' });
+    const living = [...p.home.level.rooms.values()].find((r) => r.kind === 'living')!;
+    const next = p.snapshot().level.walls.find((w) => w.a === living.id || w.b === living.id)!;
+    p.apply({ kind: 'trade_area', from: next.a === living.id ? next.b : next.a, to: living.id, m2: 1 });
+    p.apply({ kind: 'compare_scheme', name: 'A' });
+    p.apply({ kind: 'set_unit', unit: 'ft2' });
+    const text = planState(p.snapshot());
+    expect(text).toContain('plan minus scheme, in square feet');
+    const moved = p.snapshot().comparing!.deltas.find((d) => d.name === 'Living room')!.delta_m2;
+    expect(text).toContain(`Living room +${Math.round(moved * 10.7639)}`);   // feet, not the metres it moved
+    expect(text.replace('Areas are shown to the client in square feet.', '')).not.toContain('square metre');
+  });
+
   test('a whole home keeps its size on top and fits', () => {
     const p = new Planner(1400, 1000);
     p.apply({ kind: 'generate', bedrooms: 3, office: true, dining: true, utility: true, wc: true });
@@ -274,6 +289,17 @@ describe('the results', () => {
     expect(text).toContain('chaise longue');
     expect(text).toContain('Never describe it as done');
     expect(text).toContain('make it only if they agree');
+  });
+
+  test('a refusal is said in the client\'s unit, the plan\'s reason included', () => {
+    const p = new Planner(800, 600);
+    p.home.level.placeRoom('office', [0, 0, 400, 600], 'Study');
+    p.home.level.placeRoom('living', [400, 0, 800, 600], 'Living room');
+    p.apply({ kind: 'set_unit', unit: 'ft2' });
+    const text = resultFor([step(p, { kind: 'trade_area', from: 'study', to: 'living room', m2: 23 })], [], p.snapshot());
+    expect(text).toMatch(/^Refused: /);
+    expect(text).toContain('They asked to move 248 square feet from the study');
+    expect(text).not.toContain('square metre');
   });
 
   test('when part of a request fails, the result says which part', () => {

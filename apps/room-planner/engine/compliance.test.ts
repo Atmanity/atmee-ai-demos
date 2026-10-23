@@ -150,6 +150,24 @@ describe('levels', () => {
     expect(issues(home).map((i) => i.kind)).not.toContain('unreachable');
   });
 
+  test('upstairs, a room you cannot reach is unreachable from the stairs, not the front door', () => {
+    // A floor with no front door was told "you can't get to the bedroom from the front door".
+    const home = new Home(1000, 800);
+    generate(home.level, briefFor(2));
+    home.addLevel();
+    generate(home.level, briefFor(2, { upstairs: true }), { reserve: home.stairsRect(), frontDoor: false });
+    const level = home.level;
+    const stairs = [...level.rooms.values()].find((r) => r.kind === 'stairs')!;
+    // Cut the way off: every door on the stairs goes, but the rooms keep theirs.
+    level.openings = level.openings.filter((o) => o.a !== stairs.id && o.b !== stairs.id);
+    const cut = issues(home).filter((i) => i.kind === 'unreachable');
+    expect(cut.length).toBeGreaterThan(0);
+    for (const issue of cut) {
+      expect(issue.note).toMatch(/from the stairs$/);
+      expect(issue.note).not.toContain('front door');
+    }
+  });
+
   test('a second floor is connected the moment it is added', () => {
     // It used to arrive disconnected, with no way to fix it.
     const home = new Home(1000, 800);

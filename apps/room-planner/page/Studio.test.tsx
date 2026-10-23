@@ -211,6 +211,12 @@ describe("what the studio sends", () => {
     await waitFor(() => expect(screen.getByText("That takes the living room down to 4 square metres.")).toBeTruthy());
   });
 
+  it("a refusal is shown in the unit the client reads", () => {
+    const imperial = snapshot({ unit: "ft2", schedule: { ...snapshot().schedule, unit: "ft2" } });
+    render(<Studio state={imperial} send={fakePlanner().send} notice={{ text: "That takes the study down to 4 square metres — under 5, which is too small to work.", at: 1 }} />);
+    expect(screen.getByText("That takes the study down to 43 square feet — under 54 square feet, which is too small to work.")).toBeTruthy();
+  });
+
   it("a refusal heard by voice is shown the same way", () => {
     render(<Studio state={snapshot()} send={fakePlanner().send} notice={{ text: "The kitchen and the study don't share a wall.", at: 1 }} />);
     expect(screen.getByText("The kitchen and the study don't share a wall.")).toBeTruthy();

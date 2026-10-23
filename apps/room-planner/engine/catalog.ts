@@ -85,6 +85,10 @@ export const ALIASES: Record<string, string> = {
   rug: 'rug',
   carpet: 'rug',
   desk: 'desk',
+  // The sizes people say out loud, so the smaller piece is not swapped for the bigger one.
+  'two seater': 'sofa_2', '2 seater': 'sofa_2', 'two seat': 'sofa_2', '2 seat': 'sofa_2',
+  'three seater': 'sofa_3', '3 seater': 'sofa_3', 'three seat': 'sofa_3', '3 seat': 'sofa_3',
+  'small rug': 'rug_small', 'end table': 'side_table', 'side table': 'side_table', 'tv stand': 'tv_unit',
 };
 
 /** A spoken or typed piece name, as a lookup key. */
@@ -92,18 +96,29 @@ export function normalizeType(value: unknown): string {
   return String(value || '').trim().toLowerCase().replaceAll('-', ' ').split(/\s+/).filter(Boolean).join(' ');
 }
 
+/**
+ * Every name a piece answers to: the aliases, and each piece's own label and
+ * type. The labels were missing, so a name in the kit could lose to a shorter
+ * alias inside it: "a side table" became a dining table ("table"), "small rug"
+ * the big rug, "2-seat sofa" a 3-seat sofa ("sofa").
+ */
+const NAMES: Record<string, string> = {
+  ...Object.fromEntries(Object.values(CATALOG).flatMap((p) => [[normalizeType(p.label), p.type], [p.type.replaceAll('_', ' '), p.type]])),
+  ...ALIASES,
+};
+
 /** The catalog entry a name means, or null if the kit has no such thing. */
 export function resolveType(value: unknown): Piece | null {
   const key = normalizeType(value);
   if (!key) return null;
   const underscored = key.replaceAll(' ', '_');
   if (CATALOG[underscored]) return CATALOG[underscored];
-  if (ALIASES[key]) return CATALOG[ALIASES[key]];
-  // "a queen bed", "the big rug": the longest alias contained in it, so
+  if (NAMES[key]) return CATALOG[NAMES[key]];
+  // "a queen bed", "the small rug": the longest name contained in it, so
   // "coffee table" wins over "table".
   let hit = '';
-  for (const alias of Object.keys(ALIASES)) if (key.includes(alias) && alias.length > hit.length) hit = alias;
-  return hit ? CATALOG[ALIASES[hit]] : null;
+  for (const name of Object.keys(NAMES)) if (key.includes(name) && name.length > hit.length) hit = name;
+  return hit ? CATALOG[NAMES[hit]] : null;
 }
 
 /** Which drawer of the picker a piece sits in. */
