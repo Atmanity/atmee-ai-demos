@@ -1,8 +1,9 @@
 # What the Avatar API could not do
 
 Found while porting the fourteen mini-apps from `Atmanity/apps` onto the public
-Avatar API (staging, October 2026), and while building `classic/`. Each item
-says what was seen, why it matters, and what the apps do about it today. Every
+Avatar API (staging, October 2026), and while building the five apps on
+`server.js`. Each item says what was seen, why it matters, and what the apps do
+about it today. Every
 app's README has its own live run and its gaps marked seen or expected.
 
 Measured on staging Causeur sessions with the test harness in
@@ -158,8 +159,11 @@ A conductor is set per avatar, not per session. Apps that share an avatar must
 put their own agenda back before each session (the server does this), and two
 apps on one avatar at once would fight over it.
 
-How it behaves, from `classic/`'s recruiter and training agendas (live, 23
-October; none of the fourteen apps uses one). The recruiter ran every stage
+How it behaves, from the recruiter and training agendas as they were before
+those apps used tools (live, 23 October; none of the fourteen apps uses one).
+The training app has since made its quiz one step run by `await` tools, so the
+page owns the question order and the score; the rule below still holds for any
+agenda. The recruiter ran every stage
 once, in order; the training lecture spoke its three slides back to back with
 no user input and stopped for questions, as designed. What went wrong follows
 from one rule: a step does not move until the user has heard a turn written

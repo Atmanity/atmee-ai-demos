@@ -3,17 +3,17 @@
   "private": true,
   "type": "module",
   "version": "0.2.0",
-  "description": "Sample apps built on the Atmee Avatar API: the original five (classic/) and the mini-apps ported from Atmanity/apps (apps/).",
+  "description": "Sample apps built on the Atmee Avatar API: five apps on server.js, and fourteen mini-apps from Atmanity/apps on server/.",
   "engines": {
     "node": ">=20.19"
   },
   "scripts": {
     "dev": "tsx watch --env-file=.env --env-file-if-exists=.env.local --clear-screen=false --exclude \"apps/**/*.tsx\" server/index.ts",
     "build": "vite build",
-    "start": "NODE_ENV=production tsx --env-file=.env --env-file-if-exists=.env.local server/index.ts",
+    "start": "node server.js",
+    "start:apps": "NODE_ENV=production tsx --env-file=.env --env-file-if-exists=.env.local server/index.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
-    "classic": "node --env-file=.env classic/server.js"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "chess.js": "^1.4.0",

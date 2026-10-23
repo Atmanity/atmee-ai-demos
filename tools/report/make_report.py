@@ -335,23 +335,21 @@ APPS = [
 ]
 
 CLASSIC = [
-  ('Ledger Academy', 'Internal training', 'A trainer lectures three slides, takes questions, then runs a two-question quiz.', 'A conductor with `speak` edges drives the lecture; the slide and score go in `state`; the page scores a verdict by its first word.'),
-  ('Northwind Talent', 'Recruiter screening', 'A recruiter runs a structured first-round interview against a job card.', 'A conductor graph: greet, background, must-haves, logistics, questions, wrap; job and candidate in `state`.'),
-  ('Kin', 'Presence companion', 'A companion sits beside you and reacts to what is on your screen.', 'The page sends a frame when the screen changes; Gemini describes it; the description goes to `state`, anything notable as an event.'),
-  ('Isle of Whispers', 'Interactive story', 'A narrator speaks only on game events; conversation opens only at the oracle\'s shrine.', 'The user is muted; each move is an event; entering the shrine unmutes and allows typed turns.'),
-  ('Nightcap Live', 'Live stream host', 'A host reads a stream\'s chat to viewers on a branded page.', 'The user is muted; questions go in as typed turns, the rest as an event digest every 20 s; the viewer count in `state`.'),
+  ('Ledger Academy', 'Internal training', 'A trainer teaches a slide deck on its own, takes questions, then runs a two-question quiz.', 'A conductor drives the lecture; `show_slide` puts slides up; the quiz is one step run by `await` tools (`ask_quiz_question`, `grade_answer`), so the page owns the order and the score.'),
+  ('Northwind Talent', 'Recruiter screening', 'A screening call on a fixed agenda, against a job card.', 'A conductor graph from greeting to wrap; a live agenda and screening notes filled by tools.'),
+  ('Kin', 'Presence companion', 'A companion reacts to what is on your screen.', 'The app\'s own observer describes the screen (Gemini) and sends text; no tools.'),
+  ('Isle of Whispers', 'Interactive story', 'An event-driven narrator; conversation opens only at the oracle\'s shrine.', 'The user is muted; each move is an event; the oracle\'s powers are app tools.'),
+  ('Nightcap Live', 'Live stream host', 'A host reads a chatroom, pins lines and runs polls viewers vote in.', 'The user is muted; questions go in as typed turns, the rest as event digests; pins and polls are tools.'),
 ]
 
 CLASSIC_GAPS = [
   'No audience in the room: one user token per session, no viewer tokens or egress, so a stream must re-broadcast the avatar.',
-  'Sessions are capped by plan (900 s on Free, up to 4 h), and an avatar runs one session at a time.',
-  'A typed turn sent while the avatar is speaking was dropped, not queued (the kit now holds typed turns until the avatar finishes).',
-  'No transcript or reply feed outside the room; the app must read the room\'s transcription stream.',
-  'The agenda (conductor) is set per avatar, not per session, so the server puts each use case\'s agenda back before its session.',
-  'Run again live on 23 October, the recruiter ran every stage once, in order, and the lecture spoke its three slides with no user input. What went wrong follows from one rule: a step does not move until the user has heard a turn written under it. The Q&A step said "if they have none, start the quiz"; "No questions." was answered under that step, so the model invented a quiz question. Put the check on the asking step\'s edges, with an edge back to itself.',
-  'The last step stays in force: the idle check-in said the farewell again 19 s after it ended. End the session after the last step.',
-  'Scoring by a verdict\'s first word broke: the filler came first ("Aye, good choice, right right correct"), the score stayed 0 and the wrap read "nought of two". Score through a tool, not the transcript.',
-  'The recruiter greeted twice: once on its own, and again when the page\'s update with the candidate\'s name arrived.',
+  'Sessions are capped by plan, and an avatar runs one session at a time.',
+  'Mid-turn typed turns and commentary are refused, not queued; the apps hold them until the turn ends.',
+  'No transcript, tool-call or session feed outside the room.',
+  'The agenda (conductor) is set per avatar, not per session, and is not observable: the server puts each app\'s agenda back before its session.',
+  'Before these apps used tools (live, 23 October), the recruiter ran every stage once, in order, and the lecture spoke its three slides with no user input. What went wrong followed from one rule: a step does not move until the user has heard a turn written under it. A Q&A step that said "if they have none, start the quiz" had the model invent a quiz question. The training app has since made the quiz one step run by tools, so the page owns the order and the score.',
+  'The last step stays in force: the idle check-in said the farewell again 19 s after it ended.',
   'The check-in and the persona are the avatar\'s, as in the mini-apps.',
 ]
 
@@ -574,7 +572,7 @@ w(f'''<header class="top">
     <li><b>3</b><span>live rounds on staging</span></li>
     <li><b>{total_tests:,}</b><span>tests, all passing</span></li>
     <li><b>{n_missing}</b><span>API features still missing</span></li>
-    <li><b>5</b><span>classic apps kept</span></li>
+    <li><b>5</b><span>first apps, on <code>server.js</code></span></li>
   </ul>
 </header>
 ''')
@@ -599,7 +597,7 @@ for i, (name, what, who, today) in enumerate(ASKS, 1):
     if who == 'all':
         tags = f'<span class="tag">All {len(APPS)} apps</span>'
     elif who == 'classic':
-        tags = '<a class="tag" href="#classic">Classic: Ledger Academy, Northwind Talent</a>'
+        tags = '<a class="tag" href="#classic">The first five: Ledger Academy, Northwind Talent</a>'
     w(f'''<div class="ask">
   <div><span class="rank">{i:02d}</span><h3>{fmt(name)}</h3></div>
   <div class="stack" style="gap:6px"><p>{fmt(what)}</p><p class="today">Today: {fmt(today)}</p><div class="who">{tags}</div></div>
@@ -724,7 +722,7 @@ for g in groups:
 w('</section>')
 
 # --- classic
-w('<section id="classic"><div class="col stack"><p class="eyebrow">Built first, on 22 October</p><h2>The classic five</h2><p>Five branded sample apps built straight on the API with one small Node server, before the mini-app port. They live in <code>classic/</code> and run with <code>npm run classic</code>.</p></div>')
+w('<section id="classic"><div class="col stack"><p class="eyebrow">Built first, on 22 October</p><h2>The first five apps</h2><p>Five branded sample apps built straight on the API with one small Node server, before the mini-app port. Their code is where it has always been: pages in <code>public/</code>, behaviour in <code>usecases/index.js</code>, the server in <code>server.js</code>, a README for each in <code>apps/&lt;app&gt;/</code>. They run with <code>npm start</code>.</p></div>')
 w('<div class="scroll"><table class="classic"><thead><tr><th>App</th><th>Use case</th><th>What it does</th><th>How it is built</th></tr></thead><tbody>')
 for name, use, what, how in CLASSIC:
     w(f'<tr><td>{html.escape(name)}</td><td>{html.escape(use)}</td><td>{fmt(what)}</td><td>{fmt(how)}</td></tr>')
@@ -732,7 +730,7 @@ w('</tbody></table></div>')
 w('<div class="col stack"><h3>What they found missing</h3><ul class="plain">' + ''.join(f'<li>{fmt(x)}</li>' for x in CLASSIC_GAPS) + '</ul></div></section>')
 
 w('''<footer>
-  <p>Sources: each app\'s <code>README.md</code> (its live runs and its gaps), <code>docs/API-GAPS.md</code>, <code>docs/PORTING.md</code> and <code>classic/README.md</code> in <code>atmee-usecase-demos</code>, branch <code>feat/mini-apps</code>.</p>
+  <p>Sources: each app\'s <code>README.md</code> (its live runs and its gaps), <code>docs/API-GAPS.md</code>, <code>docs/PORTING.md</code> and the five apps' READMEs in <code>atmee-usecase-demos</code>, branch <code>feat/mini-apps</code>.</p>
   <p>Live runs: staging Causeur sessions on 23 October 2026, spoken through a synthetic microphone, in three rounds: before the apps used tools, with tools, and after the fixes (round 2), each app on its own host. Statuses come from the two rounds with tools; "expected" means not observed, not ruled out.</p>
 </footer>
 </div>

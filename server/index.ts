@@ -9,7 +9,8 @@
 import express from 'express';
 import { api } from './api.ts';
 
-const PORT = Number(process.env.PORT || 5190);
+// Its own variable: PORT belongs to the five apps' server.js (3333), and both read .env.
+const PORT = Number(process.env.MINIAPPS_PORT || 5190);
 const production = process.env.NODE_ENV === 'production';
 
 // Only this machine's own pages: the session routes spend the key's credits.

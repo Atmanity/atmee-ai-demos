@@ -1,6 +1,7 @@
-node_modules
-dist
 .env
+node_modules
+server.log
+.env.local
+dist
 tools/live-test/audio
 *.log
-.env.local

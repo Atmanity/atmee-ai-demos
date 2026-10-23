@@ -53,7 +53,7 @@ function Home() {
       {others.length > 0 && (
         <section className="home-shelf"><div className="home-shelf-head"><h2>More</h2></div><div className="home-grid">{others.map((app) => <Tile key={app.id} app={app} />)}</div></section>
       )}
-      <footer className="home-foot">Five earlier apps (a live stream, a recruiter, a training course, a companion, a story game) run with <code>npm run classic</code>.</footer>
+      <footer className="home-foot">Five earlier apps (a live stream, a recruiter, a training course, a companion, a story game) run with <code>npm start</code> on port 3333.</footer>
     </main>
   );
 }
