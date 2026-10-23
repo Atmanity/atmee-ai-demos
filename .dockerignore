@@ -3,10 +3,12 @@
 .env.*
 !.env.example
 node_modules
+dist
 *.log
 .git
 .github
-apps
+docs
+tools
 README.md
 Dockerfile
 .dockerignore

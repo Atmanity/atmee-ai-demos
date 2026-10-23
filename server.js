@@ -24,6 +24,7 @@
 import express from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 import { WebSocketServer } from "ws";
@@ -149,7 +150,7 @@ function hasPassword(req) {
   const decoded = Buffer.from(m[1], "base64").toString("utf8");
   return same(decoded.slice(decoded.indexOf(":") + 1), PASSWORD);
 }
-function requirePassword(req, res, next) {
+export function requirePassword(req, res, next) {
   if (!PASSWORD || hasTicket(req)) return next();
   if (hasPassword(req)) {
     res.setHeader("Set-Cookie", `${COOKIE}=${ticket}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 3600}`);
@@ -304,9 +305,8 @@ function onWatcherClose(h, ws) {
 // ---------------------------------------------------------------------------
 // WebSocket: /?usecase=<name>&role=host|viewer|streamer
 // ---------------------------------------------------------------------------
-const server = createServer(app);
 const wss = new WebSocketServer({
-  server,
+  noServer: true,
   verifyClient: ({ req }) => !PASSWORD || hasTicket(req) || hasPassword(req),
 });
 wss.on("connection", (ws, req) => {
@@ -366,7 +366,19 @@ wss.on("connection", (ws, req) => {
 setInterval(() => { for (const h of hubs.values()) if (h.session && h.def.tick) relay(h, h.def.tick(h, (m) => broadcast(h, m))); }, 5000);
 
 // Ctrl-C locally, SIGTERM from Kubernetes on a rollout: end the live sessions first.
-for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, async () => { for (const h of hubs.values()) await endSession(h).catch(() => {}); process.exit(0); });
+export async function shutdown() {
+  for (const h of hubs.values()) await endSession(h).catch(() => {});
 }
-server.listen(PORT, () => console.log(`http://localhost:${PORT}/  (use cases: ${Object.keys(USECASES).join(", ")}; password ${PASSWORD ? "on" : "off"})`));
+// Run on its own (`node server.js`) it listens and handles the signals itself;
+// the site's server (server/index.ts) mounts the same app and WebSocket beside
+// the mini-apps, and its shutdown calls this one.
+export { app };
+export function handleUpgrade(req, socket, head) {
+  wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
+}
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const server = createServer(app);
+  server.on("upgrade", handleUpgrade);
+  server.listen(PORT, () => console.log(`http://localhost:${PORT}/  (use cases: ${Object.keys(USECASES).join(", ")}; password ${PASSWORD ? "on" : "off"})`));
+  for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => shutdown().then(() => process.exit(0)));
+}

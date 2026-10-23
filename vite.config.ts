@@ -1,4 +1,4 @@
-// One multi-page app: the home page plus apps/<app>/index.html for every app.
+// One multi-page app: the mini-apps' index (apps/index.html) plus apps/<app>/index.html for every app.
 // In development the Express server (server/index.ts) runs Vite as middleware,
 // so `npm run dev` is one process serving the pages and the /api routes.
 import { existsSync, readdirSync } from 'node:fs';
@@ -9,6 +9,8 @@ const apps = readdirSync('apps').filter((dir) => existsSync(`apps/${dir}/index.h
 
 export default defineConfig({
   plugins: [react()],
+  // public/ is the five apps' (server.js serves it); nothing of theirs goes into the build.
+  publicDir: false,
   // Every page library, bundled when the server starts. A library first met
   // later (one app opened after another) makes Vite rebundle them all, and a
   // page already open then mixes two copies of React: react-chessboard failed
@@ -18,7 +20,7 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      input: { home: 'index.html', ...Object.fromEntries(apps.map((app) => [app, `apps/${app}/index.html`])) },
+      input: { home: 'apps/index.html', ...Object.fromEntries(apps.map((app) => [app, `apps/${app}/index.html`])) },
     },
   },
   test: {

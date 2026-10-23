@@ -4,7 +4,7 @@ import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './home.css';
 
-interface AppInfo { id: string; title: string; tagline: string; brand?: { color: string; ink: string }; avatar: boolean }
+interface AppInfo { id: string; title: string; tagline: string; brand?: { color: string; ink: string }; host?: string | null; avatar: boolean }
 
 const SHELVES: [string, string, string[]][] = [
   ['Play', 'Games with a host across the table.', ['guess-the-city', 'chess-opponent', 'poker-table']],
@@ -53,7 +53,7 @@ function Home() {
       {others.length > 0 && (
         <section className="home-shelf"><div className="home-shelf-head"><h2>More</h2></div><div className="home-grid">{others.map((app) => <Tile key={app.id} app={app} />)}</div></section>
       )}
-      <footer className="home-foot">Five earlier apps (a live stream, a recruiter, a training course, a companion, a story game) run with <code>npm start</code> on port 3333.</footer>
+      <footer className="home-foot">Five more apps (a live stream, a recruiter, a training course, a companion, a story game) are on the <a href="/">home page</a>.</footer>
     </main>
   );
 }

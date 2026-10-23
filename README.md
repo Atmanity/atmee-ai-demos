@@ -6,8 +6,11 @@ Sample apps built purely on the Atmee Avatar API (v2), with no changes to the pl
   from the product thread: a recruiter call, internal training, a presence/companion, an
   interactive story and a live stream.
 - **Fourteen mini-apps** from `Atmanity/apps` (games, tutors, advisors, a planetarium, a room
-  planner), rebuilt as products on their own server (`server/`). See
+  planner), rebuilt as products (`server/`, `src/`). See
   [The fourteen mini-apps](#the-fourteen-mini-apps).
+
+One site serves all nineteen: `server/index.ts` runs the fourteen and mounts `server.js` in the
+same process, on one port, and the home page lists every app.
 
 Every app has its folder in `apps/<app>/` with its README.
 
@@ -28,9 +31,12 @@ is: pages in `public/`, behaviour in `usecases/index.js`, shared server code in 
 ```
 cp .env.example .env     # ATMEE_BASE_URL, ATMEE_API_KEY, one AVATAR_<APP> per app, GEMINI_API_KEY for Kin
 npm install
-node --env-file=.env server.js
-open http://localhost:3333/
+npm run dev              # every app: http://localhost:5190/
 ```
+
+`npm run dev` serves the mini-apps' pages through Vite; `npm run build && npm start` serves the
+built pages, as the container does. `node --env-file=.env server.js` (or `npm run start:five`)
+still runs the five on their own, on `PORT` (3333).
 
 - **`ATMEE_API_KEY`** needs the `sessions` scope, plus `avatars:write` for the two apps with a
   conductor (training, recruiter). Without that scope the conductor call returns 403 and those
@@ -53,8 +59,11 @@ Staging runs the apps on the tailnet only, at https://atmee-demos.taild36ab5.ts.
 `gcp-us-central1`, manifests in argocd-app-config `apps/atmee-ai-demos`). A push to `main` builds the `Dockerfile`, pushes it
 to Artifact Registry and bumps the tag there (`.github/workflows/publish.yml`).
 
-- The container takes its settings from the environment, the same names as `.env.example`.
-- **`DEMO_PASSWORD`**, when set, puts every page, `/api` route and WebSocket behind one shared
+- The container runs every app on one server (`server/index.ts` on 3333, with the mini-apps'
+  pages built into `dist/`) and takes its settings from the environment, the same names as
+  `.env.example`. One `ATMEE_API_KEY` serves every app: the key's account holds all their
+  avatars.
+- **`DEMO_PASSWORD`**, when set, puts every page (the mini-apps' too), `/api` route and WebSocket behind one shared
   password (the browser's basic-auth prompt, any user name); after that a cookie carries it.
   Unset, as locally, nothing asks for it.
 - `GET /healthz` answers without the password, for the probes.
@@ -154,25 +163,26 @@ Each was run live on staging; its README has the runs and what the API could not
 ### Run them
 
 ```
-cp .env.example .env     # as above; the mini-apps also read MINIAPPS_PORT and GEMINI_API_KEY
+cp .env.example .env     # as above; the mini-apps also read GEMINI_API_KEY
 npm install
-npm run dev              # http://localhost:5190/
+npm run dev              # http://localhost:5190/apps/ (and every app from the home page)
 npm test                 # engines, judges, directors, the kit
 npm run typecheck
 ```
 
-Node 22.9+ (for `--env-file-if-exists`). `npm run dev` (and `npm run start:apps`) read `.env`,
-then `.env.local` if it exists, so a key there wins. Each app's host is the `avatarId` in
-`apps/<app>/avatar.json`, an avatar of the account the key belongs to; make that key without
-printing it with `atmee keys create --name mini-apps --scopes avatars:read,avatars:write --out
-.env.local`. `AVATAR_<APP_ID>` (for example `AVATAR_CHESS_OPPONENT`) overrides one app's host,
-and `AVATAR_DEFAULT` serves an app with neither. They run on `MINIAPPS_PORT` (default 5190), so
-`PORT` stays the five apps' (3333).
+Node 22.9+ (for `--env-file-if-exists`). `npm run dev` and `npm start` read `.env`, then
+`.env.local` if it exists, so a value there wins. Each app's host is the `avatarId` in
+`apps/<app>/avatar.json`, an avatar of the same account as the five apps' avatars, so one key
+serves all. `AVATAR_<APP_ID>` (for example `AVATAR_CHESS_OPPONENT`) overrides one app's host,
+and `AVATAR_DEFAULT` serves an app with neither. The site runs on `SITE_PORT` (default 5190),
+so `PORT` stays the five apps' own (3333) when `server.js` runs alone. The mini-apps own
+`/apps/…` and `/api/apps/…`; every other path is `server.js`'s.
 
 ### How a mini-app is put together
 
 ```
-server/              their server: the API key, sessions, each app's own routes
+server/              the site's server: the API key, sessions, each app's own routes
+  index.ts             one port for every app: the mini-apps' paths here, the rest to server.js
   atmee.ts             the Avatar API (session, end, conductor, app tools)
   llm.ts               the apps' own model calls (structured JSON, images)
   api.ts               discovers apps/<app>/server.ts; /api/apps/<app>/session, /end, routes
