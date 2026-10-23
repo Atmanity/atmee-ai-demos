@@ -10,7 +10,7 @@
 import type { Coach } from './coach.ts';
 import * as cons from './constraints.ts';
 import { builtAround, PLAN_WAIT_MS, pressed, say } from './director.ts';
-import { goalIn, moveIn, readLevel, stepLevel } from './judge.ts';
+import { goalIn, moveIn, readLevel, splitLevel, stepLevel } from './judge.ts';
 import { acceptGoal, baseMoveName, rebuildSummaryLine } from './plan.ts';
 import type { AvatarEvent, Command, Level, Outcome, View } from './types.ts';
 
@@ -211,11 +211,14 @@ export async function runTool(coach: Coach, relay: Relay, name: string, args: Re
       if (said && said !== 'easier' && said !== 'harder' && !goalIn(raw) && (raw.split(' ').length <= 3)) {
         return runTool(coach, relay, 'set_level', { level: said.toLowerCase() }, waitMs);
       }
-      const goal = raw ? goalIn(raw, coach.constraints.injuries) ?? acceptGoal(raw) : null;
+      // A level said inside the goal ("core and cardio, I'm a beginner") is the level, not part of the goal.
+      const inside = splitLevel(raw);
+      const goal = inside.goal ? goalIn(inside.goal, coach.constraints.injuries) ?? acceptGoal(inside.goal) : null;
       if (!goal) return done(say.noGoal());
       const stage = coach.stage();
       if (stage !== 'goal' && stage !== 'level') return done(say.goalLocked(before));
-      const out = coach.hear({ constraints: cons.EMPTY, intent: { kind: 'goal', goal, ...(level ? { level } : {}) } });
+      const known = level ?? inside.level;
+      const out = coach.hear({ constraints: cons.EMPTY, intent: { kind: 'goal', goal, ...(known ? { level: known } : {}) } });
       return finish(coach, relay, before, out, waitMs);
     }
 

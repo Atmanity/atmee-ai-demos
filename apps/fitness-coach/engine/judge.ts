@@ -13,6 +13,7 @@ export const norm = (text: string) => text.toLowerCase().normalize('NFKD').repla
   .replace(/[’`]/g, "'").replace(/[^a-z0-9' ]+/g, ' ').replace(/\s+/g, ' ').trim();
 
 const ORDINAL = /\b(first|second|third|fourth|fifth|sixth|last|1st|2nd|3rd|4th|5th|6th)\b/;
+const ORDINALS = new RegExp(ORDINAL.source, 'g');
 /** Words around a move's name that are not the name ("let's start with the squats"). */
 const FILLER = /\b(let'?s|lets|let us|start|starting|begin|go|going|with|do|doing|try|pick|choose|i|i'?ll|i'?d|i'?m|will|want|wanna|to|would|like|can|could|we|you|please|okay|ok|um|uh|maybe|how|about|what|next|move|moves|on|switch|the|a|an|some|that|this|those|these|it|one|ones|two|three|four|five|six|of|for|me|us|show|demo|video|clip|make|see|now|then|and|so|yeah|yes|sure|right|just|actually|instead|again|exercise|please|first)\b/g;
 
@@ -44,15 +45,19 @@ export function goalIn(text: string, injured: readonly string[] = []): string | 
 export const movePhrase = (text: string) => norm(text).replace(FILLER, ' ').replace(/\s+/g, ' ').trim();
 
 /**
- * The plan move a phrase names. "The first warm-up" and "the last one" go by
- * position (ordinals only: "the one with the bridge" is not "move one");
- * anything else by name, after the words around it are taken away.
+ * The plan move a phrase names. A move's name wins: "the first plank" is the
+ * plank, wherever it sits (an ordinal checked first started whatever move was
+ * first). With no name left, "the first warm-up move" and "the last one" go by
+ * position (ordinals only: "the one with the bridge" is not "move one").
  */
 export function moveIn(plan: FitnessPlan, text: string): string | null {
   const t = norm(text);
-  if (ORDINAL.test(t)) return resolvePositionalMove(plan, t);
-  const phrase = movePhrase(text);
-  return phrase ? resolvePlanMove(plan, phrase) : null;
+  // The name, with the ordinal and the words around it taken away (so the
+  // name match cannot fall back to a position itself).
+  const name = movePhrase(text).replace(ORDINALS, ' ').replace(/\s+/g, ' ').trim();
+  const named = name ? resolvePlanMove(plan, name) : null;
+  if (named) return named;
+  return ORDINAL.test(t) ? resolvePositionalMove(plan, t) : null;
 }
 
 /** A level as the host passed it (any case, a synonym, a phrase), or a step easier or harder; null when it is neither. */
@@ -66,6 +71,26 @@ export function readLevel(text: string): Level | 'easier' | 'harder' | null {
   if (/\b(intermediate|medium|moderate|middle|in between|some experience)\b/.test(t)) return 'Intermediate';
   if (/\b(advanced|expert|very experienced|hard|pro)\b/.test(t)) return 'Advanced';
   return null;
+}
+
+/** A level named outright in a phrase, with the words around it ("…, I'm a beginner"). Not "hard" or "easy": they describe a workout. */
+const LEVEL_CLAUSE = /(?:[,;]\s*)?(?:\b(?:and|but)\s+)?(?:\b(?:i'?m|i am|i'?d say i'?m|probably|maybe|at)\s+)?(?:\b(?:an?|the)\s+)?(?:\b(?:total|complete|pretty much an?)\s+)?\b(beginners?|novice|intermediate|advanced|expert)\b(?:\s+(?:level|here|please))?/i;
+
+/**
+ * What to train and the level, from one phrase the host passed as the goal
+ * ("core and cardio, I'm a beginner"): the level said in it, and the goal
+ * without it. A goal whose own name carries a level word ("Beginner
+ * strength") is only a goal.
+ */
+export function splitLevel(text: string): { goal: string; level: Level | null } {
+  const raw = String(text ?? '').trim();
+  const option = goalIn(raw);
+  if (option && LEVEL_CLAUSE.test(option)) return { goal: raw, level: null };
+  const found = LEVEL_CLAUSE.exec(raw);
+  if (!found) return { goal: raw, level: null };
+  const level = readLevel(found[1]);
+  const goal = (raw.slice(0, found.index) + raw.slice(found.index + found[0].length)).replace(/\s+/g, ' ').replace(/^[\s,;.!?-]+|[\s,;.!?-]+$/g, '');
+  return { goal, level: level === 'easier' || level === 'harder' ? null : level };
 }
 
 /** One level easier or harder than `current`; `current` itself at either end. Null when there is no level yet. */

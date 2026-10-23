@@ -1,7 +1,7 @@
 // Reading the host's tool arguments the way people say them, and the phrases
 // the page's safety net acts on when the host does not.
 import { describe, expect, it } from 'vitest';
-import { goalIn, levelAsked, limitWords, moveAsked, moveIn, mustDo, mustSetLevel, mustStartMove, mustStop, readLevel, stepLevel, type NetContext } from './judge.ts';
+import { goalIn, levelAsked, limitWords, splitLevel, moveAsked, moveIn, mustDo, mustSetLevel, mustStartMove, mustStop, readLevel, stepLevel, type NetContext } from './judge.ts';
 import { buildFallbackPlan } from './plan.ts';
 
 const plan = buildFallbackPlan('Full body', 'Beginner');
@@ -43,6 +43,16 @@ describe('a move, as the host passes it', () => {
     ['show me a demo of arm circles', 'Arm circles'],
   ])('lands on a plan move: %s', (said, move) => {
     expect(moveIn(plan, said)).toBe(move);
+  });
+
+  it('takes the move a phrase names over the slot its ordinal points at', () => {
+    // Bugbot: "the first plank" started March in place, the first move on the plan.
+    expect(moveIn(plan, 'the first plank')).toBe('Plank hold');
+    expect(moveIn(plan, 'the last squat')).toBe('Bodyweight squats');
+    expect(moveIn(plan, "let's do the second glute bridges")).toBe('Glute bridges');
+    // With no name in it, the ordinal still picks the slot.
+    expect(moveIn(plan, 'the second warm-up move')).toBe('Arm circles');
+    expect(moveIn(plan, 'the second one')).toBe('Arm circles');
   });
 
   it('does not read "the one with" as move number one', () => {
@@ -92,6 +102,17 @@ describe('the safety net', () => {
     for (const [said, stops] of cases) expect(Boolean(mustStop(said)), said).toBe(stops);
     expect(mustStop("I'm 7 months pregnant")).toEqual({ name: 'stop_for_safety', arguments: { condition: "I'm 7 months pregnant" } });
   });
+});
+
+describe('a level said inside the goal', () => {
+  it.each([
+    ["core and cardio, I'm a beginner", 'core and cardio', 'Beginner'],
+    ['glutes, intermediate please', 'glutes', 'Intermediate'],
+    ["mobility but I'm advanced", 'mobility', 'Advanced'],
+    ['Beginner strength', 'Beginner strength', null],
+    ['a hard core workout', 'a hard core workout', null],
+    ['glutes', 'glutes', null],
+  ] as const)('%s', (said, goal, level) => expect(splitLevel(said)).toEqual({ goal, level }));
 });
 
 describe('a level, however it is said', () => {

@@ -78,6 +78,27 @@ describe('choosing what to train and the level', () => {
     expect(streamed.flatMap((o) => o.events).map((e) => e.text).join(' ')).toContain('The plan is on the screen now');
   });
 
+  it('records a level said inside the goal, and keeps it out of the goal', async () => {
+    // Bugbot: "core and cardio, I'm a beginner" recorded the goal and asked the level again.
+    const { tool } = setup();
+    const run = await tool('set_goal', { goal: "core and cardio, I'm a beginner" });
+    expect(run.view.flow.goal).toBe('Core + cardio');
+    expect(run.view.plan?.level).toBe('Beginner');
+    expect(run.text).toMatch(/^Done: The plan is on the screen now/);
+    const free = setup();
+    const own = await free.tool('set_goal', { goal: "rock climbing, I'm intermediate" });
+    expect(own.view.flow.goal).toBe('rock climbing');
+    expect(own.view.plan?.level).toBe('Intermediate');
+    // A goal whose own name has a level word in it is only a goal.
+    const named = setup();
+    const strength = await named.tool('set_goal', { goal: 'Beginner strength' });
+    expect(strength.view.flow.goal).toBe('Beginner strength');
+    expect(strength.view.stage).toBe('level');
+    // "Hard" and "easy" describe a workout, not a level.
+    const hard = setup();
+    expect((await hard.tool('set_goal', { goal: 'a hard core workout' })).view.stage).toBe('level');
+  });
+
   it('takes a level passed as the goal as the level', async () => {
     const { tool } = setup();
     const run = await tool('set_goal', { goal: 'beginner' });

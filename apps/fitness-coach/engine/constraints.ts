@@ -89,44 +89,41 @@ const NAMED_INJURIES: [string, string][] = [
  * to modify exercises for your safety" and returned the identical six moves,
  * deadlifts and lateral lunges included, and never suggested seeing anyone.
  */
-const CLEARANCE_PATTERNS: [string, string][] = [
-  ['pregnant', 'pregnancy'],
-  ['pregnancy', 'pregnancy'],
-  ['expecting a baby', 'pregnancy'],
-  ['post partum', 'recent childbirth'],
-  ['postpartum', 'recent childbirth'],
-  ['chest pain', 'chest pain'],
-  ['heart condition', 'a heart condition'],
-  ['heart attack', 'a cardiac history'],
-  ['cardiac', 'a cardiac history'],
-  ['angina', 'a cardiac history'],
-  ['high blood pressure', 'high blood pressure'],
-  ['concussion', 'a recent concussion'],
-  ['surgery', 'recent surgery'],
+const BROKEN_PARTS = 'bones?|ankles?|wrists?|arms?|legs?|ribs?|foot|feet|hands?|collarbones?|toes?|fingers?|elbows?|hips?|knees?|shoulders?|pelvis|femur|tibia|fibula|jaw|neck|back|vertebrae?';
+
+/**
+ * Each condition as people report it: a verb as well as a noun, any tense, a
+ * plural. Literal phrases with an optional "s" missed "I broke my wrist", "I
+ * fractured my ankle", "two surgeries" and "dizziness", and the workout went
+ * on. Each pattern is still anchored to what only a person describing a
+ * condition says (see the notes below on what must NOT match).
+ */
+const CLEARANCE_PATTERNS: [RegExp, string][] = [
+  [/\bpregnan(?:t|cy|cies)\b/, 'pregnancy'],
+  [/\bexpecting a baby\b/, 'pregnancy'],
+  [/\bpost[\s-]?partum\b/, 'recent childbirth'],
+  [/\b(?:just|recently) (?:had|gave birth to) (?:a|my|our) (?:baby|son|daughter|child)\b|\b(?:gave|given) birth\b/, 'recent childbirth'],
+  [/\bchest pains?\b/, 'chest pain'],
+  [/\bheart (?:condition|problem|disease|failure)s?\b/, 'a heart condition'],
+  [/\bheart attacks?\b|\bcardiac\b|\bangina\b/, 'a cardiac history'],
+  [/\bhigh blood pressure\b|\bhypertension\b/, 'high blood pressure'],
+  [/\bconcuss(?:ion|ions|ed)\b/, 'a recent concussion'],
+  [/\bsurger(?:y|ies)\b/, 'recent surgery'],
   // NOT a bare "operation": "cooperation" contains it, and so does "my
   // operation at work". Likewise not a bare "broken" ("my treadmill is
-  // broken"). A match freezes the whole session with no un-halt path, so a
-  // false positive costs the user their entire workout: each pattern is
-  // anchored to something only a person describing a condition says.
-  ['had an operation', 'recent surgery'],
-  ['having an operation', 'recent surgery'],
-  ['fracture', 'a fracture'],
-  ['broken bone', 'a fracture'],
-  ['broken ankle', 'a fracture'],
-  ['broken wrist', 'a fracture'],
-  ['broken arm', 'a fracture'],
-  ['broken leg', 'a fracture'],
-  ['broken rib', 'a fracture'],
-  ['broken foot', 'a fracture'],
-  ['broken hand', 'a fracture'],
-  ['broken collarbone', 'a fracture'],
-  ['dizzy', 'dizziness'],
-  ['fainting', 'fainting'],
+  // broken") or "broke" ("I broke my routine", "broke a sweat"): a break is a
+  // fracture only with a bone or a body part after it. A match freezes the
+  // whole session with no un-halt path, so a false positive costs the user
+  // their entire workout.
+  [/\b(?:had|having|have had|getting|got) (?:an? )?operations?\b|\boperated on\b/, 'recent surgery'],
+  [/\bfractur(?:e|es|ed|ing)\b/, 'a fracture'],
+  [new RegExp(`\\b(?:broke|broken|breaking|cracked)\\s+(?:(?:my|a|her|his|their|the|both)\\s+)?(?:(?:left|right|lower|upper)\\s+)?(?:${BROKEN_PARTS})\\b`), 'a fracture'],
+  // Not "a dizzying number of reps".
+  [/\bdizz(?:y|iness)\b/, 'dizziness'],
   // The past tense, because that is how anyone reports it: "I fainted at the
   // gym last week" matched nothing and the person was handed a workout. Not a
-  // bare "passed out" (what a gym does with flyers) and not "faint" (a noise).
-  ['fainted', 'fainting'],
-  ['passing out', 'fainting'],
+  // bare "passed out" (what a gym does with flyers) and not "faint" (a smell, a noise).
+  [/\b(?:fainted|fainting|faints|fainting spells?|passing out)\b/, 'fainting'],
 ];
 
 /**
@@ -236,10 +233,10 @@ export function parseConstraints(text: string): Constraints {
   }
 
   const clearance: string[] = [];
-  // Whole words, a plural allowed: a bare substring made "cooperation" a
-  // surgery and "a dizzying number of reps" a fainting risk.
-  for (const [phrase, label] of CLEARANCE_PATTERNS) {
-    if (new RegExp(`\\b${escapeRe(phrase)}s?\\b`).test(low) && !clearance.includes(label)) clearance.push(label);
+  // Whole words, each pattern with its own forms: a bare substring made
+  // "cooperation" a surgery and "a dizzying number of reps" a fainting risk.
+  for (const [pattern, label] of CLEARANCE_PATTERNS) {
+    if (pattern.test(low) && !clearance.includes(label)) clearance.push(label);
   }
 
   const avoid: string[] = [];
@@ -334,9 +331,23 @@ export function newConstraintLabels(before: Constraints, after: Constraints): st
     // An injury already names its own bans; listing them too turns one warm
     // sentence into a recital of the ban list.
     if (after.injuries.some((part) => word === part || INJURY_BANS[part].includes(word))) continue;
-    labels.push(`no ${word}s`);
+    labels.push(`no ${movesWord(word)}`);
   }
   return labels;
+}
+
+/** Words that are not counted moves: said as they are ("no impact", "no jumping"). */
+const UNCOUNTED = new Set(['impact', 'floor', 'floor work', 'overhead', 'running', 'jumping', 'jogging']);
+
+/**
+ * A banned move as said back to the person: "no lunges", "no presses", "no
+ * crunches", "no jumping". A bare "s" made "no presss" and "no jumpings", and
+ * those are the words the host is given to say.
+ */
+export function movesWord(word: string): string {
+  if (UNCOUNTED.has(word) || /ing$/.test(word)) return word;
+  if (/(s|sh|ch|x|z)$/.test(word)) return `${word}es`;
+  return `${word}s`;
 }
 
 /**

@@ -296,6 +296,20 @@ describe('the clearance hold, as parsed', () => {
     }
   });
 
+  it('holds for a condition however it is reported: a verb, a past tense, a plural', () => {
+    // Bugbot: "I broke my wrist" and "I fractured my ankle" matched nothing, nor
+    // did "surgeries": the page kept offering moves after the disclosure.
+    const cases: [string, string][] = [
+      ['I broke my wrist last month', 'a fracture'], ['I fractured my ankle in June', 'a fracture'], ['she broke her collarbone', 'a fracture'],
+      ['I had two surgeries this year', 'recent surgery'], ["I've been having dizziness", 'dizziness'], ['two pregnancies, the last one in spring', 'pregnancy'],
+      ['I just had a baby', 'recent childbirth'], ['I was concussed playing rugby', 'a recent concussion'], ['I have hypertension', 'high blood pressure'],
+    ];
+    for (const [said, label] of cases) expect(parse(said).clearance, said).toContain(label);
+    for (const said of ['I broke my routine last week', 'I broke a sweat', 'my treadmill is broken', 'a faint smell of rubber']) {
+      expect(parse(said).clearance, said).toEqual([]);
+    }
+  });
+
   it('does not freeze a session on ordinary sentences', () => {
     // A match halts everything with no way back, so a false positive costs
     // the whole workout. "cooperation" contains "operation"; "broken" is what
@@ -339,6 +353,12 @@ describe('acknowledging what was just said', () => {
     expect(labels).toEqual(['your knee']);
     // The ban list an injury implies is not a recital.
     expect(labels.join(' ')).not.toContain('lunge');
+  });
+
+  it('says a banned move back as a person would, never "no presss" or "no jumpings"', () => {
+    const labels = cons.newConstraintLabels(cons.EMPTY, parse('no press, no jumping, no lunges, no crunches and no high knees'));
+    expect(labels).toEqual(expect.arrayContaining(['no presses', 'no jumping', 'no lunges', 'no crunches', 'no high knees']));
+    for (const label of labels) expect(label, label).not.toMatch(/sss\b|ings\b|hs\b/);
   });
 
   it('never acknowledges a clearance condition as if it were built around', () => {
