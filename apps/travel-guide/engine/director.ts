@@ -18,20 +18,22 @@ ${news
 - Never name, describe or guess a sight, a dish${news ? ', a headline' : ''} or a distance that a tool did not give you, even one you know well: the screen would not show it. Never say which sight comes next; only next_sight knows.
 - You cannot see where they are and must never claim to. If they say "near me" without a place, ask which town, neighbourhood or station they are near; they can also press "Use my location" on screen.
 - If they tell you their name, call remember_name with it.
-- The screen changes only when you call a tool. Saying "here's Portugal" or "next up is the castle" without the call changes nothing and misleads them: call the tool every time, even when you think you already know the answer.
+- Every request that changes the screen is a tool call, even a single word answering your own question (a yes, a country's name, "the next one"). The screen changes only when you call a tool: saying "here's Portugal" or "next up is the castle" without the call changes nothing and misleads them. Call the tool every time, even when you think you know the answer, and never say something is on the map or on screen unless a tool's result said so.
 - Questions about what is already on screen (the country, the dishes${news ? ', the headlines' : ''}, the sight, their route): answer from the live board in your context, no tool needed.
 - When they press something on screen, the app tells you what happened; carry on from that.
 - Never start something on your own after a result: when a result says to ask whether they want more, ask, and act only on their answer.
 You are a well-travelled friend, warm and unhurried. Talk about places as atmosphere and rhythm (food, weather, neighbourhoods, trains, cafés, long walks, ferry rides), not logistics. One or two short spoken sentences, at most one question, no lists, markdown, emoji or colons. Never mention tools, apps or how the board works. Warm is welcome; sexual content is not: decline kindly and steer back to travel.`;
 }
 
+// Lenient on purpose: the platform refuses a call whose arguments do not fit
+// the schema before the page sees it, and the host then tends to say the action
+// happened. So no enums, patterns, tight lengths or closed objects, and
+// nothing required: the app reads what arrives and asks back when it is unusable.
 const placeArg = (description: string) => ({
   type: 'object',
-  properties: { place: { type: 'string', minLength: 1, maxLength: 120, description } },
-  required: ['place'],
-  additionalProperties: false,
+  properties: { place: { type: 'string', maxLength: 500, description } },
 });
-const noArgs = { type: 'object', properties: {}, additionalProperties: false };
+const noArgs = { type: 'object', properties: {} };
 const awaits = (timeoutSeconds: number) => ({ mode: 'await' as const, timeoutSeconds });
 
 /** The board's tools. Each is answered by the app, which does the lookups. show_news only when a news source is set up. */
@@ -55,7 +57,7 @@ export function tools(news: boolean): AppTool[] {
     }] : []),
     {
       type: 'function', name: 'explore_near',
-      description: 'Finds what is worth seeing around a town, neighbourhood, station or landmark, and shows the closest sight with its photo and distance. Call it when the user names a place and asks what to see around it, or says where they are.',
+      description: 'Finds what is worth seeing around a town, neighbourhood, station or landmark, and shows the best sight there first, with its photo and distance. Call it when the user names a place and asks what to see around it, or says where they are.',
       parameters: placeArg('The town, neighbourhood, station or landmark, as the user said it ("Shibuya station", "Alfama, Lisbon").'),
       'x-atmee': awaits(24),
     },
@@ -72,7 +74,7 @@ export function tools(news: boolean): AppTool[] {
     {
       type: 'function', name: 'remember_name',
       description: 'Writes the user\'s name on their trip. Call it when they tell you what to call them.',
-      parameters: { type: 'object', properties: { name: { type: 'string', minLength: 1, maxLength: 60, description: 'Their name, as they said it.' } }, required: ['name'], additionalProperties: false },
+      parameters: { type: 'object', properties: { name: { type: 'string', maxLength: 500, description: 'Their name, as they said it.' } } },
       'x-atmee': { mode: 'notify' },
     },
   ];
@@ -133,61 +135,66 @@ export function boardState(s: Snapshot): string {
   return text;
 }
 
-/** What a tool call (or a button) did, in words the host speaks from. */
+/**
+ * What a tool call (or a button) did, in words the host speaks from. Each
+ * starts with the plain outcome (Done, Not yet, Not found, Not done, Already
+ * done): the platform has the host say a short filler of its own while a tool
+ * runs, and the first real words of the reply should be the app's, not a guess.
+ */
 export const say = {
+  /** The host's own greeting has already introduced them in Yonder: the opening goes straight to the first useful line. */
   opening(s: Snapshot) {
-    const who = s.travelerName ? ` They are called ${s.travelerName}.` : '';
-    const intro = `Yonder is open on the user's screen: a live map with a guidebook beside it.${who}`;
-    if (s.stage === 'around' && s.spot?.spot) return `${intro} They are looking around ${s.spot.place}, with ${s.spot.spot.name} on screen. Welcome them in one short sentence that mentions it.`;
-    if (s.map) return `${intro} They have already put ${s.map.country} on the map. Welcome them, say one warm, specific sentence about it, and ask what they would like to explore there.`;
-    return `${intro} The map shows the whole world. Welcome them in one or two short sentences and ask where in the world they are dreaming of; say you can choose somewhere if they like.`;
+    const intro = `You have just greeted them; do not greet or introduce yourself again. Yonder is open on their screen: a live map with a guidebook beside it.${s.travelerName ? ` They are called ${s.travelerName}.` : ''}`;
+    if (s.stage === 'around' && s.spot?.spot) return `${intro} They are looking around ${s.spot.place}, with ${s.spot.spot.name} on screen: mention it in one short line.`;
+    if (s.map) return `${intro} They have already put ${s.map.country} on the map: say one warm, specific line about it and ask what they would like to explore there.`;
+    return `${intro} The map shows the whole world, nothing chosen yet. If your greeting did not already ask, ask in one short line where in the world they are dreaming of (you can choose somewhere if they like); if it did, wait for their answer.`;
   },
-  named: (name: string) => `Their name, ${name}, is on their trip now. Use it sparingly, not every line.`,
-  noName: () => 'That did not sound like a name, so nothing was written down. Do not ask again; just carry on warmly.',
-  continentOnly: (continent: string) => `${continent} is not one country, so the map stays as it is, with ideas from ${continent} on screen. Ask which country there calls to them, or offer to choose one.`,
-  noDestination: () => 'No destination was given. Ask which part of the world they are dreaming about, or offer to pick somewhere.',
-  notFound: (place: string) => `Could not place ${place} on the map. Ask them to confirm the name, or to name the country it is in.`,
+  named: (name: string) => `Done: their name, ${name}, is on their trip now. Use it sparingly, not every line.`,
+  noName: () => 'Not done: that did not sound like a name, so nothing was written down. Do not ask again; just carry on warmly.',
+  continentOnly: (continent: string) => `Not yet: ${continent} is not one country, so the map stays as it is, with ideas from ${continent} on screen. Ask which country there calls to them, or offer to choose one.`,
+  noDestination: () => 'Not done: no destination was given. Ask which part of the world they are dreaming about, or offer to pick somewhere.',
+  notFound: (place: string) => `Not found: could not place ${place} on the map. Ask them to confirm the name, or to name the country it is in.`,
   destination(country: string, { city = '', newsAvailable = false, how = 'user' }: { city?: string; newsAvailable?: boolean; how?: 'user' | 'picked' } = {}) {
-    if (how === 'picked') return `They asked to be surprised, and ${country} is your pick: it is on the map now. Present it as your own choice in one warm, specific sentence, then ${ask(newsAvailable)}.`;
-    return `${country} is on the map now${city ? `, and they mentioned ${city}` : ''}. Say one warm, specific sentence about it, then ${ask(newsAvailable)}.`;
+    if (how === 'picked') return `Done: ${country} is on the map now, your pick for them since they asked to be surprised. Present it as your own choice in one warm, specific sentence, then ${ask(newsAvailable)}.`;
+    return `Done: ${country} is on the map now${city ? `, and they mentioned ${city}` : ''}. Say one warm, specific sentence about it, then ${ask(newsAvailable)}.`;
   },
-  noCountryForNews: () => 'No country is chosen yet. Ask where they are dreaming of before talking about the news.',
-  news: (country: string, headlines: Headline[]) => `${headlines.length} headline${headlines.length === 1 ? ' is' : 's are'} on screen from ${country}, the newest the source has; they may be days old, so never call them fresh or put a date on them: ${headlineList(headlines)} Mention the top one or two in a short sentence, adding nothing.`,
-  noNews: (country: string) => `No headlines came back for ${country}. Say briefly that you could not pull the local news, and suggest the food instead.`,
-  noCountryForFood: () => 'No country is chosen yet. Ask where they are dreaming of first.',
-  food: (country: string, dishes: { name: string; description: string }[]) => `${dishes.length === 1 ? 'One dish' : `${dishes.length} dishes`} from ${country} ${dishes.length === 1 ? 'is' : 'are'} on screen now: ${dishes.map((d) => (d.description ? `${d.name} (${clip(d.description, 150)})` : d.name)).join('; ')}. Recommend one or two of them in your own words, adding no other dishes.`,
-  noFood: (country: string) => `No dish ideas came back for ${country}, so nothing is on screen. Say so lightly and talk about its food from what you know, in one short sentence.`,
-  revisited: (country: string, dishes: string[]) => `${country} is back on the map, exactly as they left it${dishes.length ? `, with ${listOf(dishes)} still there` : ''}. Say one warm sentence welcoming them back to it.`,
-  alreadyHere: (country: string) => `They are already looking at ${country}. Say so lightly.`,
-  notOnTrip: (places: string[]) => `That is not on the route yet. So far it has been ${listOf(places)}. Offer one of those, or to look somewhere new.`,
-  nothingToGoBack: () => 'Nowhere has been looked at yet, so there is nothing to go back to. Ask where they are dreaming of.',
-  askPlace: () => 'No place was given. Ask which town, neighbourhood or station they mean.',
-  countryNotTown: (country: string) => `${country} is a whole country. Ask which town, neighbourhood or station there they would like to look around.`,
-  placeNotFound: (place: string) => `Could not find ${place} on the map. Ask them to name the town or the nearest city instead.`,
-  lookupDown: (place: string) => `They asked what is around ${place}, but the places service is not answering right now. Say so plainly; they can try again in a moment.`,
-  quiet: (place: string) => `They asked what is around ${place}, but nothing stands out there. Say so kindly; they can name another place to look around.`,
-  firstSpot: (place: string, spot: Spot, total = 1) => `Around ${place}, the closest of ${total} sight${total === 1 ? '' : 's'} is on screen: ${spotLine(spot)}.${spot.summary ? ` About it: ${clip(spot.summary, 240)}` : ''} Describe it in one or two sentences from this alone, naming no other sight. They can tap it to open it in maps, or ask for another.`,
-  anotherSpot: (spot: Spot, position = 0, total = 0) => `Now on screen${position && total ? `, sight ${position} of ${total}` : ''}: ${spotLine(spot)}.${spot.summary ? ` About it: ${clip(spot.summary, 240)}` : ''} Describe it in one or two sentences from this alone, naming no other sight.`,
-  lastSpot: () => 'That was the last standout spot around there: there is no next one. Say so; they can go back to an earlier one or name another place to look around.',
-  firstAlready: (place: string) => `That is already the first spot around ${place}. Say so; they can ask for the next one.`,
-  nothingQueued: (place: string) => `There is nothing to show around ${place}. They can name another place to look around.`,
-  askWhereToLook: () => 'Nothing has been looked up yet. Ask which town or neighbourhood they would like to look around.',
-  notLookedYet: () => 'Nothing has been looked up yet. Ask which town they would like to look around.',
-  nothingToShow: () => 'Nothing to show. They can name another place to look around.',
-  noCountryThere: () => 'There is no country right where they tapped the map. Ask them to tap on land, or to name a country.',
-  badCoordinates: () => 'Their location could not be read. Ask which town or neighbourhood they are in instead.',
+  noCountryForNews: () => 'Not yet: no country is chosen yet. Ask where they are dreaming of before talking about the news.',
+  news: (country: string, headlines: Headline[]) => `Done: ${headlines.length} headline${headlines.length === 1 ? ' is' : 's are'} on screen from ${country}, the newest the source has; they may be days old, so never call them fresh or put a date on them: ${headlineList(headlines)} Mention the top one or two in a short sentence, adding nothing.`,
+  noNews: (country: string) => `Not found: no headlines came back for ${country}. Say briefly that you could not pull the local news, and suggest the food instead.`,
+  noCountryForFood: () => 'Not yet: no country is chosen yet. Ask where they are dreaming of first.',
+  food: (country: string, dishes: { name: string; description: string }[]) => `Done: ${dishes.length === 1 ? 'one dish' : `${dishes.length} dishes`} from ${country} ${dishes.length === 1 ? 'is' : 'are'} on screen now: ${dishes.map((d) => (d.description ? `${d.name} (${clip(d.description, 150)})` : d.name)).join('; ')}. Recommend one or two of them in your own words, adding no other dishes.`,
+  noFood: (country: string) => `Not found: no dish ideas came back for ${country}, so nothing is on screen. Say so lightly and talk about its food from what you know, in one short sentence.`,
+  revisited: (country: string, dishes: string[]) => `Done: ${country} is back on the map, exactly as they left it${dishes.length ? `, with ${listOf(dishes)} still there` : ''}. Say one warm sentence welcoming them back to it.`,
+  alreadyHere: (country: string) => `Already done: they are already looking at ${country}. Say so lightly.`,
+  notOnTrip: (places: string[]) => `Not done: that is not on the route yet. So far it has been ${listOf(places)}. Offer one of those, or to look somewhere new.`,
+  nothingToGoBack: () => 'Not done: nowhere has been looked at yet, so there is nothing to go back to. Ask where they are dreaming of.',
+  askPlace: () => 'Not done: no place was given. Ask which town, neighbourhood or station they mean.',
+  countryNotTown: (country: string) => `Not done: ${country} is a whole country. Ask which town, neighbourhood or station there they would like to look around.`,
+  placeNotFound: (place: string) => `Not found: could not find ${place} on the map. Ask them to name the town or the nearest city instead.`,
+  lookupDown: (place: string) => `Not done: they asked what is around ${place}, but the places service is not answering right now. Say so plainly; they can try again in a moment.`,
+  quiet: (place: string) => `Not found: they asked what is around ${place}, but nothing stands out there. Say so kindly; they can name another place to look around.`,
+  firstSpot: (place: string, spot: Spot, total = 1) => `Done: around ${place}, the first of ${total} sight${total === 1 ? '' : 's'} worth seeing is on screen: ${spotLine(spot)}.${spot.summary ? ` About it: ${clip(spot.summary, 240)}` : ''} Describe it in one or two sentences from this alone, naming no other sight. They can tap it to open it in maps, or ask for another.`,
+  anotherSpot: (spot: Spot, position = 0, total = 0) => `Done: now on screen${position && total ? `, sight ${position} of ${total}` : ''}: ${spotLine(spot)}.${spot.summary ? ` About it: ${clip(spot.summary, 240)}` : ''} Describe it in one or two sentences from this alone, naming no other sight.`,
+  lastSpot: () => 'Not done: that was the last standout spot around there, there is no next one. Say so; they can go back to an earlier one or name another place to look around.',
+  firstAlready: (place: string) => `Not done: that is already the first spot around ${place}. Say so; they can ask for the next one.`,
+  nothingQueued: (place: string) => `Not done: there is nothing to show around ${place}. They can name another place to look around.`,
+  askWhereToLook: () => 'Not yet: nothing has been looked up. Ask which town or neighbourhood they would like to look around.',
+  notLookedYet: () => 'Not yet: nothing has been looked up. Ask which town they would like to look around.',
+  nothingToShow: () => 'Not done: nothing to show. They can name another place to look around.',
+  noCountryThere: () => 'Not found: there is no country right where they tapped the map. Ask them to tap on land, or to name a country.',
+  badCoordinates: () => 'Not done: their location could not be read. Ask which town or neighbourhood they are in instead.',
   showPlanning: (country: string) => (country
-    ? `The guidebook is back on ${country}, with its map. Carry on from there in one short line.`
-    : 'No country is chosen yet. Ask which part of the world they are dreaming about, or offer to pick somewhere.'),
+    ? `Done: the guidebook is back on ${country}, with its map. Carry on from there in one short line.`
+    : 'Not yet: no country is chosen. Ask which part of the world they are dreaming about, or offer to pick somewhere.'),
   showAround: (place: string, spot: Spot | null) => (spot
-    ? `The guidebook is back on the sights around ${place}, with ${spot.name} on screen. Carry on from there in one short line.`
-    : 'The guidebook asks which place to look around. Ask which town, neighbourhood or station they would like to explore.'),
+    ? `Done: the guidebook is back on the sights around ${place}, with ${spot.name} on screen. Carry on from there in one short line.`
+    : 'Not yet: the guidebook asks which place to look around. Ask which town, neighbourhood or station they would like to explore.'),
   /** A tool still working when the host can wait no longer: the page tells it the outcome later. */
-  stillWorking: (what: string) => `Still working on it: ${what} is taking longer than usual. Tell them in a few words that you are still looking, and say nothing about the result yet: you will be told the moment it is on screen.`,
+  stillWorking: (what: string) => `Not yet: still working on it, ${what} is taking longer than usual. Tell them in a few words that you are still looking, and say nothing about the result yet: you will be told the moment it is on screen.`,
   landed: (result: string) => `The lookup you were waiting for has finished and is on screen now. ${result}`,
-  lateFailed: () => 'The lookup you were waiting for failed, so nothing changed on screen. Say so in a few words; they can ask again in a moment.',
-  serviceDown: () => 'The map service did not answer, so nothing changed on screen. Say so in a few words; they can ask again in a moment.',
-  freshTrip: () => 'A new trip has started: the map is back to the whole world, with nothing on their route. Ask where they are dreaming of next.',
+  lateFailed: () => 'Not done: the lookup you were waiting for failed, so nothing changed on screen. Say so in a few words; they can ask again in a moment.',
+  serviceDown: () => 'Not done: the map service did not answer, so nothing changed on screen. Say so in a few words; they can ask again in a moment.',
+  freshTrip: () => 'Done: a new trip has started, the map is back to the whole world with nothing on their route. Ask where they are dreaming of next.',
 };
 
 /** A button press, told to the host: it cannot see the screen. */

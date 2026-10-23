@@ -38,6 +38,8 @@ export interface Verdict {
   /** A sentence from the character data, said aloud unchanged in meaning. */
   note: string;
   revealed?: boolean;
+  /** A stroke drawn backwards: which way they drew it and which way it goes, in plain words ("from the bottom up", "from the top down"). */
+  travel?: { drawn: string; right: string };
 }
 
 export interface CatalogEntry {

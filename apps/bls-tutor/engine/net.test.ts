@@ -44,6 +44,15 @@ describe('while a step is asked', () => {
     expect(did(said, 'answering')).toBeNull();
   });
 
+  test('wanting out while naming another drill starts that one (live, Alex left instead)', () => {
+    const said = 'This is too hard, can we do the one where someone collapsed instead?';
+    expect(did(said, 'answering', 'choking_adult')).toBe(`start:${said}`);
+  });
+
+  test('wanting out while naming the drill already running is just leaving', () => {
+    expect(did('this is too hard, can I pick a different one than the collapse', 'answering', 'adult_cardiac_arrest')).toBe('leave_scenario');
+  });
+
   test('naming the drill already running is never a switch', () => {
     expect(did("let's do child CPR", 'answering', 'child_cardiac_arrest')).toBeNull();
     expect(switchRequest("let's do the child one", 'child_cardiac_arrest')).toBeNull();

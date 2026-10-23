@@ -9,13 +9,16 @@
 //   cardiac history, recent surgery…) freezes the plan the moment the page
 //   hears it, whatever Sammy does; if she has not called stop_for_safety a few
 //   seconds later, the page does, and gives her the words.
-// - the safety net. "Start over", or a limit ("only 20 minutes", "bad knee"),
-//   that Sammy narrates without calling the tool is done by the page.
+// - the safety net. "Start over", a limit ("only 20 minutes", "bad knee"), a
+//   level said alone while the level step is live ("Beginner, please."), or a
+//   move asked for once a plan is up, that Sammy answers without calling the
+//   tool is done by the page. Live, she answered "Beginner, please." with
+//   "I've set you up for a beginner plan" and called nothing, twice.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
 import { parseConstraints } from '../engine/constraints.ts';
 import { boardState, say } from '../engine/director.ts';
-import { mustDo, mustStop, type NetCall } from '../engine/judge.ts';
+import { mustDo, mustSetLevel, mustStartMove, mustStop, type NetCall, type NetContext } from '../engine/judge.ts';
 import type { Command, Outcome, View } from '../engine/types.ts';
 import { Workout, type Pending } from './Workout.tsx';
 import { Lobby, Logo } from './Lobby.tsx';
@@ -65,7 +68,15 @@ export function App() {
   }, [show]);
 
   const run = async (call: ToolCall) => String(await onToolCall(call));
+  // What is on the screen when the words were said: a level or a move is read against it.
+  const context = (): NetContext | null => {
+    const now = shown.current;
+    if (!now) return null;
+    return { stage: held.length ? 'hold' : now.stage, level: now.flow.level, plan: now.plan };
+  };
   const net = useToolNet({ match: (text) => asCall(mustDo(text)), run, avatar: () => avatarRef.current! });
+  const levelNet = useToolNet({ match: (text) => { const ctx = context(); return ctx ? asCall(mustSetLevel(text, ctx)) : null; }, run, avatar: () => avatarRef.current! });
+  const moveNet = useToolNet({ match: (text) => { const ctx = context(); return ctx ? asCall(mustStartMove(text, ctx)) : null; }, run, avatar: () => avatarRef.current! });
   const safety = useToolNet({ match: (text) => asCall(mustStop(text)), run, avatar: () => avatarRef.current!, waitMs: STOP_WAIT_MS });
 
   // Everything the user says or types passes here once it is final.
@@ -82,9 +93,11 @@ export function App() {
       return;
     }
     net.heard(text);
+    levelNet.heard(text);
+    moveNet.heard(text);
   };
 
-  const avatar = useAvatar(ID, { onToolCall: safety.watch(net.watch(onToolCall)), onUserSaid: (text) => heard(text) });
+  const avatar = useAvatar(ID, { onToolCall: safety.watch(net.watch(levelNet.watch(moveNet.watch(onToolCall)))), onUserSaid: (text) => heard(text) });
   avatarRef.current = avatar;
   const live = avatar.phase === 'live';
 

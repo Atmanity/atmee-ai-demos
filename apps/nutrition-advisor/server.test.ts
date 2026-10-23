@@ -122,7 +122,7 @@ describe('look_up_food', () => {
     expect(body.kind).toBe('card');
     expect(body.card).toBe(true);
     expect(body.view.nutrition).toMatchObject({ product_name: 'Medium banana', source: 'estimate', portion_assumed: true });
-    expect(body.text).toContain('On screen now: the nutrition card for "Medium banana"');
+    expect(body.text).toMatch(/^Done: on screen now, the nutrition card for "Medium banana"/);
     expect(body.text).toContain('105 calories');
     expect(calls(CARD_SCHEMA)).toBe(1);
   });
@@ -142,7 +142,7 @@ describe('look_up_food', () => {
     expect(body.view.nutrition?.product_name).toBe('Medium banana');
     expect(body.view.shelf.items.map((r) => r.product_name)).toEqual(['Medium banana', 'Medium apple']);
     expect(calls(CARD_SCHEMA)).toBe(2);
-    expect(body.text).toMatch(/On screen now, again: [^]*It was already in the comparison table, with "Medium apple"/);
+    expect(body.text).toMatch(/^Done: back on screen, [^]*It was already in the comparison table, with "Medium apple"/);
   });
 
   it('two foods at once: both up, each with its figures', async () => {
@@ -161,6 +161,18 @@ describe('look_up_food', () => {
     expect(body.notice).toMatch(/Couldn't find dragon fruit/);
     const banana = await tool('look_up_food', { foods: ['banana'] });
     expect(banana.body.view.nutrition?.product_name).toBe('Medium banana');
+  });
+
+  it('takes the call however the host words it: any case, "food" for "foods", a lone string, extra fields', async () => {
+    const { tool } = await open();
+    const capital = await tool('look_up_food', { food: 'A BANANA', mood: 'hungry' });
+    expect(capital.body.kind).toBe('card');
+    expect(capital.body.view.nutrition?.product_name).toBe('Medium banana');
+    const lone = await tool('compare_foods', { foods: 'An Apple', reason: 'sugar' });
+    expect(lone.body.kind).toBe('compare');
+    const recipe = await tool('open_recipe', { name: 'The First One', why: 'dinner' });
+    expect(recipe.body.kind).toBe('recipe');
+    expect(recipe.body.recipe?.recipe_name).toBe('apple smoothie');
   });
 
   it('only a pointer is no food: nothing changes, and the host asks', async () => {
@@ -309,7 +321,7 @@ describe('buttons', () => {
     const { act } = await open();
     const { body } = await act('lookup', { food: 'Greek yogurt' });
     expect(body.kind).toBe('card');
-    expect(body.text).toMatch(/^The user pressed "greek yogurt" on screen\. On screen now: the nutrition card/);
+    expect(body.text).toMatch(/^The user pressed "greek yogurt" on screen\. Done: on screen now, the nutrition card/);
   });
 });
 

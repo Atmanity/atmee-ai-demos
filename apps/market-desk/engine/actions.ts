@@ -40,8 +40,14 @@ function within<A extends unknown[], R>(fn: ((...args: A) => Promise<R>) | null 
   });
 }
 
-const names = (value: unknown): string[] => (Array.isArray(value) ? value : typeof value === 'string' ? [value] : [])
-  .map((v) => String(v ?? '').trim().slice(0, 60)).filter(Boolean).slice(0, 12);
+/** The stocks a call names, however it names them: an array or one string, under "stocks", "stock", "symbols" or "tickers". Extra fields are ignored. */
+function names(args: Record<string, unknown>, ...keys: string[]): string[] {
+  const value = keys.map((k) => args[k]).find((v) => v !== undefined && v !== null && v !== '');
+  const list = Array.isArray(value) ? value : typeof value === 'string' ? [value] : [];
+  return list.map((v) => String(typeof v === 'object' && v ? (v as Record<string, unknown>).symbol ?? (v as Record<string, unknown>).name ?? '' : v ?? '').trim().slice(0, 60)).filter(Boolean).slice(0, 12);
+}
+const ALL = ['stocks', 'stock', 'symbols', 'symbol', 'tickers', 'ticker', 'names', 'name'];
+const ONE = ['stock', 'symbol', 'ticker', 'name', 'stocks', 'symbols', 'tickers'];
 
 /** What the panel prints for an add that did not fully go up. */
 function addRefusal(r: AddReport): string | undefined {
@@ -66,34 +72,34 @@ export async function run(session: DeskSession, name: string, args: Record<strin
 
   switch (name) {
     case 'add_symbols': {
-      const asked = names(args.stocks);
-      if (!asked.length) return { text: 'No stock was named: ask which one they want on the board.' };
+      const asked = names(args, ...ALL);
+      if (!asked.length) return { text: 'Not done: no stock was named. Ask which one they want on the board.' };
       const r = await resolveStocks(asked, session.board(), lookups);
       const report = await session.add(r.symbols, { by, said: r.said, unresolved: r.unresolved, waitMs: waitMs() });
       return { text: said.added(report, session.board()), refused: addRefusal(report) };
     }
     case 'focus_symbol': {
-      const asked = names(args.stock)[0];
-      if (!asked) return { text: 'No stock was named: ask which one they want to look at.' };
+      const asked = names(args, ...ONE)[0];
+      if (!asked) return { text: 'Not done: no stock was named. Ask which one they want to look at.' };
       const r = await resolveStocks([asked], session.board(), lookups);
       if (!r.symbols.length) return { text: said.focused({ kind: 'missing', said: asked }, session.board()), refused: `No listing matched “${asked}”. Try the ticker.` };
       const report = await session.focus(r.symbols[0], { by, said: r.said[r.symbols[0]], waitMs: waitMs() });
       return { text: said.focused(report, session.board()), refused: report.kind === 'added' ? addRefusal(report.report) : undefined };
     }
     case 'refresh_quote': {
-      const asked = names(args.stock)[0];
+      const asked = names(args, ...ONE)[0];
       let symbol: string | null = null;
       if (asked) {
         // What is refreshed is on the board: its rows and written tickers, no lookups.
         symbol = (await resolveStocks([asked], session.board())).symbols[0] ?? null;
-        if (!symbol) return { text: `"${asked}" does not match anything on the board. Ask which stock they mean.`, refused: board.NOT_ON_BOARD_MESSAGE };
+        if (!symbol) return { text: `Not done: "${asked}" does not match anything on the board. Ask which stock they mean.`, refused: board.NOT_ON_BOARD_MESSAGE };
       }
       const report = await session.refresh(symbol, { by, waitMs: waitMs() });
       return { text: said.refreshed(report), refused: refreshRefusal(report) };
     }
     case 'remove_symbols': {
-      const asked = names(args.stocks);
-      if (!asked.length) return { text: 'No stock was named: ask which one should come off.' };
+      const asked = names(args, ...ALL);
+      if (!asked.length) return { text: 'Not done: no stock was named. Ask which one should come off.' };
       // What comes off is on the board: no lookups. A name that matched
       // nothing goes to the board as said, which refuses it in its own words.
       const r = await resolveStocks(asked, session.board());

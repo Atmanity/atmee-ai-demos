@@ -24,7 +24,7 @@ export const INSTRUCTIONS_LIMIT = 4000;
 
 /** The architect's rules: the session's tool instructions (at most 4,000 characters). */
 export const INSTRUCTIONS = `You are the architect in Planwright, planning a client's home with them at a drawing board, up to two floors. The plan is on their screen. You cannot see it; the live plan in your context describes it exactly (rooms by area and compass direction, neighbours, doors, windows, furniture, schemes, checks) and is ground truth. Never describe a room, door or piece that is not in it.
-- The plan changes only when you call a tool. Saying "done" without the call changes nothing and misleads a client who is looking at the drawing. When they ask for a change, call the tool before saying anything about the result, then speak only from what it returns: its numbers, or its refusal and the reason. Never invent or estimate a size or an outcome, never confirm a refused change, and if part of a request failed say which part. Call the tool even when you think you know: only the plan knows whether it fits.
+- The plan changes only when you call a tool. Every request that changes the screen is a tool call, even a single word answering your own question (a size, a number of bedrooms, a yes). Saying "done" without the call changes nothing and misleads a client who is looking at the drawing: never say a change happened unless the tool's result said so. Call the tool before saying anything about the result, then speak only from what it returns: its numbers, or its refusal and the reason. Never invent or estimate a size or an outcome, never confirm a refused change, and if part of a request failed say which part. Call the tool even when you think you know, and even for a piece or room you think the plan lacks (a piano, a gym): only the plan knows whether it fits, and a refusal must come from it.
 - The tools. Whole floor: lay_out_floor (a whole floor from a brief, with the size if they gave it), set_floor_size, add_upper_floor, go_to_floor. Rooms: add_room, remove_room, rename_room, divide_room, swap_rooms, knock_together. Sizes: trade_area (take_from gets SMALLER, give_to gets BIGGER: in "give the study two metres off the kitchen" the study is give_to), grow_room (free floor), move_wall (exact centimetres), mark_load_bearing. Openings: add_door_or_window, remove_door_or_window. Furniture: add_furniture, move_furniture (also turns), remove_furniture. Schemes: save_scheme, use_scheme. Also switch_units, undo_change, draw_sheet, clear_floor.
 - Name rooms, pieces and schemes as the live plan names them. Tools act on the floor on screen. Several requests in one sentence are several calls, in order. While a call runs, a few words at most ("let me draw that").
 - Questions about the plan (sizes, what is where, what undo would take back): answer from the live plan, no tool. When the client changes something by hand you are told; carry on from that.
@@ -37,14 +37,20 @@ export const INSTRUCTIONS = `You are the architect in Planwright, planning a cli
 // ----------------------------------------------------------------- the tools
 
 const awaits = { mode: 'await' as const, timeoutSeconds: 10 };
-const text = (description: string) => ({ type: 'string', minLength: 1, maxLength: 80, description });
+// Lenient on purpose: the platform checks a call against these schemas before
+// the page sees it, and a call that does not fit never arrives (the host then
+// tends to say it happened). So no enums, no length or range limits beyond a
+// generous cap, nothing required but what the call cannot do without; the
+// accepted words are listed in the descriptions and normalised in tools.ts,
+// and an unusable value comes back as a question.
+const text = (description: string) => ({ type: 'string', maxLength: 500, description });
 const number = (description: string) => ({ type: 'number', description });
 const flag = (description: string) => ({ type: 'boolean', description });
-const params = (properties: Record<string, unknown>, required: string[] = []) => ({ type: 'object', properties, required, additionalProperties: false });
+const params = (properties: Record<string, unknown>, required: string[] = []) => ({ type: 'object', properties, required });
 const ROOM = text('A room as the live plan names it ("Main bedroom", "Kitchen").');
-const SIDE = { type: 'string', enum: ['north', 'south', 'east', 'west'] };
-const WHERE_ROOM = { type: 'string', enum: ['middle', 'north', 'south', 'east', 'west'], description: 'Roughly where on the floor.' };
-const WHERE_PIECE = { type: 'string', enum: ['middle', 'window', 'door', 'north', 'south', 'east', 'west'], description: 'Roughly where in the room: by a window, by the door, against a wall.' };
+const WALL = (what: string) => text(`${what}: north, south, east or west.`);
+const WHERE_ROOM = text('Roughly where on the floor: middle, north, south, east or west.');
+const WHERE_PIECE = text('Roughly where in the room: window, door, middle, or a wall (north, south, east, west).');
 const AREA = { m2: number('Square metres ("metres" about a room means square metres).'), sq_ft: number('Square feet, if the client gave square feet instead.') };
 
 /** The plan's tools. Each call is answered by the planner in the page. */
@@ -54,11 +60,11 @@ export const TOOLS: AppTool[] = [
     type: 'function', name: 'lay_out_floor',
     description: 'Draws a whole floor from a brief, replacing everything on the floor on screen. Call it once you know roughly how big the place is and how many bedrooms, or when the client asks for a redraw or another arrangement. Pass the size too if they gave it. You never place rooms: the layout is worked out for you.',
     parameters: params({
-      bedrooms: { type: 'integer', minimum: 1, maximum: 5, description: 'How many bedrooms (a couple 1, with a baby 2, a family with two children 3; a studio 1).' },
-      style: { type: 'string', enum: ['day_night', 'open_plan', 'dual_aspect', 'compact'], description: 'day_night: living at the entry end, bedrooms at the far end. open_plan: kitchen, dining and living as one room. dual_aspect: hall down the middle, every room gets a window. compact: no hall at all.' },
+      bedrooms: number('How many bedrooms, 1 to 5 (a couple 1, with a baby 2, a family with two children 3; a studio 1).'),
+      style: text('The arrangement: day_night (living at the entry end, bedrooms at the far end; the default), open_plan (kitchen, dining and living as one room), dual_aspect (hall down the middle, every room gets a window) or compact (no hall at all).'),
       study: flag('Include a study.'), dining: flag('A separate dining room.'), en_suite: flag('An en suite.'), wc: flag('A separate WC.'), utility: flag('A utility room.'),
       width_m: number('The size of the place, east-west, as the client said it.'), depth_m: number('North-south, as the client said it.'), area_m2: number('The total floor area, when they gave an area instead of two sides.'),
-    }, ['bedrooms']),
+    }),
     'x-atmee': awaits,
   },
   {
@@ -69,111 +75,111 @@ export const TOOLS: AppTool[] = [
   },
   {
     type: 'function', name: 'add_upper_floor',
-    description: 'Adds a second storey and shows it, with the stairs put in on both floors, lined up. When the client says there is an upstairs or wants bedrooms above.',
+    description: 'Adds a second storey and shows it, with the stairs put in on both floors, lined up; the ground floor keeps its layout. When the client says there is an upstairs or wants bedrooms above.',
     parameters: params({}), 'x-atmee': awaits,
   },
   {
     type: 'function', name: 'go_to_floor',
     description: 'Shows the ground or the upper floor. Every other tool acts on the floor on screen, so switch first to work on the other one.',
-    parameters: params({ floor: { type: 'string', enum: ['ground', 'upper'] } }, ['floor']), 'x-atmee': awaits,
+    parameters: params({ floor: text('ground or upper.') }), 'x-atmee': awaits,
   },
   // ------------------------------------------------------------ the rooms
   {
     type: 'function', name: 'add_room',
     description: 'Adds one room to the floor on screen ("we need a utility", "put a study in"), sized sensibly unless the client gave a size, taking spare floor or a neighbour\'s. Roughly where, never a position. For a whole floor use lay_out_floor.',
     parameters: params({
-      room: text('What it is: bedroom, single bedroom, nursery, study, bathroom, shower room, en suite, WC, utility, dining room, storage, walk-in closet, hall, balcony.'),
+      room: text('What it is: bedroom, single bedroom, nursery, study, bathroom, shower room, en suite, WC, utility, dining room, storage, walk-in closet, hall, balcony, or the client\'s own word.'),
       near: WHERE_ROOM, next_to: text('A room to put it beside, as the live plan names it.'),
       size_m2: number('Its size, only if the client gave one.'), name: text('A name for it, only if the client gave one.'),
-    }, ['room']),
+    }),
     'x-atmee': awaits,
   },
   {
     type: 'function', name: 'remove_room',
     description: 'Takes a room off the plan with its furniture and doors, leaving bare floor to give to another room. Only when the client asks.',
-    parameters: params({ room: ROOM }, ['room']), 'x-atmee': awaits,
+    parameters: params({ room: ROOM }), 'x-atmee': awaits,
   },
   {
     type: 'function', name: 'rename_room',
     description: 'Renames a room or changes what it is used for ("call that the snug", "make the study a nursery"). The walls stay.',
-    parameters: params({ room: ROOM, new_name: text('The new name, if they gave one.'), new_use: text('What it is for now (bedroom, study, nursery, dining room…), if that changes.') }, ['room']),
+    parameters: params({ room: ROOM, new_name: text('The new name, if they gave one.'), new_use: text('What it is for now (bedroom, study, nursery, dining room…), if that changes.') }),
     'x-atmee': awaits,
   },
   {
     type: 'function', name: 'divide_room',
     description: 'Puts a wall across a room to make two ("we could get a study out of that"), cut in half across its long side; trade_area evens it out after.',
-    parameters: params({ room: ROOM, new_use: text('What the new half is for, if they said.') }, ['room']), 'x-atmee': awaits,
+    parameters: params({ room: ROOM, new_use: text('What the new half is for, if they said.') }), 'x-atmee': awaits,
   },
   {
     type: 'function', name: 'swap_rooms',
     description: 'Swaps what two rooms are without moving a wall ("put the bedroom where the study is"). Furniture stays where it stands.',
-    parameters: params({ room_a: ROOM, room_b: ROOM }, ['room_a', 'room_b']), 'x-atmee': awaits,
+    parameters: params({ room_a: ROOM, room_b: ROOM }), 'x-atmee': awaits,
   },
   {
     type: 'function', name: 'knock_together',
     description: 'Takes out the wall between two neighbouring rooms to make one ("knock the kitchen and dining room together"). A load-bearing wall stays.',
-    parameters: params({ room_a: ROOM, room_b: ROOM }, ['room_a', 'room_b']), 'x-atmee': awaits,
+    parameters: params({ room_a: ROOM, room_b: ROOM }), 'x-atmee': awaits,
   },
   // ------------------------------------------------------------ the sizes
   {
     type: 'function', name: 'trade_area',
     description: 'Moves floor from one room to a neighbour: the main verb of the negotiation ("give the living room two metres off the study"). take_from gets SMALLER, give_to gets BIGGER: read who ends up with the space, not which room was said first. The two rooms must share a wall; the wall is moved for you.',
-    parameters: params({ take_from: text('The room that gives floor up (gets smaller).'), give_to: text('The room that gets the floor (gets bigger).'), ...AREA }, ['take_from', 'give_to']),
+    parameters: params({ take_from: text('The room that gives floor up (gets smaller).'), give_to: text('The room that gets the floor (gets bigger).'), ...AREA }),
     'x-atmee': awaits,
   },
   {
     type: 'function', name: 'grow_room',
     description: 'Makes a room bigger into free floor that is in no room ("the kitchen needs another couple of metres" when nothing has to give it up). To take it off a named neighbour, use trade_area.',
-    parameters: params({ room: ROOM, ...AREA, towards: { ...SIDE, description: 'Which way to grow, if they said.' } }, ['room']),
+    parameters: params({ room: ROOM, ...AREA, towards: WALL('Which way to grow, if they said') }),
     'x-atmee': awaits,
   },
   {
     type: 'function', name: 'move_wall',
     description: 'Slides the wall between two neighbouring rooms by an exact distance the client said ("move that wall twenty centimetres"). Positive centimetres give the floor to room_a. For "a bit bigger", use trade_area.',
-    parameters: params({ room_a: ROOM, room_b: ROOM, centimetres: number('How far; positive gives floor to room_a, negative to room_b.') }, ['room_a', 'room_b', 'centimetres']),
+    parameters: params({ room_a: ROOM, room_b: ROOM, centimetres: number('How far; positive gives floor to room_a, negative to room_b.') }),
     'x-atmee': awaits,
   },
   {
     type: 'function', name: 'mark_load_bearing',
     description: 'Records that the wall between two rooms is load-bearing, so it never moves or comes out ("the surveyor says that wall stays").',
-    parameters: params({ room_a: ROOM, room_b: ROOM }, ['room_a', 'room_b']), 'x-atmee': awaits,
+    parameters: params({ room_a: ROOM, room_b: ROOM }), 'x-atmee': awaits,
   },
   // ------------------------------------------------------------ openings
   {
     type: 'function', name: 'add_door_or_window',
     description: 'Puts in a door between two rooms, a window on an outside wall, or the front door. Where along the wall is worked out for you.',
     parameters: params({
-      kind: { type: 'string', enum: ['door', 'window', 'front_door'] }, room: ROOM,
-      other_room: text('For a door: the room on the other side.'), wall: { ...SIDE, description: 'For a window or the front door: the outside wall.' },
-    }, ['kind', 'room']),
+      kind: text('door, window or front door.'), room: ROOM,
+      other_room: text('For a door: the room on the other side.'), wall: WALL('For a window or the front door, the outside wall'),
+    }),
     'x-atmee': awaits,
   },
   {
     type: 'function', name: 'remove_door_or_window',
     description: 'Takes a door, a window or the front door back out ("block that doorway up"). Name the room, and the other room for a door or the wall for a window when there are several.',
     parameters: params({
-      kind: { type: 'string', enum: ['door', 'window', 'front_door'] }, room: ROOM,
-      other_room: text('For a door: the room on the other side.'), wall: { ...SIDE, description: 'For a window: which outside wall.' },
-    }, ['kind']),
+      kind: text('door, window or front door.'), room: ROOM,
+      other_room: text('For a door: the room on the other side.'), wall: WALL('For a window, which outside wall'),
+    }),
     'x-atmee': awaits,
   },
   // ----------------------------------------------------------- furniture
   {
     type: 'function', name: 'add_furniture',
-    description: 'Puts a new piece in at its real size from the kit: single, double, queen or king bed, bedside table, 2-seat, 3-seat or corner sofa, armchair, chair, stool, desk, dining, coffee or side table, wardrobe, dresser, bookshelf, TV unit, rug, plant, floor lamp. Roughly where, never a position.',
-    parameters: params({ piece: text('What it is, as the client said it.'), room: ROOM, near: WHERE_PIECE, next_to: text('A piece already on the plan to stand it beside.') }, ['piece']),
+    description: 'Puts a new piece in at its real size from the kit. Call it for ANY piece the client asks for, even one you think the kit lacks (a piano, a hot tub): the plan says what it has. The kit: single, double, queen or king bed, bedside table, 2-seat, 3-seat or corner sofa, armchair, chair, stool, desk, dining, coffee or side table, wardrobe, dresser, bookshelf, TV unit, rug, plant, floor lamp.',
+    parameters: params({ piece: text('What it is, as the client said it.'), room: ROOM, near: WHERE_PIECE, next_to: text('A piece already on the plan to stand it beside.') }),
     'x-atmee': awaits,
   },
   {
     type: 'function', name: 'move_furniture',
     description: 'Moves or turns a piece already on the plan ("put the sofa under the window", "turn the bed round"). Never remove and re-add a piece to move it: if the new spot does not fit, it stays where it was.',
-    parameters: params({ piece: text('The piece, as the live plan names it.'), room: ROOM, near: WHERE_PIECE, next_to: text('Another piece to stand it beside.'), quarter_turns: { type: 'integer', minimum: 1, maximum: 3, description: 'To turn it: quarter turns.' } }, ['piece']),
+    parameters: params({ piece: text('The piece, as the live plan names it.'), room: ROOM, near: WHERE_PIECE, next_to: text('Another piece to stand it beside.'), quarter_turns: number('To turn it: quarter turns, 1 to 3 ("round" is 2).') }),
     'x-atmee': awaits,
   },
   {
     type: 'function', name: 'remove_furniture',
     description: 'Takes a piece off the plan ("get rid of the armchair").',
-    parameters: params({ piece: text('The piece, as the live plan names it.') }, ['piece']), 'x-atmee': awaits,
+    parameters: params({ piece: text('The piece, as the live plan names it.') }), 'x-atmee': awaits,
   },
   // ------------------------------------------------------------- schemes
   {
@@ -184,14 +190,14 @@ export const TOOLS: AppTool[] = [
   {
     type: 'function', name: 'use_scheme',
     description: 'Works with a saved scheme: compare (side by side, room by room, read-only), stop_comparing, open (replaces the plan with it; undo brings the plan back) or drop. Open and drop only when the client asks.',
-    parameters: params({ action: { type: 'string', enum: ['compare', 'stop_comparing', 'open', 'drop'] }, scheme: text('The scheme, as the live plan names it.') }, ['action']),
+    parameters: params({ action: text('compare, stop_comparing, open or drop.'), scheme: text('The scheme, as the live plan names it.') }),
     'x-atmee': awaits,
   },
   // ---------------------------------------------------------------- misc
   {
     type: 'function', name: 'switch_units',
     description: 'Shows areas in square metres or square feet.',
-    parameters: params({ unit: { type: 'string', enum: ['m2', 'ft2'] } }, ['unit']), 'x-atmee': awaits,
+    parameters: params({ unit: text('m2 (square metres) or ft2 (square feet).') }), 'x-atmee': awaits,
   },
   {
     type: 'function', name: 'undo_change',
@@ -200,7 +206,7 @@ export const TOOLS: AppTool[] = [
   },
   {
     type: 'function', name: 'draw_sheet',
-    description: 'Draws up the sheet (the plan, the area schedule and the notes) on the client\'s screen, ready to download. When they want something to keep or print.',
+    description: 'Draws up the sheet (the plan, the area schedule and the notes for every floor that has rooms) on the client\'s screen, ready to download. When they want something to keep or print.',
     parameters: params({}), 'x-atmee': awaits,
   },
   {
@@ -406,8 +412,11 @@ export function doneLine(done: Done, snap: PlanSnapshot): { fact: string; say: s
       return { fact: `the ${done.item!.label.toLowerCase()} is turned (it now takes ${done.item!.w_cm} by ${done.item!.h_cm} centimetres)`, say: 'Say one short line about how it sits now.' };
     case 'remove_item':
       return { fact: `the ${done.item!.label.toLowerCase()} is off the plan`, say: 'Say one short line about the floor that frees up.' };
-    case 'add_level':
-      return { fact: `there is an upper floor now and the client is looking at it; ${snap.level.rooms.some((room) => room.kind === 'stairs') ? 'the stairs are in on both floors' : 'the ground floor had no room to spare for stairs'}${snap.stairs_aligned ? ', lined up' : ', but they do not line up yet'}`, say: 'Say one short line; they can lay the upper floor out next (ask how many bedrooms go up there).' };
+    case 'add_level': {
+      const stairs = snap.level.rooms.some((room) => room.kind === 'stairs');
+      const took = done.takenFrom ? `; the ground floor keeps its layout, and the stairs took their floor off the ${done.takenFrom.name.toLowerCase()} (now ${area(done.takenFrom.area_m2)})` : '';
+      return { fact: `there is an upper floor now and the client is looking at it; ${stairs ? 'the stairs are in on both floors' : 'the ground floor had no room to spare for stairs'}${snap.stairs_aligned ? ', lined up' : ', but they do not line up yet'}${took}`, say: 'Say one short line, including where the stairs came from; they can lay the upper floor out next (ask how many bedrooms go up there).' };
+    }
     case 'remove_level':
       return { fact: 'the upper floor is gone; the client is back on the ground floor', say: 'Say one short line.' };
     case 'go_to_level':
@@ -433,8 +442,10 @@ export function doneLine(done: Done, snap: PlanSnapshot): { fact: string; say: s
       return { fact: `the last change (${done.undone}) is taken back`, say: 'Say one short line naming what the plan is back to. It is not a new change.' };
     case 'clear':
       return { fact: `the ${snap.level.name} floor is empty again (undo brings it back)`, say: 'Say one short line inviting them to start from the size of the place.' };
-    case 'draw_sheet':
-      return { fact: "the drawing sheet (plan, area schedule and notes) is up on the client's screen, with a button to download it", say: "Say one short line pointing at it, and mention it's design guidance rather than a building-regulations check." };
+    case 'draw_sheet': {
+      const floors = (snap.sheet?.pages ?? []).map((page) => `the ${page.floor} floor`);
+      return { fact: `the drawing sheet (plan, area schedule and notes${floors.length ? ` for ${spoken(floors)}` : ''}) is up on the client's screen, with a button to download it`, say: "Say one short line pointing at it, and mention it's design guidance rather than a building-regulations check." };
+    }
     case 'select':
       return { fact: `the client is looking at the ${r[0]?.name.toLowerCase() ?? 'selection'}`, say: 'Carry on with it.' };
     default:
@@ -501,18 +512,18 @@ export function resultFor(steps: Step[], fresh: Issue[], snap: PlanSnapshot): st
     const what = asked(refused.intent, snap);
     out = facts.length
       ? `Done: ${facts.map((f) => f.fact).join('; ')}. The rest was refused and has NOT changed: they asked to ${what}, and the plan says: "${refused.result.reason}" Say in one or two short lines which part worked and which did not, and suggest a fix for the refused part; make it only if they agree.`
-      : `Refused; nothing has changed. They asked to ${what}, and the plan says: "${refused.result.reason}" Tell them so in one short line in your own words and suggest a fix; make it only if they agree. Never describe it as done.`;
+      : `Refused: nothing has changed. They asked to ${what}, and the plan says: "${refused.result.reason}" Tell them so in one short line in your own words and suggest a fix; make it only if they agree. Never describe it as done.`;
   } else if (facts.length) {
     out = `Done: ${facts.map((f) => f.fact).join('; ')}. ${facts[facts.length - 1].say}`;
   } else {
-    out = 'Nothing changed.';
+    out = 'Not yet: nothing changed.';
   }
   if (fresh.length) out += ` ${issueCue(fresh[0], fresh.length, undefined, snap.unit)}`;
   return out;
 }
 
 /** A call that could not be pinned down: the architect asks rather than guesses. */
-export const notDone = (question: string) => `Not done yet, nothing changed: ${question} Ask the client that in one short line, then call the tool again with their answer.`;
+export const notDone = (question: string) => `Not yet: nothing changed. ${question} Ask the client that in one short line, then call the tool again with their answer.`;
 
 /** Kinds that change nothing worth a word when the client does them by hand. */
 const QUIET_BY_HAND = new Set(['select', 'move_item', 'move_wall', 'rotate_item', 'remove_item', 'add_item', 'set_unit', 'go_to_level', 'compare_scheme', 'undo', 'rename_room', 'trade_area', 'grow_room', 'split_room', 'merge_rooms', 'swap_rooms', 'mark_structural', 'add_door', 'add_window', 'add_front_door', 'remove_opening', 'add_room', 'remove_room', 'place_item', 'set_envelope', 'drop_scheme', 'remove_level']);
@@ -539,8 +550,8 @@ export function byHand(steps: Step[], fresh: Issue[], snap: PlanSnapshot): { tex
 export const say = {
   /** The opening, once the architect is on her way (after her own greeting). */
   opening: (snap: PlanSnapshot) => snap.level.rooms.length
-    ? `The client is at the drawing board with their plan on screen: ${snap.level.rooms.length} rooms, ${areaIn(snap.schedule.total_m2, snap.unit)}. Welcome them in one short line and ask what they would change first.`
-    : `The client has just sat down at the drawing board; the floor on their screen is empty (${metres(snap.level.w_cm)} by ${metres(snap.level.h_cm)} metres for now). In one short, warm line ask the two things you need to sketch: roughly how big the place is, and how many bedrooms they need. Ask nothing else yet.`,
+    ? `You have just greeted them; do not greet or introduce yourself again. Their plan is on screen: ${snap.level.rooms.length} rooms, ${areaIn(snap.schedule.total_m2, snap.unit)}. In one short line ask what they would change first.`
+    : `You have just greeted them; do not greet or introduce yourself again. The floor on their screen is empty (${metres(snap.level.w_cm)} by ${metres(snap.level.h_cm)} metres for now). To sketch you need roughly how big the place is and how many bedrooms they need: if your greeting already asked, do not ask again, just wait for their answer; otherwise ask it in one short line. Ask nothing else yet.`,
   /** A photo read by the app. */
   photo: (purpose: 'room' | 'piece', added: string[], refused: string[], seen: string) => {
     const what = purpose === 'piece' ? 'a photo of a piece of furniture they own' : 'a photo of a room in their home';

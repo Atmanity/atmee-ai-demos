@@ -17,12 +17,12 @@ Open it at `/apps/poker-table/`.
 |---|---|
 | The table: blinds, betting rounds, min-raise, all-ins, showdowns, the match | `engine/holdem.ts`, `engine/evaluator.ts`, `engine/match.ts`, on the server. The seven golden hands recorded from the engine users played against replay exactly. |
 | Dex's hidden cards | Never leave the server. The page's view (`TableView`) carries the player's own two cards and Dex's only at a real showdown; Dex's state is built from that same view, so he never knows his hand. |
-| Dex's actions | Five tools (`engine/director.ts`): `play_move(words)` (await, 20 s), `deal_hand` (await, 15 s), `new_match` (await, 15 s, only when the player asks), `read_my_cards` (await, 8 s) and `show_hand_rankings` (notify: it opens the chart). The page answers each `atmee.tool` call by asking the server, and returns the words Dex speaks from. |
+| Dex's actions | Five tools (`engine/director.ts`): `play_move(words)` (await, 20 s), `deal_hand` (await, 15 s), `new_match` (await, 15 s, only when the player asks), `read_my_cards` (await, 8 s) and `show_hand_rankings` (await, 8 s: it opens the chart and hands Dex the rankings to speak from). The page answers each `atmee.tool` call by asking the server, and returns the words Dex speaks from. Every result opens with its plain outcome ("Done.", "Refused.", "Not played.") so the platform's filler line cannot pre-judge it. The schemas are lenient (no enums, no tight lengths, extra fields accepted): a call that missed a strict schema would be refused by the platform before the page saw it, so the page reads the move leniently (capitals, quotes, a `move` field, an `amount` on its own) and asks again when nothing usable came. |
 | The player's move, said or typed | Dex calls `play_move` with their words. The server reads them with the original's parser (`engine/judge.ts`: clauses, hedges, negated contractions, number words; no model ever decides what the player did) and plays the move only if the player's **own** words, heard at this point in the hand, contain that very move (`backs`). A move Dex invented ("purple banana forty seven?" as a raise to 47) is refused. |
 | A bet never lands twice | Each line the page hears is tagged with the table's `seq` when it was said (a recognised line about 1.5 s before it arrived; a typed one at once). Words only count at the seq they were said at, so once a move lands the words that asked for it are spent: a second `play_move` for the same sentence, a tap plus the same move said aloud, or a late duplicate on the next street all play nothing ("Their call already landed"). A tool call delivered twice with one id is answered once. There is no safety net for moves. |
 | Dex's own moves | `engine/decide.ts` on the server: a `structured()` call (Gemini) with the original's loose-aggressive prompt and the legal actions as an enum, a 4.5 s budget, then `normalizeDecision`; no key, a timeout or an error plays the safe action (check, else call). The page plays Dex's turn right after the player's move, deal or rematch, so the **same** tool result carries both ("The table played their call of 10… The table played your move: you raised to 60"). |
 | Buttons | Fold, check or call, a sized bet or raise (Min, ½ pot, Pot, All in, a slider), Deal next hand, Rematch: exact intents, applied at once (`POST /tables/:id/act`). Dex cannot see the screen, so he is told with one event that includes his own answer. |
-| The safety net | `useToolNet` (kit) with `mustDo`: when the player clearly asks to deal, for a rematch, or for their cards and Dex does not call the tool within 7 s, the page does it and tells him. A deal or rematch the table no longer needs (a button already did it) is dropped silently. Never a move. |
+| The safety net | `useToolNet` (kit) with `mustDo`: when the player clearly asks to deal, for a rematch, for their cards or what beats what, and Dex does not call the tool within 7 s, the page does it and tells him. A deal, rematch or chart the table no longer needs (a button already did it, the chart is open) is dropped silently. Never a move. |
 | Dex's rules | The session's tool `instructions` (the hard-won "never" rules of the original kept), a standing rules note for teaching (`RULES_NOTE`, the same text as the How to play sheet), and `state`: the live table with the only chip figures he may say. |
 | A turn of Dex's nothing played | If a request fails, or a call comes back mid-hand with the action on Dex, the page plays his turn after 3 s and tells him. |
 | The screens | The front door (`page/Lobby.tsx`); the felt with Dex's live video as his seat at the head of the table, his words in a bubble beside it, the board, the pot and the player's seat (`page/Felt.tsx`); the moves and the table talk beside it (`page/Controls.tsx`, the kit's `ChatPanel`); the rules sheet; a paused table after a call (resume, or start fresh); the match summary. Styled in `page/blindside.css`. |
@@ -47,8 +47,29 @@ Keys: `GEMINI_API_KEY` (Dex's decisions). Without it Dex only checks and calls.
 
 ## What the API could not do
 
-**Expected**: not observed yet with this design. The first port's live run
-(2026-10-23, avatar `2cd3ec08`) is where most of these were first seen.
+**Seen**: observed in the live run of this design (2026-10-23, Dex's own
+avatar `04cb3e11`). **Expected**: not observed yet.
+
+The live run: "I call" → `play_move` in 2.8 s with Dex's two checks and the
+flop in the same reply; "What are my cards?" → `read_my_cards`, both right; a
+raise below the minimum refused with nothing moved; "Purple banana forty
+seven?" moved no chips; a typed "all in" → `play_move`, and the match ended at
+the showdown; "Can we start a new match?" → `new_match`; "What are you
+holding?" named no card; a call-again brought back the same hand.
+
+Seen in that run, and fixed since:
+
+- **"What beats what?" got no chart.** Dex recited the rankings and offered
+  to open the chart. Now `show_hand_rankings` is an await tool whose result
+  carries the rankings, the instructions say to open it rather than offer it,
+  and the safety net opens it after 7 s.
+- **A second greeting.** Dex's own greeting plays at every call (again on a
+  call-back); the opening and the welcome-back now begin "You have just
+  greeted them; do not greet or introduce yourself again."
+- **Fillers pre-judged results** ("That's incorrect. oh…" before a refusal).
+  Results now open with the outcome.
+
+Still open:
 
 1. **Tools are called when the host decides.** *Expected.* Dex may narrate a
    move ("you call, nice") without calling `play_move`; then nothing moves on
@@ -85,7 +106,7 @@ moves take the same path as spoken ones.
 
 ## Tested
 
-- `npx vitest run apps/poker-table`: 181 tests.
+- `npx vitest run apps/poker-table`: 186 tests.
   - The engine, kept from the port: the seven golden hands and parity cases,
     the hand evaluator, all-ins, split pots, the decider, the parser's live
     phrasings and the rules text.
@@ -106,4 +127,4 @@ moves take the same path as spoken ones.
     a check on the flop), an invented move refused, a typed move, the safety
     net dealing (and never playing a move), the chart and the other tools.
 - `npx tsc --noEmit`: clean for this app.
-- Live: not yet run with this design.
+- Live: one run on staging, 2026-10-23 (above).

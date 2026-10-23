@@ -12,6 +12,18 @@ describe('the API limits', () => {
     for (const tool of TOOLS) expect(INSTRUCTIONS).toContain(tool.name);
   });
 
+  test('the schemas are lenient: a call that does not fit never reaches the page, so the page does the checking', () => {
+    const walk = (node: unknown): void => {
+      if (!node || typeof node !== 'object') return;
+      const o = node as Record<string, unknown>;
+      for (const banned of ['enum', 'pattern', 'format', 'minLength', 'const']) expect(o, banned).not.toHaveProperty(banned);
+      expect(o.additionalProperties).not.toBe(false);
+      if (typeof o.maxLength === 'number') expect(o.maxLength).toBeGreaterThanOrEqual(500);
+      Object.values(o).forEach(walk);
+    };
+    for (const tool of TOOLS) walk(tool.parameters);
+  });
+
   test('the tools fit the API: names, descriptions, schemas, all await within 28 s', () => {
     expect(TOOLS.length).toBeLessThanOrEqual(30);
     const names = TOOLS.map((t) => t.name);
@@ -91,6 +103,12 @@ describe('the persona never claims a strength it does not have', () => {
     }
   });
 
+  test('call, don\'t narrate: even a one-word answer is a tool call, and nothing happened unless a result said so', () => {
+    expect(all).toContain('every request that changes the board is a tool call, even a one-word answer to your own question');
+    expect(all).toContain("never say a move was played, a side changed or a game started unless a tool's result said so");
+    expect(all).toContain('when they say yes, call it');
+  });
+
   test('the hard-won rules are kept', () => {
     expect(all).toContain('no takebacks');
     expect(all).toContain('never name or announce a move of yours');
@@ -110,11 +128,33 @@ describe('tool calls become board actions, with their arguments checked', () => 
     ['new_game', {}, { kind: 'new' }],
   ])('%s %j', (name, args, action) => expect(actionFor(name, args)).toEqual(action));
 
-  test('a missing or odd argument does nothing and says what to ask', () => {
-    expect(actionFor('play_move', {})).toMatch(/nothing moved/);
-    expect(actionFor('play_move', { move: 42 })).toMatch(/nothing moved/);
-    expect(actionFor('choose_side', { side: 'purple' })).toMatch(/White or Black/);
-    expect(actionFor('set_strength', { level: 'grandmaster' })).toMatch(/full, casual and beginner/);
+  test('a missing or unusable argument does nothing and gives the host a question to ask', () => {
+    expect(actionFor('play_move', {})).toMatch(/^Nothing moved: .*Ask the player which move/);
+    expect(actionFor('play_move', { move: { san: 'e4' } })).toMatch(/^Nothing moved/);
+    expect(actionFor('choose_side', { side: 'purple' })).toMatch(/^Nothing changed: .*White or Black/);
+    expect(actionFor('set_strength', { level: 'grandmaster' })).toMatch(/^Nothing changed: .*full, casual or beginner/);
+  });
+
+  test.each<[string, Record<string, unknown>, unknown]>([
+    ['choose_side', { side: 'Black' }, { kind: 'side', side: 'black' }],
+    ['choose_side', { side: 'the black pieces' }, { kind: 'side', side: 'black' }],
+    ['choose_side', { side: ' WHITE ' }, { kind: 'side', side: 'white' }],
+    ['choose_side', { side: 'the other side' }, { kind: 'side', side: 'other' }],
+    ['choose_side', { side: 'Swap' }, { kind: 'side', side: 'other' }],
+    ['choose_side', { color: 'black' }, { kind: 'side', side: 'black' }],
+    ['set_strength', { level: 'Beginner' }, { kind: 'difficulty', level: 'beginner' }],
+    ['set_strength', { level: 'a beginner' }, { kind: 'difficulty', level: 'beginner' }],
+    ['set_strength', { level: 'Beginner mode' }, { kind: 'difficulty', level: 'beginner' }],
+    ['set_strength', { level: 'easier' }, { kind: 'difficulty', level: 'casual' }],
+    ['set_strength', { level: 'Casual' }, { kind: 'difficulty', level: 'casual' }],
+    ['set_strength', { level: 'harder' }, { kind: 'difficulty', level: 'full' }],
+    ['set_strength', { level: 'Full strength' }, { kind: 'difficulty', level: 'full' }],
+  ])('capitals and synonyms work: %s %j', (name, args, action) => expect(actionFor(name, args)).toEqual(action));
+
+  test('an extra field the host adds is ignored, not refused', () => {
+    expect(actionFor('play_move', { move: 'e4', reason: 'the player said e four' })).toEqual({ kind: 'move', text: 'e4' });
+    expect(actionFor('choose_side', { side: 'black', confirmed: true })).toEqual({ kind: 'side', side: 'black' });
+    expect(actionFor('resign', { why: 'they said so' })).toEqual({ kind: 'resign' });
   });
 
   test('a wall of words is clipped before it reaches the board', () => {
@@ -186,7 +226,7 @@ describe('the state', () => {
 describe('the reply', () => {
   test('names only the move the board played, with what it does and the opening once', () => {
     const text = say.reply({ userMove: 'Nf3', check: false }, { san: 'Nc6', tags: ['knight'] }, { ...new ChessMatch().snapshot(), history: ['e4', 'e5', 'Nf3', 'Nc6'], opening: 'Open Game' });
-    expect(text).toContain('The player played Nf3');
+    expect(text).toMatch(/^Done: the player played Nf3/);
     expect(text).toContain('You replied Nc6, already on the board');
     expect(text).toContain('The opening is Open Game. Name the opening ONLY if you have not named it already');
     expect(text).toContain('Do not narrate any other move');
@@ -202,5 +242,35 @@ describe('the reply', () => {
 
   test('a move made by hand or a button is told as such: the host cannot see the screen', () => {
     expect(pressed('pressed "Resign"', 'The player resigned.')).toBe('The player pressed "Resign" on screen. The player resigned.');
+  });
+});
+
+describe('results lead with the outcome, so the filler line before them cannot contradict it', () => {
+  const t = () => new Table(new ChessMatch('white', 1));
+
+  test('every result opens with a plain outcome', () => {
+    const outcomes: string[] = [];
+    const a = t();
+    const first = a.act({ kind: 'move', text: 'e4' });
+    outcomes.push(a.reply(first.next!).event!.text);
+    outcomes.push(t().act({ kind: 'move', text: 'Ra5' }).event!.text);
+    outcomes.push(t().act({ kind: 'move', text: 'the horse' }).event!.text);
+    outcomes.push(t().act({ kind: 'difficulty', level: 'casual' }).event!.text);
+    outcomes.push(t().act({ kind: 'difficulty', level: 'full' }).event!.text);
+    outcomes.push(t().act({ kind: 'side', side: 'white' }).event!.text);
+    outcomes.push(t().act({ kind: 'resign' }).event!.text);
+    outcomes.push(t().act({ kind: 'new' }).event!.text);
+    const b = t();
+    const side = b.act({ kind: 'side', side: 'black' });
+    outcomes.push(b.reply(side.next!).event!.text);
+    for (const text of outcomes) expect(text).toMatch(/^(Done|Refused|Not yet|Not played|Nothing changed|Game over):/);
+  });
+
+  test('the opening does not greet a second time', () => {
+    expect(t().start().event!.text).toMatch(/^You have just greeted them; do not greet or introduce yourself again\. /);
+    const black = new Table(new ChessMatch('black', 1));
+    const lead = black.start().next!;
+    expect(black.reply(lead).event!.text).toMatch(/^You have just greeted them; do not greet or introduce yourself again\. /);
+    expect(say.resume(t().snapshot())).toMatch(/^You have just greeted them/);
   });
 });

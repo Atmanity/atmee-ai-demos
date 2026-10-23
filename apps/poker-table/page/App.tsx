@@ -39,6 +39,18 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
   return res.json();
 }
 
+/**
+ * The move in Dex's call, read leniently: the words, or a near synonym of the
+ * field; an amount given on its own is added to a bare raise. The table still
+ * checks it against what the player said.
+ */
+export function moveWords(args: Record<string, unknown> | undefined): string {
+  const a = args ?? {};
+  const words = [a.words, a.move, a.text, a.action, a.said].find((v): v is string => typeof v === 'string' && v.trim() !== '') ?? '';
+  const amount = typeof a.amount === 'number' || (typeof a.amount === 'string' && /^\d+$/.test(a.amount.trim())) ? String(a.amount).trim() : '';
+  return amount && !/\d/.test(words) && /\b(raise|bet)\b/i.test(words) ? `${words.trim()} to ${amount}` : words.trim();
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 async function until(ready: () => boolean, ms: number) {
   const end = Date.now() + ms;
@@ -61,6 +73,8 @@ export function App() {
   const answers = useRef(new Map<string, Promise<string>>());
   const dexPlaying = useRef(0);
   const hostMet = useRef(false);   // a call went live, so the opening has been said
+  const rulesShown = useRef(false);
+  rulesShown.current = rulesOpen;
 
   // The table as the server last answered it. Seqs only grow at one table;
   // a late answer about an older table state is not drawn over a newer one.
@@ -130,12 +144,14 @@ export function App() {
   /** One of Dex's tools, run the way his call runs it (the safety net runs them the same way). */
   const act = async ({ name, arguments: args }: ToolCall): Promise<Done> => {
     if (name === 'show_hand_rankings') {
+      const already = rulesShown.current;
+      rulesShown.current = true;
       setRulesOpen(true);
-      return { text: 'The hand rankings are open on their screen.', changed: false, view: viewRef.current };
+      return { text: speak([said.rankings()]), changed: !already, view: viewRef.current };
     }
     const id = tableId.current;
     if (!id) throw new Error('the cards are still being shuffled; try again in a moment');
-    if (name === 'play_move') return playMove(id, String(args?.words ?? ''));
+    if (name === 'play_move') return playMove(id, moveWords(args));
     const res = await post<Answer>(`/tables/${id}/tool`, { name });
     show(res.view, res.message);
     const more = res.changed ? await dexTurns().catch(() => []) : [];
@@ -161,7 +177,7 @@ export function App() {
     match: (text) => { const name = mustDo(text); return name ? { id: `net-${Date.now()}`, name, arguments: {} } : null; },
     run: async (call) => {
       const done = await actRef.current(call);
-      // Already done another way (a button dealt it, the match is still on): nothing to tell him.
+      // Already done another way (a button dealt it, the chart was open): nothing to tell him.
       if (call.name === 'read_my_cards' ? done.view?.phase !== 'playing' : !done.changed) throw new Error(`${call.name}: nothing to do`);
       return done.text;
     },

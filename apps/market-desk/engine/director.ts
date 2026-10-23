@@ -24,11 +24,11 @@ export const INSTRUCTIONS = `You are the analyst at ${PRODUCT}, a live stock wat
 
 The board changes only when you call a tool, and you wait for each result:
 - add_symbols: they want stocks up ("add Nvidia", "put Apple and Tesla up", "let's watch Netflix"), or ask how a stock that is not on the board is doing ("what's Netflix doing?"). Pass each stock as they named it.
-- focus_symbol: "pull up Apple", "let's look at Tesla", "back to Microsoft".
+- focus_symbol: "pull up Apple", "let's look at Tesla", "back to Microsoft", even when that stock is already on the board.
 - refresh_quote: "check it again", "refresh", "any change?", "what's it at now?".
 - remove_symbols: "drop Tesla", "take it off", "lose the last one".
 - clear_board: only when they ask to clear the whole board or start over.
-Call the tool every time, even when you think you know what will happen. Saying "putting Nvidia up" or "it's gone" without the call changes nothing on their screen and misleads them. Never invent or assume an outcome: a price, a move, whether a ticker exists, whether the board said no. Speak from the result: read what landed, say plainly what did not go up and why, and never claim the board shows what it does not. If a result says a stock is still on its way, say it is coming up, with no price: the desk tells you when it lands.
+Every request that changes the screen is a tool call, even a single word answering your own question (a yes, a ticker). Call the tool every time, even when you think you know what will happen. Never say an action happened (a stock up, off, front and centre, refreshed, the board cleared) unless the tool's result said so: saying it without the call changes nothing on their screen and misleads them. Never invent or assume an outcome: a price, a move, whether a ticker exists, whether the board said no. Speak from the result: read what landed, say plainly what did not go up and why, and never claim the board shows what it does not. If a result says a stock is still on its way, say it is coming up, with no price: the desk tells you when it lands.
 
 The live board is the only source of a price, a move or a range; never quote one from memory. A stock not on the board has no price you know. A row marked stale is the last number the desk got: say so. A row with an age, like (12m old), printed that long ago. Questions about what is on the board (a price, a move, the range, which moved more, which is on watch) need no tool: answer from the live board. What a company makes or is known for needs no tool either. The stock on watch refreshes by itself every minute, so do not offer to keep watching it. When the user presses something on screen, the desk tells you what happened: carry on from that.
 
@@ -36,27 +36,30 @@ The hard rule: you never give investment advice. Never say buy, sell, hold, take
 
 If asked whether you are real: you are an AI analyst.`;
 
-const stocks = (description: string, max = MAX_SYMBOLS) => ({
-  type: 'array', minItems: 1, maxItems: max, description,
-  items: { type: 'string', minLength: 1, maxLength: 60 },
-});
+// Lenient on purpose: the platform checks a call against its schema before
+// the page sees it, and a call that does not fit never arrives (the host is
+// told "invalid arguments" and often says the action happened anyway). So no
+// required fields, no tight lengths, no extra-field ban: the app reads what
+// comes (an array or a string, "stock" or "stocks") and asks when it is unusable.
+const stocks = (description: string) => ({ type: 'array', description, items: { type: 'string', maxLength: 500 } });
+const stock = (description: string) => ({ type: 'string', maxLength: 500, description });
 
 /** The desk's tools. Each is answered by the server, which owns the board and the feed. */
 export const TOOLS: AppTool[] = [
   { type: 'function', name: 'add_symbols', description: 'Puts stocks on the user\'s board and waits for their quotes. Call it whenever the user wants stocks on the board, or asks how a stock that is not on the board is doing, before saying anything about them. The result has the real prices, or why a stock did not go up.',
-    parameters: { type: 'object', properties: { stocks: stocks('Each stock as the user named it: a company ("Nvidia") or a ticker ("TSLA").') }, required: ['stocks'], additionalProperties: false },
+    parameters: { type: 'object', properties: { stocks: stocks('Each stock as the user named it: a company ("Nvidia") or a ticker ("TSLA").') } },
     'x-atmee': { mode: 'await', timeoutSeconds: 20 } },
   { type: 'function', name: 'focus_symbol', description: 'Brings one stock front and centre, the one the desk refreshes every minute, and returns its quote. Puts it on the board first if it is not there. Call it when the user wants to look at a particular stock.',
-    parameters: { type: 'object', properties: { stock: { type: 'string', minLength: 1, maxLength: 60, description: 'The stock as the user named it, or its ticker.' } }, required: ['stock'], additionalProperties: false },
+    parameters: { type: 'object', properties: { stock: stock('The stock as the user named it, or its ticker.') } },
     'x-atmee': { mode: 'await', timeoutSeconds: 20 } },
   { type: 'function', name: 'refresh_quote', description: 'Pulls a fresh quote now and waits for it. Call it when the user asks to check a stock again or wants the latest number. Leave stock out for the one on watch.',
-    parameters: { type: 'object', properties: { stock: { type: 'string', maxLength: 60, description: 'The stock to refresh, as on the board; leave out for the one on watch.' } }, additionalProperties: false },
+    parameters: { type: 'object', properties: { stock: stock('The stock to refresh, as on the board; leave out for the one on watch.') } },
     'x-atmee': { mode: 'await', timeoutSeconds: 16 } },
   { type: 'function', name: 'remove_symbols', description: 'Takes stocks off the board. Only when the user asks to drop or remove them.',
-    parameters: { type: 'object', properties: { stocks: stocks('Each stock to take off, as on the board (ticker or company); "it" for the one on watch.') }, required: ['stocks'], additionalProperties: false },
+    parameters: { type: 'object', properties: { stocks: stocks('Each stock to take off, as on the board (ticker or company); "it" for the one on watch.') } },
     'x-atmee': { mode: 'await', timeoutSeconds: 8 } },
   { type: 'function', name: 'clear_board', description: 'Takes every stock off the board. Only when the user asks to clear the board or start over; never on your own.',
-    parameters: { type: 'object', properties: {}, additionalProperties: false },
+    parameters: { type: 'object', properties: {} },
     'x-atmee': { mode: 'await', timeoutSeconds: 8 } },
 ];
 
@@ -178,7 +181,10 @@ const nowS = () => Date.now() / 1000;
 export const said = {
   added(r: AddReport, board: Board, now = nowS(), also = ''): string {
     const parts: string[] = [];
-    if (r.landed.length) parts.push(`On the board now: ${r.landed.map(({ quote, said: s }) => `${read(quote, now)}${forSaid(quote, s)}`).join('; ')}.`);
+    const missed = r.failed.length + r.unresolved.length > 0;
+    // The plain outcome first: the platform's filler speaks before the result, and must not be what decides it.
+    parts.push(r.landed.length || r.already.length ? (missed ? 'Partly done:' : 'Done:') : r.pending.length && !missed ? 'Not yet:' : 'Not done:');
+    if (r.landed.length) parts.push(`on the board now: ${r.landed.map(({ quote, said: s }) => `${read(quote, now)}${forSaid(quote, s)}`).join('; ')}.`);
     if (also) parts.push(also);
     if (r.already.length) parts.push(`Already on the board: ${r.already.map((q) => read(q, now)).join('; ')}.`);
     if (r.pending.length) parts.push(`Still on the way: ${r.pending.join(', ')}. Say ${r.pending.length === 1 ? 'it is' : 'they are'} coming up, with no price; the desk tells you when ${r.pending.length === 1 ? 'it lands' : 'they land'}.`);
@@ -187,41 +193,41 @@ export const said = {
       if (r.failed.some((f) => /only holds/.test(f.reason))) parts.push('Ask which stock should come off; take one off only when they say which.');
     }
     if (r.unresolved.length) parts.push(`No listing matched ${r.unresolved.map((n) => `"${n}"`).join(', ')}: ask for the ticker or the company's full name, and never guess one.`);
-    if (!parts.length) return 'No stock was named: ask which one they want on the board.';
+    if (parts.length === 1) return 'Not done: no stock was named. Ask which one they want on the board.';
     parts.push(`(${slots(board)}.) Read what landed in one short line, the move and nothing else, and say plainly what did not go up and why. No advice.`);
     return parts.join(' ');
   },
 
   focused(r: FocusReport, board: Board, now = nowS()): string {
-    if (r.kind === 'missing') return `No listing matched "${r.said}": ask for the ticker or the company's full name, and never guess one.`;
+    if (r.kind === 'missing') return `Not done: no listing matched "${r.said}". Ask for the ticker or the company's full name, and never guess one.`;
     if (r.kind === 'added') return said.added(r.report, board, now, r.report.landed.length ? `${r.report.landed[0].quote.symbol} is front and centre now.` : '');
-    return `${read(r.quote, now)} is front and centre now; the desk refreshes it every minute. Read its price and move in one short line, no view on it.`;
+    return `Done: ${read(r.quote, now)} is front and centre now; the desk refreshes it every minute. Read its price and move in one short line, no view on it.`;
   },
 
   refreshed(r: RefreshReport, now = nowS()): string {
     switch (r.kind) {
       case 'fresh': return r.samePrint
-        ? `The fresh pull of ${r.quote.symbol} came back with the same print (${r.quote.price}, ${moveWords(r.quote)}): nothing has traded since. Say so in one short line.`
-        : `Fresh quote: ${read(r.quote, now)}. Read it in one short line. No advice.`;
-      case 'failed': return `The fresh pull of ${r.quote.symbol} failed: "${r.reason}" The card keeps the last number the desk got (${r.quote.price}, ${moveWords(r.quote)}) and is marked stale. Say so in one short line; do not read the old number as current.`;
-      case 'tooSoon': return `${r.quote.symbol} was pulled moments ago, so the board's number is the latest: ${read(r.quote, now)}. Read it in one short line.`;
-      case 'pending': return `The fresh quote on ${r.symbol} is still on its way: say you are pulling it, with no new number; the desk tells you when it lands.`;
-      case 'missing': return `${r.symbol} is not on the board, so there is nothing to refresh. Ask whether they want it put up; add it only if they say so.`;
-      case 'empty': return 'The board is empty, so there is nothing to refresh. Ask which stock they want up first.';
+        ? `Done: the fresh pull of ${r.quote.symbol} came back with the same print (${r.quote.price}, ${moveWords(r.quote)}): nothing has traded since. Say so in one short line.`
+        : `Done: fresh quote: ${read(r.quote, now)}. Read it in one short line. No advice.`;
+      case 'failed': return `Failed: the fresh pull of ${r.quote.symbol} failed: "${r.reason}" The card keeps the last number the desk got (${r.quote.price}, ${moveWords(r.quote)}) and is marked stale. Say so in one short line; do not read the old number as current.`;
+      case 'tooSoon': return `Not refreshed: ${r.quote.symbol} was pulled moments ago, so the board's number is the latest: ${read(r.quote, now)}. Read it in one short line.`;
+      case 'pending': return `Not yet: the fresh quote on ${r.symbol} is still on its way: say you are pulling it, with no new number; the desk tells you when it lands.`;
+      case 'missing': return `Not done: ${r.symbol} is not on the board, so there is nothing to refresh. Ask whether they want it put up; add it only if they say so.`;
+      case 'empty': return 'Not done: the board is empty, so there is nothing to refresh. Ask which stock they want up first.';
     }
   },
 
   removed(r: RemoveReport): string {
     const refused = r.refused.join(' ');
-    if (!r.removed.length) return `Nothing came off the board: ${refused} Say so in one short line; do not claim anything was removed.`;
+    if (!r.removed.length) return `Refused: nothing came off the board. ${refused} Say so in one short line; do not claim anything was removed.`;
     const gone = `${r.removed.join(', ')} ${r.removed.length === 1 ? 'is' : 'are'} off the board (${slots(r.board)}${r.board.focus ? `; on watch now: ${r.board.focus}` : ''}).`;
-    return `${gone}${refused ? ` Not removed: ${refused}` : ''} Acknowledge it in one short line.`;
+    return `${refused ? 'Partly done' : 'Done'}: ${gone}${refused ? ` Not removed: ${refused}` : ''} Acknowledge it in one short line.`;
   },
 
   cleared(r: ClearReport): string {
     return r.cleared
-      ? `The board is clear: all ${MAX_SYMBOLS} slots are open. Say so in one short line and ask what goes up first.`
-      : `${r.reason} Say so in one short line and ask what goes up first.`;
+      ? `Done: the board is clear, all ${MAX_SYMBOLS} slots are open. Say so in one short line and ask what goes up first.`
+      : `Not done: ${r.reason} Say so in one short line and ask what goes up first.`;
   },
 };
 
@@ -230,14 +236,17 @@ export const pressed = (button: string, outcome: string) => `The user pressed "$
 
 // ─── the desk's own lines: what happened without anyone asking just now ──
 
+/** The host's own greeting already introduced them in the product: the opening must not greet again. */
+const GREETED = 'You have just greeted them; do not greet or introduce yourself again.';
+
 export const say = {
-  start: () => `The desk is open and the user's board is empty: ${MAX_SYMBOLS} open slots. Welcome them to ${PRODUCT} in one short line and ask which stock they want on the board first. Do not quote any price, and no advice.`,
+  start: () => `${GREETED} The desk is open and the user's board is empty: ${MAX_SYMBOLS} open slots. Ask in one short line which stock they want on the board first. Do not quote any price, and no advice.`,
 
   /** The opening when the board already has stocks (built while the host was on the way, or before an earlier call ended). */
   startWith: (b: Board, now = nowS()) => {
     const symbols = b.watchlist.map((q) => q.symbol);
     const watch = (b.focus ? find(b, b.focus) : null) ?? b.watchlist[0];
-    return `The desk is open. The user's board already shows ${symbols.join(', ')}. Welcome them in one short line, read ${watch ? read(watch, now) : symbols[0]} off the board, and ask what goes up next. No advice.`;
+    return `${GREETED} The desk is open. The user's board already shows ${symbols.join(', ')}. In one short line, read ${watch ? read(watch, now) : symbols[0]} off the board and ask what goes up next. No advice.`;
   },
 
   /** Quotes the host was told were on their way have landed. */

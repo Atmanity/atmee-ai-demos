@@ -13,7 +13,7 @@ import { apply } from './guide.ts';
 import { normalize, parse, PLANETS } from './judge.ts';
 import { whenUp } from './later.ts';
 import { seenFigure, seenStar, type NightEntry } from './night.ts';
-import { spokenHour } from './sky.ts';
+import { findPlace, PLACE_LABELS, spokenHour } from './sky.ts';
 import type { Intent, SkyView } from './types.ts';
 
 export const TOOL_NAMES = ['point_out', 'show_constellation', 'move_chart', 'clear_chart'] as const;
@@ -41,17 +41,27 @@ export interface RunOptions {
   interpret?: (text: string) => Promise<Intent[] | null>;
 }
 
-const WORDS_LIMIT = 80;
-const wordsOf = (args: Record<string, unknown>, key: string) => (typeof args[key] === 'string' ? (args[key] as string).trim().slice(0, WORDS_LIMIT) : '');
+const WORDS_LIMIT = 120;
+/** The first of these arguments the host filled, as plain words. The schemas
+ *  are lenient (a call that does not fit them never reaches the page), so the
+ *  app normalises: any case, stray whitespace, a near-miss of the field name. */
+const wordsOf = (args: Record<string, unknown>, ...keys: string[]) => {
+  for (const key of keys) {
+    const value = args[key];
+    if (typeof value === 'string' && value.trim()) return value.trim().replace(/\s+/g, ' ').slice(0, WORDS_LIMIT);
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  }
+  return '';
+};
 
 /** Run one of the host's tools on the chart. Throws for a name that is not a tool. */
 export async function runTool(chart: SkyChart, name: string, args: Record<string, unknown>, opts: RunOptions = {}): Promise<ToolRun> {
   const now = opts.now ?? Date.now() / 1000;
   switch (name) {
-    case 'point_out': return look(chart, wordsOf(args, 'star'), 'select', opts, now);
-    case 'show_constellation': return look(chart, wordsOf(args, 'name'), 'show_constellation', opts, now);
-    case 'move_chart': return move(chart, wordsOf(args, 'place'), wordsOf(args, 'time'), opts, now);
-    case 'clear_chart': return clear(chart, wordsOf(args, 'what'), now);
+    case 'point_out': return look(chart, wordsOf(args, 'star', 'name', 'star_name'), 'select', opts, now);
+    case 'show_constellation': return look(chart, wordsOf(args, 'name', 'constellation', 'figure'), 'show_constellation', opts, now);
+    case 'move_chart': return move(chart, wordsOf(args, 'place', 'city', 'location'), wordsOf(args, 'time', 'when', 'date', 'hour'), opts, now);
+    case 'clear_chart': return clear(chart, wordsOf(args, 'what', 'target'), now);
   }
   throw new Error(`there is no tool called ${name}`);
 }
@@ -158,15 +168,25 @@ async function move(chart: SkyChart, place: string, time: string, opts: RunOptio
   } else if (out.accepted.length) {
     parts.push(said.unchanged(out.view));
   }
-  parts.push(...out.refusals.map(said.refused));
+  // A city the chart does not have is answered with the cities it does.
+  const unknown = intents.find((i): i is Extract<Intent, { kind: 'set_place' }> => i.kind === 'set_place' && Boolean(i.label) && !findPlace(i.label));
+  for (const reason of out.refusals) parts.push(unknown && reason.includes(unknown.label!) ? said.unknownPlace(unknown.label!, [...PLACE_LABELS]) : said.refused(reason));
   if (unread) parts.push(unread);
   const notice = out.refusals.length || unread ? { text: [...out.refusals, ...(unread ? [`I couldn't read "${time}" as a time.`] : [])].join(' '), later: null } : null;
   return { view: out.view, result: parts.join(' '), notice, seen: [] };
 }
 
+const CLEAR_WORDS: [RegExp, 'star' | 'constellation' | 'everything'][] = [
+  [/^(?:|all|both|everything|it all|the chart|chart|the lot|all of it|reset|start over)$/, 'everything'],
+  [/^(?:the )?(?:star|selection|selected star|marked star|mark|marker|highlight)s?$/, 'star'],
+  [/^(?:the )?(?:constellation|figure|lines|shape|outline|drawing|constellation lines)s?$/, 'constellation'],
+];
+
 /** clear_chart: safe to repeat, so the safety net may do it too. */
 function clear(chart: SkyChart, what: string, now: number): ToolRun {
-  const which = what === 'star' || what === 'constellation' ? what : 'everything';
+  const t = normalize(what);
+  const which = CLEAR_WORDS.find(([words]) => words.test(t))?.[1];
+  if (!which) return nothing(chart, said.clearWhat(what));
   const intents: Intent[] = which === 'star' ? [{ kind: 'clear_selection' }] : which === 'constellation' ? [{ kind: 'clear_figure' }] : [{ kind: 'clear_selection' }, { kind: 'clear_figure' }];
   const out = apply(chart, intents, { now });
   return { view: out.view, result: said.cleared(which), notice: null, seen: [] };

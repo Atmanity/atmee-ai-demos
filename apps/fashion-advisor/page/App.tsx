@@ -20,8 +20,6 @@ import './notch.css';
 const API = '/api/apps/fashion-advisor';
 /** How long a tool call waits for slow work before Emery hears "still working" (the tools time out at 25 s). */
 const TOOL_WAIT_MS = 20_000;
-/** The kit's safety net acts 7 s after the words and counts calls from 6 s before them. */
-const NET_WINDOW_MS = 13_000;
 
 type Button =
   | { button: 'photo'; mime: string; data: string; example: boolean }
@@ -58,7 +56,6 @@ export function App() {
   const lastArrival = useRef<string | null>(null);   // the fitting Emery last arrived to
   const rev = useRef(-1);
   const viewRef = useRef<View | null>(null);
-  const hostCalls = useRef<number[]>([]);
   const lastState = useRef('');
   const lastRating = useRef('');
 
@@ -116,19 +113,13 @@ export function App() {
       const call = mustDo(text, { tryOns: viewRef.current?.tryOnAvailable ?? false });
       return call ? { id: `net-${Date.now()}`, ...call } : null;
     },
-    run: async (call) => {
-      // She acted on those words her own way (another tool, say suggest_pieces for "how would this do at a party?"): leave it.
-      if (hostCalls.current.some((at) => Date.now() - at < NET_WINDOW_MS)) return null;
-      return onToolCall(call);
-    },
+    // The kit stands down by itself when she called this tool, or any other just as the words came.
+    run: (call) => onToolCall(call),
     avatar: () => avatarRef.current!,
   });
 
   const avatar = useAvatar('fashion-advisor', {
-    onToolCall: net.watch((call: ToolCall) => {
-      hostCalls.current = [...hostCalls.current.filter((at) => Date.now() - at < 60_000), Date.now()];
-      return onToolCall(call);
-    }),
+    onToolCall: net.watch(onToolCall),
     onUserSaid: (text) => net.heard(text),
     onLive: () => {
       const v = viewRef.current;
@@ -190,7 +181,7 @@ export function App() {
       if (ran.text) tell(ran.text);
       if (ran.job) {
         const outcome = follow(id, ran.job, ran.result ?? null);
-        if (ran.result) void outcome.then((text) => { if (text && id === studio.current) tell(text, 45); });
+        if (ran.result) void outcome.then((text) => { if (text && id === studio.current) tell(text, 60); });
       }
     } catch (err) {
       console.warn('[notch] %s failed', body.button, err);

@@ -53,9 +53,12 @@ the first port's live run (2026-10-23, staging) saw it, that is noted.
 3. **The ~10 s check-in interrupts drawing.** *Expected* (seen twice in the
    first port: "Whenever you're ready, try stroke two!"). The instructions ask
    for silence while the learner writes; the check-in cannot be tuned.
-4. **A drawn stroke's verdict can be softened.** *Expected.* It reaches Ren as
-   an event and is said in Ren's words, so "always left to right" could become
-   "usually". The exact sentence is on the sheet.
+4. **A drawn stroke's verdict can be reworded, even flipped.** *Seen* (live,
+   2026-10-23): after an upward stroke the sheet said "Top to bottom." and Ren
+   said "that one went top to bottom!". A stroke drawn backwards is now told as
+   two plain sentences, in order, computed from the lines (`engine/travel.ts`):
+   "You drew it from the bottom up. This stroke goes from the top down." The
+   same sentences are on the sheet and in the state.
 5. **Coaching can lag the drawing.** *Expected.* An event cannot be withdrawn
    once sent. The page holds cues while Ren speaks and keeps the newest, and a
    tool result drops any cue still waiting.
@@ -65,6 +68,13 @@ the first port's live run (2026-10-23, staging) saw it, that is noted.
 7. **The host can misread the state.** *Expected* (seen in the first port:
    "How am I doing?" after a stroke was shown got "We've got the first two
    down… give stroke three a try!").
+8. **A spoken "Next." was not always a call.** *Seen* (2 of 5 across two runs:
+   "I'll get that final stroke ready" with no `next_stroke`; the safety net
+   moved the sheet 7 s later). The platform rejects a call whose arguments do
+   not fit the schema before the page sees it, so every schema is now lenient
+   (no `additionalProperties: false`, enums, patterns or tight lengths; the
+   app normalises), `next_stroke` asks to be called for the one word, and the
+   instructions say a single word that changes the sheet is a tool call.
 
 Fixed by tools, compared with the first port: a spoken "which way does it
 go?" no longer gets a holding line ("Let me show you; watch the board") with
@@ -75,7 +85,7 @@ notes are gone: Ren calls the tools for spoken and typed lines alike.
 
 ## Tested
 
-- `npx vitest run apps/stroke-tutor`: 244 tests in 12 files.
+- `npx vitest run apps/stroke-tutor`: 264 tests in 13 files.
   - The engine, as ported: the grader and its parity with the Python
     original, the tutor's rules and refusals, the lesson.
   - The tools: each one's result and refusal, choosing by meaning, glyph or

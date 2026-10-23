@@ -58,14 +58,38 @@ export function runTool(planner: Planner, critic: Critic, name: string, args: Re
 // --------------------------------------------------------------- the calls
 
 const words = (value: unknown) => (typeof value === 'string' ? value.trim() : typeof value === 'number' ? String(value) : '');
+/** What the host passed, as plain lower-case words ("The North Wall" -> "north wall"). */
+const plain = (value: unknown) => words(value).toLowerCase().replace(/[_\-]+/g, ' ').replace(/[^a-z0-9² ]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/^(?:the|a|an|by the|by a|near the|on the|in the|against the|to the)\s+/, '');
+const NUMBER_WORDS: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, half: 0.5, 'a couple': 2, couple: 2 };
 const amount = (value: unknown) => {
   const n = toNumber(value);
-  return Number.isFinite(n) && n !== 0 ? n : null;
+  if (Number.isFinite(n)) return n !== 0 ? n : null;
+  const said = NUMBER_WORDS[plain(value)];
+  return said ?? null;
 };
-const NEAR: Record<string, string> = {
-  middle: 'center', centre: 'center', center: 'center', window: 'window', door: 'door',
-  north: 'north_wall', south: 'south_wall', east: 'east_wall', west: 'west_wall',
-};
+/** A yes the host may pass as true, "true" or "yes". */
+const yes = (value: unknown) => value === true || /^(?:true|yes|y|1)$/i.test(words(value));
+
+/**
+ * One accepted word for a value the host may phrase its own way: the canonical
+ * word, '' when nothing was passed, or null when it cannot be read (the call
+ * then asks rather than guesses).
+ */
+function pick(value: unknown, table: [RegExp, string][]): string | null {
+  const t = plain(value);
+  if (!t) return '';
+  for (const [pattern, out] of table) if (pattern.test(t)) return out;
+  return null;
+}
+const SIDES: [RegExp, string][] = [[/^n$|north/, 'north'], [/^s$|south/, 'south'], [/^e$|east/, 'east'], [/^w$|west/, 'west']];
+const STYLES: [RegExp, string][] = [[/open/, 'open_plan'], [/dual|both sides|aspect|down the middle/, 'dual_aspect'], [/compact|no (?:wasted )?(?:hall|corridor)/, 'compact'], [/day|night|default|classic|standard|usual/, 'day_night']];
+const FLOORS: [RegExp, string][] = [[/up|upper|first|top|second|above/, 'upper'], [/ground|down|bottom|lower|main/, 'ground']];
+const KINDS: [RegExp, string][] = [[/front|entrance|entry|main door|street/, 'front_door'], [/window|glazing/, 'window'], [/door/, 'door']];
+const ACTIONS: [RegExp, string][] = [[/stop|close|off|end|hide|clear/, 'stop_comparing'], [/compar|side by side|against|versus|vs/, 'compare'], [/drop|delete|remove|discard|bin|forget/, 'drop'], [/open|load|show|restore|back|switch|use/, 'open']];
+const UNITS: [RegExp, string][] = [[/f(?:ee)?t|foot|imperial/, 'ft2'], [/m2|m²|metre|meter|metric|sqm|^m$/, 'm2']];
+const ROOM_SPOTS: [RegExp, string][] = [[/middle|cent(?:re|er)|central/, 'center'], ...SIDES.map(([re, side]): [RegExp, string] => [re, `${side}_wall`])];
+const PIECE_SPOTS: [RegExp, string][] = [[/window/, 'window'], [/door/, 'door'], ...ROOM_SPOTS];
+
 /** Questions for a call whose required part is missing. */
 const MISSING: Record<string, string> = {
   set_floor_size: 'Roughly how big is the place: how many metres by how many?',
@@ -106,7 +130,6 @@ export function intentsFor(name: string, args: Record<string, unknown>, plan: Pl
     const ft2 = amount(args.sq_ft);
     return ft2 ? Math.round((Math.abs(ft2) / FT2_PER_M2) * 10) / 10 : null;
   };
-  const near = (value: unknown) => NEAR[words(value).toLowerCase()] ?? undefined;
   const op = (step: Op): Built => {
     const { intents, ask } = stepsToIntents([step], ctx);
     return intents.length ? { intents } : { ask: ask ?? MISSING[name] ?? 'What exactly should change?' };
@@ -114,9 +137,11 @@ export function intentsFor(name: string, args: Record<string, unknown>, plan: Pl
 
   switch (name) {
     case 'lay_out_floor': {
+      const style = pick(args.style, STYLES);
+      if (style === null) return { ask: 'Which arrangement: day end and night end, open plan, rooms on both sides, or compact?' };
       const built = op({
-        op: 'lay_out_floor', bedrooms: amount(args.bedrooms) ?? 1, style: words(args.style) || undefined,
-        office: Boolean(args.study), dining: Boolean(args.dining), ensuite: Boolean(args.en_suite), wc: Boolean(args.wc), utility: Boolean(args.utility),
+        op: 'lay_out_floor', bedrooms: amount(args.bedrooms) ?? 1, style: style || undefined,
+        office: yes(args.study), dining: yes(args.dining), ensuite: yes(args.en_suite), wc: yes(args.wc), utility: yes(args.utility),
       });
       if (!('intents' in built)) return built;
       const size = sizeOf(args, ctx);
@@ -131,15 +156,17 @@ export function intentsFor(name: string, args: Record<string, unknown>, plan: Pl
     }
     case 'add_upper_floor': return op({ op: 'add_upper_floor' });
     case 'go_to_floor': {
-      const floor = words(args.floor).toLowerCase();
-      if (!['ground', 'upper'].includes(floor)) return { ask: MISSING.go_to_floor };
+      const floor = pick(args.floor, FLOORS);
+      if (!floor) return { ask: MISSING.go_to_floor };
       return op({ op: 'go_to_floor', floor });
     }
 
     case 'add_room': {
       if (!words(args.room)) return { ask: MISSING.add_room };
       const beside = room(args.next_to);
-      return op({ op: 'add_room', room_kind: words(args.room), near: beside ? 'beside' : near(args.near), beside, m2: amount(args.size_m2) ?? undefined, name: words(args.name) || undefined });
+      const spot = pick(args.near, ROOM_SPOTS);
+      if (spot === null && !beside) return { ask: 'Roughly where: the middle, or against which wall?' };
+      return op({ op: 'add_room', room_kind: words(args.room), near: beside ? 'beside' : spot || undefined, beside, m2: amount(args.size_m2) ?? undefined, name: words(args.name) || undefined });
     }
     case 'remove_room': return op({ op: 'remove_room', room: room(args.room) });
     case 'rename_room': return op({ op: 'rename_room', room: room(args.room), name: words(args.new_name) || undefined, room_kind: words(args.new_use) || undefined });
@@ -155,20 +182,20 @@ export function intentsFor(name: string, args: Record<string, unknown>, plan: Pl
     case 'grow_room': {
       const m2 = area();
       if (!m2) return { ask: MISSING.grow_room };
-      return op({ op: 'resize_room', room: room(args.room), m2, wall: words(args.towards).toLowerCase() || undefined });
+      return op({ op: 'resize_room', room: room(args.room), m2, wall: pick(args.towards, SIDES) || undefined });
     }
     case 'move_wall': return op({ op: 'move_wall', room: room(args.room_a), other_room: room(args.room_b), cm: amount(args.centimetres) ?? undefined });
     case 'mark_load_bearing': return op({ op: 'mark_wall_structural', room: room(args.room_a), other_room: room(args.room_b) });
 
     case 'add_door_or_window': {
-      const kind = words(args.kind).toLowerCase();
+      const kind = pick(args.kind, KINDS);
       const where = room(args.room);
       if (!where) return { ask: MISSING.add_door_or_window };
       if (kind === 'door') {
         const other = room(args.other_room);
         return other ? op({ op: 'add_door', room: where, other_room: other }) : { ask: 'Which room should the door open into?' };
       }
-      const wall = words(args.wall).toLowerCase() || onlyOutsideWall(ctx, where);
+      const wall = pick(args.wall, SIDES) || onlyOutsideWall(ctx, where);
       if (kind === 'window') return wall ? op({ op: 'add_window', room: where, wall }) : { ask: 'Which wall should the window go in: north, south, east or west?' };
       if (kind === 'front_door') return op({ op: 'add_front_door', room: where, wall: wall || undefined });
       return { ask: 'A door, a window or the front door?' };
@@ -178,17 +205,25 @@ export function intentsFor(name: string, args: Record<string, unknown>, plan: Pl
     case 'add_furniture': {
       if (!words(args.piece)) return { ask: MISSING.add_furniture };
       const beside = piece(args.next_to);
-      return op({ op: 'add_furniture', piece: words(args.piece), room: room(args.room), near: beside ? 'beside' : near(args.near), beside });
+      const spot = pick(args.near, PIECE_SPOTS);
+      if (spot === null && !beside) return { ask: 'Roughly where in the room: by a window, by the door, or against which wall?' };
+      return op({ op: 'add_furniture', piece: words(args.piece), room: room(args.room), near: beside ? 'beside' : spot || undefined, beside });
     }
     case 'move_furniture': {
       const item = piece(args.piece);
       if (!item) return { ask: MISSING.move_furniture };
       const beside = piece(args.next_to);
-      const moving = Boolean(beside || near(args.near) || words(args.room));
-      const turns = amount(args.quarter_turns);
+      const spot = pick(args.near, PIECE_SPOTS);
+      if (spot === null && !beside) return { ask: 'Where should it go: by a window, by the door, or against which wall?' };
+      // Naming the room it is already in is not a move ("turn the bed in the
+      // main bedroom round" moved it first, live).
+      const target = room(args.room);
+      const current = ctx.items.find((i) => i.id === item)?.room ?? null;
+      const moving = Boolean(beside || spot || (target && target !== current));
+      const turns = quarterTurns(args.quarter_turns);
       const intents: Intent[] = [];
       if (moving) {
-        const built = op({ op: 'move_furniture', item, room: room(args.room), near: beside ? 'beside' : near(args.near), beside });
+        const built = op({ op: 'move_furniture', item, room: target, near: beside ? 'beside' : spot || undefined, beside });
         if (!('intents' in built)) return built;
         intents.push(...built.intents);
       }
@@ -199,7 +234,7 @@ export function intentsFor(name: string, args: Record<string, unknown>, plan: Pl
 
     case 'save_scheme': return op({ op: 'save_scheme', scheme: words(args.name) || undefined });
     case 'use_scheme': {
-      const action = words(args.action).toLowerCase();
+      const action = pick(args.action, ACTIONS) ?? '';
       if (action === 'stop_comparing') {
         return ctx.comparing ? op({ op: 'stop_comparing' }) : { refuse: 'No scheme is being compared right now.', intent: { kind: 'compare_scheme', name: 'off' } };
       }
@@ -211,12 +246,24 @@ export function intentsFor(name: string, args: Record<string, unknown>, plan: Pl
       if (!scheme) return { ask: `Which scheme: ${ctx.schemes.join(' or ')}?` };
       return op({ op: kinds[action], scheme });
     }
-    case 'switch_units': return op({ op: 'switch_units', unit: words(args.unit) === 'ft2' ? 'ft2' : 'm2' });
+    case 'switch_units': {
+      const unit = pick(args.unit, UNITS);
+      return unit ? op({ op: 'switch_units', unit }) : { ask: 'Square metres or square feet?' };
+    }
     case 'undo_change': return op({ op: 'undo' });
     case 'draw_sheet': return op({ op: 'draw_sheet' });
     case 'clear_floor': return op({ op: 'clear_floor' });
     default: return { refuse: "That isn't something the plan can do.", intent: { kind: name } };
   }
+}
+
+/** Quarter turns however they came: 1 to 3, "round" (2), or degrees (90, 180). */
+function quarterTurns(value: unknown): number | null {
+  if (/round|around|half|180/.test(plain(value))) return 2;
+  const n = amount(value);
+  if (!n) return null;
+  const turns = Math.abs(n) >= 45 ? Math.round(n / 90) : Math.round(n);
+  return ((turns % 4) + 4) % 4 || null;
 }
 
 /** The floor size a call gave (width and depth, or an area), in centimetres; null if none. */
@@ -242,15 +289,16 @@ function sideOf(opening: Level['openings'][number], level: Level): string | null
 
 /** The door or window a call names, by its rooms and wall: never by a guess. */
 function openingFor(args: Record<string, unknown>, ctx: JudgeContext, level: Level): Built {
-  const kind = words(args.kind).toLowerCase();
+  const kind = pick(args.kind, KINDS) ?? '';
   const nameOf = (id?: string | null) => (id ? ctx.rooms.find((r) => r.id === id)?.name.toLowerCase() ?? id : 'outside');
-  const pick = (phrase: unknown) => {
+  const lookUp = (phrase: unknown) => {
     const said = words(phrase);
     return said ? { said, id: findRoomIn(ctx, said) } : null;
   };
-  const here = pick(args.room), there = pick(args.other_room);
-  const wall = words(args.wall).toLowerCase();
+  const here = lookUp(args.room), there = lookUp(args.other_room);
+  const wall = pick(args.wall, SIDES) ?? '';
   const intent: Intent = { kind: 'remove_opening' };
+  if (!kind) return { ask: 'A door, a window or the front door?' };
   for (const named of [here, there]) if (named && !named.id) return { refuse: `There's no ${named.said.toLowerCase()} on this floor.`, intent };
 
   let found = level.openings.filter((o) => (kind === 'window' ? o.kind === 'window' : o.kind === 'door' && (kind === 'front_door' ? !o.a || !o.b : Boolean(o.a && o.b))));

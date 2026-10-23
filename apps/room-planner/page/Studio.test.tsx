@@ -448,6 +448,27 @@ describe("the drawing sheet", () => {
   });
 });
 
+describe("a sheet for every floor", () => {
+  it("offers each floor's page, the one on screen first", async () => {
+    const svg = (n: string) => `<svg xmlns="http://www.w3.org/2000/svg"><text>${n}</text></svg>`;
+    render(
+      <Studio
+        state={snapshot({ sheet: { status: "ready", svg: svg("g"), floor: "ground", pages: [{ floor: "ground", svg: svg("g") }, { floor: "upper", svg: svg("u") }] } })}
+        send={fakePlanner().send} sheetSignal={1}
+      />,
+    );
+    expect(screen.getByText("Download (SVG)").getAttribute("download")).toBe("planwright-ground.svg");
+    fireEvent.click(screen.getByText("Upstairs"));
+    await waitFor(() => expect(screen.getByText("Download (SVG)").getAttribute("download")).toBe("planwright-upper.svg"));
+    expect(screen.getByText("Drawing sheet · Upper floor")).toBeTruthy();
+  });
+
+  it("the grid is a square metre in either unit", () => {
+    render(<Studio state={snapshot({ unit: "ft2", schedule: { ...snapshot().schedule, unit: "ft2" } })} send={fakePlanner().send} />);
+    expect(screen.getByText("1 square = 1 m² (10.8 ft²)")).toBeTruthy();
+  });
+});
+
 // --------------------------------------------------------------- photos
 
 describe("photos", () => {

@@ -69,7 +69,7 @@ describe('the live chart', () => {
     render(<App />);
     let result: unknown;
     await act(async () => { result = await call.handlers.onToolCall!({ id: '1', name: 'point_out', arguments: { star: 'Vega' } }); });
-    expect(String(result)).toMatch(/^Vega is marked on the chart, /);
+    expect(String(result)).toMatch(/^Marked: Vega, /);
     expect(screen.getByRole('heading', { name: 'Vega' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Your night · 1' })).toBeTruthy();
     await act(async () => { result = await call.handlers.onToolCall!({ id: '2', name: 'move_chart', arguments: { place: 'Lisbon', time: 'midnight' } }); });
@@ -82,7 +82,7 @@ describe('the live chart', () => {
     render(<App />);
     let result: unknown;
     await act(async () => { result = await call.handlers.onToolCall!({ id: '1', name: 'show_constellation', arguments: { name: 'Orion' } }); });
-    expect(String(result)).toMatch(/^Not drawn: Orion isn't up/);
+    expect(String(result)).toMatch(/^Not up now: Orion isn't up/);
     expect(screen.getByRole('button', { name: /Show the sky at \d+:\d\d am/ })).toBeTruthy();
   });
 
@@ -110,7 +110,7 @@ describe('the live chart', () => {
   it('opens with the place and hour on screen when Mira arrives', () => {
     render(<App />);
     call.handlers.onLive!();
-    expect(call.avatar.event).toHaveBeenCalledWith(expect.stringMatching(/^Lodestar is open on their screen: the sky from Taipei at about 9 in the evening/), 60);
+    expect(call.avatar.event).toHaveBeenCalledWith(expect.stringMatching(/^You have just greeted them; do not greet or introduce yourself again\. Lodestar is open on their screen: the sky from Taipei at about 9 in the evening/), 60);
   });
 
   it('sends a typed line to Mira, who calls the tools for it too', () => {

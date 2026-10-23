@@ -55,8 +55,8 @@ export function run(tutor: BlsTutor, action: Action, args: Record<string, unknow
     if (NEEDS_A_DRILL.has(action) && tutor.phase === 'intro') throw new TutorRefusal(NO_DRILL);
     switch (action) {
       case 'check_answer': {
-        const answer = String(args.answer ?? '').trim().slice(0, 400);
-        if (!answer) return { applied: false, text: 'No answer reached the drill: ask them what they would do.' };
+        const answer = String(args.answer ?? '').trim().slice(0, 500);
+        if (!answer) return { applied: false, text: 'No answer: nothing reached the drill. Ask them what they would do.' };
         const verdict = tutor.answer('', answer);
         if (verdict.ok) return { applied: true, text: said.right(viewOf(tutor), verdict.note) };
         const rescued = rescueIfStuck(tutor);
@@ -82,7 +82,7 @@ export function run(tutor: BlsTutor, action: Action, args: Record<string, unknow
         // The tutor would also take a new scenario as the way off the
         // emergency card; only the learner's plain words or button may do that.
         if (tutor.phase === 'emergency') throw new TutorRefusal(IN_EMERGENCY);
-        const words = String(args.scenario ?? '').trim().slice(0, 120);
+        const words = String(args.scenario ?? '').trim().slice(0, 200);
         const id = resolveScenario(words);
         if (!id) return { applied: false, text: said.unknown(words), reason: UNKNOWN_SCENARIO };
         tutor.startScenario(id);

@@ -153,7 +153,12 @@ describe('the safety net: what it does when the host does not, and only what is 
     ['Lose the last one', { name: 'remove_symbols', arguments: { stocks: ['GM'] } }],
     ['drop it', { name: 'remove_symbols', arguments: { stocks: ['AAPL'] } }],
     // Never an add or a focus: a duplicate could take a slot.
-    ['Add Nvidia', null], ['Put Apple, Nvidia and Tesla up.', null], ['Pull up Microsoft', null], ["What's Netflix doing?", null],
+    // Bringing a stock already on the board to the front (live: "Pull up Tesla." got no call once).
+    ['Pull up Tesla.', { name: 'focus_symbol', arguments: { stock: 'TSLA' } }],
+    ["Let's look at Rocket Lab", { name: 'focus_symbol', arguments: { stock: 'RKLB' } }],
+    ['Back to Apple', { name: 'focus_symbol', arguments: { stock: 'AAPL' } }],
+    // Never an add, nor a focus that would add; a question about a stock is answered from the board.
+    ['Add Nvidia', null], ['Put Apple, Nvidia and Tesla up.', null], ['Pull up Microsoft', null], ["What's Netflix doing?", null], ["What's Tesla doing?", null], ['How is Tesla trading?', null],
     // An advice question is the host's to decline, whatever its verb.
     ['Should I dump Tesla?', null], ['Should I drop Apple and buy Nvidia?', null], ['Is it time to sell?', null],
     // Questions, and removals the net cannot be sure of.

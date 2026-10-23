@@ -12,7 +12,7 @@
 import { find } from './characters.ts';
 import { say } from './director.ts';
 import { characterIn } from './judge.ts';
-import { StrokeTutor, TutorRefusal } from './tutor.ts';
+import { StrokeTutor, TutorRefusal, UNKNOWN_CHARACTER } from './tutor.ts';
 import type { Intent, Outcome, Snapshot } from './types.ts';
 
 /**
@@ -111,9 +111,12 @@ export function runTool(tutor: StrokeTutor, name: string, args: Record<string, u
     case 'next_character': return spoken(perform(tutor, { kind: 'next_character' }, 'words'));
     case 'start_over': return spoken(perform(tutor, { kind: 'start_character' }, 'words'));
     case 'choose_character': {
-      const asked = String(args.character ?? '').trim().slice(0, 60);
-      if (!asked) return { view: tutor.snapshot(), text: 'No character was named: ask them which one they would like.' };
+      // Whatever the host passed: `character`, or any other string it put the name in.
+      const given = typeof args.character === 'string' ? args.character : Object.values(args).find((v) => typeof v === 'string');
+      const asked = String(given ?? '').trim().slice(0, 60);
+      if (!asked) return { view: tutor.snapshot(), text: say.unnamed(tutor.snapshot()) };
       const id = resolveCharacter(asked);
+      if (!find(id)) return { view: tutor.snapshot(), text: say.unknown(asked, tutor.snapshot()), refused: UNKNOWN_CHARACTER };
       // The one already up is not started again: that would wipe their
       // progress on a request that only named it. Starting over is its own tool.
       if (id === tutor.character?.id && tutor.phase !== 'debrief') {

@@ -33,7 +33,7 @@ describe('fire: the host hears where it landed, in the first reply', () => {
     expect(out.text).toBeUndefined();   // still in the air: nothing to say yet
     land();
     await done;
-    expect(out.text).toContain('The shot landed and missed: "You were at 0.76 m going past 40 m, 2.24 m below the top.');
+    expect(out.text).toMatch(/^Landed, missed: "You were at 0\.76 m going past 40 m, 2\.24 m below the top\./);
     expect(out.text).toContain('one specific change');
     expect(told).toEqual([]);           // the tool result is the one account of it
   });
@@ -44,7 +44,7 @@ describe('fire: the host hears where it landed, in the first reply', () => {
     expect(told).toEqual([]);
     land();
     expect(told).toHaveLength(1);
-    expect(told[0]).toMatch(/^The student pressed Fire on screen\. The shot landed and missed: "You were at 0\.76 m/);
+    expect(told[0]).toMatch(/^The student pressed Fire on screen\. Landed, missed: "You were at 0\.76 m/);
   });
 
   test('"fire" said while the button\'s shot flies joins it: one shot, one account', async () => {
@@ -53,7 +53,7 @@ describe('fire: the host hears where it landed, in the first reply', () => {
     const { out, done } = call('fire');
     land();
     await done;
-    expect(out.text).toMatch(/^That shot was already in the air\. The shot landed/);
+    expect(out.text).toMatch(/^Landed, missed: .*already in the air when you called fire/);
     expect(told).toEqual([]);
     expect(range.snapshot().attempts).toBe(1);
   });
@@ -63,10 +63,9 @@ describe('fire: the host hears where it landed, in the first reply', () => {
     const { out, done } = call('fire');
     controls.press({ kind: 'challenge', id: 'moonshot' });
     await done;
-    expect(out.text).toContain('never landed');
-    expect(out.text).toContain('On the Moon');
+    expect(out.text).toMatch(/^Not landed: .*On the Moon/);
     land();
-    expect(out.text).toContain('never landed');
+    expect(out.text).toMatch(/^Not landed/);
   });
 });
 
@@ -76,8 +75,8 @@ describe('aim: the exact numbers, the app\'s steps for words, never clamped', ()
     const { out, done } = call('aim', { angle_deg: 40 });
     await done;
     expect(range.snapshot().aim).toEqual({ angle_deg: 40, speed_ms: 20 });   // only what was said changes
-    expect(out.text).toContain('now points at 40 degrees and 20 metres a second');
-    expect(out.text).toContain('do not ask whether to fire');
+    expect(out.text).toMatch(/^Done: the launcher is at 40 degrees and 20 metres a second, as they asked/);
+    expect(out.text).toContain('without repeating their numbers');
   });
 
   test('"try ninety" is refused with the numbers, shown on screen, and nothing moves', async () => {
@@ -99,8 +98,10 @@ describe('aim: the exact numbers, the app\'s steps for words, never clamped', ()
 
   test('words with no number go through the range\'s own steps', async () => {
     const { range, call } = setup();
-    await call('aim', { request: 'a bit steeper' }).done;
+    const steeper = call('aim', { request: 'a bit steeper' });
+    await steeper.done;
     expect(range.snapshot().aim.angle_deg).toBe(48);
+    expect(steeper.out.text).toMatch(/^Done: moved the angle from 45 to 48 degrees\./);
     await call('aim', { request: 'more power' }).done;
     expect(range.snapshot().aim.speed_ms).toBe(22);
   });
@@ -131,7 +132,7 @@ describe('aim: the exact numbers, the app\'s steps for words, never clamped', ()
     const { call } = setup();
     const { out, done } = call('aim', {});
     await done;
-    expect(out.text).toContain('nothing moved');
+    expect(out.text).toMatch(/^Nothing moved: /);
   });
 
   test('"forty-five at twenty-four and fire": aimed, fired, and the landing in one result', async () => {
@@ -139,7 +140,8 @@ describe('aim: the exact numbers, the app\'s steps for words, never clamped', ()
     const { out, done } = call('aim', { angle_deg: 45, speed_ms: 24, then_fire: true });
     land();
     await done;
-    expect(out.text).toMatch(/^Aimed at 45 degrees and 24 metres a second and fired\. The shot landed and cleared the challenge: "Over with 9\.75 m to spare/);
+    expect(out.text).toMatch(/^Landed, cleared: "Over with 9\.75 m to spare/);
+    expect(out.text).toContain('The shot went at 45 degrees and 24 metres a second');
     expect(range.snapshot().attempts).toBe(1);
   });
 
@@ -149,7 +151,7 @@ describe('aim: the exact numbers, the app\'s steps for words, never clamped', ()
     land();
     await done;
     expect(range.snapshot().last_shot?.angle_deg).toBe(42);
-    expect(out.text).toContain('and fired. The shot landed');
+    expect(out.text).toMatch(/^Landed, missed: /);
   });
 
   test('a refused aim takes no shot', async () => {
@@ -165,8 +167,63 @@ describe('aim: the exact numbers, the app\'s steps for words, never clamped', ()
     void call('fire');
     const { out, done } = call('aim', { angle_deg: 30 });
     await done;
-    expect(out.text).toContain("still in the air");
+    expect(out.text).toMatch(/^Refused: .*still in the air/);
     expect(range.snapshot().aim.angle_deg).toBe(45);
+  });
+});
+
+describe('loose arguments: the schemas are lenient, so the range reads what arrives', () => {
+  test('a challenge in any case, by name, by nickname, or "next" in other words; extra fields ignored', async () => {
+    const { range, call } = setup();
+    for (const [value, id] of [
+      ['Moonshot', 'moonshot'], ['On the Moon', 'moonshot'], ['the windy one', 'headwind'], ['  ROOF ', 'ceiling'],
+      ['Land in the Zone', 'zone30'], ['max range', 'maxrange'], ['the wall', 'wall40'],
+    ] as const) {
+      const r = call('choose_challenge', { challenge: value, why: 'they asked' });
+      await r.done;
+      expect(range.snapshot().challenge.id, value).toBe(id);
+      expect(r.out.text, value).toMatch(/^(Done|Already up):/);
+    }
+    await call('choose_challenge', { challenge: 'Next one' }).done;
+    expect(range.snapshot().challenge.id).toBe('zone30');
+    await call('choose_challenge', { challenge: 'a different challenge' }).done;
+    expect(range.snapshot().challenge.id).toBe('maxrange');
+  });
+
+  test('an unusable challenge, or none, is a question for the host to ask, never silence', async () => {
+    const { range, call } = setup();
+    for (const args of [{ challenge: 'the dragon' }, { challenge: '' }, {}, { challenge: 'the' }]) {
+      const r = call('choose_challenge', args);
+      await r.done;
+      expect(r.out.text, JSON.stringify(args)).toMatch(/^Not done: .*Ask which one they want\.$/);
+    }
+    expect(range.snapshot().challenge.id).toBe('wall40');
+  });
+
+  test('numbers as strings, with units, or in words; then_fire as "true"; extra fields ignored', async () => {
+    const { range, land, call } = setup();
+    await call('aim', { angle_deg: '40', note: 'extra' }).done;
+    expect(range.snapshot().aim).toEqual({ angle_deg: 40, speed_ms: 20 });
+    await call('aim', { angle_deg: '35°', speed_ms: '22 m/s' }).done;
+    expect(range.snapshot().aim).toEqual({ angle_deg: 35, speed_ms: 22 });
+    await call('aim', { angle_deg: 'forty-five' }).done;
+    expect(range.snapshot().aim.angle_deg).toBe(45);
+    await call('aim', { speed_ms: 'twenty four' }).done;
+    expect(range.snapshot().aim.speed_ms).toBe(24);
+    const fired = call('aim', { angle_deg: 45, then_fire: 'true' });
+    land();
+    await fired.done;
+    expect(fired.out.text).toMatch(/^Landed, cleared: /);
+  });
+
+  test('extra fields on the tools with no arguments are ignored too', async () => {
+    const { range, land, call } = setup();
+    const r = call('fire', { reason: 'they said fire' });
+    land();
+    await r.done;
+    expect(range.snapshot().attempts).toBe(1);
+    await call('start_over', { confirm: true }).done;
+    expect(range.snapshot().attempts).toBe(0);
   });
 });
 
@@ -176,12 +233,12 @@ describe('choose_challenge and start_over', () => {
     void call('fire'); land(); await vi.runAllTimersAsync();
     const same = call('choose_challenge', { challenge: 'wall40' });
     await same.done;
-    expect(same.out.text).toContain('already on the range');
+    expect(same.out.text).toMatch(/^Already up: Clear the wall is on the range/);
     expect(range.snapshot().attempts).toBe(1);   // its scoreboard kept
 
     const moon = call('choose_challenge', { challenge: 'moonshot' });
     await moon.done;
-    expect(moon.out.text).toContain('On the Moon is up');
+    expect(moon.out.text).toMatch(/^Done: On the Moon is up/);
     expect(moon.out.text).toContain('gravity of 1.62');
     expect(range.snapshot().challenge.id).toBe('moonshot');
   });
@@ -192,7 +249,7 @@ describe('choose_challenge and start_over', () => {
     expect(range.snapshot().challenge.id).toBe('wall40');
     const dragon = call('choose_challenge', { challenge: 'dragon' });
     await dragon.done;
-    expect(dragon.out.text).toContain('There is no "dragon" challenge');
+    expect(dragon.out.text).toMatch(/^Not done: there is no "dragon" challenge/);
     for (const c of CHALLENGES) expect(dragon.out.text).toContain(c.name);
   });
 
@@ -201,7 +258,7 @@ describe('choose_challenge and start_over', () => {
     await call('choose_challenge', { challenge: 'zone30' }, 'net').done;
     const late = call('choose_challenge', { challenge: 'next' });
     await late.done;
-    expect(late.out.text).toContain('Land in the zone is already on the range');
+    expect(late.out.text).toContain('Already up: Land in the zone is on the range');
     expect(range.snapshot().challenge.id).toBe('zone30');
     vi.advanceTimersByTime(NET_GRACE_MS);
     await call('choose_challenge', { challenge: 'next' }).done;
@@ -214,7 +271,7 @@ describe('choose_challenge and start_over', () => {
     void call('fire'); land(); await vi.runAllTimersAsync();
     const reset = call('start_over');
     await reset.done;
-    expect(reset.out.text).toContain('Clear the wall is clear');
+    expect(reset.out.text).toMatch(/^Done: Clear the wall is clear/);
     expect(reset.out.text).toContain('45 degrees and 20 metres a second');
     expect(range.snapshot().attempts).toBe(0);
     expect(range.snapshot().history).toEqual([]);
@@ -245,7 +302,7 @@ describe('the safety net does not take a second shot', () => {
     const net = call('fire', {}, 'net');
     land();
     await net.done;
-    expect(net.out.text).toContain('The shot landed');
+    expect(net.out.text).toMatch(/^Landed, missed/);
     expect(range.snapshot().attempts).toBe(1);
   });
 });
@@ -262,15 +319,15 @@ describe('the student\'s hands', () => {
     const { controls, told } = setup();
     expect(controls.press({ kind: 'challenge', id: 'wall40' })).toBeNull();
     controls.press({ kind: 'challenge', id: 'headwind' });
-    expect(told).toEqual([expect.stringMatching(/^The student picked "Into the headwind" on screen\. Into the headwind is up/)]);
+    expect(told).toEqual([expect.stringMatching(/^The student picked "Into the headwind" on screen\. Done: Into the headwind is up/)]);
   });
 
   test('Next challenge and Start over are told too', () => {
     const { controls, told } = setup();
     controls.press({ kind: 'next' });
     controls.press({ kind: 'reset' });
-    expect(told[0]).toMatch(/^The student pressed "Next challenge" on screen\. Land in the zone is up/);
-    expect(told[1]).toMatch(/^The student pressed "Start over" on screen\. Land in the zone is clear/);
+    expect(told[0]).toMatch(/^The student pressed "Next challenge" on screen\. Done: Land in the zone is up/);
+    expect(told[1]).toMatch(/^The student pressed "Start over" on screen\. Done: Land in the zone is clear/);
   });
 
   test('Fire while a shot is up does nothing', () => {

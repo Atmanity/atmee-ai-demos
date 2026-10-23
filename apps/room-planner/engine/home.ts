@@ -1159,6 +1159,19 @@ export class Home {
         // so by name. Better than refusing the whole upper floor over it.
         return level;
       }
+      // A flight with no door is a room nobody can reach: the ground floor's
+      // checks said "the stairs has no door" right after a clean upstairs.
+      // Hang one onto circulation first, then onto the room they came out of.
+      const next = ground.sharedWalls().filter((w) => w.a === stairs.id || w.b === stairs.id).map((w) => ground.rooms.get(w.a === stairs.id ? w.b : w.a)!);
+      const rank = (room: Room) => (room.spec.circulation ? 0 : room.name === stairs.taken_from ? 1 : 2);
+      for (const room of next.sort((p, q) => rank(p) - rank(q))) {
+        try {
+          ground.addDoor(stairs, room);
+          break;
+        } catch (err) {
+          if (!(err instanceof PlanError)) throw err;
+        }
+      }
       box = bbox(ground.cellsOf(stairs.id));
     }
     try {

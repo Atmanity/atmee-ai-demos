@@ -20,7 +20,7 @@ describe('point_out', () => {
     const done = await run(sky, 'point_out', { star: 'Vega' });
     expect(sky.selected).toBe('vega');
     expect(done.view.snapshot.selected).toBe('vega');
-    expect(done.result).toMatch(/^Vega is marked on the chart, high up in the north-east\./);
+    expect(done.result).toMatch(/^Marked: Vega, high up in the north-east\./);
     expect(done.result).toContain(FACTS.vega[0]);
     expect(done.result).toContain('changing no number');
     expect(done.notice).toBeNull();
@@ -29,7 +29,7 @@ describe('point_out', () => {
 
   test('takes the names people use: "that bright one", "the north star", a known mishearing', async () => {
     const sky = chart();
-    expect((await run(sky, 'point_out', { star: 'that bright one' })).result).toMatch(/^The brightest star up now is Arcturus; it is marked/);
+    expect((await run(sky, 'point_out', { star: 'that bright one' })).result).toMatch(/^Marked: Arcturus, the brightest star up now, /);
     await run(sky, 'point_out', { star: 'the north star' });
     expect(sky.selected).toBe('polaris');
     const beforeDawn = chart('Taipei', EPOCH + 9 * 3600);
@@ -41,7 +41,7 @@ describe('point_out', () => {
     const sky = chart();
     const done = await run(sky, 'point_out', { star: 'Betelgeuse' });
     expect(sky.selected).toBeNull();
-    expect(done.result).toMatch(/^Not marked: Betelgeuse is below the horizon from Taipei right now — it rises about/);
+    expect(done.result).toMatch(/^Not up now: Betelgeuse is below the horizon from Taipei right now — it rises about/);
     expect(done.result).toContain(FACTS.betelgeuse[0]);
     expect(done.result).toContain('move the clock only if they ask');
     expect(done.notice?.text).toContain('below the horizon');
@@ -92,7 +92,7 @@ describe('point_out', () => {
     const sky = chart();
     const done = await run(sky, 'point_out', { star: 'Scorpius' });
     expect(sky.figureCon).toBe('Sco');
-    expect(done.result).toContain('Scorpius is drawn on the chart now');
+    expect(done.result).toMatch(/^Drawn: Scorpius is on the chart now\./);
   });
 
   test('no name: nothing changes and the host asks which', async () => {
@@ -121,7 +121,7 @@ describe('show_constellation', () => {
     const sky = chart();
     const done = await run(sky, 'show_constellation', { name: 'Orion' });
     expect(sky.figureCon).toBeNull();
-    expect(done.result).toMatch(/^Not drawn: Orion isn't up at this hour from Taipei — it rises about half past 2 in the morning\./);
+    expect(done.result).toMatch(/^Not up now: Orion isn't up at this hour from Taipei — it rises about half past 2 in the morning\. Nothing is drawn\./);
     expect(done.result).toMatch(/it is well up by about .* in the morning, so offer to show the sky then, and move the clock only if they ask/);
     const later = done.notice!.later!;
     const hour = localClock(later, 8).hour;
@@ -145,7 +145,7 @@ describe('move_chart', () => {
     expect(sky.placeLabel).toBe('Lisbon');
     expect(localClock(sky.epoch, sky.tz).hour).toBe(20);
     expect(nightOf(sky.epoch, sky.tz).date).toBe('2026-08-05');
-    expect(done.result).toMatch(/^The chart now shows the sky from Lisbon at about 8 in the evening \(8:00 pm, Wed 5 Aug\), with \d+ stars up; the brightest are /);
+    expect(done.result).toMatch(/^Moved: The chart now shows the sky from Lisbon at about 8 in the evening \(8:00 pm, Wed 5 Aug\), with \d+ stars up; the brightest are /);
     expect(done.result).toContain('naming only stars given here');
     expect(done.result).not.toContain('daytime');
   });
@@ -155,7 +155,7 @@ describe('move_chart', () => {
     const before = new Set(sky.snapshot().visible.map((v) => v.name));
     const done = await run(sky, 'move_chart', { time: 'midnight' });
     expect(localClock(sky.epoch, sky.tz).hour).toBe(0);
-    expect(done.result).toMatch(/^The chart now shows about midnight over Taipei/);
+    expect(done.result).toMatch(/^Moved: The chart now shows about midnight over Taipei/);
     const risen = sky.snapshot().visible.map((v) => v.name).filter((n) => !before.has(n));
     expect(done.result).toContain(`Newly up: ${risen[0]}`);
   });
@@ -190,7 +190,7 @@ describe('move_chart', () => {
     sky.setTime({ shiftHours: 3 });
     await run(sky, 'move_chart', { time: 'now' });
     expect(localClock(sky.epoch, sky.tz).hour).toBe(21);
-    expect((await run(sky, 'move_chart', { time: 'back to tonight' })).result).toContain('The chart already shows that');
+    expect((await run(sky, 'move_chart', { time: 'back to tonight' })).result).toMatch(/^Already there: /);
   });
 
   test('coordinates, however they arrive', async () => {
@@ -210,8 +210,10 @@ describe('move_chart', () => {
     const done = await run(sky, 'move_chart', { place: 'Kyoto' });
     expect(sky.placeLabel).toBe('Taipei');
     expect(sky.epoch).toBe(EPOCH);
-    expect(done.result).toContain("The chart refused: I don't know Kyoto");
-    expect(done.result).toContain('do not claim it happened');
+    // The chart's own offer, never "not in my system".
+    expect(done.result).toMatch(/^Not moved: the chart has no city called Kyoto\. It knows 41 cities \(Taipei, Tokyo, /);
+    expect(done.result).toContain('and any latitude and longitude');
+    expect(done.result).toContain('move only if they ask');
     expect(done.notice?.text).toContain('Kyoto');
   });
 
@@ -219,15 +221,15 @@ describe('move_chart', () => {
     const sky = chart();
     const done = await run(sky, 'move_chart', { place: 'Rivendell', time: 'two hours later' });
     expect(sky.epoch).toBe(EPOCH + 7200);
-    expect(done.result).toContain('Rivendell');
-    expect(done.result).toContain('The chart now shows');
+    expect(done.result).toMatch(/^Moved: The chart now shows/);
+    expect(done.result).toContain('no city called Rivendell');
   });
 
   test('a time it cannot read moves nothing, and the host asks for one it can', async () => {
     const sky = chart();
     const done = await run(sky, 'move_chart', { time: 'whenever' });
     expect(sky.epoch).toBe(EPOCH);
-    expect(done.result).toContain('"whenever" is not a time the chart can read');
+    expect(done.result).toMatch(/^Not moved: "whenever" is not a time the chart can read/);
   });
 
   test('nothing to move: the host asks where or when', async () => {
@@ -241,7 +243,7 @@ describe('move_chart', () => {
 
   test('a move into daylight says so, and offers tonight only if they ask', async () => {
     const done = await run(chart(), 'move_chart', { time: 'noon' });
-    expect(done.result).toContain('It is daytime there');
+    expect(done.result).toContain('Daytime there: it is about noon');
     expect(done.result).toContain('move the clock only if they ask');
   });
 });
@@ -260,6 +262,50 @@ describe('clear_chart', () => {
     expect((await run(sky, 'clear_chart', {})).result).toContain('no star is marked and no constellation is drawn');
     expect([sky.selected, sky.figureCon]).toEqual([null, null]);
   });
+});
+
+describe('lenient arguments: any case, synonyms, stray fields, near-miss names', () => {
+  test('capitalised and padded words work', async () => {
+    const sky = chart();
+    await run(sky, 'point_out', { star: '  VEGA ' });
+    expect(sky.selected).toBe('vega');
+    await run(sky, 'move_chart', { place: 'LISBON', time: 'Midnight' });
+    expect([sky.placeLabel, localClock(sky.epoch, sky.tz).hour]).toEqual(['Lisbon', 0]);
+  });
+
+  test('an extra unknown field is accepted, and a near-miss of the field name is read', async () => {
+    const sky = chart();
+    expect((await run(sky, 'show_constellation', { name: 'Scorpius', confidence: 0.9, extra: { a: 1 } })).result).toMatch(/^Drawn: /);
+    await run(sky, 'point_out', { name: 'Antares' });
+    expect(sky.selected).toBe('antares');
+    await run(sky, 'move_chart', { city: 'Sydney', when: '3 am' });
+    expect([sky.placeLabel, localClock(sky.epoch, sky.tz).hour]).toEqual(['Sydney', 3]);
+  });
+
+  test('clear_chart takes the words people use, and asks about ones it cannot use', async () => {
+    const sky = chart();
+    for (const [what, left] of [['Everything', [null, null]], ['both', [null, null]], ['the lines', ['vega', null]], ['The Star', [null, 'Sco']], ['marker', [null, 'Sco']]] as const) {
+      sky.select('vega');
+      sky.showConstellation('Scorpius');
+      expect((await run(sky, 'clear_chart', { what })).result, what).toMatch(/^Cleared: /);
+      expect([sky.selected, sky.figureCon], what).toEqual(left);
+    }
+    sky.select('vega');
+    const done = await run(sky, 'clear_chart', { what: 'banana' });
+    expect(done.result).toBe('Nothing cleared: "banana" is not something on the chart. Ask them whether to clear the marked star, the drawn constellation, or both.');
+    expect(sky.selected).toBe('vega');
+  });
+});
+
+test('every result begins with its plain outcome, so the reply\'s first real words are the chart\'s', async () => {
+  const outcomes = /^(?:Marked|Not up now|Not in the catalogue|Not on the chart|Drawn|No figure|Moved|Already there|Refused|Not moved|Nothing changed|Nothing cleared|Cleared): /;
+  const calls: [string, Record<string, unknown>][] = [
+    ['point_out', { star: 'Vega' }], ['point_out', { star: 'Betelgeuse' }], ['point_out', { star: 'Zorblax' }], ['point_out', { star: 'Jupiter' }], ['point_out', {}],
+    ['show_constellation', { name: 'Scorpius' }], ['show_constellation', { name: 'Orion' }], ['show_constellation', { name: 'Virgo' }],
+    ['move_chart', { place: 'Lisbon' }], ['move_chart', { place: 'Kyoto' }], ['move_chart', { time: 'whenever' }], ['move_chart', {}], ['move_chart', { time: 'in two years' }],
+    ['clear_chart', {}], ['clear_chart', { what: 'banana' }],
+  ];
+  for (const [name, args] of calls) expect((await run(chart(), name, args)).result, `${name} ${JSON.stringify(args)}`).toMatch(outcomes);
 });
 
 test('only the four tools run', async () => {

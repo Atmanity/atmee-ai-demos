@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { Coach } from './coach.ts';
 import { clearanceLine, parseConstraints } from './constraints.ts';
-import { boardState, INSTRUCTIONS, INSTRUCTIONS_MAX, PLAN_WAIT_MS, say, spokenGoal, STATE_MAX, TOOLS, videoLine } from './director.ts';
+import { boardState, HOLD_LINE, INSTRUCTIONS, INSTRUCTIONS_MAX, PLAN_WAIT_MS, say, spokenGoal, STATE_MAX, TOOLS, videoLine } from './director.ts';
 import type { FitnessPlan, View } from './types.ts';
 
 const toPlan = () => {
@@ -38,6 +38,36 @@ describe('the limits of the API', () => {
       expect(tool['x-atmee']!.timeoutSeconds!).toBeLessThanOrEqual(28);
     }
     expect(JSON.stringify(TOOLS).length).toBeLessThanOrEqual(24576);
+  });
+
+  it('accepts any arguments that could reach the page: no enums, patterns or tight lengths, extra fields allowed', () => {
+    const walk = (schema: Record<string, unknown>) => {
+      expect(schema).not.toHaveProperty('enum');
+      expect(schema).not.toHaveProperty('pattern');
+      expect(schema).not.toHaveProperty('format');
+      expect(schema).not.toHaveProperty('minLength');
+      expect(schema.additionalProperties).not.toBe(false);
+      if (typeof schema.maxLength === 'number') expect(schema.maxLength).toBeGreaterThanOrEqual(500);
+      for (const child of Object.values((schema.properties ?? {}) as Record<string, Record<string, unknown>>)) walk(child);
+    };
+    for (const tool of TOOLS) {
+      walk(tool.parameters);
+      expect(((tool.parameters.required ?? []) as string[]).length, tool.name).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('tells the host to call, not narrate, even for one word answering its own question', () => {
+    expect(INSTRUCTIONS).toContain('even a single word answering your own question');
+    expect(INSTRUCTIONS).toContain('Never say an action happened');
+    expect(INSTRUCTIONS).toContain('"Beginner, please"');
+  });
+
+  it('opens without a second greeting', () => {
+    const view = new Coach({ seed: 'abc' }).view();
+    for (const text of [say.start(view), say.resume(view)]) {
+      expect(text).toMatch(/^You have just greeted them; do not greet or introduce yourself again\./);
+      expect(text).not.toMatch(/introduce yourself as/i);
+    }
   });
 
   it('waits for a plan for less time than the tools that build one wait for the answer', () => {
@@ -167,9 +197,11 @@ describe('under a hold', () => {
     expect(text).not.toMatch(/READY|being made|Step \d of 4|Now coaching/);
   });
 
-  it('gives the host the exact sentence, and the screen the same words', () => {
+  it('gives the host the exact sentence first, and the screen the same words', () => {
     const text = say.clearance(['pregnancy']);
-    expect(text).toContain(clearanceLine(['pregnancy']));
+    expect(text.startsWith(`"${clearanceLine(['pregnancy'])}"`)).toBe(true);
     expect(text).toContain('Do not suggest any exercise');
+    // A refusal under the pause also opens with what to say, not with room for a filler's "Nah, I don't agree".
+    expect(say.onHold('start a move').startsWith(`"${HOLD_LINE}"`)).toBe(true);
   });
 });

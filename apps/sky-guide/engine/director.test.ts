@@ -46,9 +46,24 @@ describe('the tools fit the API', () => {
     expect(JSON.stringify(TOOLS).length).toBeLessThanOrEqual(24576);
   });
 
-  test('everything the host speaks about waits for the chart; only clearing does not', () => {
+  test('every tool waits for the chart, so the host speaks from its outcome', () => {
     const mode = Object.fromEntries(TOOLS.map((t) => [t.name, t['x-atmee']?.mode]));
-    expect(mode).toEqual({ point_out: 'await', show_constellation: 'await', move_chart: 'await', clear_chart: 'notify' });
+    expect(mode).toEqual({ point_out: 'await', show_constellation: 'await', move_chart: 'await', clear_chart: 'await' });
+  });
+
+  test('the schemas are lenient: a call that does not fit never reaches the page', () => {
+    // Causeur answers "invalid arguments" to the model for a call that breaks
+    // the schema, and the host then often says the action happened anyway.
+    const walk = (node: unknown): void => {
+      if (!node || typeof node !== 'object') return;
+      const o = node as Record<string, unknown>;
+      for (const banned of ['enum', 'pattern', 'format', 'minLength', 'additionalProperties']) expect(o, banned).not.toHaveProperty(banned);
+      if (typeof o.maxLength === 'number') expect(o.maxLength).toBeGreaterThanOrEqual(500);
+      Object.values(o).forEach(walk);
+    };
+    for (const tool of TOOLS) walk(tool.parameters);
+    const required = Object.fromEntries(TOOLS.map((t) => [t.name, (t.parameters as { required?: string[] }).required ?? []]));
+    expect(required).toEqual({ point_out: ['star'], show_constellation: ['name'], move_chart: [], clear_chart: [] });
   });
 
   test('the instructions fit, name every tool, and keep the hard rules', () => {
@@ -60,12 +75,15 @@ describe('the tools fit the API', () => {
     expect(INSTRUCTIONS).toMatch(/never degrees/);
     expect(INSTRUCTIONS).toContain('never claim the change happened');
     expect(INSTRUCTIONS).toContain('The chart changes only when you call a tool');
+    expect(INSTRUCTIONS).toContain('Every request that changes the chart is a tool call, even a single word answering your own question');
+    expect(INSTRUCTIONS).toContain("never say a change happened unless the tool's result says so");
+    expect(INSTRUCTIONS).toContain('never of a system, an app or a tool');
     expect(INSTRUCTIONS).toContain('call the tool only if they say yes');
     expect(INSTRUCTIONS).toMatch(/clear_chart, and only then/);
   });
 
   test('the guide is given a job, never a name (the host keeps its own persona)', () => {
-    expect(INSTRUCTIONS).not.toMatch(/\bIris\b/);
+    expect(INSTRUCTIONS).not.toMatch(/\bMira\b/);
   });
 });
 
@@ -156,6 +174,8 @@ describe('the results', () => {
   test('the opening names the place, the hour in words and the brightest stars actually up', () => {
     const sky = chart();
     const line = said.opening(sky.view());
+    expect(line).toMatch(/^You have just greeted them; do not greet or introduce yourself again\. /);
+    expect(line).not.toMatch(/[Ww]elcome/);
     expect(line).toContain('Taipei');
     expect(line).toContain('about 8 in the evening');
     for (const s of sky.snapshot().visible.slice(0, 3)) expect(line).toContain(s.name);
@@ -167,7 +187,7 @@ describe('the results', () => {
     const text = said.marked(sky.view(), false);
     expect(text).toContain(FACTS.vega[0]);
     expect(text).toContain('changing no number');
-    expect(text).toMatch(/Vega is marked on the chart, (?:high up|almost straight overhead|about halfway up|low down) in the/);
+    expect(text).toMatch(/^Marked: Vega, (?:high up|almost straight overhead|about halfway up|low down) in the/);
     expect(text).not.toContain('degrees');
   });
 
@@ -198,6 +218,6 @@ describe('the results', () => {
   });
 
   test('a refusal is to be said, and never confirmed', () => {
-    expect(said.refused('Kyoto is not a place I know')).toBe('The chart refused: Kyoto is not a place I know. Say that in one short line, in your own voice, and do not claim it happened.');
+    expect(said.refused('Kyoto is not a place I know')).toBe('Refused: Kyoto is not a place I know. Say that in one short line, in your own voice, and do not claim it happened.');
   });
 });

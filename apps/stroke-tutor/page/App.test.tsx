@@ -127,7 +127,7 @@ describe('a lesson', () => {
     fake.phase = 'live';
     view.rerender(<App />);
     await settle();
-    expect(fake.events.map((e) => e.text)[0]).toContain('A lesson is starting');
+    expect(fake.events.map((e) => e.text)[0]).toMatch(/^You have just greeted them; do not greet or introduce yourself again\./);
     expect(lastState()).toContain('No character is on the sheet yet');
   });
 
@@ -149,11 +149,11 @@ describe('a lesson', () => {
     await settle();
     expect(requests.some((r) => r.path.endsWith('/stroke'))).toBe(true);
     expect(screen.getByText('Wrong order')).toBeTruthy();
-    expect(fake.events.map((e) => e.text).join(' ')).toContain('Wrong stroke ORDER');
+    expect(fake.events.map((e) => e.text).join(' ')).toContain('Not right: wrong stroke ORDER');
     await act(async () => { draw([[150, 450], [850, 450]], { samples: 40 }); });     // the horizontal
     await settle();
     expect(screen.getByText('Correct')).toBeTruthy();
-    expect(fake.events.map((e) => e.text).join(' ')).toContain('That stroke was right');
+    expect(fake.events.map((e) => e.text).join(' ')).toContain('Right: the stroke they drew was correct');
     expect(button(/Next stroke/)).toBeTruthy();
   });
 
@@ -209,7 +209,7 @@ describe('a lesson', () => {
     await live();
     await tool('choose_character', { character: 'ten' });
     const result = await tool('next_stroke');
-    expect(result).toContain('The sheet refused that: Finish this stroke first.');
+    expect(result).toMatch(/^Refused: Finish this stroke first\./);
     expect(screen.getByText(/Write stroke/).textContent).toContain('1 of 2');
   });
 });

@@ -38,13 +38,31 @@ interface Framing { result?: Milestone; compose?: (out: Outcome) => string | nul
 
 const words = (events: SayEvent[]) => events.map((e) => e.text).join(' ').trim() || null;
 
-/** A tool call as an intent, its arguments checked; null for a tool Notch does not have. */
+/** An occasion as the host passed it: "  A Summer Wedding, please!" is "summer wedding"; '' when nothing is left. */
+export function occasionFrom(raw: string): string {
+  const said = cleanSingleLine(raw, 200).toLowerCase()
+    .replace(/[.!?,;:"]+/g, ' ').replace(/\s+(?:please|instead|then|now|today|tonight)\s*$/, '')
+    .replace(/^(?:(?:for|to|at|an?|the|my|our|this|that|i'?m dressing for|dressing for|going to)\s+)+/, '').trim();
+  return cleanSingleLine(said, 80);
+}
+
+/** Where the pieces should lean: "Make it a bit dressier" is "formal"; '' when the words name no direction. */
+export function leanFrom(raw: string): string {
+  const said = cleanSingleLine(raw, 200).toLowerCase().replace(/[.!?,;:"]+/g, ' ')
+    .replace(/^(?:(?:make|it|them|the|pieces|rail|a|bit|little|more|something|lean|leaning|toward|towards|into|go|please)\s+)+/, '').trim();
+  if (!said) return '';
+  if (/\b(dress(?:y|ier)|fanc(?:y|ier)|smart(?:er)?|sharp(?:er)?|elegant|formal|polished)\b/.test(said)) return 'formal';
+  if (/\b(relax(?:ed)?|laid[- ]?back|chill(?:er)?|casual(?:er)?|comfy|comfortable)\b/.test(said)) return 'casual';
+  return normalizeStyleCategory(said);
+}
+
+/** A tool call as an intent. Arguments are read leniently (case, articles, synonyms, extra fields); null for a tool Notch does not have. */
 export function intentOfTool(name: string, args: Record<string, unknown> = {}): Intent | null {
-  const str = (key: string, max: number) => (typeof args[key] === 'string' ? cleanSingleLine(args[key] as string, max) : '');
+  const str = (key: string) => (typeof args?.[key] === 'string' ? args[key] as string : '');
   switch (name) {
-    case 'rate_outfit': return str('occasion', 80) ? { kind: 'rate', occasion: str('occasion', 80) } : { kind: 'rate' };
-    case 'suggest_pieces': return str('direction', 60) ? { kind: 'pieces', direction: str('direction', 60) } : { kind: 'pieces' };
-    case 'try_on': return { kind: 'tryOn', piece: str('piece', 80) };
+    case 'rate_outfit': return occasionFrom(str('occasion')) ? { kind: 'rate', occasion: occasionFrom(str('occasion')) } : { kind: 'rate' };
+    case 'suggest_pieces': return leanFrom(str('direction')) ? { kind: 'pieces', direction: leanFrom(str('direction')) } : { kind: 'pieces' };
+    case 'try_on': return { kind: 'tryOn', piece: cleanSingleLine(str('piece'), 80) };
     case 'restore_photo': return { kind: 'restore' };
     default: return null;
   }
@@ -91,8 +109,9 @@ export class Fitting {
     const ran = this.run(intent);
     if (asker.by === 'user') {
       const frame = (text: string) => said.pressed(asker.pressed, text);
+      // What was pressed is said once: with the outcome now, else with the outcome that follows.
       if (ran.text) ran.text = frame(ran.text);
-      if (ran.job && ran.result) this.framing.set(ran.job.id, { ...this.framing.get(ran.job.id), frame });
+      else if (ran.job && ran.result) this.framing.set(ran.job.id, { ...this.framing.get(ran.job.id), frame });
     }
     return ran;
   }
@@ -117,7 +136,16 @@ export class Fitting {
       case 'photo': {
         const out = this.reads(this.stylist.act({ type: 'photo', mime: intent.mime, data: intent.data, source: intent.example ? 'sample' : 'upload' }));
         // A file that could not be used is refused on screen (the notice); nothing for Emery to say.
-        return out.job ? this.awaiting(out, 'done') : { view: out.view, text: null };
+        if (!out.job) return { view: out.view, text: null };
+        // Emery hears at once that the photo is in the mirror; the verdict follows. If she was
+        // told to ask for the occasion, "it can't be rated yet" is not said twice.
+        const askedOccasion = !this.stylist.target;
+        const ran = this.awaiting(out, 'done', (o) => {
+          const outcome = words(o.events);
+          if (!outcome || (askedOccasion && !o.view.target)) return null;
+          return o.view.analysis ? said.photoRead(outcome) : outcome;
+        });
+        return { ...ran, text: said.photoIn(out.view, Boolean(intent.example)) };
       }
     }
   }

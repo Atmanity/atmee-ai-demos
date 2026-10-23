@@ -17,24 +17,27 @@ export const INSTRUCTIONS = `You are Alex, a calm paramedic instructor running C
 - When the learner says what they would do, call check_answer with their words, as close to verbatim as you can, before reacting, and answer only from its result. Never say right, wrong, close, "not quite" or "exactly" on your own: the drill decides, sometimes differently than you would.
 - "Show me", "I don't know", "tell me": call show_step. A hint or a clue: call give_hint. Never make up a step, a hint or a teaching point.
 - "Next", "ready", "go on", or yes when you asked whether they are ready: call next_step.
-- When they pick a drill ("let's do choking", "the pool one", "you choose"), call start_scenario with their words. When they want out of the one they are in ("go back", "a different one", "this is too hard"), call leave_scenario, then ask which they would like. Both only when they ask, never on your own.
+- When they pick a drill ("let's do choking", "the pool one", "you choose"), call start_scenario with their words, also mid-drill ("this is too hard, can we do the collapse one?" starts that one). Only when they want out without naming one ("go back", "a different one") call leave_scenario, then ask which they would like. Both only when they ask, never on your own.
 - NUMBERS: never state a compression rate, depth, ratio, timing or count from memory. Every number comes word for word from a tool result or the live screen in your context; if you do not have it, do not estimate or round.
 - This step's answer and the steps after it are hidden from you on purpose: never guess at them, list the steps or teach ahead.
-- The screen changes only when you call a tool. Saying "let's move on" or "here is the step" without the call changes nothing and misleads them: call the tool every time, even when you think you know.
+- Every request that changes the screen is a tool call, even a single word answering your own question (a yes, a drill's name). Never say an action happened unless a tool's result said so: "let's move on" or "here is the step" without the call changes nothing and misleads them. Call the tool every time, even when you think you know.
+- While a tool runs, say nothing that judges: no "good choice", "right", "nice". Begin your reply with the result's own outcome word (Right, Not yet, Shown…).
 - Questions about what is on screen (the scene, the question, the score, the steps done): answer from the live screen in your context, no tool needed.
 - When they press a button on screen, the drill tells you what happened; carry on from that. A tool that refuses gives you a sentence: say it calmly and never pretend anything happened.
-REAL EMERGENCIES outrank the drill. If anything they say sounds like someone really needs help now (not breathing, collapsed, "this is real", "should I call 911?"), call stop_for_emergency at once and say what it returns, word for word. Never coach CPR or any protocol for a real emergency. A learner narrating the drill ("I'd check if he's breathing", "in this scenario") is practising. While the red card is up, tell them to call 911 (112 in Europe) and stay on the line with the dispatcher; call resume_practice only when they say plainly that nobody is in danger, and never talk them back into practice yourself.
+REAL EMERGENCIES outrank the drill. If anything they say sounds like someone really needs help now (not breathing, collapsed, "this is real", "should I call 911?"), call stop_for_emergency at once and say the sentence it returns word for word, with nothing before it. Never coach CPR or any protocol for a real emergency. A learner narrating the drill ("I'd check if he's breathing", "in this scenario") is practising. While the red card is up, tell them to call 911 (112 in Europe) and stay on the line with the dispatcher; call resume_practice only when they say plainly that nobody is in danger, and never talk them back into practice yourself. After a scare, stay calm and plain: no exclamations.
 Short sentences, one idea at a time, at most two sentences before you let them think. Praise specifically ("good, scene first") and correct without blame. Say only what you would say aloud: no lists, labels or markdown.`;
 
 const awaits = (timeoutSeconds = 12) => ({ mode: 'await' as const, timeoutSeconds });
-const noArgs = { type: 'object', properties: {}, additionalProperties: false };
+// Lenient on purpose: arguments that fail the schema never reach the page, and
+// the host then tends to say the action happened. The app normalises instead.
+const noArgs = { type: 'object', properties: {} };
 
 /** The drill's tools. Each is answered by the server, which owns the drill. */
 export const TOOLS: AppTool[] = [
   {
     type: 'function', name: 'check_answer',
     description: 'Grades what the learner would do for the step on their screen, against the drill\'s algorithm. Call it whenever they describe an action as their answer ("I\'d check the scene", "call 911", "start compressions"), before reacting.',
-    parameters: { type: 'object', properties: { answer: { type: 'string', minLength: 1, maxLength: 400, description: 'What the learner said they would do, as close to their words as you can.' } }, required: ['answer'], additionalProperties: false },
+    parameters: { type: 'object', properties: { answer: { type: 'string', maxLength: 500, description: 'What the learner said they would do, as close to their words as you can.' } }, required: ['answer'] },
     'x-atmee': awaits(),
   },
   { type: 'function', name: 'show_step', description: 'Shows and teaches the current step when the learner asks to be shown, says they do not know, or gives up. The step then counts as shown, not as got.', parameters: noArgs, 'x-atmee': awaits() },
@@ -43,7 +46,7 @@ export const TOOLS: AppTool[] = [
   {
     type: 'function', name: 'start_scenario',
     description: 'Starts the drill the learner names: an adult collapse in a café, a child by a pool, choking at dinner, or someone unresponsive but breathing. Only when they ask for one; it restarts any drill in progress.',
-    parameters: { type: 'object', properties: { scenario: { type: 'string', minLength: 1, maxLength: 120, description: 'The drill as the learner named it ("choking", "the pool one", "you pick").' } }, required: ['scenario'], additionalProperties: false },
+    parameters: { type: 'object', properties: { scenario: { type: 'string', maxLength: 500, description: 'The drill as the learner named it, in any words ("choking", "the pool one", "the collapse one", "you pick").' } }, required: ['scenario'] },
     'x-atmee': awaits(),
   },
   { type: 'function', name: 'leave_scenario', description: 'Leaves the drill in progress and goes back to the list of drills, when the learner wants out ("go back", "a different one", "this is too hard"). Only when they ask.', parameters: noArgs, 'x-atmee': awaits() },
@@ -102,36 +105,37 @@ export function drillState(v: View, onScreen: { hint?: string | null } = {}): st
 export const said = {
   /** Once per call, when Alex arrives (on a shared host, after its own greeting). */
   opening: (v: View | null) => {
-    const hello = `You are Alex, the learner's instructor in Bystander, a CPR and first-aid practice app. Greet them in one short line, then say this sentence word for word: ${quote(SAFETY_LINE)}`;
+    const hello = `You have just greeted them; do not greet or introduce yourself again. You are their instructor in Bystander, a CPR and first-aid practice app. Say this sentence word for word: ${quote(SAFETY_LINE)}`;
     if (!v || v.phase === 'intro' || !v.scenario) return `${hello} Then ask which drill they would like: ${MENU}. Start one only when they choose.`;
     if (v.phase === 'emergency') return said.emergency();
     if (v.phase === 'answering') return `${hello} Then set the scene of ${quote(v.scenario.title)} in your own words, ${quote(v.scenario.opening)}, and ask exactly this, then wait: ${quote(v.prompt ?? '')} Do not hint at the answer.`;
     if (v.phase === 'coaching') return `${hello} They are back mid-drill in ${quote(v.scenario.title)}, between steps: ask whether they are ready for the next step.`;
     return `${hello} Their drill ${quote(v.scenario.title)} is complete, ${v.score.correct} of ${stepCount(v)} on their own: ask whether they would like another (${MENU}).`;
   },
-  started: (v: View) => `Drill started: ${quote(v.scenario!.title)}, ${stepCount(v)} steps, on their screen now. Set the scene in your own words, ${quote(v.scenario!.opening)}, then ask exactly this and wait: ${quote(v.prompt ?? '')} Do not hint at the answer and do not list the steps.`,
-  right: (v: View, note: string) => `The drill graded it RIGHT: step ${(v.step_index ?? 0) + 1} of ${stepCount(v)}, ${quote(v.steps?.[v.step_index ?? 0]?.label ?? '')} (score ${v.score.correct}). Confirm it in one short line, then give this teaching point in your own calm words without changing any number: ${quote(note)} Then ask whether they are ready for the next step; call next_step only when they say so.`,
-  wrong: (note: string) => `The drill graded it NOT RIGHT. Do not give them the step. Say this nudge in one short line, ${quote(note)}, and invite another try; one more miss and the drill shows them the step.`,
-  rescued: (label: string, note: string) => `That was their second miss, so the drill has shown the step on their screen: ${quote(label)}. Teach it plainly and kindly, keeping every number exactly as written: ${quote(note)} No blame. Then ask whether they are ready for the next step; call next_step only when they say so.`,
-  shown: (label: string, note: string) => `The step is now shown on their screen: ${quote(label)}. Teach it plainly and kindly, keeping every number exactly as written: ${quote(note)} Then ask whether they are ready for the next step; call next_step only when they say so.`,
-  hint: (hint: string) => `The drill's hint for this step, which is not the answer: ${quote(hint)} Give it in your own words in one line, adding nothing, and let them try.`,
-  next: (v: View) => `Step ${(v.step_index ?? 0) + 1} of ${stepCount(v)} is live on their screen. Ask exactly this in one line, then stop and wait: ${quote(v.prompt ?? '')} Do not hint at the answer.`,
-  debrief: (v: View) => `That was the last step: they got ${v.score.correct} of ${stepCount(v)} without help, and their review is on screen. Give a warm two-sentence debrief with no new numbers, then ask whether they would like another drill; start one only when they choose.`,
-  left: () => `They are back at the list of drills; nothing is held against them. In one short, unbothered line say that's fine and ask which they would like: ${MENU}. Start one only when they choose.`,
-  unknown: (words: string) => `There is no drill called ${quote(words)}. The four are: ${MENU}. Ask which one they would like.`,
-  refused: (reason: string) => `The drill refused that: ${reason.replace(/\*/g, '')} Say it calmly in one line, in your own words; nothing changed.`,
-  emergency: () => `STOP THE DRILL. The learner may be in a real emergency: the drill is stopped and a red ${quote(EMERGENCY_TITLE)} card covers their screen. Say this, word for word, and nothing else: ${quote(EMERGENCY_LINE)} Do not coach CPR or any protocol, and do not ask a drill question.`,
+  started: (v: View) => `Started: ${quote(v.scenario!.title)}, ${stepCount(v)} steps, on their screen now. Set the scene in your own words, ${quote(v.scenario!.opening)}, then ask exactly this and wait: ${quote(v.prompt ?? '')} Do not hint at the answer and do not list the steps.`,
+  right: (v: View, note: string) => `Right: the drill graded it RIGHT, step ${(v.step_index ?? 0) + 1} of ${stepCount(v)}, ${quote(v.steps?.[v.step_index ?? 0]?.label ?? '')} (score ${v.score.correct}). Confirm it in one short line, then give this teaching point in your own calm words without changing any number: ${quote(note)} Then ask whether they are ready for the next step; call next_step only when they say so.`,
+  wrong: (note: string) => `Not yet: the drill graded it NOT RIGHT. Do not give them the step. Say this nudge in one short line, ${quote(note)}, and invite another try; one more miss and the drill shows them the step.`,
+  rescued: (label: string, note: string) => `Not yet, and that was their second miss, so the drill has shown the step on their screen: ${quote(label)}. Teach it plainly and kindly, keeping every number exactly as written: ${quote(note)} No blame. Then ask whether they are ready for the next step; call next_step only when they say so.`,
+  shown: (label: string, note: string) => `Shown: the step is now on their screen: ${quote(label)}. Teach it plainly and kindly, keeping every number exactly as written: ${quote(note)} Then ask whether they are ready for the next step; call next_step only when they say so.`,
+  hint: (hint: string) => `Hint: ${quote(hint)} It is not the answer. Give it in your own words in one line, adding nothing, and let them try.`,
+  next: (v: View) => `Next step: step ${(v.step_index ?? 0) + 1} of ${stepCount(v)} is live on their screen. Ask exactly this in one line, then stop and wait: ${quote(v.prompt ?? '')} Do not hint at the answer.`,
+  debrief: (v: View) => `Drill complete: that was the last step, and they got ${v.score.correct} of ${stepCount(v)} without help, and their review is on screen. Give a warm two-sentence debrief with no new numbers, then ask whether they would like another drill; start one only when they choose.`,
+  left: () => `Done: they are back at the list of drills; nothing is held against them. In one short, unbothered line say that's fine and ask which they would like: ${MENU}. Start one only when they choose.`,
+  unknown: (words: string) => `Not found: there is no drill called ${quote(words)}. The four are: ${MENU}. Ask which one they would like.`,
+  refused: (reason: string) => `Refused: ${reason.replace(/\*/g, '')} Say it calmly in one line, in your own words; nothing changed.`,
+  /** The exact sentence first, so nothing of Alex's own can come before it. */
+  emergency: (why = 'The learner may be in a real emergency.') => `${EMERGENCY_LINE} [Say exactly that sentence, word for word, with nothing before or after it. ${why} The drill is stopped and a red ${quote(EMERGENCY_TITLE)} card covers their screen. Do not coach CPR or any protocol, and do not ask a drill question.]`,
   /** The page's own watch caught it, in words Alex did not hear (typed) or heard but did not act on. */
-  alarm: (how: 'typed' | 'spoken', words: string) => `The learner ${how === 'typed' ? 'typed' : 'said'} ${quote(words.slice(0, 200))}, which sounds like a real emergency. ${said.emergency()}`,
+  alarm: (how: 'typed' | 'spoken', words: string) => said.emergency(`The learner ${how === 'typed' ? 'typed' : 'said'} ${quote(words.slice(0, 200))}, which sounds like a real emergency.`),
   resumed: (v: View) => {
-    const glad = 'The red card is down: the learner says nobody is in danger. In one short line say you are glad everyone is safe';
+    const glad = 'Resumed: the red card is down, the learner says nobody is in danger. In one short, calm line say you are glad everyone is safe';
     if (v.phase === 'answering' && v.scenario) return `${glad}; the drill is back where they left it. Ask exactly this and wait: ${quote(v.prompt ?? '')}`;
     if (v.phase === 'coaching') return `${glad}; the drill is back where they left it, between steps. Ask whether they are ready for the next step.`;
     if (v.phase === 'debrief') return `${glad}; their drill was already complete. Ask whether they would like another (${MENU}).`;
     return `${glad}, then ask which drill they would like: ${MENU}.`;
   },
-  keepCard: () => `The red card stays up: nothing the learner has said since it went up says plainly that nobody is in danger. Do not resume practice. Calmly tell them to call 911 (112 in Europe, or their local number) and stay on the line with the dispatcher; if this was only practice, they can tell you plainly that nobody is in danger, or press "Nobody is in danger" on the card.`,
-  notStopped: () => 'The drill is not stopped; carry on from the live screen.',
+  keepCard: () => `Refused: the red card stays up: nothing the learner has said since it went up says plainly that nobody is in danger. Do not resume practice. Calmly tell them to call 911 (112 in Europe, or their local number) and stay on the line with the dispatcher; if this was only practice, they can tell you plainly that nobody is in danger, or press "Nobody is in danger" on the card.`,
+  notStopped: () => 'Nothing to resume: the drill is not stopped; carry on from the live screen.',
 };
 
 /** A button press, told to Alex: he cannot see the screen. */

@@ -9,16 +9,16 @@
 import type { AppTool } from '../../../server/app-server.ts';
 import type { Choice } from './engine.ts';
 import { parseFen, PIECE_VALUES } from './engine.ts';
-import { clip, MODEL_QUOTE_MAX_BYTES } from './game.ts';
+import { clip, MODEL_QUOTE_MAX_BYTES, parseSide, parseStrength } from './game.ts';
 import type { Action, ChessSnapshot, GameEndReason, GameResultWinner, LastMove } from './types.ts';
 
 /** The host's rules: the session's tool instructions (at most 4,000 characters). */
 export const INSTRUCTIONS = `You are the player's opponent in a game of chess, on a board on their screen: a dry-witted club player who needles a little, teaches a little and explains every move. The board owns the rules and plays your moves for you; you reach it only through its tools.
 - When the player states a move they are making now ("e4", "knight to f3", "castle", "bishop takes c6"), call play_move with it before saying anything about it. Its result says whether the board took it and which move you replied with: speak only from that. Never say a move was played, legal, illegal or good before the result.
 - Never call play_move for your own move, for a question ("should I play d4?", "can I castle?") or for a plan ("I'll push e5 next"). Your own move comes back in play_move's result, already on the board: say why you played it. Never name or announce a move of yours that a result has not given you.
-- "Can I play black?", "let's switch sides": call choose_side. It starts a new game, so mid-game, if it is not clear they want to abandon this one now, ask first. "Go easy on me", "I'm a beginner", "play properly": call set_strength.
+- "Can I play black?", "let's switch sides": call choose_side; it starts a new game. Mid-game, if they only seem to be wondering, ask, and when they say yes, call it. "Go easy on me", "I'm a beginner", "play properly": call set_strength.
 - "I resign", "I give up": call resign, only when they clearly concede now. "New game", "rematch": call new_game, only when they ask for one; never on your own, not even after a game ends.
-- The screen changes only when you call a tool. Saying "sure, you're Black" or "fine, I'll go easy" without the call changes nothing and misleads them: call the tool every time, even when you think you know the outcome.
+- The screen changes only when you call a tool. Every request that changes the board is a tool call, even a one-word answer to your own question ("black", "beginner", "yes"). Saying "sure, you're Black" or "fine, I'll go easy" without the call changes nothing and misleads them: call the tool every time, even when you think you know the outcome, and never say a move was played, a side changed or a game started unless a tool's result said so.
 - Questions about the position, whose move it is, the moves so far, the opening, the material or the result: answer from the live board in your context, no tool needed.
 - If the player moves a piece or presses a button on screen, the board tells you what happened; carry on from that.
 How strong you are, honestly: you look one move ahead. You take a hanging piece and a mate that is there, and a two-move tactic beats you. If asked, say that in one light line. Never claim a rating, an Elo, a title or "grandmaster level"; never talk about evaluations or numbers.
@@ -26,7 +26,11 @@ There are no takebacks: if asked, say kindly that the move stands and offer a ne
 Style: understated trash talk, never an insult; no gloating, take a loss well. Name the opening once when a result gives it, and a motif (a pin, a fork, a weak square) when one appears. Avoid the phrase "best move". A player who goes quiet is thinking: at most one short, dry line, and never tell them what to play.
 Speak only what you say aloud: one short sentence, two with a teaching beat, under 30 words. No lists, markdown or emojis. If asked whether you are real: you are an AI.`;
 
-const noArgs = { type: 'object', properties: {}, additionalProperties: false };
+// Lenient on purpose: the platform checks a call against its schema before the
+// page sees it, and a call that does not fit never arrives (the host is told
+// "invalid arguments" and often says the action happened anyway). So no enums,
+// no closed objects, only generous bounds: the page reads and checks the words.
+const noArgs = { type: 'object', properties: {} };
 const awaits = (timeoutSeconds: number) => ({ mode: 'await' as const, timeoutSeconds });
 
 /** The board's tools. Each is answered by the page, which owns the board. */
@@ -36,8 +40,8 @@ export const TOOLS: AppTool[] = [
     description: 'Plays the player\'s own move on the board. The board checks it is legal and, if it is, plays your reply; the result says what happened. Call it whenever the player states a move they are making now ("e4", "knight to f3", "castle kingside"), before reacting to it. Never for your own move, a question about a move, or a plan.',
     parameters: {
       type: 'object',
-      properties: { move: { type: 'string', minLength: 1, maxLength: 80, description: 'Just the move, no other words: in the player\'s words ("knight to f3", "e4", "castle kingside") or in notation (Nf3, O-O, e2e4).' } },
-      required: ['move'], additionalProperties: false,
+      properties: { move: { type: 'string', maxLength: 500, description: 'Just the move, no other words: in the player\'s words ("knight to f3", "e4", "castle kingside") or in notation (Nf3, O-O, e2e4).' } },
+      required: ['move'],
     },
     'x-atmee': awaits(12),
   },
@@ -46,8 +50,8 @@ export const TOOLS: AppTool[] = [
     description: 'Seats the player on White or Black and starts a new game (chess has no swap mid-game). If you are White after it, the result includes your first move. Call it when the player asks to play a colour or to switch sides.',
     parameters: {
       type: 'object',
-      properties: { side: { type: 'string', enum: ['white', 'black', 'switch'], description: 'The colour the player wants, or "switch" for the other one.' } },
-      required: ['side'], additionalProperties: false,
+      properties: { side: { type: 'string', maxLength: 500, description: 'The colour the player wants: "white" or "black", or "switch" for the other one.' } },
+      required: ['side'],
     },
     'x-atmee': awaits(12),
   },
@@ -56,8 +60,8 @@ export const TOOLS: AppTool[] = [
     description: 'Sets how hard you play from your next move: full, casual or beginner. Call it when the player asks you to go easier or harder, or says they are a beginner.',
     parameters: {
       type: 'object',
-      properties: { level: { type: 'string', enum: ['full', 'casual', 'beginner'], description: 'full: your favourite move; casual: easier; beginner: easiest.' } },
-      required: ['level'], additionalProperties: false,
+      properties: { level: { type: 'string', maxLength: 500, description: '"full" (your favourite move), "casual" (easier) or "beginner" (easiest).' } },
+      required: ['level'],
     },
     'x-atmee': awaits(10),
   },
@@ -75,27 +79,36 @@ export const TOOLS: AppTool[] = [
 
 export type ToolName = 'play_move' | 'choose_side' | 'set_strength' | 'resign' | 'new_game';
 
+/** "switch", "the other side", "swap": the other colour. */
+const SWITCH_WORDS = /\b(switch\w*|swap\w*|other|opposite|flip\w*|change|reverse)\b/;
+
 /**
- * A tool call as a board action, with its arguments checked: the host passes
- * what it heard, the board decides. A string is the reason nothing was done,
- * for the host to speak from.
+ * A tool call as a board action, with its arguments read leniently ("Black",
+ * "the black pieces", "a beginner", "easier") and checked: the host passes
+ * what it heard, the board decides. Unknown extra fields are ignored. A
+ * string is the reason nothing was done, with the question for the host to ask.
  */
 export function actionFor(name: string, args: Record<string, unknown> = {}): Action | string {
+  const word = (...keys: string[]) => {
+    for (const key of keys) if (typeof args[key] === 'string' || typeof args[key] === 'number') return String(args[key]).trim();
+    return '';
+  };
   switch (name) {
     case 'play_move': {
-      const move = clip(typeof args.move === 'string' ? args.move : '', MODEL_QUOTE_MAX_BYTES);
-      return move ? { kind: 'move', text: move } : 'No move was given, so nothing moved: ask the player which move they mean.';
+      const move = clip(word('move', 'san'), MODEL_QUOTE_MAX_BYTES);
+      return move ? { kind: 'move', text: move } : 'Nothing moved: no move was given. Ask the player which move they mean.';
     }
     case 'choose_side': {
-      const side = args.side;
-      if (side === 'white' || side === 'black') return { kind: 'side', side };
-      if (side === 'switch') return { kind: 'side', side: 'other' };
-      return 'No side was given, so nothing changed: ask the player whether they want White or Black.';
+      const said = word('side', 'colour', 'color').toLowerCase();
+      const side = parseSide(said);
+      if (side) return { kind: 'side', side };
+      if (SWITCH_WORDS.test(said)) return { kind: 'side', side: 'other' };
+      return 'Nothing changed: the side was not clear. Ask the player whether they want White or Black.';
     }
     case 'set_strength': {
-      const level = args.level;
-      if (level === 'full' || level === 'casual' || level === 'beginner') return { kind: 'difficulty', level };
-      return 'No level was given, so nothing changed: the levels are full, casual and beginner.';
+      const level = parseStrength(word('level', 'strength', 'difficulty').toLowerCase().replace(/\s+(mode|level|strength)$/, ''));
+      if (level) return { kind: 'difficulty', level };
+      return 'Nothing changed: the level was not clear. Ask the player whether they want full, casual or beginner strength.';
     }
     case 'resign': return { kind: 'resign' };
     case 'new_game': return { kind: 'new' };
@@ -209,6 +222,9 @@ export interface Lead {
   note?: string;
 }
 
+/** The opening follows the host's own greeting on this call: no second hello. */
+const GREETED = 'You have just greeted them; do not greet or introduce yourself again.';
+
 /** After a game ends: offered, never started on the host's own initiative. */
 const ANOTHER = 'Then ask whether they would like another game; start one only if they say so.';
 
@@ -222,18 +238,18 @@ function resultCue(winner: GameResultWinner, reason: GameEndReason): string {
 
 export const say = {
   /** The opening, when the player moves first. */
-  start: (s: ChessSnapshot) => `A new game is set up on the player's screen: they are ${sideName(s.user_color)} and move first, and you are their opponent. Welcome them in one short line and invite their first move: they can say it, type it, or drag a piece.`,
+  start: (s: ChessSnapshot) => `${GREETED} A game is set up on the player's screen: they are ${sideName(s.user_color)} and move first, and you are their opponent. In one short line, invite their first move: they can say it, type it, or drag a piece.`,
 
   /** The opening, when the opponent moves first: the lead of its reply. */
-  startLead: (s: ChessSnapshot) => `A new game is set up on the player's screen: they are ${sideName(s.user_color)}, so you moved first. Welcome them in a few words.`,
+  startLead: (s: ChessSnapshot) => `${GREETED} A game is set up on the player's screen: they are ${sideName(s.user_color)}, so you moved first.`,
 
-  resume: (s: ChessSnapshot) => `The player is back at the board; the game goes on from where it was (${s.history.length} moves played). Welcome them back in one short line; ${s.result ? 'that game is over, so ask whether they would like another; start one only if they say so' : s.turn === 'user' ? 'it is their move' : 'it is your move and the board is playing it'}.`,
+  resume: (s: ChessSnapshot) => `${GREETED} The player is back at the board; the game goes on from where it was (${s.history.length} moves played). Say so in one short line; ${s.result ? 'that game is over, so ask whether they would like another; start one only if they say so' : s.turn === 'user' ? 'it is their move' : 'it is your move and the board is playing it'}.`,
 
   /** The opponent's own move, and whatever led to it, in one text. */
   reply(lead: Lead, choice: Pick<Choice, 'san' | 'tags'>, s: ChessSnapshot): string {
     const parts: string[] = [];
     if (lead.note) parts.push(lead.note);
-    if (lead.userMove) parts.push(`The player played ${lead.userMove} and it is on the board.${lead.check ? ' It gives you check; acknowledge it without drama.' : ''}`);
+    if (lead.userMove) parts.push(`Done: the player played ${lead.userMove} and it is on the board.${lead.check ? ' It gives you check; acknowledge it without drama.' : ''}`);
     parts.push(`You ${s.history.length <= 1 && !lead.userMove ? 'opened with' : 'replied'} ${choice.san}, already on the board.`);
     const facts = describeTags(choice.tags);
     if (facts) parts.push(`What your move does: ${facts}.`);
@@ -246,37 +262,37 @@ export const say = {
   /** The game ended, on whoever's move. Said once: no separate commentary on the final move. */
   result(s: ChessSnapshot, last: LastMove | null): string {
     const final = last ? `${last.by === 'agent' ? 'You' : 'The player'} played ${last.san}, and it is on the board. ` : '';
-    return final + resultCue(s.result!.winner, s.result!.reason);
+    return `Game over: ${final}${resultCue(s.result!.winner, s.result!.reason)}`;
   },
 
-  refused: (said: string, why: string) => `The board REFUSED the player's move '${said}': ${why}. It was NOT played, the position is unchanged and it is still their move; the reason is on their screen. Say so plainly in one short line, name the reason and invite another move. Do NOT congratulate them or describe it as played.`,
+  refused: (said: string, why: string) => `Refused: the board did not play the player's move '${said}': ${why}. It was NOT played, the position is unchanged and it is still their move; the reason is on their screen. Say so plainly in one short line, name the reason and invite another move. Do NOT congratulate them or describe it as played.`,
 
-  ambiguous: (said: string, why: string) => `The player's move '${said}' could be either of two pieces: ${why}. Nothing was played. Ask them which, in one short line. Do NOT call it illegal.`,
+  ambiguous: (said: string, why: string) => `Not yet: the player's move '${said}' could be either of two pieces: ${why}. Nothing was played. Ask them which, in one short line. Do NOT call it illegal.`,
 
-  unreadable: (said: string) => `The board could not read '${said}' as a move, so nothing was played and the position is unchanged. Do NOT say it is illegal: it may well be legal. Ask them to say it again plainly, like "knight to f3", or to drag the piece.`,
+  unreadable: (said: string) => `Not played: the board could not read '${said}' as a move, so the position is unchanged. Do NOT say it is illegal: it may well be legal. Ask them to say it again plainly, like "knight to f3", or to drag the piece.`,
 
   /** The side the player already has: nothing is reset. */
-  sideSame: (s: ChessSnapshot, played: boolean) => `The player is already playing ${sideName(s.user_color)}, so nothing changed${played ? ' and the game goes on (a fresh game on the same side is new_game, only if they ask for one)' : ': this game has only just started'}. Say so in one short line; do not claim anything changed.`,
+  sideSame: (s: ChessSnapshot, played: boolean) => `Nothing changed: the player is already playing ${sideName(s.user_color)}${played ? ' and the game goes on (a fresh game on the same side is new_game, only if they ask for one)' : ' and this game has only just started'}. Say so in one short line; do not claim anything changed.`,
 
   sideRefused: (why: string) => `Nothing changed: ${why}. The game goes on. Say so in one short line; do not claim they changed sides.`,
 
   /** A reset that leaves the player to move (no opponent move follows). */
   freshBoard: (s: ChessSnapshot, why: 'new' | 'side') => why === 'side'
     ? `Done: the board started a new game with the player on ${sideName(s.user_color)}, so they move first. Say that in one short line and invite their first move.`
-    : `A fresh game just started and the board is reset; the player is ${sideName(s.user_color)} and moves first. Say one short line inviting the first move. Do not recap the last game.`,
+    : `Done: a fresh game just started and the board is reset; the player is ${sideName(s.user_color)} and moves first. Say one short line inviting the first move. Do not recap the last game.`,
 
   /** A reset that makes the opponent move first: the lead of its reply. */
   freshBoardLead: (s: ChessSnapshot, why: 'new' | 'side') => why === 'side'
     ? `Done: the board started a new game with the player on ${sideName(s.user_color)}, so you moved first.`
-    : `A fresh game just started; the player is ${sideName(s.user_color)}, so you moved first. Do not recap the last game.`,
+    : `Done: a fresh game just started; the player is ${sideName(s.user_color)}, so you moved first. Do not recap the last game.`,
 
   difficulty: (level: string) => `Done: you are playing at ${level} strength from your next move on${level === 'full' ? '' : ': you deliberately play a move lower in your own ranking, and never decline a mate'}. Say so in one short, unbothered line; no promises about what you will play.`,
 
-  difficultySame: (level: string) => `You were already playing at ${level} strength, so nothing changed. Say so in one short line.`,
+  difficultySame: (level: string) => `Nothing changed: you were already playing at ${level} strength. Say so in one short line.`,
 
   difficultyRefused: (why: string) => `Nothing changed: ${why}. Say so in one short line and do not claim anything changed.`,
 
-  resigned: () => `The player resigned, so the game is over and you won. Thank them for the game in one short, gracious line. ${ANOTHER}`,
+  resigned: () => `Done: the player resigned, so the game is over and you won. Thank them for the game in one short, gracious line. ${ANOTHER}`,
 
   refusedCommand: (why: string) => `Nothing changed: ${why}. Say so in one short line.`,
 };

@@ -19,7 +19,8 @@ somewhere else.
 | Part | Where |
 |---|---|
 | The sky: sidereal time, altitude and azimuth, rising and setting, 41 places | `engine/sky.ts`, `engine/chart.ts` (one `SkyChart`: validate before mutate, refuse by name, drop what sets), `engine/catalog.ts`. All in the page: the sky is public and the maths is pure, so the chart on screen, Mira's picture of it and every tool result come from the same object. |
-| Mira's actions | Four tools (`engine/director.ts`): `point_out(star)`, `show_constellation(name)` and `move_chart(place?, time?)` are `await` (10 to 15 s); `clear_chart(what)` is `notify`. The page answers each `atmee.tool` call with `engine/actions.ts`, which moves the chart and returns what it computed; her first reply carries it ("Vega is marked, high up in the north-east…", "Orion isn't up yet: it rises about half past 2; it's well up by quarter past 3"). |
+| Mira's actions | Four `await` tools (`engine/director.ts`): `point_out(star)`, `show_constellation(name)`, `move_chart(place?, time?)` (10 to 15 s) and `clear_chart(what)` (8 s). The page answers each `atmee.tool` call with `engine/actions.ts`, which moves the chart and returns what it computed. Every result begins with its plain outcome ("Marked: Vega, high up in the north-east…", "Not up now: Orion…", "Moved: …", "Not moved: the chart has no city called Kyoto. It knows 41 cities…"), so her first real words after the platform's filler are the chart's. |
+| Lenient schemas | No `enum`, `pattern`, `format`, `minLength` or `additionalProperties: false`, generous upper bounds, only the name required: a call that breaks a schema is refused before it reaches the page. The app normalises instead (any case, stray fields, near-miss field names, "both", "the lines", "marker") and answers an unusable value with a question for Mira to ask. |
 | Reading what Mira heard | The tools take her words ("the north star", "beetle juice", "40.7 north 74 west", "December 21st", "two hours later"); `engine/judge.ts` reads them by rules over the catalogue's own names. A model (`server.ts`, Gemini) only for words the rules cannot place; the chart still validates its answer. |
 | Mira's rules | The tool `instructions`: the screen changes only when she calls a tool; never say what is up, where or when before a result; facts about a star only from the catalogue; no Sun, Moon or planets; no degrees out loud; offers acted on only when asked. |
 | What Mira sees | `state` (worst case 3,521 of 3,858 characters, measured over every place, hour and season): the place and hour, every star up grouped by where to look, the figures up (with where) and down (with when they rise), the drawn figure, the marked star and its catalogue lines. She answers "what's up in the south?" from it without a tool. |
@@ -40,28 +41,35 @@ somewhere else.
 
 ## What the API could not do
 
-Status before this rebuild's live run. **Seen**: observed live (in the first
-port, where noted). **Expected**: not observed yet.
+Status after the live run of 2026-10-23 on staging (shared avatar `2cd3ec08`,
+then Mira's own `53e7e3f4`). **Seen**: observed live. **Expected**: not observed yet.
 
-1. **Tools are called when the host decides.** *Expected.* Mira may narrate a
-   move ("let's look at midnight!") without calling `move_chart`, or answer
-   "where's Vega?" from the chart in her context without `point_out` (right,
-   but nothing is marked). The safety net makes the safe moves after 7 s; a
-   star asked about is left to her, since she will usually have said where it is.
-2. **The facts-only rule is only an instruction.** *Expected.* Nothing gates the
+1. **Tools are called when the host decides.** *Seen working.* Every chart
+   request called the right tool once, 2.5 to 4.2 s after the words began, and
+   the first reply carried the chart's outcome ("Orion hasn't popped up over
+   Taipei just yet! It rises around quarter past nine"; Lisbon at midnight with
+   Rigel and Betelgeuse rising). "What's up in the south?" was answered from the
+   live chart without a tool. The safety net did not need to fire.
+2. **The platform's filler comes before the result.** *Seen.* While a tool ran,
+   the host said "What do you mean?" or "Could you repeat that?" and then gave
+   the chart's answer, which reads as if she misheard. The app cannot remove
+   it; each result now starts with its outcome so her next words are the chart's.
+3. **The facts-only rule is only an instruction.** *Expected* (the facts said
+   live were the catalogue's: Vega "was our pole star twelve thousand years ago"). Nothing gates the
    model's memory, and a result is paraphrased: "eight and a half light years"
    may drift. The catalogue's lines are on screen beside the chart as the source
    of truth. In the first port the facts said live were the catalogue's.
-3. **No speech hints for star names.** *Seen in the first port*: "Betelgeuse"
+4. **No speech hints for star names.** *Seen in the first port*: "Betelgeuse"
    arrived as "Beetlejuice". The tools take the words the host passes and the
    app maps known mishearings; one not in the table reaches the model reader
    (with a key) or is refused by name.
-4. **The ~10 s check-in talks over the stargazing.** *Expected.* The original
-   had no idle nudge at all; the API's cannot be turned off or lengthened.
-5. **The persona and the greeting belong to the avatar.** *Seen in the first
-   port* ("I'm Emily, a 21-year-old college student…" before the chart's
-   opening). `avatar.json` is the host this product was designed for; the
-   opening event names the place and hour once she has greeted.
+5. **The ~10 s check-in talks over the stargazing.** *Seen* (19 s after
+   "Clear the chart"). The original had no idle nudge at all; the API's cannot
+   be turned off or lengthened.
+6. **The persona and the greeting belong to the avatar.** *Seen*, and solved by
+   giving Lodestar its own host: Mira (`avatar.json`) greets as Lodestar's guide,
+   so the opening event tells her not to greet again and goes straight to the
+   place and hour on the chart.
 
 Fixed by tools, compared with the first port: the host no longer answers a
 move before the app has made it ("let's have a look", then the sky a beat
@@ -71,14 +79,18 @@ first reply.
 
 ## Tested
 
-- `npx vitest run apps/sky-guide`: 304 tests. The engine as ported (the
+- `npx vitest run apps/sky-guide`: 309 tests. The engine as ported (the
   closed-form astronomy, the catalogue, the chart's refusals and settling, the
   judge's phrasings, the narrator, the projection); the tools against the API
-  limits and the instructions naming each; the state's worst case; every tool's
-  outcome and wording (`actions.test.ts`); the safety net's phrases and that its
+  limits, lenient schemas and the instructions naming each; the state's worst
+  case; every tool's outcome and wording, outcome first, with capitalised,
+  synonym and stray-field arguments (`actions.test.ts`); the safety net's phrases and that its
   calls are safe to repeat; "when is it up"; the night list and its file; the
   chart's screen (taps, the keyboard list, the strip, the picker, the figures,
   refusals); and the app's screens with the call stood in for (front door,
   tool calls moving the screen, a control told to the host, the night card).
 - `npx tsc --noEmit`: clean for this app.
-- Live: not yet run.
+- Live on staging, 2026-10-23, spoken through `tools/live-test/harness.js`: the
+  steps above, then hang-up to the night card (Vega, Taipei 9:00 pm, "Download
+  the list"). The night card keeps what was marked or drawn, not every star
+  named in a move.

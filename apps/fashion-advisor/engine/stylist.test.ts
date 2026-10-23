@@ -221,7 +221,7 @@ describe('a refused try-on', () => {
     const { stylist } = studio();
     stylist.act({ type: 'name', name: 'Sam', style: 'smart casual' });
     const early = stylist.act({ type: 'tryOn', item: 'black fedora hat' });
-    expect(early.events[0].text).toMatch(/no photo to put the black fedora hat on yet/);
+    expect(early.events[0].text).toMatch(/^Not yet: there's no photo to put the black fedora hat on/);
     const [, done] = await settle(stylist, stylist.act({ type: 'photo', mime: 'image/jpeg', data: PHOTO, source: 'upload' }));
     expect(done.events[0].offer).toBe('black fedora hat');
     expect(done.events[0].text).toContain('asked about earlier');

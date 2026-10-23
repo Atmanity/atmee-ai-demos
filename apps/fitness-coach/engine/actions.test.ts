@@ -46,7 +46,7 @@ describe('choosing what to train and the level', () => {
     const { tool } = setup();
     const run = await tool('set_goal', { goal: 'core and cardio', level: 'beginner' });
     expect(run.view.plan).not.toBeNull();
-    expect(run.text).toMatch(/^The plan is on the screen now/);
+    expect(run.text).toMatch(/^Done: The plan is on the screen now/);
     expect(run.text).not.toContain('putting together');
   });
 
@@ -107,6 +107,68 @@ describe('choosing what to train and the level', () => {
   });
 });
 
+describe('arguments as the host really sends them', () => {
+  it.each([
+    ['Beginner', 'Beginner'], ['a beginner', 'Beginner'], ['Beginner level', 'Beginner'], ['BEGINNER, please', 'Beginner'],
+    ['novice', 'Beginner'], ['Intermediate', 'Intermediate'], ['medium', 'Intermediate'], ['Advanced', 'Advanced'], ['expert level', 'Advanced'],
+  ])('reads the level %s', async (said, level) => {
+    const { tool } = setup();
+    await tool('set_goal', { goal: 'glutes' });
+    const run = await tool('set_level', { level: said });
+    expect(run.view.flow.level).toBe(level);
+    expect(run.view.plan).not.toBeNull();
+  });
+
+  it('reads a step easier or harder said in words', async () => {
+    const { tool } = setup();
+    await tool('set_goal', { goal: 'Glutes', level: 'Beginner' });
+    expect((await tool('set_level', { level: 'a bit harder' })).view.plan!.level).toBe('Intermediate');
+    expect((await tool('set_level', { level: 'Too hard, make it easier' })).view.plan!.level).toBe('Beginner');
+  });
+
+  it('accepts fields it does not know, and a field named differently', async () => {
+    const { tool } = setup();
+    const goal = await tool('set_goal', { goal: 'Glutes', level: 'Beginner', confidence: 'high' });
+    expect(goal.view.plan).not.toBeNull();
+    const limits = await tool('add_limits', { injury: 'my left knee is bad', minutes: 20 });
+    expect(limits.view.constraints.injuries).toEqual(['knee']);
+    expect(limits.view.constraints.minutes).toBe(20);
+    const move = await tool('start_move', { exercise: 'the first warm-up move', note: 'go' });
+    expect(move.view.stage).toBe('coach');
+  });
+
+  it('takes a level passed as the goal, in any case', async () => {
+    const { tool } = setup();
+    await tool('set_goal', { goal: 'Glutes' });
+    expect((await tool('set_goal', { goal: 'A Beginner' })).view.plan?.level).toBe('Beginner');
+  });
+
+  it('asks a short question for a value it cannot use, never silence', async () => {
+    const { tool } = setup();
+    await tool('set_goal', { goal: 'glutes' });
+    for (const [name, args] of [['set_level', { level: 'whatever' }], ['set_level', {}], ['set_goal', { goal: '' }], ['add_limits', { words: '' }]] as const) {
+      const run = await tool(name, args);
+      expect(run.text, name).toMatch(/^Not done: /);
+      expect(run.text, name).toMatch(/\b(Ask|ask)\b/);
+    }
+  });
+
+  it('starts every result with its plain outcome, so a filler cannot pre-judge it', async () => {
+    const { tool } = setup();
+    const results = [
+      await tool('set_goal', { goal: 'glutes' }),
+      await tool('add_limits', { words: 'bad knee' }),
+      await tool('set_level', { level: 'beginner' }),
+      await tool('set_level', { level: 'easier' }),
+      await tool('start_move', { move: 'burpees' }),
+      await tool('start_move', { move: 'the first one' }),
+      await tool('set_goal', { goal: 'mobility' }),
+      await tool('start_over'),
+    ].map((r) => r.text);
+    for (const text of results) expect(text).toMatch(/^(Done|Done already|Not yet|Not done|Refused|Nothing to change|Nothing changed): /);
+  });
+});
+
 describe('limits', () => {
   it('banks a limit before the plan and builds the plan around it', async () => {
     const { tool } = setup();
@@ -122,7 +184,7 @@ describe('limits', () => {
     const { tool } = setup();
     await tool('set_goal', { goal: 'full body', level: 'beginner' });
     const run = await tool('add_limits', { words: 'I have a bad knee' });
-    expect(run.text).toMatch(/^Noted on your knee\./);
+    expect(run.text).toMatch(/^Done: Noted on your knee\./);
     expect(run.text).toContain('That takes bodyweight squats out of your workout');
     expect(run.view.plan!.workout_steps.join(' ')).not.toMatch(/squat/i);
   });
@@ -145,7 +207,7 @@ describe('limits', () => {
     const { tool } = setup();
     expect((await tool('add_limits', { words: 'I am a bit tired today' })).text).toContain('Nothing in those words is a limit');
     await tool('add_limits', { words: 'only 20 minutes' });
-    expect((await tool('add_limits', { words: 'twenty minutes max' })).text).toContain('Already noted: 20 minutes');
+    expect((await tool('add_limits', { words: 'twenty minutes max' })).text).toMatch(/^Done already: 20 minutes was noted/);
   });
 });
 
@@ -182,10 +244,12 @@ describe('the safety stop', () => {
     await tool('set_goal', { goal: 'full body', level: 'beginner' });
     const run = await tool('stop_for_safety', { condition: 'seven months pregnant' });
     expect(run.view.stage).toBe('hold');
-    expect(run.text).toContain(clearanceLine(['pregnancy']));
+    // The exact sentence comes first: the filler said while the tool ran cannot soften it.
+    expect(run.text.startsWith(`"${clearanceLine(['pregnancy'])}"`)).toBe(true);
     for (const [name, args] of [['set_level', { level: 'advanced' }], ['start_move', { move: 'squats' }], ['add_limits', { words: '20 minutes' }], ['start_over', {}], ['set_goal', { goal: 'mobility' }]] as const) {
       const after = await tool(name, args);
       expect(after.text, name).toContain('on hold');
+      expect(after.text, name).toMatch(/^"I can't coach any exercise/);
       expect(after.view.stage, name).toBe('hold');
     }
   });
@@ -212,7 +276,7 @@ describe('the safety stop', () => {
     const { tool } = setup();
     const run = await tool('add_limits', { words: 'I had heart surgery last month' });
     expect(run.view.stage).toBe('hold');
-    expect(run.text).toContain('IMPORTANT, safety');
+    expect(run.text).toMatch(/^"I have to stop us there/);
   });
 
   it('ends a tool that is waiting for a plan as soon as the page stops, with the stop', async () => {
@@ -226,7 +290,7 @@ describe('the safety stop', () => {
     const run = await pending;
     expect(run.view.stage).toBe('hold');
     expect(run.view.plan).toBeNull();
-    expect(run.text).toContain('IMPORTANT, safety');
+    expect(run.text).toMatch(/^"I have to stop us there/);
     model.release();
     await flush();
     expect(coach.view().plan).toBeNull();

@@ -137,6 +137,13 @@ describe('the sights', () => {
     expect(sent).toEqual([[{ kind: 'next' }, 'Next sight']]);
   });
 
+  test('a sight with no photo shows a designed card, not a grey box with a letter', () => {
+    guide(sights());
+    expect(screen.getByRole('img', { name: 'No photo of this shrine yet' })).toBeTruthy();
+    expect(screen.getByText('Open it in Maps to look around')).toBeTruthy();
+    expect(document.querySelector('.yd-sight-photo')!.textContent).not.toBe('Y');
+  });
+
   test('at the last sight there is no next one', () => {
     guide(sights({ spot: { ...sights().spot!, index: 1 } }));
     expect((screen.getByRole('button', { name: 'That was the last' }) as HTMLButtonElement).disabled).toBe(true);

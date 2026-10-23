@@ -124,14 +124,14 @@ describe('a fitting', () => {
   test('opens while Emery is on her way; she arrives to an opening that fits the empty room', async () => {
     await inTheRoom();
     expect(fake.starts).toEqual([{ mic: true }]);
-    expect(fake.events.at(-1)).toContain("ask what they're dressing for today");
+    expect(fake.events.at(-1)).toMatch(/^You have just greeted them; do not greet or introduce yourself again\..*ask what they're dressing for today/);
     expect(lastState()).toContain('The mirror is empty');
   });
 
   test("Emery's rate_outfit: the occasion is set on screen and her result asks for the photo", async () => {
     await inTheRoom();
     const result = await tool('rate_outfit', { occasion: 'dinner out' });
-    expect(result).toContain("Noted: they're dressing for dinner out");
+    expect(result).toMatch(/^Done: the occasion is set to dinner out/);
     expect(screen.getByRole('button', { name: /Dressing for dinner out/ })).toBeTruthy();
     expect(lastState()).toContain('Dressing for: dinner out.');
   });
@@ -141,7 +141,9 @@ describe('a fitting', () => {
     await tool('rate_outfit', { occasion: 'dinner out' });
     fireEvent.click(screen.getByRole('button', { name: 'Use an example outfit' }));
     await waitFor(() => expect(screen.getByRole('img', { name: '6 out of 10' })).toBeTruthy());
-    await waitFor(() => expect(fake.events.at(-1)).toMatch(/^The user chose the example outfit on screen\. The verdict: 6 out of 10 for dinner out/));
+    // At once: the photo is in the mirror. Then the verdict, once it is read.
+    await waitFor(() => expect(fake.events).toContainEqual(expect.stringMatching(/^The user chose the example outfit on screen\. Done: the example outfit is in the mirror now, and Notch is reading it for dinner out/)));
+    await waitFor(() => expect(fake.events.at(-1)).toMatch(/^The photo they just added has been read\. Done: the verdict is 6 out of 10 for dinner out/));
     expect(screen.getByText('Ground it with sharper shoes.')).toBeTruthy();
     expect(lastState()).toContain('Your verdict: 6 out of 10');
   });
@@ -151,7 +153,7 @@ describe('a fitting', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Use an example outfit' }));
     await waitFor(() => expect(lastState()).toContain('In the mirror: their own photo.'));
     const result = await tool('rate_outfit', { occasion: 'job interview' });
-    expect(result).toMatch(/^The verdict: 6 out of 10 for job interview/);
+    expect(result).toMatch(/^Done: the verdict is 6 out of 10 for job interview/);
   });
 
   test('a try-on: started at once in her result; the picture and its new score follow as events', async () => {
@@ -161,9 +163,9 @@ describe('a fitting', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Use an example outfit' }));
     await waitFor(() => expect(screen.getByRole('img', { name: '5 out of 10' })).toBeTruthy());
     const result = await tool('try_on', { piece: 'the second one' });
-    expect(result).toContain('Putting the Camel Wool Topcoat on their photo now');
-    await waitFor(() => expect(fake.events.some((e) => e.includes('The Camel Wool Topcoat is on their photo now'))).toBe(true));
-    await waitFor(() => expect(fake.events.at(-1)).toContain('With the Camel Wool Topcoat on, the outfit scores 7 out of 10'));
+    expect(result).toMatch(/^Started: putting the Camel Wool Topcoat on their photo now/);
+    await waitFor(() => expect(fake.events.some((e) => e.includes('Done: the Camel Wool Topcoat is on their photo now'))).toBe(true));
+    await waitFor(() => expect(fake.events.at(-1)).toContain('Done: with the Camel Wool Topcoat on, the outfit scores 7 out of 10'));
     expect(screen.getByText('+2 with the Camel Wool Topcoat')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Back to my photo' })).toBeTruthy();
   });
@@ -171,7 +173,7 @@ describe('a fitting', () => {
   test('a button with nothing to do yet still answers: Emery is told, nothing breaks', async () => {
     await inTheRoom();
     fireEvent.click(screen.getByRole('button', { name: 'Job interview' }));
-    await waitFor(() => expect(fake.events.at(-1)).toMatch(/^The user picked "Job interview" as what they're dressing for on screen\. Noted/));
+    await waitFor(() => expect(fake.events.at(-1)).toMatch(/^The user picked "Job interview" as what they're dressing for on screen\. Done: the occasion is set to Job interview/));
   });
 
   test('the call ends: the notes open once there is a verdict', async () => {
@@ -185,7 +187,7 @@ describe('a fitting', () => {
     // Called back: the same fitting, and Emery is told so.
     fireEvent.click(screen.getByRole('button', { name: 'Back to the fitting room' }));
     act(() => { fake.setPhase!('live'); fake.handlers.onLive!(); });
-    expect(fake.events.at(-1)).toMatch(/^They called you back to carry on the same fitting/);
+    expect(fake.events.at(-1)).toMatch(/^You have just greeted them; do not greet or introduce yourself again\. They called you back to carry on the same fitting/);
     expect(screen.getByRole('img', { name: '6 out of 10' })).toBeTruthy();
   });
 });
@@ -208,7 +210,7 @@ describe('the safety net', () => {
     await act(() => vi.advanceTimersByTimeAsync(7100));
     expect(toolsSeen).toEqual(['rate_outfit']);
     await act(() => vi.advanceTimersByTimeAsync(10));
-    expect(fake.events.at(-1)).toMatch(/^You did not call rate_outfit, so the app did it for the player just now: The verdict: 6 out of 10 for wedding/);
+    expect(fake.events.at(-1)).toMatch(/^You did not call rate_outfit, so the app did it for the player just now: Done: the verdict is 6 out of 10 for wedding/);
   });
 
   test('Emery called it herself: nothing twice', async () => {

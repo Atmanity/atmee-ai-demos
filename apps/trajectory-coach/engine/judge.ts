@@ -18,7 +18,7 @@
 // A request outside the launcher's limits is passed through, never clamped:
 // the range refuses it with the numbers, and that refusal is the teaching
 // moment.
-import { CHALLENGES } from './challenges.ts';
+import { CHALLENGES, find } from './challenges.ts';
 import { pyRound } from './flight.ts';
 import type { Aim, Command, Intent, Limits } from './types.ts';
 
@@ -460,4 +460,27 @@ export function mustDo(text: string, ctx: JudgeContext): NetCall | null {
     case 'next': return { name: 'choose_challenge', arguments: { challenge: nextChallengeId(ctx.challengeId) } };
     default: return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// A tool's challenge argument, however the host wrote it
+// ---------------------------------------------------------------------------
+
+const NEXT_WORDS = /^(?:the )?(?:next(?: one| challenge)?|another(?: one| challenge)?|(?:a )?(?:new|different)(?: one| challenge)?|move on)$/;
+
+/**
+ * The challenge a tool argument names: an id ("moonshot"), a name in any case
+ * ("On the Moon"), what people call it ("the moon", "the windy one", "the
+ * roof") or "next" and its synonyms. Null when it names none of them.
+ */
+export function challengeIdFrom(value: unknown): string | 'next' | null {
+  const raw = String(value ?? '').trim();
+  const t = normalize(raw).replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+  if (t.length < 3) return null;
+  if (NEXT_WORDS.test(t)) return 'next';
+  // A substring of a name counts only when it is a word or two, not "the".
+  const direct = t.length >= 4 ? find(raw.toLowerCase()) ?? find(t) ?? find(t.replace(/\s+/g, '')) : null;
+  if (direct) return direct.id;
+  for (const [id, rx] of ALIASES) if (rx.test(t)) return id;
+  return null;
 }

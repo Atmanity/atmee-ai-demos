@@ -15,12 +15,12 @@ Open it at `/apps/chess-opponent/`.
 |---|---|
 | The board: rules, legality, results | `engine/game.ts`: chess.js plus our layer (seating, strength, the spoken-move resolver, refusals, the snapshot). Runs **in the page**: chess has no secrets, so the page answers Sasha's tool calls itself. |
 | Sasha's own move | `engine/engine.ts`: the original one-ply heuristic (material, piece-square tables, a one-exchange hang check), a seeded tie-break; strength = how far down her own ranking she plays (full 0, casual 2, beginner 5; she never declines a mate). Never the model. |
-| Sasha's actions | Five `await` tools (`engine/director.ts`): `play_move(move)`, `choose_side(side)`, `set_strength(level)`, `resign`, `new_game`. The page answers each `atmee.tool` call through the board (`engine/table.ts`): `play_move` plays the player's move, waits a 0.7 s beat, plays Sasha's reply and returns both, so her first reply carries the board's ruling and her own move. |
+| Sasha's actions | Five `await` tools, with lenient schemas (no enums, no closed objects: a call that does not fit the schema never reaches the page) and the words read in the page ("Black", "the black pieces", "a beginner", "easier"; an unclear value comes back as a question to ask). Every result opens with its outcome ("Done:", "Refused:", "Not yet:", "Nothing changed:", "Game over:"), so the platform's filler line cannot pre-judge it. (`engine/director.ts`): `play_move(move)`, `choose_side(side)`, `set_strength(level)`, `resign`, `new_game`. The page answers each `atmee.tool` call through the board (`engine/table.ts`): `play_move` plays the player's move, waits a 0.7 s beat, plays Sasha's reply and returns both, so her first reply carries the board's ruling and her own move. |
 | Reading a move | Sasha passes what she heard ("knight to f three", "Nf3"); `engine/spoken.ts`, `game.ts` and `san.ts` resolve it against the position. An ambiguous "knight to d2" is a question back, an unreadable phrase is "say it again", never "illegal". |
 | Sasha's rules | The session's tool `instructions`: the board plays her moves, she acts only through the tools, no takebacks, an honest strength, the original's "never" rules. |
 | What Sasha sees | `state`: seating, strength, whose move, last move, the moves so far, opening, material count, FEN, and the player's legal moves (for "can I castle?"). No staged answers: the tools give them. |
 | Moves by hand and buttons | Drag or tap a piece; the side, strength, resign and new-game controls (a swap, a resignation or a reset mid-game asks for a second press). They act at once and Sasha is told by an event ("The player pressed "Resign" on screen. …"). |
-| Typed lines | A line that is exactly a legal move as chess.js reads it ("Nf6", "exd5", "e2e4") is played at once like a move by hand, shown in the chat, and told to Sasha (`typedMove`, `engine/judge.ts`): typed text has no recognition errors. Anything else goes to Sasha as a chat turn. |
+| Typed lines | A line written as a move in notation ("Nf6", "exd5", "e2e4", "O-O") goes to the board at once like a move by hand (`readsAsMove`, `typedMove` in `engine/judge.ts`): played if legal, else refused under the board; it is shown in the chat and Sasha is told either way. Typed text has no recognition errors. Anything else goes to Sasha as a chat turn. |
 | The safety net | `useToolNet` (kit) with `mustDo` (`engine/judge.ts`): when the player clearly says "I resign", "new game", "go easy on me", or names a side before the first move, and Sasha does not call the tool within 7 s, the page does it and tells her. Never a move (a doubled move is two moves), and never a side swap that would throw a game away. A reset that names a side ("start over as Black") is a side request, and the net stands down when the same action, or any new game, was already taken since the words (by Sasha's other tool or a button). |
 | The screens | The front door (`page/Lobby.tsx`), the table (`page/Game.tsx`: Sasha's side, the board, your side, refusals, the controls, the result), Sasha's frame and the conversation (`page/App.tsx`), the scoresheet with its PGN download (`page/Scoresheet.tsx`, `page/pgn.ts`), styled in `page/kibitz.css`. |
 
@@ -84,7 +84,7 @@ her own move is in her first reply rather than an event that could be dropped.
 
 ## Tested
 
-- `npx vitest run apps/chess-opponent`: 508 tests. The engine suites ported
+- `npx vitest run apps/chess-opponent`: 552 tests. The engine suites ported
   from the original (`test_engine.py`, `test_game_and_table.py`, with the
   vocabulary class sweeps), the board's table, and the panel's pure modules;
   the director against the API limits (names, sizes, timeouts, reserved
@@ -100,4 +100,10 @@ her own move is in her first reply rather than an event that could be dropped.
   above each have a test that fails with the fix taken out.
 - Live on staging, 2026-10-23: spoken moves, a refusal, resigning and a new
   game all went through the tools; the typed move and the doubled game above
-  were fixed after the run.
+  were fixed after the run. A second run on Sasha's own host (avatar
+  `0d38eb18`): every step went through the right tool (`play_move` 3.0 and
+  3.2 s, `choose_side` 3.5 s, `resign` 3.2 s, `new_game` 3.6 s), no second game
+  on "Yes, start over as Black.", and a typed "e5" was played by the page.
+  Fixed after it: a typed move the board cannot play is now refused on screen
+  (it went to Sasha, who called it played), and a refusal no longer stays
+  under the board after a resignation.

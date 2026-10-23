@@ -178,7 +178,12 @@ h1, h2, h3 { margin: 0; }
 .yd-dish:first-child { padding-top: 2px; }
 .yd-dish-photo { aspect-ratio: 1; border-radius: 3px; overflow: hidden; background: var(--yd-sky); display: grid; place-items: center; }
 .yd-dish-photo img { width: 100%; height: 100%; object-fit: cover; }
-.yd-dish-photo span, .yd-sight-photo span { font: 400 40px var(--yd-display); color: var(--yd-sea-soft); }
+.yd-nophoto { position: relative; display: grid; place-items: end start; width: 100%; height: 100%; overflow: hidden; }
+.yd-sight-photo > .yd-nophoto, .yd-dish-photo > .yd-nophoto { place-self: stretch; }
+.yd-nophoto svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.yd-nophoto-text { position: relative; display: grid; gap: 2px; margin: 0 0 12px 14px; padding: 6px 10px; background: var(--yd-paper); border-left: 4px solid var(--yd-sun); }
+.yd-nophoto-text b { font: 500 11px var(--yd-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--yd-sea); }
+.yd-nophoto-text small { font-size: 12.5px; color: var(--yd-stone); }
 .yd-dish-text { display: grid; gap: 2px; align-content: start; }
 .yd-num { font: 500 11px var(--yd-mono); letter-spacing: 0.1em; color: var(--yd-coral-ink); }
 .yd-dish h3 { font: 700 17px/1.25 var(--yd-body); color: var(--yd-sea); }

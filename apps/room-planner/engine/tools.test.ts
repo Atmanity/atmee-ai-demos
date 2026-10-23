@@ -36,7 +36,7 @@ describe('the floor', () => {
     runTool(planner, new Critic(), 'lay_out_floor', { bedrooms: 1, area_m2: 50 });
     expect(planner.home.level.w_cm * planner.home.level.h_cm / 10_000).toBeCloseTo(50, 0);
     const half = runTool(new Planner(), new Critic(), 'set_floor_size', { width_m: 9 });
-    expect(half.text).toMatch(/^Not done yet, nothing changed: And the other side/);
+    expect(half.text).toMatch(/^Not yet: nothing changed. And the other side/);
   });
 
   test('a redraw at a smaller size replaces the floor instead of refusing the shrink', () => {
@@ -50,7 +50,7 @@ describe('the floor', () => {
     const { call } = plan();
     const out = call('set_floor_size', { width_m: 5, depth_m: 4 });
     expect(out.refusal).toMatch(/^Shrinking it would cut into the/);
-    expect(out.text).toMatch(/^Refused; nothing has changed/);
+    expect(out.text).toMatch(/^Refused: nothing has changed/);
   });
 
   test('an upper floor comes with its stairs, and the other tools act on the floor on screen', () => {
@@ -248,5 +248,102 @@ describe('every call', () => {
     const out = call('remove_door_or_window', other ? { kind: 'door', room: victim.name, other_room: other.name } : { kind: 'front_door', room: victim.name });
     expect(out.refusal).toBeNull();
     expect(out.text).toContain('It also created a problem');
+  });
+});
+
+describe('what the host passes, its own way', () => {
+  test('capitalised words and synonyms are understood, and an unknown extra field is ignored', () => {
+    const { planner, call } = plan();
+    expect(call('lay_out_floor', { bedrooms: 'two', style: 'Open Plan', study: 'yes', mood: 'cosy' }).text).toContain('laid out as "Open plan living"');
+    expect([...planner.home.level.rooms.values()].some((r) => r.kind === 'office')).toBe(true);
+    expect(call('switch_units', { unit: 'Square Feet' }).text).toContain('areas now show in square feet');
+    expect(call('switch_units', { unit: 'metric' }).text).toContain('areas now show in square metres');
+    expect(call('add_upper_floor', { please: true }).refusal).toBeNull();
+    expect(call('go_to_floor', { floor: 'Downstairs' }).text).toContain('looking at the ground floor');
+    expect(call('save_scheme', { name: 'A' }).refusal).toBeNull();
+    expect(call('use_scheme', { action: 'Compare' }).text).toContain('is side by side with the plan');
+    expect(call('use_scheme', { action: 'close it' }).text).toContain('the comparison is closed');
+  });
+
+  test('a door, a window or the front door by any of their names, on a wall named any way', () => {
+    const { planner, call } = plan();
+    const level = planner.snapshot().level;
+    const front = level.openings.find((o) => o.kind === 'door' && (!o.a || !o.b))!;
+    const room = level.rooms.find((r) => r.id === (front.a ?? front.b))!;
+    expect(call('remove_door_or_window', { kind: 'Front Door', room: room.name }).refusal).toBeNull();
+    const out = call('add_door_or_window', { kind: 'entrance', room: room.name, wall: 'The South Wall' });
+    expect(out.text).toMatch(/^(Done: the front door is in the|Refused: )/);
+  });
+
+  test('a piece turned "round" turns twice, in place, even when its room is named', () => {
+    const { planner, call } = plan();
+    call('add_furniture', { piece: 'Queen Bed', room: 'Main bedroom', near: 'Middle' });
+    const [x, y] = [planner.home.level.items[0].x_cm, planner.home.level.items[0].y_cm];
+    const out = call('move_furniture', { piece: 'Queen bed', room: 'Main bedroom', quarter_turns: 'round' });
+    expect(out.steps.map((s) => s.intent.kind)).toEqual(['rotate_item']);
+    expect(out.steps[0].intent.deg).toBe(180);
+    expect([planner.home.level.items[0].x_cm, planner.home.level.items[0].y_cm]).toEqual([x, y]);
+    expect(call('move_furniture', { piece: 'queen bed', quarter_turns: 90 }).steps[0]?.intent.deg).toBe(90);
+  });
+
+  test('a value that cannot be read becomes a question, never a guess or silence', () => {
+    const { call } = plan();
+    expect(call('lay_out_floor', { bedrooms: 2, style: 'gothic' }).text).toMatch(/^Not yet: nothing changed. Which arrangement/);
+    expect(call('switch_units', { unit: 'cubits' }).text).toContain('Square metres or square feet?');
+    expect(call('go_to_floor', { floor: 'basement' }).text).toContain('Which floor');
+    expect(call('add_furniture', { piece: 'sofa', near: 'ceiling' }).text).toContain('Roughly where in the room');
+    expect(call('remove_door_or_window', { kind: 'hatch' }).text).toContain('A door, a window or the front door?');
+  });
+});
+
+describe('found live', () => {
+  test('a piano is refused by the plan, in its own words', () => {
+    const { call } = plan();
+    const out = call('add_furniture', { piece: 'grand piano', room: 'Living room' });
+    expect(out.text).toMatch(/^Refused: nothing has changed\..*I don't have a grand piano in my kit/);
+  });
+
+  test('open plan is one room for kitchen and living, as the architect says it is', () => {
+    const { planner, call } = plan();
+    call('lay_out_floor', { bedrooms: 2, study: true, style: 'open_plan' });
+    const rooms = [...planner.home.level.rooms.values()];
+    expect(rooms.some((r) => r.kind === 'kitchen')).toBe(false);
+    expect(rooms.find((r) => r.kind === 'living')!.name).toBe('Kitchen and living room');
+    expect(call('trade_area', { take_from: 'kitchen', give_to: 'study', m2: 1 }).text).not.toContain("There's no kitchen");
+  });
+
+  test("adding an upstairs keeps the ground floor's layout, gives the stairs a door, and says where they came from", () => {
+    const { planner, call } = plan();
+    call('lay_out_floor', { bedrooms: 2, study: true, style: 'open_plan' });
+    const ground = planner.home.levels[0];
+    const before = new Map([...ground.rooms.values()].map((r) => [r.id, `${r.name}|${r.kind}`]));
+    const out = call('add_upper_floor');
+    expect(out.text).toMatch(/the ground floor keeps its layout, and the stairs took their floor off the [a-z ]+ \(now [\d.]+ square metres\)/);
+    // Every room is still there, as it was; the only new room is the stairs.
+    for (const [id, what] of before) expect(`${ground.rooms.get(id)?.name}|${ground.rooms.get(id)?.kind}`).toBe(what);
+    const stairs = [...ground.rooms.values()].find((r) => r.kind === 'stairs')!;
+    expect(ground.rooms.size).toBe(before.size + 1);
+    expect(ground.openings.some((o) => o.kind === 'door' && (o.a === stairs.id || o.b === stairs.id))).toBe(true);
+    planner.apply({ kind: 'go_to_level', id: 'ground' });
+    expect(planner.snapshot().issues.map((i) => i.note).join(' ')).not.toContain('The stairs has no door');
+  });
+
+  test('"the drawing to keep" from an empty upstairs draws the floor that has rooms', () => {
+    const { planner, call } = plan();
+    call('add_upper_floor');
+    const out = call('draw_sheet');
+    expect(out.drew).toBe(true);
+    const sheet = planner.snapshot().sheet!;
+    expect(sheet.floor).toBe('ground');
+    expect(sheet.pages!.map((p) => p.floor)).toEqual(['ground']);
+    expect(out.text).toContain('for the ground floor');
+  });
+
+  test('with both floors drawn, the sheet has a page for each, the one on screen first', () => {
+    const { planner, call } = plan();
+    call('add_upper_floor');
+    call('lay_out_floor', { bedrooms: 2 });
+    call('draw_sheet');
+    expect(planner.snapshot().sheet!.pages!.map((p) => p.floor)).toEqual(['upper', 'ground']);
   });
 });

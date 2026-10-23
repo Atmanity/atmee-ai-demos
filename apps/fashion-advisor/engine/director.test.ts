@@ -60,7 +60,7 @@ describe('the API limits', () => {
 
   test('the instructions keep the hard-won rules', () => {
     const text = instructions(true);
-    for (const rule of ['The screen changes only when you call a tool', 'Never give, guess or hint at a score yourself', 'never say it is on them or describe it',
+    for (const rule of ['Every request that changes the screen is a tool call', 'Never say an action happened', 'the moment they say what they are dressing for', 'call it with that direction', 'Never give, guess or hint at a score yourself', 'never say it is on them or describe it',
       'Never body-shame', 'you cannot open their camera', 'answer from the live board in your context, no tool', 'only when they ask']) expect(text).toContain(rule);
   });
 
@@ -132,14 +132,14 @@ describe('the words Emery speaks from', () => {
   test('the verdict: the score change with a try-on, and the next piece offered only if they say yes', () => {
     const v = viewOf({ analysis: analysis({ style_score: 8, tried_items: ['Slim Navy Silk Tie'] }) });
     const up = say.analysis(v, { added: 'Slim Navy Silk Tie', previousScore: 6 });
-    expect(up.text).toContain('With the Slim Navy Silk Tie on, the outfit scores 8 out of 10 for smart casual');
+    expect(up.text).toContain('Done: with the Slim Navy Silk Tie on, the outfit scores 8 out of 10 for smart casual');
     expect(up.text).toContain('lifts the look by 2 points (it was 6)');
     expect(up.offer).toBe('Camel Wool Topcoat');
     expect(up.text).toContain("ask whether they'd like to try on the Camel Wool Topcoat next; put it on only if they say yes");
     expect(say.analysis(viewOf({ analysis: analysis({ style_score: 5 }) }), { added: 'Camel Wool Topcoat', previousScore: 6 }).text).toContain('hurts the balance by 1');
     expect(say.analysis(viewOf({ analysis: analysis({ style_score: 6 }) }), { added: 'Camel Wool Topcoat', previousScore: 6 }).text).toContain('keeps the score steady at 6');
     const plain = say.analysis(viewOf({ analysis: analysis() })).text;
-    expect(plain).toContain('The verdict: 6 out of 10 for smart casual ("Clean navy base")');
+    expect(plain).toContain('Done: the verdict is 6 out of 10 for smart casual ("Clean navy base")');
     expect(plain).toContain('What works: The navy layer frames you. The one fix: Ground it with sharper shoes.');
     expect(plain).not.toMatch(/lifts|hurts|steady/);
   });
@@ -160,7 +160,7 @@ describe('the words Emery speaks from', () => {
 
   test('a refused try-on gives the reason', () => {
     expect(say.tryOnHidden('White Leather Sneakers').text).toContain("their feet aren't in the photo");
-    expect(say.tryOnNeedsPhoto('black fedora').text).toContain('no photo to put the black fedora on yet');
+    expect(say.tryOnNeedsPhoto('black fedora').text).toContain("Not yet: there's no photo to put the black fedora on");
   });
 
   test('no result asks Emery to act on her own: every offer waits for a yes', () => {
@@ -180,7 +180,12 @@ describe('the words Emery speaks from', () => {
     expect(said.opening(viewOf({ target: '' }))).toContain("ask what they're dressing for");
     expect(said.opening(viewOf({ jobs: { photo: false, analysing: true, tryOn: null, queued: [], more: false } }))).toContain("Don't guess it");
     expect(said.opening(viewOf({ analysis: analysis() }))).toContain('6 out of 10 for smart casual');
-    expect(said.opening(viewOf({ analysis: analysis() }), true)).toMatch(/^They called you back to carry on the same fitting/);
+    expect(said.opening(viewOf({ analysis: analysis() }), true)).toMatch(/^You have just greeted them; do not greet or introduce yourself again\. They called you back to carry on the same fitting/);
+    // Her own greeting already introduced her: the opening never greets again.
+    for (const v of [viewOf(), viewOf({ target: '', image: null, photo: 'none' })]) {
+      expect(said.opening(v)).toMatch(/^You have just greeted them; do not greet or introduce yourself again\./);
+      expect(said.opening(v)).not.toMatch(/welcome|introduce yourself as/i);
+    }
   });
 
   test('a button press is told as what the user pressed, then what came of it', () => {
@@ -189,9 +194,32 @@ describe('the words Emery speaks from', () => {
 
   test('steering the rail names the fresh pieces and the refreshed verdict', () => {
     const text = said.steered(viewOf({ analysis: analysis({ style_score: 7 }) }), 'streetwear');
-    expect(text).toContain('The rail now leans streetwear: Slim Navy Silk Tie, Camel Wool Topcoat first');
+    expect(text).toContain('Done: the rail now leans streetwear: Slim Navy Silk Tie, Camel Wool Topcoat first');
     expect(text).toContain('7 out of 10 for smart casual');
     expect(said.steered(viewOf({ analysis: analysis(), notice: { kind: 'error', text: 'x' } }), 'streetwear')).toContain("didn't come through");
+  });
+
+  test('every result starts with its plain outcome, so the platform\'s filler cannot pre-judge it', () => {
+    const v = viewOf({ analysis: analysis() });
+    const results = [
+      say.styleSet(viewOf({ image: null })), say.styleSet(v), say.photoNeedsStyle(), say.analysis(v), say.analysisFailed(), say.tryOnAck('x'), say.tryOnBusy('x', 'y'),
+      say.tryOnOnScreen('x'), say.tryOnHidden('White Sneakers'), say.tryOnSelf(), say.tryOnNeedsPhoto('x'), say.tryOnUnavailable('x'), say.tryOnFailed('x', true),
+      say.moreReady(['a'], false, true), say.moreReady([], false, true), say.moreCapped(18), say.needsRead('x'), say.reset(),
+    ].map((e) => e.text).concat([
+      said.noOccasion(), said.readRunning(v), said.noVerdictYet(), said.tryOnRunning('x'), said.alreadyOwn(), said.alreadyGoing('x'), said.moreOnTheWay(),
+      said.whichPiece(), said.notAPiece('x'), said.steered(v, 'streetwear'), said.stillWorking(), said.lost(), said.photoIn(v, true), said.photoIn(viewOf({ target: '' }), false),
+    ]);
+    for (const text of results) expect(text, text).toMatch(/^(Done|Not yet|Not yet rated|Refused|Failed|Started|Queued|Nothing new|Nothing to add|Nothing to do|Already started|Not clear):/);
+  });
+
+  test('the tool schemas are lenient: the platform rejects a call that does not fit them before the page sees it', () => {
+    for (const tool of tools(true)) {
+      const schema = JSON.stringify(tool.parameters);
+      for (const strict of ['additionalProperties', 'minLength', 'enum', 'pattern', 'format']) expect(schema, tool.name).not.toContain(strict);
+      for (const prop of Object.values((tool.parameters as { properties: Record<string, { maxLength?: number }> }).properties)) expect(prop.maxLength ?? 500).toBeGreaterThanOrEqual(500);
+    }
+    expect(tools(true).find((t) => t.name === 'try_on')!.parameters.required).toEqual(['piece']);
+    expect(tools(true).find((t) => t.name === 'rate_outfit')!.parameters.required).toBeUndefined();
   });
 
   test('ttl stays within the API limit', () => {

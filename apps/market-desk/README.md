@@ -25,8 +25,10 @@ Open it at `/apps/market-desk/`.
 | What Reese sees | `state`: one line per stock with its 52-week position worked out and its age or "stale", the names, what is arriving, the last refusal |
 | Buttons | the add box, the starters, a slot (put it on watch), refresh, remove, clear (asks first): they act at once (`POST /desks/:id/act`) and Reese is told by an event, while on the line |
 | The desk's own lines | a 1% move on the stock on watch, a quote that outlived Reese's wait: server-sent events to the page, then `event`s to Reese (only the page holds the call) |
-| The safety net | `useToolNet` (kit) with `mustDo` (`engine/judge.ts`): "clear the board", "check it again", "drop Tesla" (actions safe to repeat) are done by the page if Reese does not call the tool within 7 s. Never an add or a focus (a duplicate could take a slot), and never on an advice question ("should I dump Tesla?"). |
-| The opening | an event when Reese arrives, from the board as it is then (the user can add while the call connects) |
+| The safety net | `useToolNet` (kit) with `mustDo` (`engine/judge.ts`): "clear the board", "check it again", "drop Tesla", "pull up Tesla" (when Tesla is already on the board) are done by the page if Reese does not call the tool within 7 s. Actions safe to repeat only: never an add, nor a focus that would add; never on an advice question ("should I dump Tesla?") or a question about a stock ("what's Tesla doing?"). |
+| Tool arguments | Lenient schemas (no required fields, no tight lengths, no extra-field ban: a call that fails the schema never reaches the page); the app reads an array or a string under `stocks`, `stock`, `symbols` or `tickers`, ignores extra fields, and answers an unusable call with a question for Reese. |
+| Results | Each begins with the plain outcome ("Done:", "Partly done:", "Not done:", "Not yet:", "Failed:"), so the platform's filler before it cannot pre-judge it. |
+| The opening | an event when Reese arrives, from the board as it is then (the user can add while the call connects); it does not greet again, since Reese's own greeting already introduced Outcry |
 | The screens | the front door (`page/Lobby.tsx`); the desk: Reese's booth, the tape, the stock on watch and the six slots (`page/Board.tsx`, `page/Tape.tsx`); the closing sheet with a CSV download when the call ends (`page/Closing.tsx`); styled in `page/outcry.css` |
 
 Running it needs only the repo's `.env`. Optional:
@@ -43,22 +45,21 @@ Running it needs only the repo's `.env`. Optional:
 
 ## What the API could not do
 
-Status: **Expected**, not yet observed live with the tools (the last live run,
-2026-10-23 on staging, was of the earlier port without them).
+Status after the live run of 2026-10-23 on staging (Outcry's own host).
+**Seen**: observed live. **Expected**: not observed yet.
 
-1. **Tools are called when the host decides.** *Expected.* Reese may narrate
-   "putting Nvidia up" without calling `add_symbols`, or quote a remembered
-   price for "what's Netflix doing?" instead of putting it up. The
-   instructions forbid both; the safety net covers clear, refresh and remove,
-   but an add is never redone by the page (a duplicate could take a slot).
-2. **The no-advice rule is the host's to keep.** *Expected.* The app no
-   longer detects advice questions or stages a decline: the rule, the
-   standing line and the fact to offer are in the instructions, and the reply
-   is Reese's. Seen before tools: one refusal with a board fact, not two.
-   Nothing can verify the reply before it is spoken.
-3. **The persona and the greeting belong to the avatar.** *Expected* (seen on
-   the shared test avatar before: it greeted as itself). `avatar.json` is the
-   host this product was designed for.
+1. **Tools are called when the host decides.** *Seen.* Ten of eleven requests
+   called their tool; a spoken "Pull up Tesla." got no `focus_symbol`, yet
+   Reese said "Tesla is front and centre now" (a typed "Pull up Microsoft."
+   did call it). The instructions now say every change is a call and nothing
+   happened unless a result said so, and the safety net now does a focus of a
+   stock already on the board. An add is never redone by the page.
+2. **The no-advice rule is the host's to keep.** *Seen holding.* "Should I buy
+   Nvidia?" got "I read the tape, I don't give advice." and a board fact (its
+   move and "sixty-four percent up its 52-week range"). The app does not
+   detect advice or stage a decline; nothing can verify the reply first.
+3. **The persona and the greeting belong to the avatar.** *Seen.* Reese's own
+   greeting introduces him, so the opening no longer greets again.
 4. **The ~10 s check-in** talks into silences the desk would leave quiet.
    *Expected* (seen before).
 5. **The desk's own lines compete for the floor.** *Expected.* A 1% move
@@ -106,4 +107,12 @@ longer need a judge in the page.
   "Coinbase" next to a stock already up (one landed, one "already on the
   board"), "it" removed (the one on watch), button presses worded for Reese,
   clear twice.
-- Not yet live with the tools.
+- Live on staging (2026-10-23, own host, spoken and typed): "Put Nvidia and
+  Tesla up" called `add_symbols` and the first reply read both real moves
+  (3.5 s); "What's Netflix doing?" put NFLX up; "Check it again" refreshed;
+  "Add Z Q X W Q" was refused in the board's words; "Drop Tesla", a typed
+  "put apple up", three stocks in one typed line, a typed "Pull up
+  Microsoft" and "Clear the board" all went through their tools (every tool
+  answered in 1–650 ms); the closing sheet showed the board. Missed: the
+  spoken "Pull up Tesla" (gap 1). Fixed since: the closing sheet's time was
+  in the browser's language ("下午4:43"); it is now English like the rest.

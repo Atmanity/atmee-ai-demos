@@ -116,8 +116,8 @@ describe('choose_destination', () => {
 
   test('nothing, or nowhere: the host asks', async () => {
     const state = new TravelState();
-    expect(await runTool(state, fakeLookups().lookups, 'choose_destination', {})).toContain('No destination was given');
-    expect(await runTool(state, fakeLookups().lookups, 'choose_destination', { place: 'Atlantis' })).toContain('Could not place Atlantis');
+    expect(await runTool(state, fakeLookups().lookups, 'choose_destination', {})).toMatch(/^Not done: no destination was given/);
+    expect(await runTool(state, fakeLookups().lookups, 'choose_destination', { place: 'Atlantis' })).toMatch(/^Not found: could not place Atlantis/);
     expect(state.seq).toBe(0);
   });
 });
@@ -126,7 +126,7 @@ describe('show_food and show_news', () => {
   test('the dishes, with their words, for the country on the map', async () => {
     const state = new TravelState();
     const { lookups } = fakeLookups();
-    expect(await runTool(state, lookups, 'show_food')).toContain('No country is chosen yet');
+    expect(await runTool(state, lookups, 'show_food')).toMatch(/^Not yet: no country is chosen yet/);
     await runTool(state, lookups, 'choose_destination', { place: 'Japan' });
     const said = await runTool(state, lookups, 'show_food');
     expect(state.snapshot().food!.shown).toBe(true);
@@ -165,7 +165,7 @@ describe('the sights', () => {
   test('explore_near shows the closest, next_sight and previous_sight move one at a time', async () => {
     const { lookups } = fakeLookups();
     const state = new TravelState();
-    expect(await runTool(state, lookups, 'explore_near', { place: 'Shibuya station' })).toContain('the closest of 3 sights is on screen: Hachikō');
+    expect(await runTool(state, lookups, 'explore_near', { place: 'Shibuya station' })).toContain('the first of 3 sights worth seeing is on screen: Hachikō');
     expect(await runTool(state, lookups, 'next_sight')).toContain('sight 2 of 3: Shibuya Crossing');
     expect(await runTool(state, lookups, 'previous_sight')).toContain('sight 1 of 3: Hachikō');
     expect(await runTool(state, lookups, 'previous_sight')).toContain('already the first');
@@ -178,7 +178,7 @@ describe('the sights', () => {
     await runTool(state, lookups, 'next_sight'); // the host's own, late
     const said = await runTool(state, lookups, 'next_sight', { from: 0 }); // the net's, from the sight it saw
     expect(state.spotIndex).toBe(1);
-    expect(said).toContain('done already');
+    expect(said).toMatch(/^Already done: sight 2 of 3/);
     await runTool(state, lookups, 'next_sight', { from: 1 });
     expect(state.spotIndex).toBe(2);
   });
@@ -196,7 +196,29 @@ describe('the sights', () => {
 
   test('before anywhere was looked at, the host asks where', async () => {
     expect(await runTool(new TravelState(), fakeLookups().lookups, 'next_sight')).toContain('which town');
-    expect(await runTool(new TravelState(), fakeLookups().lookups, 'explore_near', {})).toContain('No place was given');
+    expect(await runTool(new TravelState(), fakeLookups().lookups, 'explore_near', {})).toMatch(/^Not done: no place was given/);
+  });
+});
+
+describe('arguments as the host sends them: any case, other words for the same thing, extra fields', () => {
+  test('a capitalised place, a synonym, and an unknown extra field all work', async () => {
+    const { lookups } = fakeLookups();
+    const state = new TravelState();
+    expect(await runTool(state, lookups, 'choose_destination', { place: '  PORTUGAL ', mood: 'sunny', urgency: 3 })).toMatch(/^Done: Portugal is on the map/);
+    await runTool(state, lookups, 'choose_destination', { place: 'the UK' });
+    expect(state.country).toBe('United Kingdom');
+    await runTool(state, lookups, 'choose_destination', { country: 'Japan' }); // the host named the field its own way
+    expect(state.country).toBe('Japan');
+    expect(await runTool(state, lookups, 'explore_near', { location: 'Shibuya Station', radius: 'small' })).toMatch(/^Done: around Shibuya/);
+    expect(await runTool(state, lookups, 'next_sight', { politely: true })).toMatch(/^Done: now on screen, sight 2 of 3/);
+    await runTool(state, lookups, 'remember_name', { first_name: '  sam ' });
+    expect(state.travelerName).toBe('Sam');
+  });
+
+  test('an unusable value gets a question for the host to ask, never silence', async () => {
+    const state = new TravelState();
+    expect(await runTool(state, fakeLookups().lookups, 'choose_destination', { place: 42 })).toMatch(/^Not done: .* Ask/);
+    expect(await runTool(state, fakeLookups().lookups, 'explore_near', { place: '' })).toMatch(/^Not done: .* Ask/);
   });
 });
 

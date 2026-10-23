@@ -153,6 +153,9 @@ test('what the safety net does when the host does not, and never a move', () => 
     ['I fold. Can we start a new hand?', 'deal_hand'], ['one more hand', 'deal_hand'],
     ['Rematch!', 'new_match'], ["let's play again", 'new_match'], ['run it back', 'new_match'],
     ['what are my cards?', 'read_my_cards'], ['What am I holding?', 'read_my_cards'],
+    // Live, "What beats what?" got the rankings recited and the chart offered, not opened.
+    ['What beats what?', 'show_hand_rankings'], ["What's the best hand?", 'show_hand_rankings'], ['show me the rankings', 'show_hand_rankings'],
+    ['Which hand wins, a flush or a straight?', 'show_hand_rankings'],
     // Moves are never the net's: a bet it played on top of the host's would land twice.
     ['I call', null], ['raise to 60', null], ['all in', null], ['I fold', null], ['check', null],
     // Chatter that only sounds like a deal.

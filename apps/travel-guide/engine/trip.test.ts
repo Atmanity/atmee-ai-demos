@@ -117,7 +117,7 @@ describe('planning a trip', () => {
     expect(calls.some((c) => c.startsWith('place:'))).toBe(false);
     await trip.searchDestination(state, lookups, 'Bali');
     expect([state.country, state.city]).toEqual(['Indonesia', 'Bali']);
-    expect(await trip.searchDestination(state, lookups, 'Atlantis')).toContain('Could not place Atlantis');
+    expect(await trip.searchDestination(state, lookups, 'Atlantis')).toContain('could not place Atlantis');
   });
 
   test('a tap on the map plans a trip to the country under it, and the sea is nobody\'s', async () => {
@@ -195,7 +195,7 @@ describe('headlines and dishes: fetched at once, shown when asked', () => {
     const line = await trip.showHeadlines(state);
     expect(state.detail.size).toBe(0);
     expect(state.seq).toBe(0);
-    expect(line).toContain('No country is chosen yet');
+    expect(line).toContain('no country is chosen yet');
   });
 
   test('dishes appear before their photos do', async () => {
@@ -315,6 +315,18 @@ describe('what is around them', () => {
     expect(v.spot!.imageUrl).toMatch(/^https:\/\/img\.test\//);
     expect(v.spot!.summary).toContain('worth the trip');
     expect(line).toContain('Kiyomizu-dera');
+  });
+
+  test("a ranked sight keeps its own photo, and its article is looked up by its exact title", async () => {
+    const { lookups, calls } = fakeLookups({
+      nearby: async () => [{ name: 'Igreja de Santo Estêvão', wiki: 'Igreja de Santo Estêvão (Lisbon)', category: 'church', lat: 38.7117, lon: -9.1272, image: 'https://img.test/estevao.jpg' }],
+      summary: async (t) => { calls.push(`summary:${t}`); return null; },
+    });
+    const state = new TravelState();
+    await trip.explorePlace(state, lookups, 'Kyoto');
+    expect(calls).toContain('summary:Igreja de Santo Estêvão (Lisbon)');
+    expect(state.snapshot().spot!.spot!.imageUrl).toBe('https://img.test/estevao.jpg');
+    expect(state.snapshot().spot!.spot!.name).toBe('Igreja de Santo Estêvão');
   });
 
   test('a Wikipedia article about some other place lends neither its photo nor its words', async () => {

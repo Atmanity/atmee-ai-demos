@@ -3,6 +3,7 @@
 // finished character. Everything here is drawn from the server's snapshot and
 // the page's own marks: there is no character data in the page, so nothing
 // here can show a stroke before it is earned.
+import { travelSentences } from '../engine/director.ts';
 import { VERDICT_LABEL, type CatalogEntry, type Command, type Snapshot, type Verdict } from '../engine/types.ts';
 import type { GridPoint } from './ink.ts';
 import { markKey, markLabel, type Marks } from './marks.ts';
@@ -164,7 +165,7 @@ export function Lesson({ view, marks, busy, pending, miss, notice, onStroke, onC
         {verdict ? (
           <div className={`hs-verdict is-${verdict.kind}`} role="status">
             <span className="hs-verdict-tag">{verdictLabel(verdict, view.attempts)}</span>
-            <p>{verdict.note}</p>
+            <p>{verdict.travel ? travelSentences(verdict.travel) : verdict.note}</p>
           </div>
         ) : (
           <p className="hs-tip">Draw it in one movement, with your finger or mouse. Not sure how it goes? Ask {HOST}, or press Show me.</p>

@@ -11,8 +11,6 @@ import type { AppTool } from '../../../server/app-server.ts';
 import { NOT_FACTORABLE } from './methods.ts';
 import type { FactsView, MethodId, View } from './types.ts';
 
-export const METHOD_IDS: MethodId[] = ['factoring', 'completing_square', 'quadratic_formula'];
-
 export const METHOD_WORDS: Record<MethodId, string> = {
   factoring: 'factoring',
   completing_square: 'completing the square',
@@ -28,15 +26,19 @@ The board changes only when you call one of its tools, and only the board knows 
 - "Go back", "undo that": call previous_line. "Show it all", "just give them the answer": call show_all_working.
 - "Show the graph", "hide the graph", "just the working": call show_graph or hide_graph.
 - "Clear the board", "start fresh": call clear_board, and only when the teacher asks for it.
-- Call the tool every time. Saying "next line" or "putting that up" without the call changes nothing on the screen and misleads the class. One tool per request, the smallest one that does it.
+- Every request that changes the board is a tool call, even a single word answering your own question (a method's name after you asked which, a yes). Call the tool every time: saying "next line" or "putting that up" without the call changes nothing on the screen and misleads the class. Never say anything went up, changed or was cleared unless the tool's result said so. One tool per request, the smallest one that does it.
 - A tool that refuses gives you the reason: say it in your own words and do not pretend anything happened.
 - Questions about what is on the board (the roots, the vertex, the discriminant, which way it opens, which methods work, what a line says): answer from the live board in your context, with no tool. If it is not there, say you don't have it.
 - When the teacher presses a button or writes on the board themselves, you are told what happened: carry on from that.
 Numbers, the one hard rule: every number you say is copied from the board or a tool's result, exactly as written. Surds stay surds and fractions stay fractions: never round, never say "approximately", never turn 2 + √3 into a decimal; if they ask for a decimal, say you have the exact value and read that. Say "x squared" for x², "plus or minus" for ±, "root three" for √3. Say only what you would say aloud: no lists, labels or symbol names.`;
 
-const noArgs = { type: 'object', properties: {}, additionalProperties: false };
+// Lenient schemas: the platform checks a call's arguments before the page sees
+// them, and a call that does not fit never arrives (the host then tends to say
+// it happened). So no enums, patterns or tight lengths: the board reads the
+// words itself and asks back when it cannot use them.
+const noArgs = { type: 'object', properties: {} };
 const awaits = (timeoutSeconds = 8) => ({ mode: 'await' as const, timeoutSeconds });
-const methodParam = { type: 'string', enum: METHOD_IDS };
+const METHODS_IN_WORDS = 'factoring, completing the square or the quadratic formula (the teacher\'s own words are fine)';
 
 /** The board's tools. Each is answered by the server, which owns the working. */
 export const TOOLS: AppTool[] = [
@@ -46,11 +48,9 @@ export const TOOLS: AppTool[] = [
     parameters: {
       type: 'object',
       properties: {
-        equation: { type: 'string', minLength: 1, maxLength: 200, description: 'The equation as the teacher said or typed it, in words or symbols: "x squared minus four x plus three", "2x^2 + 5". For a change to the one on the board, the whole new equation.' },
-        method: { ...methodParam, description: 'Only when the teacher named a method in the same breath.' },
+        equation: { type: 'string', maxLength: 500, description: 'The equation as the teacher said or typed it, in words or symbols: "x squared minus four x plus three", "2x^2 + 5". For a change to the one on the board, the whole new equation.' },
+        method: { type: 'string', maxLength: 500, description: `Only when the teacher named a method in the same breath: ${METHODS_IN_WORDS}.` },
       },
-      required: ['equation'],
-      additionalProperties: false,
     },
     // A misheard equation goes to the server's own model, which takes a few seconds.
     'x-atmee': awaits(15),
@@ -58,7 +58,7 @@ export const TOOLS: AppTool[] = [
   {
     type: 'function', name: 'choose_method',
     description: 'Sets the board up to solve the equation on it by one method; no working is revealed yet. Call it when the teacher picks or changes method ("by factoring", "complete the square", "use the formula").',
-    parameters: { type: 'object', properties: { method: { ...methodParam, description: 'The method the teacher picked.' } }, required: ['method'], additionalProperties: false },
+    parameters: { type: 'object', properties: { method: { type: 'string', maxLength: 500, description: `The method the teacher picked: ${METHODS_IN_WORDS}.` } } },
     'x-atmee': awaits(),
   },
   { type: 'function', name: 'next_line', description: 'Puts the next line of working on the board and returns it for you to read out. Call it once each time the teacher asks for the next line ("next", "go on", "and then?").', parameters: noArgs, 'x-atmee': awaits() },
@@ -122,47 +122,57 @@ export function boardState(v: View): string {
 /** Shown on the board when an equation the teacher said could not be read. */
 export const UNREADABLE = "That didn't read as a quadratic. Say it again, or write it in the box below the board.";
 
-/** What a tool call (or a control) did, in words the host speaks from. */
+/** Every opening starts here: the host's own greeting has already introduced it. */
+export const GREETED = 'You have just greeted them; do not greet or introduce yourself again.';
+
+/**
+ * What a tool call (or a control) did, in words the host speaks from. Each
+ * begins with the plain outcome ("Done:", "Not done:", "Refused:"), so the
+ * reply's first real words are the board's and a filler said while the call
+ * ran cannot pre-judge it.
+ */
 export const said = {
   start: () =>
-    'The board is ready and empty. Greet the teacher in ONE short line and say the board is ready whenever they want an equation on it. Do not teach anything, do not explain quadratics, and do not put anything on the board yourself.',
+    `${GREETED} The board is clean and ready. In one short line, tell them they can name any quadratic or tap one of the three examples on the board. Do not teach anything, do not explain quadratics, and do not put anything on the board yourself.`,
   resume: (v: View) => {
     if (!v.equation) return said.start();
     const where = v.method ? `${METHOD_WORDS[v.method]}, ${v.revealed} of ${v.total_steps} lines up` : 'no method chosen yet';
-    return `The teacher called you back, and the board is as they left it: ${v.equation.display}, ${where}. Say in one short line that you are back and the board is as they left it. Do not read any working.`;
+    return `${GREETED} The board is as they left it: ${v.equation.display}, ${where}. Say so in one short line. Do not read any working.`;
   },
   equation: (v: View, how: 'heard' | 'written') => {
-    const up = `${v.equation!.display} is on the board${v.graph_visible ? ', with its graph' : ''}.`;
+    const up = `Done: ${v.equation!.display} is on the board${v.graph_visible ? ', with its graph' : ''}.`;
     const check = how === 'heard' ? 'Read the equation back in one short line so they can check it was heard right' : 'Say in one short line that it is up';
     if (v.method) return `${up} It is set up for ${METHOD_WORDS[v.method]}: ${v.total_steps} lines, none up yet. ${check}, say you're ready, and wait for them to ask for the first line. Do not start solving.`;
     return `${up} ${check}, then ask which method they want: ${offer(v)}. Do not start solving.`;
   },
   equationNotMethod: (v: View, reason: string) =>
-    `${v.equation!.display} is on the board, but not the method: ${reason} Read the equation back in one short line, say that, and ask which method they want: ${offer(v)}.`,
+    `Done, but not the method: ${v.equation!.display} is on the board, and ${reason} Read the equation back in one short line, say that, and ask which method they want: ${offer(v)}.`,
   alreadyUp: (v: View) =>
-    `${v.equation!.display} is already on the board, so nothing changed${v.method ? ` (${METHOD_WORDS[v.method]}, ${v.revealed} of ${v.total_steps} lines up)` : ''}. Say so in a few words.`,
-  noEquation: () => 'No equation was given. Ask the teacher in one short line which equation to put up.',
+    `Already done: ${v.equation!.display} is on the board, so nothing changed${v.method ? ` (${METHOD_WORDS[v.method]}, ${v.revealed} of ${v.total_steps} lines up)` : ''}. Say so in a few words.`,
+  noEquation: () => 'Not done: no equation was given. Ask the teacher in one short line which equation to put up.',
   unreadable: (text: string) =>
-    `The board could not read "${text}" as a quadratic, so nothing went up. Ask the teacher in one short line to say it again or write it in the box below the board. Do not guess the numbers.`,
-  refused: (reason: string) => `The board refused that: ${reason} Say that to them in one short line, in your own voice, and do not claim anything happened.`,
+    `Not done: the board could not read "${text}" as a quadratic, so nothing went up. Ask the teacher in one short line to say it again or write it in the box below the board. Do not guess the numbers.`,
+  whichMethod: (asked: string) =>
+    `Not done: ${asked ? `"${asked}" is not a method this board knows` : 'no method was given'}, so nothing changed. Ask the teacher in one short line which they want: factoring, completing the square or the quadratic formula.`,
+  refused: (reason: string) => `Refused: ${reason} Say that to them in one short line, in your own voice, and do not claim anything happened.`,
   method: (v: View) =>
-    `The board is set up for ${METHOD_WORDS[v.method!]}: ${v.total_steps} lines, none up yet. Say you're ready in one short line and wait for the teacher to ask for the first line. Do not read or describe any of the working.`,
+    `Done: the board is set up for ${METHOD_WORDS[v.method!]}: ${v.total_steps} lines, none up yet. Say you're ready in one short line and wait for the teacher to ask for the first line. Do not read or describe any of the working.`,
   sameMethod: (v: View) =>
-    `The board is already set up for ${METHOD_WORDS[v.method!]}, with ${v.revealed} of ${v.total_steps} lines up, so nothing changed. Say so in a few words.`,
+    `Already done: the board is set up for ${METHOD_WORDS[v.method!]}, with ${v.revealed} of ${v.total_steps} lines up, so nothing changed. Say so in a few words.`,
   next: (v: View) => {
     const last = v.steps[v.steps.length - 1];
     const tail = v.remaining === 0 ? ' That was the last line: the answer is boxed on the board.' : ` ${v.remaining} more to come; wait to be asked.`;
-    return `Line ${last.n} of ${v.total_steps} is now on the board: ${last.working}. Read it out once in your own words, keeping every number and symbol exactly as written: "${last.say}"${tail} Say nothing else.`;
+    return `Done: line ${last.n} of ${v.total_steps} is now on the board: ${last.working}. Read it out once in your own words, keeping every number and symbol exactly as written: "${last.say}"${tail} Say nothing else.`;
   },
-  revealAll: (v: View) => `Every line is up, and the answer is boxed on the board. In one short line, say the answer is ${answerText(v.facts!)}: those exact values, not decimals.`,
+  revealAll: (v: View) => `Done: every line is up, and the answer is boxed on the board. In one short line, say the answer is ${answerText(v.facts!)}: those exact values, not decimals.`,
   back: (v: View) => {
-    if (!v.revealed) return 'The working is back to blank. Say so in one very short line. Do not repeat any line you just took down.';
+    if (!v.revealed) return 'Done: the working is back to blank. Say so in one very short line. Do not repeat any line you just took down.';
     const last = v.steps[v.steps.length - 1];
-    return `The last line was taken down; ${v.revealed} ${v.revealed === 1 ? 'line is' : 'lines are'} still up, ending at ${last.working}. Say in one very short line that you've gone back a step, and nothing more.`;
+    return `Done: the last line was taken down; ${v.revealed} ${v.revealed === 1 ? 'line is' : 'lines are'} still up, ending at ${last.working}. Say in one very short line that you've gone back a step, and nothing more.`;
   },
-  graph: (v: View) => `The graph is ${v.graph_visible ? 'up' : 'hidden'}. Acknowledge it in a few words.`,
-  clear: () => "The board is clean. Say so in one short line and ask what they'd like up next. Do not refer to the equation you just wiped.",
-  failed: () => 'The board did not answer that. Ask the teacher in one short line to try again, and do not say anything changed.',
+  graph: (v: View) => `Done: the graph is ${v.graph_visible ? 'up' : 'hidden'}. Acknowledge it in a few words.`,
+  clear: () => "Done: the board is clean. Say so in one short line and ask what they'd like up next. Do not refer to the equation you just wiped.",
+  failed: () => 'Not done: the board did not answer. Ask the teacher in one short line to try again, and do not say anything changed.',
 };
 
 const pressed = (what: string, outcome: string) => `The teacher ${what} on the board themselves. ${outcome}`;

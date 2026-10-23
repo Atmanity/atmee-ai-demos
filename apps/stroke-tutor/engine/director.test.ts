@@ -104,7 +104,7 @@ describe('staging', () => {
     const tutor = new StrokeTutor();
     tutor.startCharacter('juu');
     tutor.stroke(drawing(JUU, 0).reverse());
-    expect(boardState(tutor.snapshot())).toContain(`Wrong direction: "${JUU.strokes[0].directionNote}"`);
+    expect(boardState(tutor.snapshot())).toContain('Wrong direction: "You drew it from right to left. This stroke goes from left to right."');
   });
 
   test('the menu is on the board before any character, and after the last stroke', () => {
@@ -149,6 +149,20 @@ describe('limits', () => {
     }
   });
 
+  test('the schemas are lenient: nothing the platform could reject a fair call for', () => {
+    const banned = /"(enum|pattern|format|minLength|const|additionalProperties)"/;
+    for (const tool of TOOLS) {
+      const schema = JSON.stringify(tool.parameters);
+      expect(schema, tool.name).not.toMatch(banned);
+      expect((tool.parameters as { required?: unknown }).required, tool.name).toBeUndefined();
+      for (const m of schema.matchAll(/"maxLength":(\d+)/g)) expect(Number(m[1])).toBeGreaterThanOrEqual(200);
+    }
+  });
+
+  test('next_stroke asks to be called for the single word "next"', () => {
+    expect(TOOLS.find((t) => t.name === 'next_stroke')!.description).toContain('even that one word');
+  });
+
   test('a starting-over tool says it is only for when the learner asks', () => {
     expect(TOOLS.find((t) => t.name === 'start_over')!.description).toContain('Only when the learner asks');
   });
@@ -176,7 +190,11 @@ describe('limits', () => {
     expect(INSTRUCTIONS).toContain("never say \"I can't describe it\"");
     expect(INSTRUCTIONS).toContain('WITHOUT changing what it claims');
     expect(INSTRUCTIONS).toContain('Never comment on neatness');
-    expect(INSTRUCTIONS).toContain('The sheet changes only when you call a tool');
+    expect(INSTRUCTIONS).toContain('The sheet changes only when you call');
+    expect(INSTRUCTIONS).toContain('Every request that changes the sheet is a tool call, even one word');
+    expect(INSTRUCTIONS).toContain('"Next." on its own');
+    expect(INSTRUCTIONS).toContain('Never say an action happened');
+    expect(INSTRUCTIONS).toContain('in the order given: what they drew, then which way it goes');
     expect(INSTRUCTIONS).toContain('Never invent an outcome');
     expect(INSTRUCTIONS).toContain('You cannot draw for them');
   });
@@ -186,6 +204,22 @@ describe('cues', () => {
   const view = (verdict: Snapshot['last_verdict'], attempts = 1): Snapshot => ({
     phase: 'writing', character: { id: 'juu', glyph: '十', meaning: 'ten', reading: 'jū', script: 'kanji', strokes_total: 2 },
     stroke_index: 0, strokes: [], attempts, last_verdict: verdict, score: { correct: 0, total: 1 }, grid: 1000, catalog: [],
+  });
+
+  test('a stroke drawn backwards is told as what they drew, then which way it goes, in that order', () => {
+    const cue = say.verdict(view({ ok: false, kind: 'direction', note: 'Top to bottom.', travel: { drawn: 'from the bottom up', right: 'from the top down' } }));
+    expect(cue).toMatch(/^Not right: /);
+    expect(cue).toContain('"You drew it from the bottom up. This stroke goes from the top down."');
+    expect(cue).toContain('in this order');
+    // The bare note, which live was heard as what they did, is not what Ren is handed.
+    expect(cue).not.toContain('"Top to bottom."');
+  });
+
+  test('the opening does not greet again: the host has just greeted them', () => {
+    expect(say.opening()).toMatch(/^You have just greeted them; do not greet or introduce yourself again\./);
+    const tutor = new StrokeTutor();
+    tutor.startCharacter('ki');
+    expect(say.resume(tutor.snapshot())).toMatch(/^You have just greeted them; do not greet or introduce yourself again\./);
   });
 
   test('each verdict kind gets its own coaching line, quoting the note', () => {

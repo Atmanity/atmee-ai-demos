@@ -224,18 +224,27 @@ export function rules(text: string, board: Board): Judgement {
 
 // ─── the safety net ──────────────────────────────────────────────────────
 
-export type NetCall = { name: 'clear_board' | 'refresh_quote' | 'remove_symbols'; arguments: Record<string, unknown> };
+export type NetCall = { name: 'clear_board' | 'refresh_quote' | 'remove_symbols' | 'focus_symbol'; arguments: Record<string, unknown> };
+
+/** Asking to look at a stock, as opposed to asking about it ("what's Tesla doing?" is answered from the board). */
+const LOOK = /\b(pull up|bring up|look at|focus on|switch to|go back to|back to|go to|show me|zoom in on|let me see|put [a-z0-9.\- ]+ (front and cent(er|re)|on watch))\b/;
 
 /**
  * The tool call the user's words clearly ask for, among those safe to do
  * twice: a second clear finds the board clear, a second refresh hits the 15 s
- * floor, a second removal finds the stock gone. Never an add (a duplicate
- * could take a slot) and never a focus (it adds what is not there).
+ * floor, a second removal finds the stock gone, a second focus finds it in
+ * front already. Never an add (a duplicate could take a slot), and a focus
+ * only of a stock already on the board (otherwise it would add).
  */
 export function mustDo(text: string, board: Board): NetCall | null {
   const j = rules(text, board);
   if (j.kind === 'clear') return { name: 'clear_board', arguments: {} };
   if (j.kind === 'refresh') return { name: 'refresh_quote', arguments: j.symbols[0] ? { stock: j.symbols[0] } : {} };
+  // Bringing a stock already on the board to the front is safe to do twice; one that is not there would be an add.
+  if (j.kind === 'focus') {
+    const symbol = j.symbols[0];
+    return symbol && board.watchlist.some((q) => q.symbol === symbol) && LOOK.test(norm(text)) ? { name: 'focus_symbol', arguments: { stock: symbol } } : null;
+  }
   if (j.kind === 'remove') {
     if (j.symbols.length) return { name: 'remove_symbols', arguments: { stocks: j.symbols } };
     // "Drop it": the one on watch. "Drop the other thing" names nothing the net can be sure of.

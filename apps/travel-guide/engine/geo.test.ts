@@ -104,6 +104,16 @@ describe('parseOverpassPois', () => {
     expect(spots[0].category).toBe('gallery');
   });
 
+  test('a plaque or a boundary stone is not a sight; a gate or a fort is', () => {
+    const body = { elements: [
+      { tags: { name: 'Júlio de Castilho', historic: 'memorial' }, lat: 1, lon: 1 },
+      { tags: { name: 'Old Plaque', historic: 'plaque' }, lat: 1, lon: 1 },
+      { tags: { name: 'Old Fort', historic: 'fort' }, lat: 1, lon: 1.001 },
+      { tags: { name: 'War Memorial Museum', historic: 'memorial', tourism: 'museum' }, lat: 1, lon: 1.002 },
+    ] };
+    expect(geo.parseOverpassPois(body, 1, 1).map((s) => s.name)).toEqual(['Old Fort', 'War Memorial Museum']);
+  });
+
   test('underscored categories become spoken words', () => {
     const body = { elements: [{ tags: { name: 'Old Gate', historic: 'city_gate' }, lat: 1, lon: 1 }] };
     expect(geo.parseOverpassPois(body, 1, 1)[0].category).toBe('city gate');
@@ -119,20 +129,62 @@ describe('parseOverpassPois', () => {
   });
 });
 
-describe('parseGeosearch, parseHeadlines, parseSummary', () => {
-  test("GeoSearch keeps Wikipedia's closest-first order", () => {
-    const body = { query: { geosearch: [
-      { title: 'Kiyomizu-dera', lat: 34.99, lon: 135.78 },
-      { title: 'Kiyomizu-dera', lat: 34.99, lon: 135.78 },
-      { title: 'Yasaka Shrine', lat: 35.0, lon: 135.77 },
-    ] } };
-    expect(geo.parseGeosearch(body).map((s) => s.name)).toEqual(['Kiyomizu-dera', 'Yasaka Shrine']);
+/** A Wikipedia GeoSearch around Alfama, Lisbon, shaped like the API's (formatversion 2). */
+const ALFAMA = { batchcomplete: true, query: { pages: [
+  // What live GeoSearch put first: nearest, obscure, no photo.
+  { title: 'Júlio de Castilho Memorial', coordinates: [{ lat: 38.7118, lon: -9.1302 }], length: 1800, description: 'memorial in Lisbon, Portugal', pageviews: { a: 2, b: 1 } },
+  { title: 'S. Vicente (artwork)', coordinates: [{ lat: 38.7121, lon: -9.1299 }], length: 1500, thumbnail: { source: 'https://img.test/svicente.jpg' }, description: 'artwork in Lisbon', pageviews: { a: 1 } },
+  { title: 'São Jorge Castle', coordinates: [{ lat: 38.7139, lon: -9.1335 }], length: 32000, thumbnail: { source: 'https://img.test/castle.jpg' }, description: 'castle in Lisbon, Portugal', pageviews: { a: 900, b: 1100 } },
+  { title: 'Lisbon Cathedral', coordinates: [{ lat: 38.7099, lon: -9.1334 }], length: 21000, thumbnail: { source: 'https://img.test/se.jpg' }, description: 'Roman Catholic cathedral in Lisbon, Portugal', pageviews: { a: 600 } },
+  { title: 'Miradouro de Santa Luzia', coordinates: [{ lat: 38.7116, lon: -9.1302 }], length: 6000, thumbnail: { source: 'https://img.test/luzia.jpg' }, description: 'viewpoint in Lisbon', pageviews: { a: 120 } },
+  { title: 'Igreja de Santo Estêvão (Lisbon)', coordinates: [{ lat: 38.7117, lon: -9.1272 }], length: 4000, thumbnail: { source: 'https://img.test/estevao.jpg' }, description: 'church in Alfama, Lisbon' },
+  // Near, with photos, and not sights.
+  { title: 'Alfama', coordinates: [{ lat: 38.7114, lon: -9.1302 }], length: 15000, thumbnail: { source: 'https://img.test/alfama.jpg' }, description: 'neighbourhood of Lisbon, Portugal', pageviews: { a: 800 } },
+  { title: 'Santa Apolónia station', coordinates: [{ lat: 38.7136, lon: -9.1225 }], length: 9000, thumbnail: { source: 'https://img.test/station.jpg' }, description: 'railway station in Lisbon, Portugal', pageviews: { a: 150 } },
+  { title: 'List of churches in Lisbon', coordinates: [{ lat: 38.712, lon: -9.13 }], length: 9000, thumbnail: { source: 'https://img.test/list.jpg' } },
+  // Things that happened there, and the ward itself (live, around Shibuya and in Lisbon).
+  { title: 'Lisbon Regicide', coordinates: [{ lat: 38.7076, lon: -9.1366 }], length: 20000, thumbnail: { source: 'https://img.test/regicide.jpg' }, description: 'Murder of the king and crown prince of Portugal in 1908', pageviews: { a: 300 } },
+  { title: 'February 26 incident', coordinates: [{ lat: 38.712, lon: -9.131 }], length: 60000, thumbnail: { source: 'https://img.test/coup.jpg' }, description: "1936 coup d'état attempt in Japan", pageviews: { a: 900 } },
+  { title: 'Shibuya', coordinates: [{ lat: 38.7116, lon: -9.1306 }], length: 30000, thumbnail: { source: 'https://img.test/ward.jpg' }, description: 'Special ward in Tokyo, Japan', pageviews: { a: 2000 } },
+  // Famous, but a long way off for a walk around Alfama.
+  { title: 'Jerónimos Monastery', coordinates: [{ lat: 38.6979, lon: -9.2068 }], length: 40000, thumbnail: { source: 'https://img.test/jeronimos.jpg' }, description: 'monastery in Belém, Lisbon', pageviews: { a: 1500 } },
+] } };
+
+describe('the sights around a place, ranked for a traveller', () => {
+  const ranked = () => geo.parseRankedSights(ALFAMA, 38.7115, -9.1305);
+
+  test('the landmarks come first, the obscure after; no photo, no sight', () => {
+    const names = ranked().map((s) => s.name);
+    expect(names.slice(0, 3)).toEqual(['São Jorge Castle', 'Lisbon Cathedral', 'Miradouro de Santa Luzia']);
+    expect(names).not.toContain('Júlio de Castilho Memorial'); // no lead image
+    expect(names.indexOf('S. Vicente')).toBeGreaterThan(names.indexOf('Igreja de Santo Estêvão'));
   });
 
-  test.each([null, {}, { query: {} }, { query: { geosearch: {} } }])('GeoSearch junk is tolerated: %j', (body) => {
-    expect(geo.parseGeosearch(body)).toEqual([]);
+  test('the district itself, a station, a list and an event are not sights', () => {
+    const names = ranked().map((s) => s.name);
+    for (const notASight of ['Alfama', 'Santa Apolónia station', 'List of churches in Lisbon', 'Lisbon Regicide', 'February 26 incident', 'Shibuya']) expect(names).not.toContain(notASight);
   });
 
+  test('a famous sight a long way off ranks below the ones within a walk', () => {
+    const names = ranked().map((s) => s.name);
+    expect(names.indexOf('Jerónimos Monastery')).toBeGreaterThan(names.indexOf('Miradouro de Santa Luzia'));
+  });
+
+  test('each carries its kind, its photo, and its article when the name shown is shortened', () => {
+    const castle = ranked().find((s) => s.name === 'São Jorge Castle')!;
+    expect([castle.category, castle.image, castle.wiki]).toEqual(['castle', 'https://img.test/castle.jpg', undefined]);
+    const church = ranked().find((s) => s.name === 'Igreja de Santo Estêvão')!;
+    expect([church.category, church.wiki]).toEqual(['church', 'Igreja de Santo Estêvão (Lisbon)']);
+    expect(ranked().find((s) => s.name === 'Lisbon Cathedral')!.category).toBe('cathedral');
+    expect(ranked().find((s) => s.name === 'S. Vicente')!.category).toBe('landmark');
+  });
+
+  test.each([null, {}, { batchcomplete: true }, { query: { pages: {} } }, { query: { pages: [null, 3, { title: 'x' }] } }])('junk and "nothing here" are an empty list: %j', (body) => {
+    expect(geo.parseRankedSights(body, 0, 0)).toEqual([]);
+  });
+});
+
+describe('parseHeadlines, parseSummary', () => {
   test('headlines name their source from the url', () => {
     const [headline] = geo.parseHeadlines({ news: [{ title: '  Trams   return  ', url: 'https://www.publico.pt/x', publish_date: '2026-07-30' }] });
     expect(headline.title).toBe('Trams return'); // whitespace collapsed
@@ -198,13 +250,25 @@ describe('the transport half, against scripted responses', () => {
     expect(seen[0].get('User-Agent')).toMatch(/atmee/);
   });
 
-  test('nearby spots fall back to Wikipedia when Overpass is down', async () => {
-    // Every Overpass mirror 504ing is a normal afternoon, and it must not read as "there is nothing near you".
-    const { http } = fakeHttp({
-      interpreter: { status: 504 },
-      'w/api.php': { body: { query: { geosearch: [{ title: 'Torre de Belém', lat: 38.69, lon: -9.21 }] } } },
-    });
-    expect((await geo.nearbySpots(38.7, -9.2, http))!.map((s) => s.name)).toEqual(['Torre de Belém']);
+  test('enough sights from Wikipedia, and Overpass is never asked', async () => {
+    // Live, every Overpass mirror failed in both runs, for 25 to 50 seconds each time.
+    const { http, calls } = fakeHttp({ 'w/api.php': { body: ALFAMA }, interpreter: { status: 504 } });
+    const spots = await geo.nearbySpots(38.7115, -9.1305, http);
+    expect(spots![0].name).toBe('São Jorge Castle');
+    expect(calls.some((c) => c.method === 'POST')).toBe(false);
+    expect(calls[0].url).toContain('generator=geosearch');
+    expect(calls[0].url).toContain('pageimages');
+  });
+
+  test('a place Wikipedia knows little about is topped up from Overpass, Wikipedia first', async () => {
+    const one = { query: { pages: [ALFAMA.query.pages[2]] } };
+    const { http } = fakeHttp({ 'w/api.php': { body: one }, interpreter: { body: OVERPASS } });
+    expect((await geo.nearbySpots(35.0, 135.7, http))!.map((s) => s.name)).toEqual(['São Jorge Castle', 'Near Gallery', 'Far Museum']);
+  });
+
+  test('Wikipedia down, Overpass up: the Overpass spots', async () => {
+    const { http } = fakeHttp({ 'w/api.php': { status: 500 }, interpreter: { body: OVERPASS } });
+    expect((await geo.nearbySpots(35.0, 135.7, http))!.map((s) => s.name)).toEqual(['Near Gallery', 'Far Museum']);
   });
 
   test('nearby spots are null only when every provider failed', async () => {
@@ -214,7 +278,7 @@ describe('the transport half, against scripted responses', () => {
   });
 
   test('nearby spots are empty when a provider answered with nothing', async () => {
-    const { http } = fakeHttp({ interpreter: { body: { elements: [] } }, 'w/api.php': { body: { query: { geosearch: [] } } } });
+    const { http } = fakeHttp({ interpreter: { body: { elements: [] } }, 'w/api.php': { body: { batchcomplete: true } } });
     expect(await geo.nearbySpots(0, 0, http)).toEqual([]);
   });
 

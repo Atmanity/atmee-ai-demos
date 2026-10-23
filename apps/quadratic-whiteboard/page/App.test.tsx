@@ -117,7 +117,7 @@ describe('the front door', () => {
 describe('the lesson', () => {
   it('sets up a clean board while Ada arrives, and opens with it', async () => {
     await live();
-    expect(fake.events[0]).toContain('The board is ready and empty');
+    expect(fake.events[0]).toMatch(/^You have just greeted them; do not greet or introduce yourself again\. The board is clean and ready/);
     expect(lastState()).toContain('The board is empty');
     expect(screen.getByText('A clean board.')).toBeTruthy();
     expect(document.body.textContent).not.toMatch(PLUMBING);
@@ -130,7 +130,7 @@ describe('the lesson', () => {
     expect(await call('choose_method', { method: 'factoring' })).toContain('set up for factoring');
     expect(screen.getAllByText('Not revealed yet')).toHaveLength(6);
     const line = await call('next_line');
-    expect(line).toContain('Line 1 of 6');
+    expect(line).toContain('Done: line 1 of 6');
     expect(screen.getByText('x² − 4x + 3 = 0')).toBeTruthy();
     expect(lastState()).toContain('1 of 6 lines are up');
     expect(document.body.textContent).not.toMatch(PLUMBING);
@@ -170,6 +170,19 @@ describe('the safety net', () => {
     vi.useRealTimers();
     await waitFor(() => expect(lastEvent()).toContain('You did not call hide_graph'));
     expect(screen.getByRole('button', { name: 'Show graph' })).toBeTruthy();
+  });
+
+  it('gives a typed line longer: live, typed turns were answered up to a turn late', async () => {
+    await live();
+    await call('put_up_equation', { equation: 'x^2 - 4x + 3' });
+    vi.useFakeTimers();
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    act(() => fake.onUserSaid!('Hide the graph.', 'typed'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(7100); });
+    expect(fake.events.some((e) => e.includes('You did not call'))).toBe(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(8000); });
+    vi.useRealTimers();
+    await waitFor(() => expect(lastEvent()).toContain('You did not call hide_graph'));
   });
 
   it('does nothing more when Ada made the call', async () => {

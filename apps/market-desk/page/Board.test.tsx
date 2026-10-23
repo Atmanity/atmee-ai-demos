@@ -333,6 +333,14 @@ describe('the other screens', () => {
     expect(onAgain).toHaveBeenCalledOnce();
   });
 
+  it('the closing sheet tells the time in English, whatever the browser\'s language', () => {
+    const spy = vi.spyOn(Date.prototype, 'toLocaleTimeString');
+    render(<Closing board={snapshot()} now={Date.UTC(2026, 9, 23, 8, 43)} host="Reese" onAgain={() => {}} />);
+    expect(spy.mock.calls.every(([locale]) => locale === 'en-US')).toBe(true);
+    expect(screen.getByText(/^Closing sheet · \d{1,2}:43 (AM|PM)$/)).toBeTruthy();
+    spy.mockRestore();
+  });
+
   it('the closing sheet for an empty board offers only the way back', () => {
     render(<Closing board={snapshot({ watchlist: [] })} now={Date.now()} host="Reese" onAgain={() => {}} />);
     expect(screen.getByRole('heading').textContent).toBe('You hung up with an empty board');

@@ -38,7 +38,7 @@ describe('the host\'s tools', () => {
   test('add_symbols: the first reply carries the real quotes, named the way the user said them', async () => {
     const { s } = desk();
     const done = await run(s, 'add_symbols', { stocks: ['Nvidia', 'TSLA'] }, 'tool');
-    expect(done.text).toContain('On the board now: NVDA (NVDA Inc.) at 212.55, up 0.16% today, for "nvidia"; TSLA (TSLA Inc.) at 212.55');
+    expect(done.text).toMatch(/^Done: on the board now: NVDA \(NVDA Inc\.\) at 212\.55, up 0\.16% today, for "nvidia"; TSLA \(TSLA Inc\.\) at 212\.55/);
     expect(done.refused).toBeUndefined();
     expect(s.board().watchlist.map((q) => q.symbol)).toEqual(['NVDA', 'TSLA']);
   });
@@ -78,7 +78,7 @@ describe('the host\'s tools', () => {
     expect((await run(s, 'focus_symbol', { stock: 'Nvidia' }, 'tool')).text).toContain('NVDA (NVDA Inc.) at 212.55, up 0.16% today is front and centre now');
     expect(s.board().focus).toBe('NVDA');
     const added = await run(s, 'focus_symbol', { stock: 'Microsoft' }, 'tool');
-    expect(added.text).toContain('On the board now: MSFT');
+    expect(added.text).toContain('Done: on the board now: MSFT');
     expect(added.text).toContain('MSFT is front and centre now');
     expect(s.board().focus).toBe('MSFT');
   });
@@ -106,15 +106,32 @@ describe('the host\'s tools', () => {
   test('clear_board: once clears, twice says it already was', async () => {
     const { s } = desk();
     await run(s, 'add_symbols', { stocks: ['AAPL'] }, 'tool');
-    expect((await run(s, 'clear_board', {}, 'tool')).text).toContain('The board is clear');
+    expect((await run(s, 'clear_board', {}, 'tool')).text).toMatch(/^Done: the board is clear/);
     expect((await run(s, 'clear_board', {}, 'tool')).refused).toBe("The board's already clear.");
   });
 
   test('a call with nothing named asks, and changes nothing', async () => {
     const { s } = desk();
-    expect((await run(s, 'add_symbols', { stocks: [] }, 'tool')).text).toContain('No stock was named');
-    expect((await run(s, 'remove_symbols', {}, 'tool')).text).toContain('No stock was named');
+    expect((await run(s, 'add_symbols', { stocks: [] }, 'tool')).text).toMatch(/^Not done: no stock was named/);
+    expect((await run(s, 'remove_symbols', {}, 'tool')).text).toMatch(/^Not done: no stock was named/);
     expect(s.board().watchlist).toEqual([]);
+  });
+});
+
+describe('arguments as the host actually sends them', () => {
+  test('capitals, a string for a list, another key, and extra fields all work', async () => {
+    const { s } = desk();
+    await run(s, 'add_symbols', { stocks: 'NVIDIA', reason: 'the user asked', confidence: 0.9 }, 'tool');
+    await run(s, 'add_symbols', { symbols: ['tesla'] }, 'tool');
+    await run(s, 'add_symbols', { stock: 'Apple Inc.' }, 'tool');
+    expect(s.board().watchlist.map((q) => q.symbol)).toEqual(['NVDA', 'TSLA', 'AAPL']);
+    expect((await run(s, 'focus_symbol', { symbol: 'TESLA', note: 'x' }, 'tool')).text).toMatch(/^Done: TSLA/);
+    expect((await run(s, 'remove_symbols', { stocks: [{ symbol: 'AAPL' }] }, 'tool')).text).toMatch(/^Done: AAPL is off the board/);
+  });
+
+  test('a call with nothing usable asks a question back, never silence', async () => {
+    const { s } = desk();
+    for (const name of ['add_symbols', 'focus_symbol', 'remove_symbols']) expect((await run(s, name, { stocks: '', foo: 1 }, 'tool')).text).toMatch(/^Not done: no stock was named\. Ask/);
   });
 });
 
@@ -122,7 +139,7 @@ describe('the user\'s buttons', () => {
   test('a button acts at once and the host is told what it did, with the real quote', async () => {
     const { s } = desk();
     const done = await press(s, 'add', 'NVDA');
-    expect(done.text).toMatch(/^The user pressed "Add NVDA" on screen\. On the board now: NVDA \(NVDA Inc\.\) at 212\.55/);
+    expect(done.text).toMatch(/^The user pressed "Add NVDA" on screen\. Done: on the board now: NVDA \(NVDA Inc\.\) at 212\.55/);
     expect((await press(s, 'focus', 'NVDA')).text).toContain('pressed "the NVDA card"');
     expect((await press(s, 'remove', 'NVDA')).text).toContain('NVDA is off the board');
   });

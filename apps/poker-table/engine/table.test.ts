@@ -111,6 +111,19 @@ test('a move the player did not say is never played', () => {
   expect(text(result)).toContain('raise to 60');
 });
 
+test('the host may write the move in capitals or quotes; an empty one gets a question, not silence', () => {
+  for (const [words, kind] of [['I CALL', 'call'], ['"All In"', 'raise'], ['  Raise To 60.  ', 'raise']] as const) {
+    const table = liveTable();
+    const result = table.playerMove(words, [{ text: words.toLowerCase().replace(/"/g, ''), seq: table.view().seq }]);
+    expect(result.changed, words).toBe(true);
+    expect(table.view().last_action?.kind, words).toBe(kind);
+  }
+  const table = liveTable();
+  const empty = table.playerMove('   ', [{ text: 'I call', seq: table.view().seq }]);
+  expect(empty.changed).toBe(false);
+  expect(text(empty)).toContain('Ask them what they want to do');
+});
+
 test('a raise amount is the number they said', () => {
   // 47 is legal here (the minimum raise-to is 40 preflop) and it is what they
   // said: the parser never rounds, substitutes or picks.

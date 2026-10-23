@@ -155,10 +155,30 @@ it('a tapped call and the same call said aloud land once', async () => {
   const voiced = await answer(tool('v1', 'play_move', { words: 'I call' }), 6000);
   expect(voiced).toContain('Their call already landed');
   const told = harness.events.at(-1)!;
-  expect(told).toContain('The player pressed "Call 10" on screen. The table played their call of 10.');
+  expect(told).toContain('The player pressed "Call 10" on screen. Done. The table played their call of 10.');
   expect(told).toContain('The table played your move: you checked.');
   expect(screen.getAllByRole('img').filter((el) => el.closest('.bs-board'))).toHaveLength(3);
   expect(screen.getByRole('button', { name: 'Check' })).toBeTruthy();
+});
+
+it('the safety net opens the chart when Dex only recites the rankings', async () => {
+  // Live: "What beats what?" was answered from memory with an offer to open the chart.
+  await sitDown();
+  say('What beats what?');
+  await settle(7500);
+  expect(screen.getByRole('dialog', { name: 'How to play' })).toBeTruthy();
+  expect(harness.events.at(-1)).toContain('You did not call show_hand_rankings');
+  expect(harness.events.at(-1)).toContain('Done. The hand-rankings chart is open');
+});
+
+it('a lenient call: an extra field, a synonym field and capitals all reach the table', async () => {
+  await sitDown();
+  say('I call.');
+  const called = await answer(tool('l1', 'play_move', { words: 'I CALL', confidence: 0.9 }), 3000);
+  expect(called).toContain('The table played their call of 10.');
+  say('Bet sixty.');
+  const bet = await answer(tool('l2', 'play_move', { move: 'Bet', amount: 60 }), 3000);
+  expect(bet).toContain('The table played their bet of 60.');
 });
 
 it('an invented move never lands: the words decide', async () => {
@@ -200,10 +220,13 @@ it('the safety net deals the next hand when Dex only talks about it, and never p
   expect(screen.getByRole('button', { name: 'Check' })).toBeTruthy();
 });
 
-it("Dex's chart tool opens the rankings on screen; his other tools read the table", async () => {
+it("Dex's chart tool opens the rankings and gives him them to speak from; his other tools read the table", async () => {
   await sitDown();
-  await act(async () => { await tool('r1', 'show_hand_rankings'); });
+  let chart = '';
+  await act(async () => { chart = await tool('r1', 'show_hand_rankings'); });
   expect(screen.getByRole('dialog', { name: 'How to play' })).toBeTruthy();
+  expect(chart.startsWith('Done. The hand-rankings chart is open on their screen.')).toBe(true);
+  expect(chart).toContain('royal flush, then straight flush');
   const cards = await answer(tool('k1', 'read_my_cards'), 100);
   expect(cards).toMatch(/Their two hole cards are the \w+ of \w+ and the \w+ of \w+\./);
   expect(await answer(tool('d1', 'deal_hand'), 100)).toContain('A hand is already in play');

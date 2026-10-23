@@ -52,6 +52,12 @@ describe('the tools fit the API', () => {
     expect(JSON.stringify(TOOLS).length).toBeLessThanOrEqual(24576);
   });
 
+  it('the schemas are lenient: a call that does not fit never reaches the page, and the host then claims it worked', () => {
+    const all = JSON.stringify(TOOLS.map((t) => t.parameters));
+    for (const strict of ['"enum"', '"additionalProperties":false', '"pattern"', '"minLength"', '"minItems"', '"maxItems"', '"format"', '"required"']) expect(all, strict).not.toContain(strict);
+    for (const [, max] of all.matchAll(/"maxLength":(\d+)/g)) expect(Number(max)).toBeGreaterThanOrEqual(500);
+  });
+
   it('the server answers the ones that need it; the page answers the recipe’s place itself', () => {
     expect([...SERVER_TOOLS].sort()).toEqual(['compare_foods', 'look_up_food', 'open_recipe', 'start_over']);
     for (const name of SERVER_TOOLS) expect(TOOLS.map((t) => t.name)).toContain(name);
@@ -71,8 +77,15 @@ describe('the instructions and the standing note', () => {
 
   it('the screen changes only through a tool, and narrating an action is not doing it', () => {
     expect(INSTRUCTIONS).toMatch(/The screen changes only when you call a tool/);
-    expect(INSTRUCTIONS).toMatch(/without the call changes nothing and misleads them: call the tool every time/);
-    expect(INSTRUCTIONS).toMatch(/Never say something is on screen unless a result or the board says so/);
+    expect(INSTRUCTIONS).toMatch(/Every request that changes the screen is a tool call, even a one-word answer to your own question/);
+    expect(INSTRUCTIONS).toMatch(/without the call changes nothing and misleads them/);
+    expect(INSTRUCTIONS).toMatch(/Never say an action happened, or that something is on screen, unless a tool's result or the board says so/);
+  });
+
+  it('only what is on the card: no nutrient from memory', () => {
+    // Live, a banana's takeaway added "and potassium", which the label does not show.
+    expect(INSTRUCTIONS).toMatch(/Speak only of what is on the card/);
+    expect(INSTRUCTIONS).toMatch(/no potassium, vitamins or glycemic index[^.]*say that isn't on this card/);
   });
 
   it('a food is looked up before anything is said about it, and no figure is ever its own', () => {
@@ -267,7 +280,8 @@ describe('the board at its fullest', () => {
 describe('what a tool returns: the real outcome, to speak from', () => {
   it('a card carries every figure on it, and asks for the takeaway', () => {
     const text = said.cards([food('Medium banana')], [], false);
-    expect(text).toContain('On screen now: the nutrition card for "Medium banana"');
+    expect(text).toMatch(/^Done: on screen now, the nutrition card for "Medium banana"/);
+    expect(text).toMatch(/Speak only of what this card shows[^.]*say that isn't on this card/);
     expect(text).toContain('105 calories');
     expect(text).toContain('fiber 3.1 g (11% DV)');
     expect(text).toContain('Health score 9 of 10');
@@ -284,7 +298,7 @@ describe('what a tool returns: the real outcome, to speak from', () => {
   });
 
   it('a food looked at before is back, not new; one that could not be found is said', () => {
-    expect(said.cards([food('Medium banana')], ['Medium apple'], true)).toMatch(/On screen now, again: [^]*It was already in the comparison table, with "Medium apple"/);
+    expect(said.cards([food('Medium banana')], ['Medium apple'], true)).toMatch(/^Done: back on screen, [^]*It was already in the comparison table, with "Medium apple"/);
     expect(said.cards([food('Medium banana')], [], false, ['dragon fruit'])).toMatch(/could not find "dragon fruit" just now/);
   });
 
@@ -318,9 +332,9 @@ describe('what a tool returns: the real outcome, to speak from', () => {
   it('the next steps, then the end', () => {
     const r = recipe('Banana oat smoothie');
     const text = said.steps(r, { at: 3, shown: [2, 2] });
-    expect(text).toContain('Step 3 of 3 of "Banana oat smoothie" is lit up on screen now: (3) Pour and serve.');
+    expect(text).toContain('Done: step 3 of 3 of "Banana oat smoothie" is lit up on screen now: (3) Pour and serve.');
     expect(text).toMatch(/That is the last step/);
-    expect(said.stepsDone(r)).toMatch(/Every step[^.]*has been given/);
+    expect(said.stepsDone(r)).toMatch(/^Finished: every step[^.]*has been given/);
     expect(said.noRecipe()).toMatch(/open one only if they name it/);
   });
 
@@ -344,6 +358,7 @@ describe('what a tool returns: the real outcome, to speak from', () => {
     expect(said.closed('Medium banana')).toContain('the card for "Medium banana" is on screen again');
     expect(said.notOpen(null)).toContain('nothing is on screen yet');
     expect(said.cleared()).toMatch(/the screen is empty/);
+    expect(said.start()).toMatch(/^You have just greeted them; do not greet or introduce yourself again\./);
     expect(said.start()).toMatch(/invite them to name any food, or to add a photo/);
     expect(said.start()).toMatch(/Never ask them to hold anything up to a camera/);
   });
@@ -363,8 +378,20 @@ describe('what a tool returns: the real outcome, to speak from', () => {
     expect(SAMPLE_FAILED.endsWith('.')).toBe(false);
   });
 
-  it('an emergency is one instruction: call for help', () => {
-    expect(said.emergency()).toMatch(/call their local emergency number right now/);
-    expect(said.emergency()).toMatch(/Say nothing about food/);
+  it('every tool result opens with the plain outcome, so a filler cannot pre-judge it', () => {
+    const r = recipe('Banana oat smoothie');
+    const rows = [shelfRow(food('Medium banana')), shelfRow(food('Medium apple'))];
+    const results = [
+      said.cards([food('Medium banana')], [], false), said.cards([food('Medium banana')], [], true), said.cards([food('A'), food('B')], [], false),
+      said.lookupFailed(['kiwano']), said.noFood(), said.compare(rows, [], 2), said.recipe(r, 'Medium banana', started(3)),
+      said.recipeFailed('Banana bread'), said.steps(r, started(3)), said.stepsDone(r), said.noRecipe(), said.whichRecipe(),
+      said.closed('Medium banana'), said.notOpen(null), said.cleared(),
+    ];
+    for (const text of results) expect(text).toMatch(/^(?:Done|Not done|Not found|Finished|Nothing to close): /);
+  });
+
+  it('an emergency is one instruction: call for help, first', () => {
+    expect(said.emergency()).toMatch(/^Tell them to call their local emergency number right now/);
+    expect(said.emergency()).toMatch(/and nothing about food/);
   });
 });

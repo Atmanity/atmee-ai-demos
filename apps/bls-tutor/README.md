@@ -31,11 +31,14 @@ Open it at `/apps/bls-tutor/`.
 
 ## What the API could not do
 
-Status: not run live yet as Bystander. **Expected**: not observed on this
-build. The first port (state, notes and events, no tools) was run on staging on
-2026-10-23; what it saw is noted where it still applies.
+Status after the live runs of 2026-10-23 (shared host, then Alex's own).
+**Seen**: observed live. **Expected**: not observed yet.
 
-1. **The emergency line cannot be forced word for word.** *Expected.* The
+1. **The emergency line cannot be forced word for word.** *Seen.* While a tool
+   runs the platform has the host say a filler of its own, and it lands first:
+   "Heavy stuff, ok I know, but stop — if this is happening now…". The line
+   now opens the `stop_for_emergency` result so nothing else of Alex's comes
+   before it; the filler cannot be removed by the app. The
    original spoke it through text-to-speech with no model in the path. Here
    `stop_for_emergency` returns it with "word for word, and nothing else", and
    the page's event says the same, but Alex words results himself and an event
@@ -47,7 +50,13 @@ build. The first port (state, notes and events, no tools) was run on staging on
    page reads the recogniser's text about a second after the learner stops; a
    misheard "he's not breathing" is not caught by the rules. Alex's own
    judgement (`stop_for_emergency`) is the second chance. Typed text is certain.
-3. **Tools are called when Alex decides.** *Expected.* He may narrate ("let's
+3. **Tools are called when Alex decides, and the filler speaks first.** *Seen.*
+   Every verdict came from `check_answer`, but the filler said "Good choice"
+   before a Not-yet verdict; each result now opens with its outcome word
+   ("Not yet:", "Right:", "Refused:") and the instructions forbid judging while
+   a tool runs. "This is too hard, can we do the one where someone collapsed
+   instead?" called `leave_scenario`, not `start_scenario`; the instructions now
+   say to start a named drill, and the safety net does. He may narrate ("let's
    move on") without the call, or judge an answer aloud before `check_answer`.
    The safety net covers show me, next, leaving, choosing a drill and the false
    alarm; an answer he never passes on stays ungraded, and the learner can type
@@ -76,7 +85,7 @@ answer; and a spoken "show me" or scenario choice is no longer narrated twice.
 
 ## Tested
 
-- `npx vitest run apps/bls-tutor`: 266 tests. The engine's own, unchanged
+- `npx vitest run apps/bls-tutor`: 273 tests. The engine's own, unchanged
   (scenarios, grading, phases, the review, the emergency watch and its
   suppressions; only the staging tests went, with staging); `run()` for every
   tool and refusal; the tools and
@@ -87,4 +96,10 @@ answer; and a spoken "show me" or scenario choice is no longer narrated twice.
   and buttons, the review, the red card from speech, typing, Alex and an
   answer, the card's button with the server down, the net doing and not
   doing); and the sheet's controls per phase.
-- Live: not yet run as Bystander (no sessions were started for this rebuild).
+- Live on staging, 2026-10-23 (shared host `baf61f2c`, then Alex's own host
+  `35cd3138`), spoken through `tools/live-test/harness.js`: every step went
+  through its tool (`check_answer`, `next_step`, `give_hint`, `show_step`,
+  `start_scenario`); "my dad just collapsed and he's not breathing" put the red
+  card up from the page's own watch before Alex's `stop_for_emergency`, the line
+  was said once, and practice resumed only after "false alarm, nobody's hurt".
+  Since then: outcome-first results, lenient tool schemas, no second greeting.

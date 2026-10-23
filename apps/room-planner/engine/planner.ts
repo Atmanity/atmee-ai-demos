@@ -253,8 +253,13 @@ export class Planner {
       }
       // -------------------------------------------------------------- levels
       case 'add_level': {
+        // The ground floor keeps its layout; the stairs take their floor off
+        // one room, and the architect says which.
+        const ground = home.levels[0];
+        const before = new Map([...ground.rooms.values()].map((r) => [r.id, areaM2(ground.cellsOf(r.id))]));
         const added = home.addLevel();
-        return { kind, label: 'added an upper floor', level: added.name };
+        const donor = [...ground.rooms.values()].find((r) => before.has(r.id) && areaM2(ground.cellsOf(r.id)) < before.get(r.id)!);
+        return { kind, label: 'added an upper floor', level: added.name, ...(donor ? { takenFrom: this.fact(ground, donor) } : {}) };
       }
       case 'remove_level': {
         home.removeLevel();
@@ -296,8 +301,22 @@ export class Planner {
       case 'draw_sheet': {
         // Not a change to the plan, a picture of it, which is why it is out of
         // the undo history. Rendered here: the page can hand the client a file.
-        if (!level.rooms.size) throw new PlanError("There's nothing on this floor to draw up yet.");
-        this.view.sheet = { status: 'ready', svg: render(home, { unit: home.unit }), floor: level.name };
+        // Every floor that has rooms gets a page, the one on screen first: live,
+        // "the drawing to keep" asked while an empty upstairs was showing drew
+        // a sheet of nothing but the stairs.
+        const drawn = home.levels.map((lv, index) => ({ lv, index })).filter(({ lv }) => [...lv.rooms.values()].some((r) => r.kind !== 'stairs'));
+        if (!drawn.length) throw new PlanError("There's nothing on this floor to draw up yet.");
+        drawn.sort((p, q) => Number(q.index === home.active) - Number(p.index === home.active) || p.index - q.index);
+        const showing = home.active;
+        const pages = drawn.map(({ lv, index }) => {
+          home.active = index;
+          try {
+            return { floor: lv.name, svg: render(home, { unit: home.unit }) };
+          } finally {
+            home.active = showing;
+          }
+        });
+        this.view.sheet = { status: 'ready', svg: pages[0].svg, floor: pages[0].floor, pages };
         return { kind, label: 'drew up the sheet' };
       }
       case 'set_unit': {

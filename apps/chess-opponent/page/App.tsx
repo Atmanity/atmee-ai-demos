@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
 import { actionFor, boardState, pressed, say } from '../engine/director.ts';
 import { ChessMatch } from '../engine/game.ts';
-import { mustDo, typedMove } from '../engine/judge.ts';
+import { mustDo, readsAsMove, typedMove } from '../engine/judge.ts';
 import { Table, type Outcome } from '../engine/table.ts';
 import type { Action, ChessSnapshot } from '../engine/types.ts';
 import { Game, type Intent, type Sent } from './Game.tsx';
@@ -153,16 +153,17 @@ export function App() {
   }, [act, touch]);
 
   /**
-   * A typed line that is exactly a legal move ("Nf6", "e2e4") is played at
-   * once, like a move by hand, and Sasha is told; anything else is a chat turn
-   * she answers (and calls the tools for).
+   * A typed line written as a move ("Nf6", "e2e4", "O-O") goes to the board at
+   * once, like a move by hand: played (chess.js's exact reading when it is
+   * legal now), or refused under the board; Sasha is told either way. Anything
+   * else is a chat turn she answers (and calls the tools for).
    */
   const onTyped = (text: string) => {
     const s = table.current?.snapshot();
-    const uci = s ? typedMove(text, s) : null;
-    if (!uci) return void avatar.say(text);
-    avatar.record(text);
-    void send({ kind: 'move', move: uci }, `typed the move "${text.trim()}"`);
+    if (!s || !readsAsMove(text)) return void avatar.say(text);
+    const line = text.trim();
+    avatar.record(line);
+    void send({ kind: 'move', move: typedMove(line, s) ?? line.replace(/\.$/, '') }, `typed the move "${line}"`);
   };
 
   // The board is set up while Sasha is on her way (the player sees it during

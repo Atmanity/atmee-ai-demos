@@ -79,7 +79,7 @@ describe('the call', () => {
     expect(screen.getByText('Theo is on his way to the range…')).toBeTruthy();
     expect(button('Fire').disabled).toBe(true);
     expect(fake.states.at(-1)).toContain('Challenge 1 of 6: Clear the wall');
-    expect(fake.events).toEqual([{ text: expect.stringContaining('The challenge up is Clear the wall'), ttl: 60 }]);
+    expect(fake.events).toEqual([{ text: expect.stringMatching(/^You have just greeted them;.*the challenge up is Clear the wall/), ttl: 60 }]);
   });
 });
 
@@ -124,7 +124,7 @@ describe("Theo's tools: the range acts, and the result is what he says", () => {
     live();
     let text = '';
     await act(async () => { text = await tool('choose_challenge', { challenge: 'moonshot' }); });
-    expect(text).toContain('On the Moon is up');
+    expect(text).toMatch(/^Done: On the Moon is up/);
     expect(screen.getByRole('heading', { name: 'On the Moon' })).toBeTruthy();
     expect(fake.states.at(-1)).toContain('Challenge 6 of 6: On the Moon');
     expect(fake.events).toEqual([]);
@@ -138,7 +138,7 @@ describe('the student\'s hands: Theo cannot see the screen, so he is told', () =
     expect(fake.events).toEqual([]);
     land();
     expect(fake.events).toHaveLength(1);
-    expect(fake.events[0].text).toMatch(/^The student pressed Fire on screen\. The shot landed and missed: "You were at 0\.76 m/);
+    expect(fake.events[0].text).toMatch(/^The student pressed Fire on screen\. Landed, missed: "You were at 0\.76 m/);
   });
 
   it('a challenge from the list is told with its setup; dragging or stepping the aim is not', () => {
@@ -170,7 +170,7 @@ describe('the safety net', () => {
     expect(screen.getByText('In the air…')).toBeTruthy();
     await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
     expect(fake.events).toHaveLength(1);
-    expect(fake.events[0].text).toMatch(/^You did not call fire, so the app did it.*The shot landed and missed/);
+    expect(fake.events[0].text).toMatch(/^You did not call fire, so the app did it.*Landed, missed/);
   });
 
   it('when Theo calls fire himself, the net stays out of it: one shot', async () => {

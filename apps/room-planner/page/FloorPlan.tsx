@@ -201,21 +201,6 @@ export function FloorPlan({
                 strokeLinecap="square"
               />
             ))}
-            {/* The label sits at the TOP of the room, not its centre. Centred,
-                it disappeared under the first piece of furniture placed — and
-                the middle of the floor is exactly where furniture goes. */}
-            <text
-              x={centre(room.bbox).x} y={room.bbox[1] + 42}
-              className="pw-room-name" textAnchor="middle"
-            >
-              {room.name}
-            </text>
-            <text
-              x={centre(room.bbox).x} y={room.bbox[1] + 74}
-              className="pw-room-area" textAnchor="middle"
-            >
-              {areaLabel(room.area_m2, unit)}
-            </text>
           </g>
         );
       })}
@@ -277,6 +262,22 @@ export function FloorPlan({
           </g>
         );
       })}
+
+      {/* Room names and areas, drawn over the furniture with a paper halo:
+          live, a queen bed against the top wall hid "Main bedroom" and its
+          area. They sit at the TOP of the room, where furniture goes least. */}
+      <g pointerEvents="none">
+        {level.rooms.map((room) => (
+          <g key={room.id}>
+            <text x={centre(room.bbox).x} y={room.bbox[1] + 42} className="pw-room-name" textAnchor="middle">
+              {room.name}
+            </text>
+            <text x={centre(room.bbox).x} y={room.bbox[1] + 74} className="pw-room-area" textAnchor="middle">
+              {areaLabel(room.area_m2, unit)}
+            </text>
+          </g>
+        ))}
+      </g>
 
       {/* The grips. Wide and invisible: a wall is a few pixels of ink and
           nobody can hit a few pixels, so the handle is thirty centimetres of

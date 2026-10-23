@@ -69,22 +69,23 @@ describe('rating the outfit', () => {
     const { f } = fitting();
     const ran = tool(f, 'rate_outfit', { occasion: 'wedding guest' });
     expect(ran.job).toBeUndefined();
-    expect(ran.text).toContain("Noted: they're dressing for wedding guest");
+    expect(ran.text).toContain('Done: the occasion is set to wedding guest');
     expect(ran.text).toContain('add a photo of their outfit on the mirror');
     expect(ran.view.target).toBe('wedding guest');
   });
 
   test('nothing to rate against: Emery asks what they are dressing for', () => {
     const { f } = fitting();
-    expect(tool(f, 'rate_outfit').text).toContain("ask what they're dressing for");
+    expect(tool(f, 'rate_outfit').text).toMatch(/^Not yet: .*ask what they're dressing for/i);
   });
 
   test('a photo with no occasion: the button says what was pressed, and the occasion is asked for', async () => {
     const { f, models } = fitting();
     const ran = press(f, { button: 'photo', mime: 'image/jpeg', data: PHOTO });
-    expect(ran).toMatchObject({ text: null, result: 'done' });
+    // Said at once: the photo is in the mirror; the occasion is asked for.
+    expect(ran.text).toBe("The user added a new photo of their outfit on screen. Done: their outfit photo is in the mirror now. To score it you need what they're dressing for: ask them.");
     const { result } = await settle(f, ran);
-    expect(result).toMatch(/^The user added a new photo of their outfit on screen\. Their photo is in, but you don't know what they're dressing for yet/);
+    expect(result).toBeNull();   // "it can't be rated yet" is not said twice
     expect(models.reads).toHaveLength(0);
   });
 
@@ -95,7 +96,7 @@ describe('rating the outfit', () => {
     expect(ran).toMatchObject({ text: null, result: 'done' });
     expect(ran.view.target).toBe('dinner out');
     const { result } = await settle(f, ran);
-    expect(result).toMatch(/^The verdict: 6 out of 10 for dinner out/);
+    expect(result).toMatch(/^Done: the verdict is 6 out of 10 for dinner out/);
     expect(models.reads.at(-1)?.target).toBe('dinner out');
   });
 
@@ -104,7 +105,7 @@ describe('rating the outfit', () => {
     models.scores = [3];
     const ran = press(f, { button: 'occasion', occasion: 'Job interview' });
     const { result } = await settle(f, ran);
-    expect(result).toMatch(/^The user picked "Job interview" as what they're dressing for on screen\. The verdict: 3 out of 10 for Job interview/);
+    expect(result).toMatch(/^The user picked "Job interview" as what they're dressing for on screen\. Done: the verdict is 3 out of 10 for Job interview/);
     expect(models.reads.at(-1)?.context).toContain('new target: Job interview');
   });
 
@@ -126,7 +127,8 @@ describe('rating the outfit', () => {
     expect(picked.job).toBeUndefined();
     expect(picked.text).toContain('being read for First date right now');
     const { result } = await settle(f, photo);
-    expect(result).toMatch(/^The user added a new photo of their outfit on screen\. The verdict: 6 out of 10 for First date/);
+    expect(photo.text).toMatch(/^The user added a new photo of their outfit on screen\. Done: their outfit photo is in the mirror now/);
+    expect(result).toMatch(/^The photo they just added has been read\. Done: the verdict is 6 out of 10 for First date/);
     expect(models.reads).toHaveLength(1);
   });
 
@@ -145,12 +147,12 @@ describe('trying a piece on', () => {
     const { f } = await rated(models);
     const ran = tool(f, 'try_on', { piece: 'the second one' });
     expect(ran.result).toBeUndefined();
-    expect(ran.text).toContain('Putting the Camel Wool Topcoat on their photo now');
+    expect(ran.text).toMatch(/^Started: putting the Camel Wool Topcoat on their photo now/);
     expect(ran.job?.milestones).toEqual(['image', 'done']);
     const { steps } = await settle(f, ran);
-    expect(steps[0].text).toContain('The Camel Wool Topcoat is on their photo now');
+    expect(steps[0].text).toMatch(/^Done: the Camel Wool Topcoat is on their photo now/);
     expect(steps[0].view.image).toMatchObject({ kind: 'tryon', item: 'Camel Wool Topcoat' });
-    expect(steps[1].text).toContain('With the Camel Wool Topcoat on, the outfit scores 7 out of 10');
+    expect(steps[1].text).toMatch(/^Done: with the Camel Wool Topcoat on, the outfit scores 7 out of 10/);
     expect(steps[1].text).toContain('lifts the look by 2 points (it was 5)');
     expect(models.tryOns[0]).toContain('Adds structure over the tee.');   // the rail's reason goes into the render
   });
@@ -178,9 +180,9 @@ describe('trying a piece on', () => {
     const { f } = await rated(models);
     const reads = models.reads.length;
     const ran = press(f, { button: 'tryOn', piece: 'Camel Wool Topcoat', why: 'Adds structure.' });
-    expect(ran.text).toMatch(/^The user tapped Try it on for the Camel Wool Topcoat on screen\. Putting the Camel Wool Topcoat/);
+    expect(ran.text).toMatch(/^The user tapped Try it on for the Camel Wool Topcoat on screen\. Started: putting the Camel Wool Topcoat/);
     await new Promise((r) => setTimeout(r, 0));
-    expect(tool(f, 'rate_outfit').text).toContain('The Camel Wool Topcoat is still going on');
+    expect(tool(f, 'rate_outfit').text).toMatch(/^Not yet: the Camel Wool Topcoat is still going on/);
     models.release();
     await settle(f, ran);
     expect(models.reads.length).toBe(reads + 1);   // only the try-on's re-read
@@ -193,7 +195,7 @@ describe('trying a piece on', () => {
     const ran = tool(f, 'restore_photo');
     expect(ran.result).toBe('done');
     const { result, steps } = await settle(f, ran);
-    expect(result).toContain('The verdict: 6 out of 10 for dinner out');
+    expect(result).toContain('Done: the verdict is 6 out of 10 for dinner out');
     expect(steps[0].view.image?.kind).toBe('look');
   });
 });
@@ -201,7 +203,7 @@ describe('trying a piece on', () => {
 describe('more pieces', () => {
   test('no verdict yet: nothing to add to', () => {
     const { f } = fitting();
-    expect(tool(f, 'suggest_pieces').text).toContain('no photo to read yet');
+    expect(tool(f, 'suggest_pieces').text).toMatch(/^Not yet: .*there is no photo to read/);
   });
 
   test('more pieces are named as they land on the rail', async () => {
@@ -216,8 +218,30 @@ describe('more pieces', () => {
     const { f } = await rated();
     const ran = tool(f, 'suggest_pieces', { direction: 'more streetwear' });
     const { result } = await settle(f, ran);
-    expect(result).toContain('The rail now leans streetwear');
+    expect(result).toContain('Done: the rail now leans streetwear');
     expect(result).toContain('Slim Navy Silk Tie');
+  });
+});
+
+describe('arguments as the host sends them', () => {
+  test('capitals, articles, synonyms and fields Notch does not know are all fine', async () => {
+    const { f, models } = await rated();
+    const rerated = tool(f, 'rate_outfit', { occasion: '  A Summer Wedding, please! ', mood: 'excited', confidence: 0.9 });
+    expect(rerated.view.target).toBe('summer wedding');
+    expect((await settle(f, rerated)).result).toMatch(/^Done: the verdict is 6 out of 10 for summer wedding/);
+    const leaned = tool(f, 'suggest_pieces', { direction: 'Make it a bit Dressier', count: 3 });
+    expect((await settle(f, leaned)).result).toMatch(/^Done: the rail now leans formal/);
+    const put = tool(f, 'try_on', { piece: 'The Second One', size: 'M' });
+    expect(put.text).toMatch(/^Started: putting the Camel Wool Topcoat/);
+    await settle(f, put);
+    expect(models.tryOns).toHaveLength(1);
+  });
+
+  test('an empty or unusable value is read as none, and Emery is told what to ask', () => {
+    const { f } = fitting();
+    expect(tool(f, 'rate_outfit', { occasion: '   ' }).text).toMatch(/^Not yet: .*ask what they're dressing for/i);
+    expect(tool(f, 'rate_outfit', { occasion: 42 }).text).toMatch(/^Not yet:/);
+    expect(tool(f, 'try_on', { piece: 'that one' }).text).toMatch(/^Not clear: .*ask them to name it/);
   });
 });
 

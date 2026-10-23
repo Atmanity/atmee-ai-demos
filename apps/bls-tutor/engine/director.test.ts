@@ -145,6 +145,66 @@ describe('what the screen says, Alex says', () => {
   });
 });
 
+describe('results the filler cannot contradict', () => {
+  // Live, the platform's own filler said "Good choice" before a Not-yet verdict:
+  // each result opens with its outcome, so Alex's first real words are the drill's.
+  test('every result begins with its plain outcome', () => {
+    const t = new BlsTutor();
+    const first = (r: { text: string }) => r.text.split(':')[0];
+    expect(first(run(t, 'start_scenario', { scenario: 'choking' }))).toBe('Started');
+    expect(first(run(t, 'give_hint'))).toBe('Hint');
+    expect(first(run(t, 'check_answer', { answer: "I'd give her back blows" }))).toBe('Not yet');
+    expect(run(t, 'check_answer', { answer: 'pat her' }).text.startsWith('Not yet, and that was their second miss')).toBe(true);
+    expect(first(run(t, 'next_step'))).toBe('Next step');
+    expect(first(run(t, 'check_answer', { answer: 'encourage her to keep coughing' }))).toBe('Right');
+    expect(first(run(t, 'show_step'))).toBe('Refused');
+    run(t, 'next_step');
+    expect(first(run(t, 'show_step'))).toBe('Shown');
+    expect(first(run(t, 'start_scenario', { scenario: 'motorbike' }))).toBe('Not found');
+    expect(first(run(t, 'leave_scenario'))).toBe('Done');
+    expect(first(run(t, 'resume_practice'))).toBe('Nothing to resume');
+    run(t, 'stop_for_emergency');
+    expect(first(run(t, 'resume_practice'))).toBe('Resumed');
+    expect(said.keepCard().startsWith('Refused')).toBe(true);
+    const done = new BlsTutor();
+    done.startScenario('recovery_position');
+    for (let i = 0; i < 5; i++) { done.reveal(); if (i < 4) done.nextStep(); }
+    expect(first(run(done, 'next_step'))).toBe('Drill complete');
+  });
+
+  test('the opening does not greet again: the host has just greeted them', () => {
+    const t = new BlsTutor();
+    t.startScenario('choking_adult');
+    for (const v of [null, viewOf(t)]) expect(said.opening(v).startsWith('You have just greeted them; do not greet or introduce yourself again.')).toBe(true);
+  });
+});
+
+describe('lenient tool schemas: a call that fails the schema never reaches the page', () => {
+  test('no enum, pattern, format, minLength or closed objects; only generous upper bounds', () => {
+    const blob = JSON.stringify(TOOLS.map((t) => t.parameters));
+    for (const word of ['"enum"', '"pattern"', '"format"', '"minLength"', '"additionalProperties":false']) expect(blob).not.toContain(word);
+    for (const m of blob.matchAll(/"maxLength":(\d+)/g)) expect(Number(m[1])).toBeGreaterThanOrEqual(500);
+  });
+
+  test('a capitalised or loosely worded value works, and an extra unknown field is accepted', () => {
+    const t = new BlsTutor();
+    expect(run(t, 'start_scenario', { scenario: 'THE POOL ONE', mood: 'keen' }).applied).toBe(true);
+    expect(t.scenario?.id).toBe('child_cardiac_arrest');
+    expect(run(t, 'start_scenario', { scenario: 'the Collapse one in the Café' }).applied).toBe(true);
+    expect(t.scenario?.id).toBe('adult_cardiac_arrest');
+    expect(run(t, 'check_answer', { answer: '  MAKE SURE THE SCENE IS SAFE ', confidence: 0.9 }).text.startsWith('Right')).toBe(true);
+    expect(run(t, 'next_step', { please: true }).applied).toBe(true);
+  });
+
+  test('an unusable value gets a question for Alex to ask, never silence', () => {
+    const t = new BlsTutor();
+    t.startScenario('choking_adult');
+    expect(run(t, 'check_answer', {}).text).toContain('Ask them what they would do');
+    expect(run(t, 'start_scenario', { scenario: '' }).text).toContain('Ask which one they would like');
+    expect(run(t, 'start_scenario', {}).text).toContain('Ask which one they would like');
+  });
+});
+
 describe('the safety lines', () => {
   test('the safety line rides in every state and in every opening, verbatim', () => {
     expect(drillState(viewOf(new BlsTutor()))).toContain(SAFETY_LINE);
@@ -162,9 +222,12 @@ describe('the safety lines', () => {
     expect(state).toContain(EMERGENCY_LINE);
     expect(state).toContain('resume_practice');
     expect(state).not.toMatch(/Step \d+ of/);
-    expect(said.emergency()).toContain(`word for word, and nothing else: "${EMERGENCY_LINE}"`);
-    expect(said.alarm('typed', 'my dad collapsed')).toContain(EMERGENCY_LINE);
+    // First, so the platform's filler is the only thing that can come before it.
+    expect(said.emergency().startsWith(EMERGENCY_LINE)).toBe(true);
+    expect(said.alarm('typed', 'my dad collapsed').startsWith(EMERGENCY_LINE)).toBe(true);
     expect(said.alarm('typed', 'my dad collapsed')).toContain('typed "my dad collapsed"');
+    const { text } = run(new BlsTutor(), 'check_answer', { answer: "he's not breathing" });
+    expect(text.startsWith(EMERGENCY_LINE)).toBe(true);
   });
 
   test('results that end a phase never start the next one on their own', () => {

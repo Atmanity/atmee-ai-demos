@@ -47,7 +47,7 @@ describe("the architect's tools", () => {
   test('a question back changes nothing on the plan', () => {
     const h = harness();
     const before = JSON.stringify(h.session.snapshot().level);
-    expect(h.session.tool('trade_area', { take_from: 'hall', give_to: 'kitchen' })).toMatch(/^Not done yet, nothing changed/);
+    expect(h.session.tool('trade_area', { take_from: 'hall', give_to: 'kitchen' })).toMatch(/^Not yet: nothing changed/);
     expect(JSON.stringify(h.session.snapshot().level)).toBe(before);
   });
 

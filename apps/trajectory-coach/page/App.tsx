@@ -92,6 +92,9 @@ export function App() {
   // Theo's picture of the range follows the range.
   useEffect(() => { avatar.state(rangeState(state)); }, [state]);
 
+  // A new screen starts at its top (the front door or the range may have been scrolled).
+  useEffect(() => { document.documentElement.scrollTop = 0; }, [avatar.phase === 'idle', view]);
+
   // The call over, with something to show for it: the logbook.
   useEffect(() => { if (avatar.phase === 'ended' && shotCount(log) > 0) setView('logbook'); }, [avatar.phase]);
 

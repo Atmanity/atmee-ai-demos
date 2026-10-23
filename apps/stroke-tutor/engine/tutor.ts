@@ -28,6 +28,7 @@ import {
   type Stroke,
 } from './characters.ts';
 import { clean, decimate, grade, isDegenerate } from './strokes.ts';
+import { travelPair } from './travel.ts';
 import type { CharacterView, Phase, Snapshot, StrokeView, Verdict } from './types.ts';
 
 /** A refusal whose message is shown (and said) to the learner verbatim. */
@@ -107,6 +108,8 @@ export class StrokeTutor {
     // push the learner into the two-miss rescue for nothing.
     if (isDegenerate(drawn)) throw new TutorRefusal(DEGENERATE_STROKE);
     const verdict = grade(this._character!, this.strokeIndex, drawn);
+    // Said as two plain sentences, so "Top to bottom." cannot be heard as what they did.
+    if (verdict.kind === 'direction') verdict.travel = travelPair(drawn, this._character!.strokes[this.strokeIndex].points);
     this.attempts += 1;
     this.lastVerdict = verdict;
     if (verdict.ok) {

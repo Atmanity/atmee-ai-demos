@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { ChessMatch } from './game.ts';
-import { judge, mustDo, tidy, typedMove } from './judge.ts';
+import { judge, mustDo, readsAsMove, tidy, typedMove } from './judge.ts';
 
 const kind = (said: string, moves = 0) => {
   const v = judge(said, { moves });
@@ -186,5 +186,14 @@ describe('a typed line that is exactly a legal move', () => {
     const over = new ChessMatch('white', 1);
     over.resign('user');
     expect(typedMove('e4', over.snapshot())).toBeNull();
+  });
+});
+
+describe('a typed line written as a move, legal or not, goes to the board', () => {
+  test.each(['e4', 'Nf6', 'Nf6.', 'exd5', 'Qxd7+', 'e8=Q#', 'e8Q', 'O-O', 'O-O-O', '0-0', 'e2e4', 'e2-e4', 'g7g8q', 'Nbd2', 'R1a3'])('%s', (typed) => {
+    expect(readsAsMove(typed)).toBe(true);
+  });
+  test.each(['nf3', 'knight to f3', 'e4 please', 'Is e4 good?', 'castle', 'Nice game', 'E4', '', 'hello'])('not: %s', (typed) => {
+    expect(readsAsMove(typed)).toBe(false);
   });
 });

@@ -90,7 +90,8 @@ export class Table {
    */
   playerMove(words: string, heard: readonly Heard[] = []): Result {
     const before = this.view();
-    const text = String(words ?? '').trim().slice(0, 160);
+    const text = String(words ?? '').trim().replace(/^["'“]+|["'”]+$/g, '').slice(0, 160);
+    if (!text) return { view: before, changed: false, line: said.noWords() };
     const parsed = parseTurn(text);
     if (!parsed.move) return { view: before, changed: false, line: said.unclear(text, parsed.unclear ?? 'there is no move in it') };
     const move = parsed.move;

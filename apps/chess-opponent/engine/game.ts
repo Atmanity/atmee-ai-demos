@@ -451,6 +451,8 @@ export class ChessMatch {
     if (this.result) throw new IllegalMove('the game is already over');
     this.result = { winner: who === 'user' ? 'agent' : 'opponent', reason: 'resignation' };
     this.lastMove = null;
+    // A refusal was about a move in a game that is now over.
+    this.lastRefusal = null;
   }
 
   /** Apply one move, spoken or precise. */

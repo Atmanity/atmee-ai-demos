@@ -65,6 +65,35 @@ describe.each([true, false])('the tools and the rules, with a news source: %s', 
   });
 });
 
+test('the schemas are lenient: a call that does not fit them never reaches the app, and the host then claims it worked', () => {
+  for (const tool of tools(true)) {
+    const schema = JSON.stringify(tool.parameters);
+    for (const strict of ['"enum"', '"pattern"', '"format"', '"minLength"', '"required"', '"additionalProperties":false']) expect(schema, `${tool.name} ${strict}`).not.toContain(strict);
+    for (const prop of Object.values((tool.parameters as { properties: Record<string, { maxLength?: number }> }).properties)) expect(prop.maxLength ?? 500).toBeGreaterThanOrEqual(200);
+  }
+});
+
+test('the rules say: call, never narrate', () => {
+  for (const news of [true, false]) {
+    expect(instructions(news)).toContain('Every request that changes the screen is a tool call, even a single word answering your own question');
+    expect(instructions(news)).toContain("never say something is on the map or on screen unless a tool's result said so");
+  }
+});
+
+test('every result starts with the plain outcome, so the first real words are the app\'s', () => {
+  const results = [
+    say.named('Sam'), say.noName(), say.continentOnly('Asia'), say.noDestination(), say.notFound('Atlantis'),
+    say.destination('Japan'), say.destination('Japan', { how: 'picked' }), say.noCountryForNews(), say.news('Japan', japan().news!.headlines),
+    say.noNews('Japan'), say.noCountryForFood(), say.food('Japan', [{ name: 'Ramen', description: '' }]), say.noFood('Japan'),
+    say.revisited('Japan', []), say.alreadyHere('Japan'), say.notOnTrip(['Peru']), say.nothingToGoBack(), say.askPlace(), say.countryNotTown('Japan'),
+    say.placeNotFound('Nowhere'), say.lookupDown('Kyoto'), say.quiet('Kyoto'), say.firstSpot('Kyoto', spot()), say.anotherSpot(spot()), say.lastSpot(),
+    say.firstAlready('Kyoto'), say.nothingQueued('Kyoto'), say.askWhereToLook(), say.notLookedYet(), say.nothingToShow(), say.noCountryThere(),
+    say.badCoordinates(), say.showPlanning('Japan'), say.showPlanning(''), say.showAround('Kyoto', spot()), say.showAround('', null),
+    say.stillWorking('looking around Kyoto'), say.lateFailed(), say.serviceDown(), say.freshTrip(),
+  ];
+  for (const text of results) expect(text).toMatch(/^(Done|Not yet|Not found|Not done|Already done): /);
+});
+
 test('the tools take what the host heard, nothing the app decides', () => {
   const params = Object.fromEntries(tools(true).map((t) => [t.name, Object.keys((t.parameters as { properties: object }).properties)]));
   expect(params).toEqual({
@@ -151,13 +180,16 @@ describe('results', () => {
   });
 
   test('a sight reads aloud, with its place in the list, and names no other', () => {
-    expect(say.firstSpot('Kyoto', spot(), 8)).toContain('the closest of 8 sights is on screen: Kiyomizu-dera, an attraction, about a 9 minute walk away');
+    expect(say.firstSpot('Kyoto', spot(), 8)).toContain('the first of 8 sights worth seeing is on screen: Kiyomizu-dera, an attraction, about a 9 minute walk away');
     expect(say.anotherSpot(spot({ category: 'museum' }), 2, 8)).toContain('sight 2 of 8: Kiyomizu-dera, a museum');
     for (const text of [say.firstSpot('Kyoto', spot()), say.anotherSpot(spot())]) expect(text).toContain('naming no other sight');
   });
 
-  test('the opening picks up what is already on the board', () => {
-    expect(say.opening(base())).toContain('ask where in the world they are dreaming of');
+  test('the opening never greets again (the host already did), and picks up what is on the board', () => {
+    for (const s of [base(), japan(), { ...base(), stage: 'around' as const, spot: { place: 'Kyoto', origin: null, index: 0, total: 1, lookupFailed: false, spot: spot(), pins: [] } }]) {
+      expect(say.opening(s).startsWith('You have just greeted them; do not greet or introduce yourself again.')).toBe(true);
+    }
+    expect(say.opening(base())).toContain('where in the world they are dreaming of');
     expect(say.opening({ ...base(), travelerName: 'Sam' })).toContain('They are called Sam');
     expect(say.opening(japan())).toContain('They have already put Japan on the map');
   });

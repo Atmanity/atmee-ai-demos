@@ -20,12 +20,12 @@ export const INSTRUCTIONS = `You are the stargazing guide in Lodestar, standing 
 - A constellation ("show me Orion", "where's the Plough?"): call show_constellation.
 - Another place or another time ("the sky from Lisbon", "I'm in Sydney", "at midnight", "two hours later", "in December", "back to tonight"): call move_chart with their words; place and time together in one call when they ask for both.
 - "Clear it", "hide the lines", "start over": call clear_chart, and only then.
-- The chart changes only when you call a tool. Saying "let's look at midnight" or "there's Orion" without the call changes nothing and misleads them: call the tool every time, even when you think you know the answer. Never say whether something is up, where it is or when it rises before the result tells you.
+- Every request that changes the chart is a tool call, even a single word answering your own question (a "yes", a time, a city). The chart changes only when you call a tool: saying "let's look at midnight" or "there's Orion" without the call changes nothing and misleads them. Call the tool every time, even when you think you know the answer, and never say a change happened unless the tool's result says so. Never say whether something is up, where it is or when it rises before the result tells you.
 - Questions about what is on the chart now (what's up, what's in the south, the brightest, the place, the hour, the marked star): answer from the live chart in your context, no tool needed. A star the chart does not list as up is below the horizon now.
 - When the user moves the chart with its own controls, the app tells you what changed; carry on from that. You cannot see the screen.
 FACTS, THE HARD RULE: everything you say about a particular star comes from a point_out result or the live chart's "fact about" line. You do not know distances, masses, temperatures or ages from memory: a remembered number is indistinguishable from an invented one. Say a fact in your own words but never change a number in it.
 - The chart is stars only: no Sun, Moon or planets. Say so cheerfully if asked; it is a limit, not a failure.
-- When a result says the chart refused something, say the reason plainly in one line and never claim the change happened.
+- When a result says the chart refused something, say the reason plainly in one line and never claim the change happened. Speak of the chart and its catalogue, never of a system, an app or a tool.
 - A result may say what you could offer next (the clock at an hour when something is up); offer it, and call the tool only if they say yes.
 Speak like a person outside at night: ordinary directions (low in the south-east, high up, almost straight overhead), never degrees, magnitudes or coordinates. Say numbers as a person would: "eight and a half light years", "about half past two". The chart is one held instant; the clock moves only when someone moves it. One or two short spoken sentences, under 30 words, no lists.`;
 
@@ -36,13 +36,13 @@ export const TOOLS: AppTool[] = [
   {
     type: 'function', name: 'point_out',
     description: 'Marks a star on the user\'s chart and returns where it is and what the catalogue says about it, or why it cannot (below the horizon now, with when it rises; not in the catalogue). Call it whenever they ask where a star is, ask about a star by name, or say "that bright one", before you say anything about the star.',
-    parameters: { type: 'object', properties: { star: { type: 'string', minLength: 1, maxLength: 60, description: 'The star as they said it: "Vega", "the north star", "that bright one".' } }, required: ['star'], additionalProperties: false },
+    parameters: { type: 'object', properties: { star: { type: 'string', maxLength: 500, description: 'The star as they said it: "Vega", "the north star", "that bright one".' } }, required: ['star'] },
     'x-atmee': awaits(10),
   },
   {
     type: 'function', name: 'show_constellation',
     description: 'Draws a constellation\'s figure on the chart and returns where to look for it, or why it cannot (not up at this hour, with when it rises; no figure for it). Call it when they ask to see or find a constellation: "show me Orion", "where\'s the Plough?", "the Southern Cross".',
-    parameters: { type: 'object', properties: { name: { type: 'string', minLength: 1, maxLength: 60, description: 'The constellation as they said it: "Orion", "the Big Dipper", "Scorpio".' } }, required: ['name'], additionalProperties: false },
+    parameters: { type: 'object', properties: { name: { type: 'string', maxLength: 500, description: 'The constellation as they said it: "Orion", "the Big Dipper", "Scorpio".' } }, required: ['name'] },
     'x-atmee': awaits(10),
   },
   {
@@ -51,18 +51,17 @@ export const TOOLS: AppTool[] = [
     parameters: {
       type: 'object',
       properties: {
-        place: { type: 'string', maxLength: 80, description: 'A city, "the equator", or coordinates as they said them ("40.7 north 74 west"). Leave out to keep the place.' },
-        time: { type: 'string', maxLength: 80, description: 'The time as they said it: "midnight", "3 am", "two hours later", "December 21st", "tonight". Leave out to keep the time.' },
+        place: { type: 'string', maxLength: 500, description: 'A city, "the equator", or coordinates as they said them ("40.7 north 74 west"). Leave out to keep the place.' },
+        time: { type: 'string', maxLength: 500, description: 'The time as they said it: "midnight", "3 am", "two hours later", "December 21st", "tonight". Leave out to keep the time.' },
       },
-      additionalProperties: false,
     },
     'x-atmee': awaits(15),
   },
   {
     type: 'function', name: 'clear_chart',
     description: 'Removes the marked star, the drawn constellation, or both, from the chart. Only when the user asks to clear, hide or start over.',
-    parameters: { type: 'object', properties: { what: { type: 'string', enum: ['star', 'constellation', 'everything'], description: 'What to clear; everything if they did not say.' } }, additionalProperties: false },
-    'x-atmee': { mode: 'notify' },
+    parameters: { type: 'object', properties: { what: { type: 'string', maxLength: 500, description: 'What to clear: "star", "constellation" or "everything" (everything if they did not say).' } } },
+    'x-atmee': awaits(8),
   },
 ];
 
@@ -158,27 +157,27 @@ export const said = {
   opening(view: SkyView): string {
     const s = view.snapshot;
     const brightest = s.visible.slice(0, 3).map((v) => v.name);
-    return `Lodestar is open on their screen: the sky from ${s.where.label} at ${view.spokenWhen}, with ${s.visible.length} stars up${brightest.length ? `, the brightest ${list(brightest)}` : ''}. Welcome them in one short, warm line: say which place and roughly what hour the chart shows, and invite them to ask about a star, a constellation, another place or another hour. Under 30 words.`;
+    return `You have just greeted them; do not greet or introduce yourself again. Lodestar is open on their screen: the sky from ${s.where.label} at ${view.spokenWhen}, with ${s.visible.length} stars up${brightest.length ? `, the brightest ${list(brightest)}` : ''}. In one short line, say which place and roughly what hour the chart shows, and invite them to ask about a star, a constellation, another place or another hour. Under 30 words.`;
   },
 
   marked(view: SkyView, brightest: boolean): string {
     const s = view.snapshot;
     const star = s.visible.find((v) => v.id === s.selected);
     const title = s.fact?.title ?? star?.name ?? 'The star';
-    return `${brightest ? `The brightest star up now is ${title}; it is` : `${title} is`} marked on the chart, ${whereInSky(star)}. The catalogue says (the only thing you know about it): ${quote(s.fact?.lines ?? [])} Tell them where to look and one thing from that, in your own words, changing no number. Under 30 words.`;
+    return `Marked: ${title},${brightest ? ' the brightest star up now,' : ''} ${whereInSky(star)}. The catalogue says (the only thing you know about it): ${quote(s.fact?.lines ?? [])} Tell them where to look and one thing from that, in your own words, changing no number. Under 30 words.`;
   },
 
   /** A known star that is not up. Its catalogue lines still answer "tell me about it". */
   starDown(reason: string, lines: string[] | null, later: string | null): string {
-    return `Not marked: ${reason}${lines?.length ? ` The catalogue says: ${quote(lines)}` : ''} Tell them plainly it is not up now${later ? `; it is well up ${later}, so offer to show the sky then, and move the clock only if they ask` : ''}. Under 30 words.`;
+    return `Not up now: ${reason}${lines?.length ? ` The catalogue says: ${quote(lines)}` : ''} Tell them plainly it is not up now${later ? `; it is well up ${later}, so offer to show the sky then, and move the clock only if they ask` : ''}. Under 30 words.`;
   },
 
   unknownStar(reason: string, brightest: string | null): string {
-    return `Not marked: ${reason} Say so in one short line in your own voice, and say nothing about that star from memory${brightest ? `; you could offer the brightest star up now, ${brightest}` : ''}.`;
+    return `Not in the catalogue: ${reason} Say so in one short line in your own voice, and say nothing about that star from memory${brightest ? `; you could offer the brightest star up now, ${brightest}` : ''}.`;
   },
 
   notAStar(words: string, brightest: string | null): string {
-    return `"${words}" is not on the chart: it carries stars only, no Sun, Moon or planets. Say so cheerfully in one line${brightest ? `, and offer the brightest star up now, ${brightest}` : ''}. Do not say where it is.`;
+    return `Not on the chart: "${words}". It carries stars only, no Sun, Moon or planets. Say so cheerfully in one line${brightest ? `, and offer the brightest star up now, ${brightest}` : ''}. Do not say where it is.`;
   },
 
   drawn(view: SkyView): string {
@@ -187,45 +186,54 @@ export const said = {
     // user can check by standing outside.
     const anchor = figureAnchor(s, s.figure);
     const where = anchor ? ` Its brightest star on the chart is ${anchor.name}, ${whereInSky(anchor)}.` : '';
-    return `${s.figure?.name ?? 'The figure'} is drawn on the chart now.${where} Tell them where to look for it and what shape to look for, using that direction and no other. Under 25 words.`;
+    return `Drawn: ${s.figure?.name ?? 'the figure'} is on the chart now.${where} Tell them where to look for it and what shape to look for, using that direction and no other. Under 25 words.`;
   },
 
   figureDown(reason: string, later: string | null): string {
-    return `Not drawn: ${reason} Say that plainly in one line${later ? `; it is well up ${later}, so offer to show the sky then, and move the clock only if they ask` : ''}. Under 30 words.`;
+    return `Not up now: ${reason} Nothing is drawn. Say that plainly in one line${later ? `; it is well up ${later}, so offer to show the sky then, and move the clock only if they ask` : ''}. Under 30 words.`;
   },
 
   noFigure(reason: string): string {
-    return `Not drawn: ${reason} Say so in one short line and describe nothing from memory. The figures this chart can draw: ${figureList()}.`;
+    return `No figure: ${reason} Say so in one short line and describe nothing from memory. The figures this chart can draw: ${figureList()}.`;
   },
 
   /** A move of the place, the clock or both: the chart's new sky. */
   moved(before: SkyView, after: SkyView): string {
-    return `${skyNow(before, after, 'tool')} Say one short line about that sky, naming only stars given here; do not list them all or read the date out.`;
+    return `Moved: ${skyNow(before, after, 'tool')} Say one short line about that sky, naming only stars given here; do not list them all or read the date out.`;
   },
 
   unchanged(view: SkyView): string {
-    return `The chart already shows that: the sky from ${view.snapshot.where.label} at ${view.spokenWhen}. Say so in a few words.`;
+    return `Already there: the chart shows the sky from ${view.snapshot.where.label} at ${view.spokenWhen}. Say so in a few words.`;
   },
 
   daytime(view: SkyView): string {
-    return `It is daytime there (${view.spokenWhen}); the chart leaves out the Sun. Mention it, and offer tonight's sky instead; move the clock only if they ask.`;
+    return `Daytime there: it is ${view.spokenWhen}, and the chart leaves out the Sun. Mention it, and offer tonight's sky instead; move the clock only if they ask.`;
   },
 
   refused(reason: string): string {
     const r = reason.trim();
-    return `The chart refused: ${cap(r)}${/[.!?]$/.test(r) ? '' : '.'} Say that in one short line, in your own voice, and do not claim it happened.`;
+    return `Refused: ${cap(r)}${/[.!?]$/.test(r) ? '' : '.'} Say that in one short line, in your own voice, and do not claim it happened.`;
   },
 
   unreadTime(words: string): string {
-    return `"${words}" is not a time the chart can read, so the clock did not move. Ask them for an hour, "midnight", "two hours later" or a date.`;
+    return `Not moved: "${words}" is not a time the chart can read, so the clock stayed where it was. Ask them for an hour, "midnight", "two hours later" or a date.`;
   },
 
   nothingToMove(): string {
-    return `No place or time was given, so nothing moved. Ask them where or when they would like to look.`;
+    return `Not moved: no place or time was given. Ask them where or when they would like to look.`;
   },
 
   noName(what: 'star' | 'constellation'): string {
-    return `No ${what} was named, so nothing changed. Ask them which ${what} they mean.`;
+    return `Nothing changed: no ${what} was named. Ask them which ${what} they mean.`;
+  },
+
+  /** A city the chart does not have: the chart's own offer, so nothing sounds backstage. */
+  unknownPlace(words: string, cities: string[]): string {
+    return `Not moved: the chart has no city called ${words}. It knows ${cities.length} cities (${list(cities)}) and any latitude and longitude. Say that in one short line, offer a listed city near it or its coordinates, and move only if they ask.`;
+  },
+
+  clearWhat(words: string): string {
+    return `Nothing cleared: "${words}" is not something on the chart. Ask them whether to clear the marked star, the drawn constellation, or both.`;
   },
 
   cleared(what: 'star' | 'constellation' | 'everything'): string {

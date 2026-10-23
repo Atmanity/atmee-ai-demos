@@ -10,7 +10,10 @@ import { Table } from './table.ts';
 const DECK = ['As', 'Kd', 'Ah', 'Kc', '2c', '7d', '9h', '3s', '5c', '5d', '8h', 'Jc', 'Qd'];
 
 /** Every way a card can be written in what Dex is told. */
-const mentions = (text: string, card: string) => text.includes(card) || text.toLowerCase().includes(spokenCard(card));
+// The code as a whole token: the ace of spades "As" is not the "As" in "Ask them".
+const mentions = (text: string, card: string) =>
+  new RegExp(`(?<![A-Za-z0-9])${card.replace(/[^A-Za-z0-9]/g, '\\$&')}(?![A-Za-z0-9])`).test(text) ||
+  text.toLowerCase().includes(spokenCard(card));
 
 test('the tools fit the API: names, descriptions, schemas, modes and timeouts', () => {
   expect(TOOLS.length).toBeLessThanOrEqual(30);
@@ -34,11 +37,39 @@ test('the tools fit the API: names, descriptions, schemas, modes and timeouts', 
   expect(JSON.stringify(TOOLS).length).toBeLessThanOrEqual(24576);
 });
 
-test('everything Dex must speak about waits for the table; only the chart is fire-and-forget', () => {
+test('every tool waits for the table, the chart included, so Dex speaks from what happened', () => {
   const modes = Object.fromEntries(TOOLS.map((t) => [t.name, t['x-atmee']?.mode]));
-  expect(modes).toEqual({ play_move: 'await', deal_hand: 'await', new_match: 'await', read_my_cards: 'await', show_hand_rankings: 'notify' });
+  expect(modes).toEqual({ play_move: 'await', deal_hand: 'await', new_match: 'await', read_my_cards: 'await', show_hand_rankings: 'await' });
   // The move's result can carry Dex's own move too: the decider's 4.5 s budget, twice, fits.
   expect(TOOLS.find((t) => t.name === 'play_move')!['x-atmee']!.timeoutSeconds).toBeGreaterThanOrEqual(15);
+});
+
+test('the schemas are lenient: a call that misses a tight schema never reaches the page', () => {
+  // Live (Spotter): "Beginner, please." failed the schema, was answered
+  // "invalid arguments", and the host said it had happened anyway.
+  for (const tool of TOOLS) {
+    const json = JSON.stringify(tool.parameters);
+    for (const strict of ['"enum"', '"additionalProperties":false', '"pattern"', '"minLength"', '"format"']) expect(json, `${tool.name} ${strict}`).not.toContain(strict);
+    for (const [, max] of json.matchAll(/"maxLength":(\d+)/g)) expect(Number(max)).toBeGreaterThanOrEqual(500);
+  }
+});
+
+test('results open with the plain outcome, so a filler cannot pre-judge them', () => {
+  const table = new Table();
+  table.open();
+  const seq = table.view().seq;
+  const starts = [
+    speak([table.playerMove('raise to 5', [{ text: 'raise to 5', seq }]).line]),
+    speak([table.playerMove('purple banana', [{ text: 'purple banana', seq }]).line]),
+    speak([table.playerMove('call', [{ text: 'nice hat', seq }]).line]),
+    speak([table.playerMove('', []).line]),
+    speak([table.deal().line]),
+    speak([table.rematch().line]),
+    speak([table.ownCards().line]),
+    speak([said.rankings()]),
+    speak([table.playerMove('I call', [{ text: 'I call', seq }]).line]),
+  ].map((t) => t.split('.')[0]);
+  expect(starts).toEqual(['Refused', 'Not played', 'Not played', 'Not played', 'Not dealt', 'Not started', 'Done', 'Done', 'Done']);
 });
 
 test('the instructions fit 4,000 characters and name every tool', () => {
@@ -57,7 +88,8 @@ test('the hard-won rules survive the move to tools', () => {
   for (const rule of [
     "you're checking? cute", 'never pick, round or fix an amount', 'their cards and they are entitled to them', 'never announce, preview or promise',
     'never add up, estimate', 'never ask them to deal', 'ai, made by atmee', 'a question about a move', 'call the tool even when you think you know',
-    'changes only when a tool runs', 'new_match, only when they ask',
+    'changes only when a tool runs', 'new_match, only when they ask', 'even a single word answering your own question',
+    'never say an action happened', 'never offer to open it instead',
   ]) {
     expect(all, rule).toContain(rule.toLowerCase());
   }
@@ -174,9 +206,12 @@ test('the session line: nothing until a hand finishes, then the count', () => {
   expect(tableState(match.view())).toContain('Session: 1 hand finished; you have won 1, they have won 0, and they are down 10 chips.');
 });
 
-test('the opening never asks the player to deal, and names whose move it is', () => {
+test('the opening never greets twice, never asks the player to deal, and names whose move it is', () => {
   const table = new Table();
   const text = speak([table.open().line]);
+  // Dex's own greeting has just played: the table's opening must not be a second one.
+  expect(text.startsWith('You have just greeted them; do not greet or introduce yourself again.')).toBe(true);
+  expect(speak([said.resume(table.view())]).startsWith('You have just greeted them; do not greet or introduce yourself again.')).toBe(true);
   expect(text).toContain('never ask them to deal');
   expect(text).toContain('Hand 1 is dealt');
   expect(text).toContain('The action is on them: they can fold, call 10 or raise to anything from 40 up to 1000');

@@ -35,28 +35,36 @@ maths get "That didn't read as a quadratic" and Ada asks again.
 
 ## What the API could not do
 
-Status: rebuilt with tools on 2026-10-23, not yet run live. **Expected**: not
-observed with this build.
+Status after the live run of 2026-10-23 on staging (shared test avatar
+`26cbe079`, then a smoke pass on Ada's own host). **Seen**: observed live.
+**Expected**: not observed yet.
 
-1. **Tools are called when the host decides.** *Expected.* Ada may narrate
-   "next line" without calling `next_line`, or say one filler line ("putting
-   that up") while an `await` call is pending. The safety net covers putting
-   an equation up, the method, show all, the graph and clearing; the next and
-   previous line are left out, so a missed "next" is one tap on Next line.
-2. **"Never speak unprompted" cannot be met.** *Expected* (seen in the first
-   port: "Whenever you are ready for the next line…", three times in one run).
-   The ~10 s check-in cannot be turned off per session, so Ada may talk into
-   the pauses while the teacher explains to the class.
-3. **Exact narration is not guaranteed.** *Expected.* Results are said in
-   Ada's own words, so "2 + √3" could still come out as a decimal despite the
-   rules. The board is the source of truth.
-4. **The persona belongs to the avatar.** *Expected* (seen in the first port:
-   the shared test avatar introduced itself as a lighthouse keeper before the
-   board's opening). `avatar.json` is the host this product was designed for;
-   the instructions deliberately name no character.
-5. **No speech hints.** *Expected.* The original biased the recogniser toward
-   maths words; here "four x" can arrive as "for x" and "x" as "ex". The rules
-   read both after an operator, and the model takes the rest.
+1. **Tools are called when the host decides.** *Seen.* Spoken requests were
+   called within 2 to 4 s and the first reply carried the board's outcome. A
+   typed "Hide the graph." was called only after 26.9 s; the safety net hid it
+   first. Typed lines now get a 15 s net (spoken: 7 s), and repeating a call
+   changes nothing. The net never does next or back.
+2. **Typed turns are answered a turn late.** *Seen.* The first reply to a typed
+   equation answered the previous board; the right line came one turn later.
+   Platform side; the app's only part was the net's message queuing ahead of
+   the late reply, which the longer typed window removes.
+3. **The filler and the reply repeat an opener.** *Seen* ("Aye, gladly! Aye,
+   gladly!"). The platform's filler while a call runs, then a reply that starts
+   the same way. Every result now opens with the plain outcome ("Done:",
+   "Refused:", "Not done:"), so the reply's first real words are the board's.
+4. **"Never speak unprompted" cannot be met.** *Seen* ("Shall I put up the next
+   line?"). The ~10 s check-in cannot be turned off per session.
+5. **The persona belongs to the avatar.** *Seen.* On the shared avatar, a
+   lighthouse keeper greeted first and answered a misheard line in character;
+   Ada's own host sounded mechanical ("Executing request."). `avatar.json` now
+   gives her a warmer persona, and the opening no longer greets a second time.
+6. **No speech hints.** *Seen*: "Hide the graph." arrived as "Hi DeGraff."
+7. **Exact narration is not guaranteed.** *Expected*; live, the surds were kept
+   for "what's that as a decimal?".
+8. **A call that does not fit the schema never arrives.** The platform checks
+   arguments first, so the schemas are lenient (no enums, no required fields);
+   the board reads the words itself ("Quadratic Formula", "the formula") and
+   asks back when it cannot use them.
 
 Fixed by tools, compared with the first port:
 
@@ -86,7 +94,7 @@ Fixed by tools, compared with the first port:
 
 ## Tested
 
-- `npx vitest run apps/quadratic-whiteboard`: 377 tests. The engine as ported
+- `npx vitest run apps/quadratic-whiteboard`: 392 tests. The engine as ported
   (exact surds, every method ends on the same answer, never the same line
   twice, every refusal's sentence, the parity check, spoken maths); the tools
   against the API limits; the instructions keep the hard-won rules and name
@@ -96,6 +104,9 @@ Fixed by tools, compared with the first port:
   board, tray and recap rendered; and the page wired end to end with the
   engine as its server (Ada's calls moving the board, a key telling Ada, the
   net acting after 7 s, the recap, calling back to the same board).
-- Live: not yet run with this build. The first port's run (staging, avatar
-  `26cbe079`, 2026-10-23) had every spoken "next" answered with the right line
-  while the board moved, and kept the surds for "what's that as a decimal?".
+- Live on staging, 2026-10-23 (session `909be6c5`, spoken through
+  `tools/live-test/harness.js`, plus two typed lines): every spoken step called
+  its tool and the first reply carried the outcome; no unrevealed line was read
+  early; factoring x² − 4x + 1 was refused with the board's sentence; the
+  recap after hang-up listed three equations, one solved. Smoke pass on Ada's
+  own host (session `86f05535`): put up, factoring and next all called.

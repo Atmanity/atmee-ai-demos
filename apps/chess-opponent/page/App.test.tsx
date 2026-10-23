@@ -95,6 +95,7 @@ describe('the front door', () => {
 describe('the game', () => {
   it('sets up the board while Sasha arrives, and opens with one event', async () => {
     await live();
+    expect(fake.events[0]).toMatch(/^You have just greeted them; do not greet or introduce yourself again\. /);
     expect(fake.events[0]).toContain('invite their first move');
     expect(lastState()).toContain("It is the player's move");
     expect(screen.getAllByText('Your move').length).toBeGreaterThan(0);
@@ -104,7 +105,7 @@ describe('the game', () => {
   it("play_move: the board plays the move and Sasha's reply, and the result says both", async () => {
     await live();
     const result = await call('play_move', { move: 'e4' });
-    expect(result).toContain('The player played e4 and it is on the board');
+    expect(result).toMatch(/^Done: the player played e4 and it is on the board/);
     expect(result).toMatch(/You replied \S+, already on the board/);
     expect(result).toContain('why you played it');
     await waitFor(() => expect(lastState()).toMatch(/Moves so far: 1\. e4 \S+/));
@@ -115,7 +116,7 @@ describe('the game', () => {
   it('play_move with an illegal move: refused in the result and on screen, nothing moves', async () => {
     await live();
     const result = await call('play_move', { move: 'Rook to a five' });
-    expect(result).toContain('REFUSED');
+    expect(result).toMatch(/^Refused:/);
     expect(result).toContain('NOT played');
     await waitFor(() => expect(screen.getByText(/not a legal move in this position/)).toBeTruthy());
     expect(lastState()).toContain('No moves have been played yet');
@@ -139,7 +140,7 @@ describe('the game', () => {
   it('resign: the game ends, the result screen shows, and another game is only offered', async () => {
     await live();
     const result = await call('resign');
-    expect(result).toContain('The player resigned');
+    expect(result).toMatch(/^Done: the player resigned/);
     expect(result).toContain('start one only if they say so');
     await waitFor(() => expect(screen.getByText('Sasha wins.')).toBeTruthy());
     expect(await call('resign')).toContain('already over');
@@ -156,7 +157,7 @@ describe('the game', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Resign' }));
     fireEvent.click(screen.getByRole('button', { name: 'Really resign?' }));
     await waitFor(() => expect(fake.events).toHaveLength(2));
-    expect(fake.events[1]).toMatch(/^The player pressed "Resign" on screen\. The player resigned/);
+    expect(fake.events[1]).toMatch(/^The player pressed "Resign" on screen\. Done: the player resigned/);
   });
 
   it("a move made by hand is answered by Sasha's, and she is told about both", async () => {
@@ -164,7 +165,7 @@ describe('the game', () => {
     fireEvent.click(document.querySelector("[data-square='e2']")!);
     fireEvent.click(document.querySelector("[data-square='e4']")!);
     await waitFor(() => expect(fake.events).toHaveLength(2), { timeout: 3000 });
-    expect(fake.events[1]).toMatch(/^The player moved a piece by hand on screen\. The player played e4/);
+    expect(fake.events[1]).toMatch(/^The player moved a piece by hand on screen\. Done: the player played e4/);
     expect(fake.events[1]).toContain('You replied');
   });
 });
@@ -177,7 +178,7 @@ describe('typing', () => {
     await waitFor(() => expect(fake.events).toHaveLength(2), { timeout: 3000 });
     expect(fake.recorded).toEqual(['e4']);
     expect(fake.said).toEqual([]);
-    expect(fake.events[1]).toMatch(/^The player typed the move "e4" on screen\. The player played e4 and it is on the board\. You replied/);
+    expect(fake.events[1]).toMatch(/^The player typed the move "e4" on screen\. Done: the player played e4 and it is on the board\. You replied/);
     expect(lastState()).toMatch(/Moves so far: 1\. e4 \S+/);
   });
 
@@ -185,13 +186,25 @@ describe('typing', () => {
     await live();
     type('g1f3');
     await waitFor(() => expect(fake.events).toHaveLength(2), { timeout: 3000 });
-    expect(fake.events[1]).toContain('The player played Nf3');
+    expect(fake.events[1]).toContain('Done: the player played Nf3');
   });
 
-  it('anything else typed goes to Sasha: talk, an illegal move, a move in words', async () => {
+  it('a typed move the board cannot play is refused under the board, and Sasha is told', async () => {
+    // Seen live: typed "Nf6" as White went to Sasha, who said it was played; nothing moved, nothing said why.
     await live();
-    for (const text of ['Nice to meet you!', 'e5', 'knight to f3']) type(text);
-    expect(fake.said).toEqual(['Nice to meet you!', 'e5', 'knight to f3']);
+    type('Nf6');
+    await waitFor(() => expect(fake.events).toHaveLength(2));
+    expect(fake.recorded).toEqual(['Nf6']);
+    expect(fake.said).toEqual([]);
+    expect(fake.events[1]).toMatch(/^The player typed the move "Nf6" on screen\. Refused: the board did not play the player's move 'Nf6'/);
+    expect(screen.getByText(/'Nf6' is not a legal move in this position\./)).toBeTruthy();
+    expect(lastState()).toContain('No moves have been played yet');
+  });
+
+  it('anything not written as a move goes to Sasha: talk, a move in words', async () => {
+    await live();
+    for (const text of ['Nice to meet you!', 'knight to f3', 'nf3', 'e4 please']) type(text);
+    expect(fake.said).toEqual(['Nice to meet you!', 'knight to f3', 'nf3', 'e4 please']);
     expect(fake.recorded).toEqual([]);
     expect(fake.events).toHaveLength(1);
     expect(lastState()).toContain('No moves have been played yet');
@@ -206,7 +219,7 @@ describe('choosing a side', () => {
     const dealt = lastState();
     let second = '';
     await netAfter('Yes, start over as Black.', async () => { second = await call('choose_side', { side: 'black' }); });
-    expect(second).toContain('already playing Black, so nothing changed');
+    expect(second).toContain('Nothing changed: the player is already playing Black');
     expect(fake.events.some((e) => e.startsWith('You did not call'))).toBe(false);
     expect(lastState()).toBe(dealt);
   });

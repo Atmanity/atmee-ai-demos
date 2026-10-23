@@ -266,11 +266,37 @@ function layOut(level: Level, shape: Typology, slots: Slot[], entryWall: string,
       throw new PlanError(`I can't fit ${article(slot.spec.label)} on a floor this size — ${err.message}`);
     }
   }
+  if (shape.key === 'open_plan') openUp(level);
   // The stairs go in last and take their floor off whichever room can spare it,
   // so they land above the flight below rather than wherever the partition left room.
   if (reserve !== null) reserveStairs(level, reserve);
   hangDoors(level, frontDoor);
   cutWindows(level);
+}
+
+/**
+ * Open plan means one room. The typology only ordered the kitchen, dining and
+ * living next to each other, so "open plan" drew the same three rooms as the
+ * default and the architect described a combined room the drawing did not
+ * have (seen live). The walls between them come out here, before the doors
+ * are hung; a pair that ended up not touching stays separate.
+ */
+function openUp(level: Level): void {
+  const ofKind = (kind: string) => [...level.rooms.values()].find((r) => r.kind === kind);
+  const living = ofKind('living');
+  if (!living) return;
+  const joined: string[] = [];
+  for (const kind of ['kitchen', 'dining']) {
+    const other = ofKind(kind);
+    if (!other) continue;
+    try {
+      level.mergeRooms(living, other);
+      joined.push(kind);
+    } catch (err) {
+      if (!(err instanceof PlanError)) throw err;
+    }
+  }
+  if (joined.length) living.name = joined.length === 2 ? 'Kitchen, dining and living room' : joined[0] === 'kitchen' ? 'Kitchen and living room' : 'Dining and living room';
 }
 
 /**

@@ -15,7 +15,8 @@ function download(board: Board, now: number) {
 
 export function Closing({ board, now, host, onAgain }: { board: Board | null; now: number; host: string; onAgain: () => void }) {
   const rows = board?.watchlist ?? [];
-  const at = new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  // English like the rest of the product, whatever the browser's language (a zh-TW browser printed "下午4:43").
+  const at = new Date(now).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   return (
     <section className="oc-closing" aria-label="Closing sheet">
       <p className="oc-eyebrow">Closing sheet · {at}</p>

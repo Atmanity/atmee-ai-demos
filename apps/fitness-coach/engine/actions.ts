@@ -10,8 +10,8 @@
 import type { Coach } from './coach.ts';
 import * as cons from './constraints.ts';
 import { builtAround, PLAN_WAIT_MS, pressed, say } from './director.ts';
-import { goalIn, moveIn, stepLevel } from './judge.ts';
-import { acceptGoal, baseMoveName, normalizeLevel, rebuildSummaryLine } from './plan.ts';
+import { goalIn, moveIn, readLevel, stepLevel } from './judge.ts';
+import { acceptGoal, baseMoveName, rebuildSummaryLine } from './plan.ts';
 import type { AvatarEvent, Command, Level, Outcome, View } from './types.ts';
 
 const warn = (message: string, ...args: unknown[]) => console.warn(`[fitness-coach] [Relay] ${message}`, ...args);
@@ -91,7 +91,23 @@ export class Relay {
 
 export interface ToolRun { view: View; text: string }
 
-const str = (value: unknown, max: number) => (typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, max) : '');
+const str = (value: unknown, max: number) => (typeof value === 'string' || typeof value === 'number' ? String(value).replace(/\s+/g, ' ').trim().slice(0, max) : '');
+
+/**
+ * A tool argument, read leniently: the platform drops a call whose arguments
+ * do not fit the schema, so the schemas accept almost anything and the reading
+ * happens here. The named field, else (when the host named it differently,
+ * "goal_level", "injury") the other text fields joined, never the ones listed
+ * in `besides`.
+ */
+export function arg(args: Record<string, unknown>, key: string, max: number, besides: string[] = []): string {
+  const named = str(args?.[key], max);
+  if (named) return named;
+  // A bare number keeps its field's name: { minutes: 20 } is "20 minutes".
+  const others = Object.entries(args ?? {}).filter(([k]) => k !== key && !besides.includes(k))
+    .map(([k, v]) => (typeof v === 'number' ? `${v} ${k.replace(/_/g, ' ')}` : str(v, max))).filter(Boolean);
+  return others.join(', ').slice(0, max);
+}
 const joined = (events: AvatarEvent[]) => events.map((e) => e.text).join(' ');
 const busy = (coach: Coach) => { const v = coach.view(); return v.planning || v.rebuilding; };
 
@@ -176,9 +192,10 @@ export async function runTool(coach: Coach, relay: Relay, name: string, args: Re
   const done = (text: string): ToolRun => ({ view: coach.view(), text });
 
   if (name === 'stop_for_safety') {
-    const stopped = stopFor(coach, str(args.condition, 120) || 'a health condition');
+    const condition = arg(args, 'condition', 160);
+    const stopped = stopFor(coach, condition || 'a health condition');
     if (stopped) return done(stopped);
-    const limits = await runTool(coach, relay, 'add_limits', { words: args.condition }, waitMs);
+    const limits = await runTool(coach, relay, 'add_limits', { words: condition }, waitMs);
     return { ...limits, text: `${say.notAStop()} ${limits.text}` };
   }
   if (!(name in WHAT)) throw new Error(`unknown tool ${name}`);
@@ -186,14 +203,16 @@ export async function runTool(coach: Coach, relay: Relay, name: string, args: Re
 
   switch (name) {
     case 'set_goal': {
-      const raw = str(args.goal, 80);
-      const level = normalizeLevel(str(args.level, 20));
-      const goal = raw ? goalIn(raw, coach.constraints.injuries) ?? acceptGoal(raw) : null;
-      if (!goal) {
-        // "Beginner" given as what to train: it is the level.
-        const said = normalizeLevel(raw);
-        return said ? runTool(coach, relay, 'set_level', { level: said.toLowerCase() }, waitMs) : done(say.noGoal());
+      const raw = arg(args, 'goal', 80, ['level']);
+      const read = readLevel(str(args.level, 60));
+      const level = read === 'easier' || read === 'harder' ? null : read;
+      const said = readLevel(raw);
+      // "Beginner" given as what to train: it is the level.
+      if (said && said !== 'easier' && said !== 'harder' && !goalIn(raw) && (raw.split(' ').length <= 3)) {
+        return runTool(coach, relay, 'set_level', { level: said.toLowerCase() }, waitMs);
       }
+      const goal = raw ? goalIn(raw, coach.constraints.injuries) ?? acceptGoal(raw) : null;
+      if (!goal) return done(say.noGoal());
       const stage = coach.stage();
       if (stage !== 'goal' && stage !== 'level') return done(say.goalLocked(before));
       const out = coach.hear({ constraints: cons.EMPTY, intent: { kind: 'goal', goal, ...(level ? { level } : {}) } });
@@ -201,15 +220,16 @@ export async function runTool(coach: Coach, relay: Relay, name: string, args: Re
     }
 
     case 'set_level': {
-      const raw = str(args.level, 20).toLowerCase();
+      // "Beginner", "a beginner", "beginner level", "a bit harder": all read here.
+      const read = readLevel(arg(args, 'level', 80));
       let level: Level | null;
-      if (raw === 'easier' || raw === 'harder') {
+      if (read === 'easier' || read === 'harder') {
         const current = before.plan || before.planning ? before.flow.level : '';
-        level = current ? stepLevel(current, raw) : null;
+        level = current ? stepLevel(current, read) : null;
         if (!level) return done(say.noPlanToChange());
-        if (level === current) return done(say.levelEdge(level, raw));
+        if (level === current) return done(say.levelEdge(level, read));
       } else {
-        level = normalizeLevel(raw);
+        level = read;
       }
       if (!level) return done(say.noLevel());
       const relevel = Boolean(before.plan || before.planning);
@@ -218,7 +238,7 @@ export async function runTool(coach: Coach, relay: Relay, name: string, args: Re
     }
 
     case 'add_limits': {
-      const words = str(args.words, 300);
+      const words = arg(args, 'words', 500);
       const heard = cons.parseConstraints(words);
       // A condition passed as a limit is still a stop.
       if (heard.clearance.length) return done(stopFor(coach, words)!);
@@ -238,7 +258,7 @@ export async function runTool(coach: Coach, relay: Relay, name: string, args: Re
     }
 
     case 'start_move': {
-      const raw = str(args.move, 80);
+      const raw = arg(args, 'move', 120);
       if (!before.plan) return done(before.planning ? say.stillBuilding(before) : say.noPlanYet());
       if (!raw) return done(say.whichMove(before.plan));
       const move = moveIn(before.plan, raw);

@@ -48,3 +48,14 @@ test('the round-intro result never names the next city; a wrong guess never name
   g.skip(); g.next();
   expect(said.next(g.view(null))).not.toContain(g.city.name);
 });
+
+test('the tool schemas are lenient: an extra field or odd spacing still fits', () => {
+  const check = TOOLS.find((t) => t.name === 'check_guess')!;
+  expect(check.parameters).not.toHaveProperty('additionalProperties');
+  for (const tool of TOOLS) expect(JSON.stringify(tool.parameters)).not.toMatch(/"enum"|"pattern"|"additionalProperties":false/);
+});
+
+test('the opening does not greet a second time', () => {
+  const g = fresh();
+  expect(said.start(g.view(null))).toMatch(/^You have just greeted them; do not greet/);
+});

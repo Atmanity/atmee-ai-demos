@@ -26,6 +26,11 @@ describe('the instructions', () => {
 
   test('the plan changes only through the tools, and an outcome is never invented', () => {
     expect(INSTRUCTIONS).toContain('The plan changes only when you call a tool');
+    expect(INSTRUCTIONS).toContain('Every request that changes the screen is a tool call, even a single word answering your own question');
+    expect(INSTRUCTIONS).toContain("never say a change happened unless the tool's result said so");
+    // Live, "add a grand piano" got no call and a made-up "nearly four square metres".
+    expect(INSTRUCTIONS).toContain('even for a piece or room you think the plan lacks (a piano, a gym)');
+    expect(INSTRUCTIONS).toContain('a refusal must come from it');
     expect(INSTRUCTIONS).toContain('Never invent or estimate a size or an outcome');
     expect(INSTRUCTIONS).toContain('never confirm a refused change');
     expect(INSTRUCTIONS).toContain('Call the tool even when you think you know');
@@ -71,6 +76,18 @@ describe('the tools', () => {
       expect(tool['x-atmee']!.timeoutSeconds!).toBeLessThanOrEqual(28);
     }
     expect(JSON.stringify(TOOLS).length).toBeLessThanOrEqual(24576);
+  });
+
+  test('the schemas are lenient: a call the platform rejects never reaches the plan', () => {
+    // Live, a call that did not fit its schema was answered "invalid arguments"
+    // to the host, never reached the page, and the host said it had happened.
+    const all = JSON.stringify(TOOLS);
+    for (const strict of ['"enum"', '"additionalProperties"', '"pattern"', '"format"', '"minLength"', '"minimum"', '"maximum"']) expect(all).not.toContain(strict);
+    for (const tool of TOOLS) {
+      const props = tool.parameters.properties as Record<string, { maxLength?: number }>;
+      for (const prop of Object.values(props)) if (prop.maxLength !== undefined) expect(prop.maxLength).toBeGreaterThanOrEqual(500);
+      expect((tool.parameters.required as string[]) ?? []).toEqual([]);
+    }
   });
 
   test('nothing takes a position; only an exact wall move and the floor size are measurements', () => {
@@ -240,7 +257,7 @@ describe('the results', () => {
   test("a refusal carries the plan's reason and forbids confirming it", () => {
     const p = new Planner();
     const text = resultFor([step(p, { kind: 'add_item', type: 'chaise longue' })], [], p.snapshot());
-    expect(text).toMatch(/^Refused; nothing has changed/);
+    expect(text).toMatch(/^Refused: nothing has changed/);
     expect(text).toContain('chaise longue');
     expect(text).toContain('Never describe it as done');
     expect(text).toContain('make it only if they agree');
@@ -313,10 +330,23 @@ describe('changes by hand', () => {
 });
 
 describe('the opening and photos', () => {
+  test('the opening never greets twice: the host has already introduced herself', () => {
+    for (const snap of [new Planner().snapshot(), twoBed().snapshot()]) {
+      expect(say.opening(snap)).toMatch(/^You have just greeted them; do not greet or introduce yourself again\./);
+    }
+  });
+
   test('the opening asks the two things a sketch needs', () => {
     const text = say.opening(new Planner().snapshot());
     expect(text).toContain('roughly how big the place is');
     expect(text).toContain('how many bedrooms');
+  });
+
+  test('every result starts with its plain outcome, so a filler cannot pre-judge it', () => {
+    const p = twoBed();
+    expect(resultFor([step(p, { kind: 'set_unit', unit: 'ft2' })], [], p.snapshot())).toMatch(/^Done: /);
+    expect(resultFor([step(p, { kind: 'add_item', type: 'piano' })], [], p.snapshot())).toMatch(/^Refused: /);
+    expect(resultFor([], [], p.snapshot())).toMatch(/^Not yet: /);
   });
 
   test('a plan already on screen is welcomed, not interviewed', () => {

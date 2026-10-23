@@ -32,9 +32,23 @@ describe('the tools and the instructions fit the API', () => {
     expect(timeout('aim')).toBeGreaterThanOrEqual(12);    // a 6 s model call, then perhaps a shot
   });
 
-  test('choose_challenge offers exactly the six ids and "next"', () => {
-    const challenge = (TOOLS.find((t) => t.name === 'choose_challenge')!.parameters as { properties: { challenge: { enum: string[] } } }).properties.challenge;
-    expect(challenge.enum).toEqual([...CHALLENGES.map((c) => c.id), 'next']);
+  test('the schemas are lenient: the platform refuses a misfit before the page can read it', () => {
+    // Live (another app): "Beginner, please." failed an enum, never reached the
+    // page, and the host said it had been done. The page reads loose values itself.
+    const walk = (node: unknown): void => {
+      if (!node || typeof node !== 'object') return;
+      const o = node as Record<string, unknown>;
+      for (const key of ['enum', 'pattern', 'format', 'minLength']) expect(o, key).not.toHaveProperty(key);
+      expect(o.additionalProperties).not.toBe(false);
+      if (typeof o.maxLength === 'number') expect(o.maxLength).toBeGreaterThanOrEqual(500);
+      for (const v of Object.values(o)) walk(v);
+    };
+    for (const tool of TOOLS) walk(tool.parameters);
+    const required = Object.fromEntries(TOOLS.map((t) => [t.name, (t.parameters as { required?: string[] }).required ?? []]));
+    expect(required).toEqual({ aim: [], fire: [], choose_challenge: ['challenge'], start_over: [] });
+    const challenge = (TOOLS.find((t) => t.name === 'choose_challenge')!.parameters as { properties: { challenge: { description: string } } }).properties.challenge;
+    for (const c of CHALLENGES) expect(challenge.description).toContain(c.id);
+    expect(challenge.description).toContain('"next"');
   });
 
   test('what resets the range is called only when the student asks', () => {
@@ -46,18 +60,21 @@ describe('the tools and the instructions fit the API', () => {
     for (const tool of TOOLS) expect(INSTRUCTIONS).toContain(tool.name);
     const rules = INSTRUCTIONS.toLowerCase();
     // "you need to aim first" while the launcher sat aimed (four times in one session)
-    expect(rules).toContain('never say they must aim first');
-    // "the angle is now thirty degrees" with the arrow showing exactly that
-    expect(rules).toContain('never read the numbers back');
+    expect(rules).toContain('never tell them to set an aim first');
+    // "the angle is now thirty degrees" right after they said thirty
+    expect(rules).toContain('never repeat numbers they just said');
     // "do you want to send it?" after nearly every turn
     expect(rules).toContain('never end a turn by asking whether to fire');
-    // numbers quoted, not recomputed; a shot in the air is not guessed
+    // numbers quoted, not recomputed; a shot in the air is not guessed, nor one not yet fired
     expect(rules).toContain('exactly as written');
     expect(rules).toContain('never guess where a shot will land');
+    expect(rules).toContain('never predict whether the shot will clear');
     // never clamped: "try ninety" is refused by the range, with the numbers
     expect(rules).toContain('even outside the limits');
-    // the screen changes only through a call
-    expect(rules).toContain('call the tool every time');
+    // live: "Start over." got no call and "I've wiped the board clean"; "Fire!" during the welcome got none
+    expect(rules).toContain('every request that changes the screen is a tool call');
+    expect(rules).toContain('never say an action happened');
+    expect(rules).toContain('even said while you are still talking');
   });
 });
 
@@ -136,6 +153,22 @@ describe('what the host speaks from', () => {
     expect(moon).toContain('On the Moon');
     expect(moon.toLowerCase()).not.toContain('wall');
     expect(moon.toLowerCase()).toContain('drag the arrow');
+    // The host's own greeting already introduced him: no second one.
+    expect(wall).toMatch(/^You have just greeted them; do not greet or introduce yourself again\./);
+    expect(wall.toLowerCase()).not.toContain('welcome');
+  });
+
+  test('every result starts with its plain outcome, before any filler could pre-judge it', () => {
+    const l = new Launcher();
+    const s = l.snapshot();
+    const results = [
+      said.aimed(s), said.stepped(s, s), said.aimRefused('90 is off the rail.', s), said.noAim(), said.unreadable('welly'),
+      said.fireRefused("It's already in the air."), said.cancelled(s), said.challenge(s), said.alreadyUp(s), said.unknownChallenge('dragon'),
+      said.refused('No.'), said.reset(s),
+    ];
+    l.fire(); l.land();
+    results.push(said.landed(l.snapshot()), said.joined(said.landed(l.snapshot())), said.aimedAndFired(l.snapshot(), said.landed(l.snapshot())));
+    for (const text of results) expect(text, text).toMatch(/^(Done|Refused|Nothing moved|Not fired|Not landed|Already up|Not done|Landed, (missed|cleared)):/);
   });
 
   test("a miss is said in the range's own words, then one change; later misses ask why", () => {
@@ -156,7 +189,7 @@ describe('what the host speaks from', () => {
     l.fire();
     l.land();
     const line = said.landed(l.snapshot());
-    expect(line).toContain('cleared the challenge');
+    expect(line).toMatch(/^Landed, cleared: /);
     expect(line).toContain('Over with 9.75 m to spare');
     expect(line).toContain('Forty-five degrees maximises range');
     // A result never has the host act on its own: Postmark's host once started a new game unasked.
@@ -174,12 +207,22 @@ describe('what the host speaks from', () => {
     expect(line).not.toContain('next challenge');
   });
 
-  test('the aim result neither reads the numbers back nor asks whether to fire', () => {
+  test('an aim from their numbers is not read back; one from words names the new value; neither predicts nor asks', () => {
     // The original's aim cue once ended "and ask if they want to send it",
-    // which is why the coach asked that after almost every turn.
-    const cue = said.aimed(new Launcher().snapshot()).toLowerCase();
-    expect(cue).toContain('without reading the numbers back');
-    expect(cue).toContain('do not ask whether to fire');
+    // which is why the coach asked that after almost every turn. Live, "a bit
+    // steeper" got "way more arc to sail right over the wall!" before any shot.
+    const l = new Launcher();
+    const before = l.snapshot();
+    const own = said.aimed(before);
+    expect(own).toContain('without repeating their numbers');
+    l.setAim(48, null);
+    const stepped = said.stepped(l.snapshot(), before);
+    expect(stepped).toMatch(/^Done: moved the angle from 45 to 48 degrees\./);
+    expect(stepped).toContain('Tell them the new angle once');
+    for (const cue of [own, stepped]) {
+      expect(cue).toContain('Do not predict whether it will clear');
+      expect(cue).toContain('do not ask whether to fire');
+    }
   });
 
   test('a refused aim keeps the numbers and says the launcher did not move', () => {
@@ -192,7 +235,7 @@ describe('what the host speaks from', () => {
 
   test('a challenge is set up with its conditions, and never with an angle', () => {
     const text = said.challenge(new Launcher('headwind').snapshot());
-    expect(text).toContain('Into the headwind is up');
+    expect(text).toMatch(/^Done: Into the headwind is up/);
     expect(text).toContain('6 m/s headwind');
     expect(text).toContain('Never suggest an angle');
   });

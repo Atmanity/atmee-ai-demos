@@ -8,11 +8,14 @@
 //    (or a pair of coordinates) to a human place. An anonymous or bursty client
 //    gets 403/429, which from here looks exactly like "that country does not
 //    exist". Hence USER_AGENT and the throttle.
-//  - Overpass: nearby points of interest. The main instance is regularly
-//    rate-limited or 504s under load, so the mirrors are tried in order.
-//  - Wikipedia: GeoSearch as an Overpass-independent fallback for nearby
-//    places, and the REST summary for a real photo and a sentence about a
-//    place or a dish.
+//  - Wikipedia: the sights around a place, first. A GeoSearch ranked for a
+//    traveller (an article with a lead photo, some prominence, a landmark
+//    rather than a district or a station), and the REST summary for a real
+//    photo and a sentence about a place or a dish.
+//  - Overpass: nearby points of interest, only to top up a place Wikipedia
+//    knows little about. The main instance is regularly rate-limited or 504s
+//    under load (live, every mirror failed in both runs), so the mirrors are
+//    tried in order within a time budget.
 //  - WorldNews: the latest local headlines. The only one that needs a key
 //    (WORLDNEWS_API_KEY). No key means no headlines and a session that runs
 //    exactly as well otherwise; never a crash.
@@ -43,6 +46,12 @@ const WIKIPEDIA_SUMMARY = 'https://en.wikipedia.org/api/rest_v1/page/summary';
 const WORLDNEWS_SEARCH = 'https://api.worldnewsapi.com/search-news';
 
 export const POI_SEARCH_RADIUS_M = 1500;
+/** How far Wikipedia looks for sights: a long walk, or a short ride. */
+export const SIGHT_RADIUS_M = 3000;
+/** With this many good sights from Wikipedia, Overpass is not asked at all. */
+export const ENOUGH_SIGHTS = 3;
+/** The most time the Overpass mirrors get, together: past it, the next mirror is not tried. */
+export const OVERPASS_BUDGET_MS = 14_000;
 
 /** What the fetchers use to make requests: `fetch`, or a scripted double in tests. */
 export type Http = (url: string, init?: RequestInit) => Promise<Response>;
@@ -69,6 +78,10 @@ export interface RawSpot {
   category: string;
   lat: number;
   lon: number;
+  /** The Wikipedia article, when the name shown is not its exact title ("Igreja de Santo Estêvão (Lisbon)"). */
+  wiki?: string;
+  /** Its lead photo, when the source already has one. */
+  image?: string | null;
 }
 
 export interface WikiSummary {
@@ -185,6 +198,9 @@ export function parsePlace(data: unknown): GeoPlace | null {
   };
 }
 
+/** `historic=*` values that mark something small rather than a place to visit. */
+const MINOR_HISTORIC = new Set(['memorial', 'plaque', 'boundary_stone', 'milestone', 'wayside_cross', 'wayside_shrine', 'stone', 'tomb', 'grave', 'yes']);
+
 /**
  * Overpass elements to named spots, closest first, de-duplicated by name.
  * Ways and relations carry their position under `center` rather than at the
@@ -205,6 +221,8 @@ export function parseOverpassPois(data: unknown, lat: number, lon: number): RawS
     const pLat = num(where.lat);
     const pLon = num(where.lon);
     if (pLat === null || pLon === null) continue;
+    // A plaque or a boundary stone is history, not a sight anyone crosses a city for.
+    if (!tags.tourism && MINOR_HISTORIC.has(String(tags.historic))) continue;
     seen.add(name.toLowerCase());
     const category = tags.tourism || tags.historic || 'place';
     spots.push({ name, category: cleanText(String(category).replace(/_/g, ' '), 40), lat: pLat, lon: pLon });
@@ -213,24 +231,51 @@ export function parseOverpassPois(data: unknown, lat: number, lon: number): RawS
   return spots.slice(0, 8);
 }
 
-/** Wikipedia GeoSearch results to the same shape, in its own (closest-first) order. */
-export function parseGeosearch(data: unknown): RawSpot[] {
-  if (!isObject(data) || !isObject(data.query)) return [];
-  const results = data.query.geosearch;
-  if (!Array.isArray(results)) return [];
-  const spots: RawSpot[] = [];
+/** What a traveller would cross a street for, read from the head of a Wikipedia short description ("cathedral in Lisbon, Portugal"). */
+const SIGHT_WORDS = /\b(castle|cathedral|basilica|church|chapel|monastery|convent|abbey|cloister|mosque|synagogue|temple|shrine|pagoda|palace|fortress|fort|citadel|tower|museum|gallery|monument|viewpoint|miradouro|belvedere|lookout|park|gardens?|square|plaza|piazza|market|bridge|gate|arch|aqueduct|ruins|amphitheatre|theatre|theater|opera house|lighthouse|beach|waterfall|zoo|aquarium|fountain|cemetery|library|observatory|statue|crossing|stadium|arena|skyscraper|landmark)\b/i;
+/** What is near a place but is not a sight: the district itself, a station, a school, a company, a person. */
+const NOT_A_SIGHT = /\b(station|stop|airport|port|school|college|university|hospital|clinic|company|corporation|business|bank|embassy|consulate|hotel|office|newspaper|magazine|club|team|parish|municipality|district|neighbou?rhood|quarter|borough|street|road|avenue|motorway|highway|line|constituency|settlement|village|town|city|capital|organi[sz]ation|association|party|band|album|film|ship|event|battle|earthquake|writer|poet|politician|painter|actor|singer|footballer|architect|people|family|ward|prefecture|region|area|think tank|institute|coup|murder|assassination|incident|confrontation|attack|massacre|riot|protest|rebellion|uprising|war|siege|bombing|fire|disaster|election|treaty|crisis)\b/i;
+/** "1936 coup d'état attempt", "1908 murder of the king": a head that starts with a year is something that happened, not somewhere to go. */
+const AN_EVENT = /^\d{3,4}s?\b/;
+
+/** "cathedral in Lisbon, Portugal" -> "cathedral": what the thing is, before where it is. */
+const headOf = (description: string) => description.split(/\s(?:in|of|at|on|near|located|from)\s|[,(;]/)[0].trim();
+
+/**
+ * A Wikipedia GeoSearch (with lead images, page sizes, short descriptions and
+ * recent pageviews) ranked for a traveller. GeoSearch alone is nearest first,
+ * and live that meant a "Júlio de Castilho memorial" and an "S. Vicente
+ * artwork" with no photo, two minutes from Lisbon's castle and cathedral. So:
+ * no photo, no sight; a district, a station or a person is not one either;
+ * and the rest are scored by prominence (article length and pageviews), a
+ * landmark's kind, and distance. The best come first, at most eight.
+ */
+export function parseRankedSights(data: unknown, lat: number, lon: number): RawSpot[] {
+  if (!isObject(data)) return [];
+  const pages = isObject(data.query) && Array.isArray(data.query.pages) ? data.query.pages : [];
+  const scored: { spot: RawSpot; score: number }[] = [];
   const seen = new Set<string>();
-  for (const item of results) {
-    if (!isObject(item)) continue;
-    const name = cleanText(item.title || '', 80);
-    if (!name || seen.has(name.toLowerCase())) continue;
-    const pLat = num(item.lat);
-    const pLon = num(item.lon);
-    if (pLat === null || pLon === null) continue;
+  for (const page of pages) {
+    if (!isObject(page)) continue;
+    const title = cleanText(page.title || '', 120);
+    const image = isObject(page.thumbnail) && typeof page.thumbnail.source === 'string' ? page.thumbnail.source : '';
+    const where = Array.isArray(page.coordinates) && isObject(page.coordinates[0]) ? page.coordinates[0] : {};
+    const pLat = num(where.lat);
+    const pLon = num(where.lon);
+    if (!title || !image || pLat === null || pLon === null || /^list of\b|disambiguation/i.test(title)) continue;
+    const head = headOf(cleanText(page.description || '', 160));
+    if (head && ((NOT_A_SIGHT.test(head) && !SIGHT_WORDS.test(head)) || AN_EVENT.test(head))) continue;
+    const name = title.replace(/\s*\([^)]*\)\s*$/, '');
+    if (seen.has(name.toLowerCase())) continue;
     seen.add(name.toLowerCase());
-    spots.push({ name, category: 'notable spot', lat: pLat, lon: pLon });
+    const views = isObject(page.pageviews) ? Object.values(page.pageviews).map(num).filter((v): v is number => v !== null) : [];
+    const daily = views.length ? views.reduce((a, b) => a + b, 0) / views.length : 0;
+    const kind = head.match(SIGHT_WORDS)?.[1]?.toLowerCase() ?? '';
+    const km = haversineM(lat, lon, pLat, pLon) / 1000;
+    const score = Math.log10(Math.max(num(page.length) ?? 0, 100)) + 0.8 * Math.log10(1 + daily) + (kind ? 1 : 0) - 0.4 * km;
+    scored.push({ spot: { name, category: kind || 'landmark', lat: pLat, lon: pLon, ...(name !== title ? { wiki: title } : {}), image }, score });
   }
-  return spots.slice(0, 8);
+  return scored.sort((a, b) => b.score - a.score).slice(0, 8).map((s) => s.spot);
 }
 
 /** A WorldNews body to at most five headlines the board can list. */
@@ -386,7 +431,9 @@ out center 40;
 /** Overpass across its mirrors. null means every mirror failed. */
 async function overpass(lat: number, lon: number, http: Http): Promise<RawSpot[] | null> {
   const body = new URLSearchParams({ data: overpassQuery(lat, lon) });
+  const started = Date.now();
   for (const url of OVERPASS_URLS) {
+    if (Date.now() - started > OVERPASS_BUDGET_MS) break;
     try {
       const res = await http(url, { method: 'POST', body, headers: { 'User-Agent': USER_AGENT } });
       if (res.status !== 200) {
@@ -401,20 +448,31 @@ async function overpass(lat: number, lon: number, http: Http): Promise<RawSpot[]
   return null;
 }
 
+/** Wikipedia's sights around a point, ranked; null when Wikipedia did not answer. */
+async function wikipediaSights(lat: number, lon: number, http: Http): Promise<RawSpot[] | null> {
+  const body = await getJson(http, WIKIPEDIA_API, {
+    action: 'query', format: 'json', formatversion: '2',
+    generator: 'geosearch', ggscoord: `${lat}|${lon}`, ggsradius: String(SIGHT_RADIUS_M), ggslimit: '50',
+    prop: 'coordinates|pageimages|info|description|pageviews', colimit: '50', piprop: 'thumbnail', pithumbsize: '640', pilimit: '50', pvipdays: '7',
+  });
+  return body === null ? null : parseRankedSights(body, lat, lon);
+}
+
 /**
- * Spots near a point, closest first. Three outcomes, and the caller needs all
- * three: spots, an empty list (a provider answered and the place really is
- * barren), or null (every provider failed). Collapsing the last two makes the
- * guide tell someone standing in central Rome that there is nothing to see.
+ * Sights near a point, best first. Wikipedia's ranked sights, and when it
+ * knows fewer than three, Overpass's points of interest after them. Three
+ * outcomes, and the caller needs all three: sights, an empty list (a provider
+ * answered and the place really is quiet), or null (every provider failed).
+ * Collapsing the last two makes the guide tell someone looking at central
+ * Rome that there is nothing to see.
  */
 export async function nearbySpots(lat: number, lon: number, http: Http = defaultHttp): Promise<RawSpot[] | null> {
+  const ranked = await wikipediaSights(lat, lon, http);
+  if (ranked && ranked.length >= ENOUGH_SIGHTS) return ranked;
   const fromOverpass = await overpass(lat, lon, http);
-  if (fromOverpass?.length) return fromOverpass;
-  const wiki = parseGeosearch(await getJson(http, WIKIPEDIA_API, {
-    action: 'query', list: 'geosearch', gscoord: `${lat}|${lon}`, gsradius: String(Math.min(10000, POI_SEARCH_RADIUS_M * 3)), gslimit: '20', format: 'json',
-  }));
-  if (wiki.length) return wiki;
-  return fromOverpass !== null ? [] : null;
+  if (ranked === null && fromOverpass === null) return null;
+  const seen = new Set((ranked ?? []).map((s) => s.name.toLowerCase()));
+  return [...(ranked ?? []), ...(fromOverpass ?? []).filter((s) => !seen.has(s.name.toLowerCase()))].slice(0, 8);
 }
 
 /** A real photo and a sentence about a place or a dish, or null. */

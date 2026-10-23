@@ -156,6 +156,22 @@ const TOKEN_TO_ID: [RegExp, string][] = [
   [/^(adult|cardiac arrest|collapse|cafe)$/, 'adult_cardiac_arrest'],
 ];
 
+/** Words for each scene, condition first, for a line that already asks to leave ("too hard, the collapse one"). */
+const SCENE_TOKENS: [RegExp, string][] = [
+  [/\b(choking|choke|heimlich)\b/, 'choking_adult'],
+  [/\b(recovery|side)\b/, 'recovery_position'],
+  [/\b(child|kid|pediatric|paediatric|infant)\b/, 'child_cardiac_arrest'],
+  [/\b(adult|arrest|cardiac|cpr)\b/, 'adult_cardiac_arrest'],
+];
+
+/** The scene a line names, by its title words or its condition and audience, or null. */
+export function sceneIn(text: string): string | null {
+  const t = clean(text);
+  for (const [re, id] of TITLE_WORDS) if (re.test(t)) return id;
+  for (const [re, id] of SCENE_TOKENS) if (re.test(t)) return id;
+  return null;
+}
+
 /** The drill a mid-scenario line asks to switch to, or null. */
 export function switchRequest(text: string, current: string | null): string | null {
   const t = clean(text);
@@ -187,7 +203,11 @@ export function mustDo(text: string, phase: Phase, current: string | null): NetC
   const start: NetCall = { name: 'start_scenario', arguments: { scenario: text.trim().slice(0, 120) } };
   if (phase === 'intro' || phase === 'debrief') return namesScenario(text) ? start : null;
   if (switchRequest(text, current)) return start;
-  if (wantsOut(text)) return { name: 'leave_scenario', arguments: {} };
+  if (wantsOut(text)) {
+    // "This is too hard, can we do the one where someone collapsed instead?" names where to go.
+    const other = sceneIn(text);
+    return other && other !== current ? start : { name: 'leave_scenario', arguments: {} };
+  }
   if (phase === 'answering' && wantsShown(text)) return { name: 'show_step', arguments: {} };
   if (phase === 'coaching' && isAdvanceRequest(text)) return { name: 'next_step', arguments: {} };
   return null;

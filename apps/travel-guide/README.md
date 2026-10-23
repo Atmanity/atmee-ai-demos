@@ -16,9 +16,10 @@ Open it at `/apps/travel-guide/`.
 | Part | Where |
 |---|---|
 | The trip: countries on the route, what each showed, the sights around a place | `engine/state.ts` and `engine/trip.ts` on the server, one trip per page (the lookups need a User-Agent, a request-a-second throttle and, for the news, a key a browser cannot hold) |
-| The lookups | `engine/geo.ts`: Nominatim (countries, places), Overpass with mirrors and Wikipedia GeoSearch as the fallback (sights), Wikipedia summaries (photos, one line each), WorldNews (headlines, with a key). Dishes: the app's own model, or a built-in list (`engine/food.ts`) |
+| The lookups | `engine/geo.ts`: Nominatim (countries, places); for sights, a Wikipedia GeoSearch ranked for a traveller (only articles with a lead photo; scored by article length, recent pageviews, a landmark's kind and distance; districts, stations, people and lists dropped), topped up from Overpass (plaques dropped, 14 s budget) only when Wikipedia knows fewer than three; Wikipedia summaries (photos, one line each); WorldNews (headlines, with a key). Dishes: the app's own model, or a built-in list (`engine/food.ts`) |
 | Lumi's actions | Six `await` tools and one `notify` (`engine/director.ts`): `choose_destination(place)`, `show_food`, `show_news` (only with a news key), `explore_near(place)`, `next_sight`, `previous_sight`, and `remember_name(name)`. The page answers each `atmee.tool` call by asking the server (`engine/tools.ts`, one runner for tools and buttons), which acts and returns the words Lumi speaks from. Her first reply carries the board's real outcome. |
-| Slow lookups | Overpass can take half a minute. A tool still running 4 s before its timeout answers "still looking"; the outcome follows as an event when it lands. |
+| Slow lookups | A tool still running 4 s before its timeout answers "still looking"; the outcome follows as an event when it lands. |
+| Tool schemas and results | Lenient on purpose (no enums, closed objects, tight lengths or required fields): the platform refuses a call that does not fit before the page sees it. The app reads the arguments widely ("place", or "country", "city"…), and every result starts with the plain outcome ("Done:", "Not yet:", "Not found:") so the host's filler cannot pre-judge it. The opening never greets again: Lumi's own greeting already did. |
 | Lumi's rules | The session's tool `instructions`: she reaches the map only through the tools, and never names a sight, dish, headline or distance a tool did not give her. |
 | What Lumi sees | `state`: what is on the screen (the country, the dishes and headlines once shown, the sight and its facts, the route). Never the next sight, and never dishes or headlines before they are shown, so she has to call for them. |
 | Buttons | Search, Surprise me, idea chips, the route, Eat / News / Wander, a place box, Use my location, next and previous, pins and map taps: they act at once and Lumi is told by an event. Switching a tab only moves the board; Lumi just gets the new state. |
@@ -52,44 +53,51 @@ page/              App, Lobby, Guidebook, Summary, TravelMap (Leaflet), notes, o
 
 ## What the API could not do
 
-Status before Yonder's first live run. **Seen**: observed live. **Expected**:
-not observed yet with tools.
+Status after the live runs of 2026-10-23 on staging (below). **Seen**:
+observed live. **Expected**: not observed yet.
 
-1. **Tools are called when the host decides.** *Expected.* Lumi may narrate
-   ("Portugal, lovely!") without calling `choose_destination`, or describe a
-   sight she knows instead of calling `next_sight`. The safety net covers a
-   country named plainly, the food, the news and the sight moves; a place to
-   explore and a city she must locate are hers alone.
-2. **The 28 s ceiling meets slow open data.** *Expected.* Overpass often times
-   out (in the smoke run below every mirror failed and the Wikipedia fallback
-   answered after 14 s). `explore_near` waits 20 s, then Lumi says she is
-   still looking and the sight arrives as an event, which may queue behind
-   whatever she says meanwhile.
-3. **The persona and the greeting belong to the avatar.** *Expected* (seen
-   in the tool-less run: the shared test avatar greeted as a lighthouse
-   keeper). `avatar.json` is the host Yonder was designed for.
-4. **No per-session speech hints.** *Expected.* Rare place names rely on the
-   recogniser alone; Lumi passes what she heard and the app geocodes it.
-5. **The ~10 s check-in** can prod a user reading a sight or the dishes.
-   *Expected* (seen in the tool-less run).
+1. **Tools are called when the host decides.** *Seen working.* Every step
+   called the right tool once, 2.7 to 4.1 s after the words; "Which dishes
+   did you show me?" was answered from the board with exactly the three on
+   screen. The safety net (a country named plainly, the food, the news, the
+   sight moves) was never needed.
+2. **Slow open data against the 28 s ceiling.** *Seen*, and fixed in the app.
+   Every Overpass mirror failed in both runs; `explore_near`'s first line came
+   ~25 s after the words (51 s on the second run), and GeoSearch's nearest
+   articles were obscure and photo-less (a "Júlio de Castilho memorial", an
+   "S. Vicente artwork", shown as a letter). Sights now come from Wikipedia
+   first, ranked for a traveller, in one fast request; Overpass only tops up,
+   and a sight without a photo shows a designed card.
+3. **A call the schema refuses never reaches the page.** *Expected* (seen in
+   another app: the host then said the action had happened). The schemas are
+   lenient and the app asks back for anything unusable.
+4. **The filler while a tool runs** can pre-judge the result. *Expected.*
+   Results lead with the outcome.
+5. **The persona and the greeting belong to the avatar.** *Seen.* On the
+   shared test avatar the host introduced herself as someone else; on Lumi's
+   own host the greeting fits, so the opening no longer greets again.
+6. **No per-session speech hints.** *Seen harmless:* "Alfama" was first
+   captioned "Alfa Min"; the final transcript and the tool's place were right.
+7. **The ~10 s check-in** can prod a user reading a sight. *Expected.*
+
+Also seen: Lumi's flavour lines ("old wooden trams", "bamboo groves") are her
+own, not the app's; harmless, and never a sight, a dish or a distance.
 
 Fixed by tools, compared with the first port: Lumi no longer answers before
-the map moves (the old event-after-the-reply), no longer invents the next
-sight while the app fetches the real one, and no longer promises news that
-never comes. "You choose" no longer depends on the app reading a country out
-of her words: she picks and calls the tool. Nothing is staged in her state
-any more, and the rules that lived at the original's decision points (never
-call headlines fresh, you cannot see where they are) are back next to the
-tools, in their descriptions and results.
+the map moves, no longer invents the next sight while the app fetches the
+real one, and no longer promises news that never comes. "You choose" no
+longer depends on the app reading a country out of her words: she picks and
+calls the tool. Nothing is staged in her state any more.
 
 ## Tested
 
-- `npx vitest run apps/travel-guide`: 336 tests. The engine's ported tests
+- `npx vitest run apps/travel-guide`: 350 tests. The engine's ported tests
   (geo parsers and failures, the mainland and outline rules, the state and
   trip rules, the name filter, the snapshot parsers, the strip's projection);
   the tools and instructions against the API limits, with and without a news
-  source; the board never holding the next sight or unshown dishes; the tool
-  runner (a city finding its country, a country on the route coming back with
+  source; the board never holding the next sight or unshown dishes; the sights ranked for a traveller (Alfama's castle,
+  cathedral and miradouro first; no photo, a district or a station, out); the
+  tool runner (any case, other field names and extra fields accepted, a city finding its country, a country on the route coming back with
   nothing refetched, food and news bringing the country's page back, a stale
   safety-net move doing nothing); the safety net's phrases; the guidebook,
   the trip summary and its notes rendered; and the page's wiring with the call
@@ -103,4 +111,10 @@ tools, in their descriptions and results.
   "Portugal" from its sights back to its page, "Kyoto" placing Japan with the
   city, back to Portugal with nothing refetched, "somewhere in Asia" narrowing
   the ideas, Surprise me picking India.
-- Not yet run live on staging with tools.
+- Live on staging (2026-10-23): a full run on the shared test avatar
+  (`2cd3ec08`, session `98d5f1fd`) and a smoke pass on Lumi's own host
+  (`99ab5a47`, session `772c15f6`): name, Portugal, its food, Alfama's sights,
+  next and previous, "you choose", Kyoto, back to Portugal, a question about
+  the screen, hang-up to the trip notes. The fixes since (ranked sights, the
+  no-photo card, lenient schemas, outcome-first results, no second greeting)
+  are not yet run live.

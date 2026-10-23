@@ -32,7 +32,7 @@ describe('the opponent moves on its own', () => {
     expect(t.match.turn()).toBe('user');
     expect(events(outcomes)).toHaveLength(1);
     const [line] = events(outcomes);
-    expect(line).toContain('The player played e4');
+    expect(line).toMatch(/^Done: the player played e4/);
     expect(line).toContain(`You replied ${t.snapshot().history[1]}`);
     expect(line).toContain('why you played it');
   });
@@ -77,7 +77,7 @@ describe('refusals reach both the screen and the avatar', () => {
     const t = table();
     const [outcome] = play(t, 'Qh5');
     expect(outcome.kind).toBe('refused');
-    expect(outcome.event!.text).toContain('REFUSED');
+    expect(outcome.event!.text).toMatch(/^Refused:/);
     expect(outcome.event!.text).toContain('not a legal move');
     expect(outcome.event!.text).toContain('NOT played');
     expect(t.snapshot().history).toEqual([]);
@@ -145,6 +145,13 @@ describe('every ending is spoken, once', () => {
     expect(outcome.event!.text).not.toContain('why you played it');
   });
 
+  test('a refusal does not outlive the game: resigning clears it', () => {
+    // Seen live: "'Ra5' is not a legal move" was still under the board at game over.
+    const t = table();
+    expect(t.act({ kind: 'move', text: 'Ra5' }).snapshot.last_refusal).not.toBeNull();
+    expect(t.act({ kind: 'resign' }).snapshot.last_refusal).toBeNull();
+  });
+
   test('a resignation is thanked for once, not twice', () => {
     // Resigning once got two goodbyes in a row from the same avatar.
     const t = table();
@@ -195,7 +202,7 @@ describe('sides and strength', () => {
     const outcome = t.act({ kind: 'side', side: 'white' });
     expect(outcome.applied).toBe(false);
     expect(outcome.reason).toMatch(/already playing white/);
-    expect(outcome.event!.text).toContain('already playing White, so nothing changed and the game goes on');
+    expect(outcome.event!.text).toContain('Nothing changed: the player is already playing White and the game goes on');
     expect(t.snapshot().history).toHaveLength(2);
   });
 
@@ -208,7 +215,7 @@ describe('sides and strength', () => {
     const again = t.act({ kind: 'side', side: 'black' });
     expect(again.applied).toBe(false);
     expect(again.next).toBeUndefined();
-    expect(again.event!.text).toContain('already playing Black, so nothing changed: this game has only just started');
+    expect(again.event!.text).toContain('Nothing changed: the player is already playing Black and this game has only just started');
     expect(t.snapshot()).toEqual(dealt);
   });
 

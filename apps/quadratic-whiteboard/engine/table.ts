@@ -76,6 +76,16 @@ export type Ask = (prompt: string) => Promise<unknown>;
 /** Shown on the board when the equation box's text could not be read. */
 export const UNREADABLE_BOX = "That didn't read as a quadratic. Try x^2 - 4x + 3, or \"x squared minus four x plus three\".";
 
+/**
+ * The equation a tool call names, however it was passed: the words, or (a
+ * host's own shorthand) its coefficients a, b and c.
+ */
+function equationText(args: Record<string, unknown>): string {
+  const said = typeof args.equation === 'string' || typeof args.equation === 'number' ? String(args.equation).trim() : '';
+  if (said || args.a === undefined) return said;
+  return `${args.a}, ${args.b ?? 0}, ${args.c ?? 0}`;
+}
+
 /** Three coefficients as read, before the board checks them. */
 type Coefficients = { a: unknown; b: unknown; c: unknown };
 
@@ -166,13 +176,14 @@ export class Table {
     };
     switch (name) {
       case 'put_up_equation': {
-        const text = String(args.equation ?? '').trim();
+        const text = equationText(args);
         if (!text) return done(said.noEquation());
-        const method = typeof args.method === 'string' && args.method.trim() ? args.method : null;
+        // A method the board cannot place is left out: the result asks which one they want.
+        const method = normaliseMethod(String(args.method ?? ''));
         const read = await this.read(text, ask);
         if (!read) return done(said.unreadable(text.slice(0, MAX_EQUATION)), UNREADABLE);
         if (this.onBoard(read)) {
-          return method && normaliseMethod(method) !== this.board.method ? this.tool('choose_method', { method }) : done(said.alreadyUp(this.view()));
+          return method && method !== this.board.method ? this.tool('choose_method', { method }) : done(said.alreadyUp(this.view()));
         }
         const reason = this.apply({ kind: 'set_equation', ...read });
         if (reason) return done(said.refused(reason), reason);
@@ -180,9 +191,13 @@ export class Table {
         return why ? done(said.equationNotMethod(this.view(), why), why) : done(said.equation(this.view(), 'heard'));
       }
       case 'choose_method': {
-        const method = normaliseMethod(String(args.method ?? ''));
-        if (method && this.board.equation && this.board.method === method) return done(said.sameMethod(this.view()));
-        return step({ kind: 'set_method', method: args.method }, said.method);
+        const asked = String(args.method ?? '').trim().slice(0, 80);
+        const method = normaliseMethod(asked);
+        // Nothing to choose for yet, or a word the board cannot place: say which, rather than fail.
+        if (!this.board.equation) return step({ kind: 'set_method', method }, said.method);
+        if (!method) return done(said.whichMethod(asked));
+        if (this.board.method === method) return done(said.sameMethod(this.view()));
+        return step({ kind: 'set_method', method }, said.method);
       }
       case 'next_line': return step({ kind: 'reveal_step' }, said.next);
       case 'previous_line': return step({ kind: 'back_step' }, said.back);

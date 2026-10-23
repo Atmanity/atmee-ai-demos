@@ -39,7 +39,7 @@ export interface Comparing {
  * The drawing sheet. On the API the page renders it itself, so it carries the
  * SVG and is offered as a download; `failed` keeps a refusal visible.
  */
-export interface SheetView { status: 'ready' | 'failed'; svg?: string; error?: string; floor?: string }
+export interface SheetView { status: 'ready' | 'failed'; svg?: string; error?: string; floor?: string; pages?: { floor: string; svg: string }[] }
 
 export interface PlanSnapshot {
   level: Level;

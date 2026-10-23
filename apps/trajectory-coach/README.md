@@ -28,9 +28,11 @@ Open it at `/apps/trajectory-coach/`; add `?challenge=moonshot` (or `wall40`,
 |---|---|
 | The physics and the marking | `engine/flight.ts`, `engine/challenges.ts`: the original's closed-form model (no drag), ported line for line; `engine/golden.test.ts` pins every number and sentence to the Python engine's own output (`engine/golden/`). |
 | The launcher and the range | `engine/launcher.ts` validates before it mutates, so a refused request leaves the range as it was and carries a sentence with the numbers. `engine/range.ts` is the one writer and owns the clock that lands each shot `play_s + 0.15 s` after it is fired. While a shot flies, the snapshot has its curve and no result, so nothing built from it (the screen, Theo's picture of the range) can announce one early. It runs in the page: nothing in it is secret. |
-| Theo's actions | Four `await` tools (`engine/director.ts`): `aim(angle_deg, speed_ms, request, then_fire)`, `fire`, `choose_challenge(challenge)`, `start_over`. The page answers each `atmee.tool` call through `engine/controls.ts`, which acts on the range and returns the words Theo speaks from. `fire` resolves when the ball is down, with the range's verdict, so his first reply to "fire" is where it landed. |
+| Theo's actions | Four `await` tools (`engine/director.ts`): `aim(angle_deg, speed_ms, request, then_fire)`, `fire`, `choose_challenge(challenge)`, `start_over`. The page answers each `atmee.tool` call through `engine/controls.ts`, which acts on the range and returns the words Theo speaks from. `fire` resolves when the ball is down, with the range's verdict, so his first reply to "fire" is where it landed. Every result opens with its plain outcome ("Done:", "Refused:", "Landed, missed:"), so the platform's filler line cannot pre-judge it. |
+| Lenient arguments | The schemas have no enums, closed objects or tight lengths: the platform rejects a misfit before the page sees it. The page reads loose values itself: a challenge by id, name in any case or nickname ("the Moon", "the windy one", "next one"), numbers as strings, with units or in words ("forty-five"), `then_fire` as "true". Anything unusable comes back as a question for Theo to ask. |
 | Aims in words | `aim` takes the numbers Theo heard, never clamped (the launcher refuses "ninety" with its limits). A change with no number ("a bit steeper", "more power") goes in `request` and through the range's own steps (`engine/judge.ts`: a bit = 3° or 1 m/s, plain = 5° or 2 m/s, a lot = 10° or 5 m/s); what the rules cannot read ("lob it like a mortar") goes to `POST /api/apps/trajectory-coach/interpret`, a validated model call. Without `GEMINI_API_KEY` Theo asks for a number instead. |
-| Theo's rules | The tool `instructions`: the range moves only through a call; numbers exactly as given; never guess a shot in the air; never "aim first", never read the aim back, never ask whether to fire, never give away the answer. |
+| Theo's rules | The tool `instructions`: every request that changes the screen is a call, even a one-word answer; never say an action happened unless a result said so; numbers exactly as given; never guess or predict a shot; never "aim first", never repeat the student's numbers, never ask whether to fire, never give away the answer. After an aim from words ("a bit steeper"), the result has him name the new angle once. |
+| The opening | An event naming the challenge up, which tells Theo not to greet again: his host's own greeting has introduced him. |
 | What Theo sees | `state` (`rangeState`): the challenge and its conditions, the aim and the limits, the last shot's numbers and sentence, recent shots, the lesson once earned, the six challenges. Questions ("why did that miss?") are answered from it, no tool. |
 | The screen's controls | The arrow, the angle and speed steppers, Fire, the challenge list, Next challenge and Start over act at once (`Controls.press`). Theo is told by an event: a new challenge at once, a shot when it lands, the aim not at all (the board shows it). |
 | One account per landing | A shot is told once: as the result of the `fire` call waiting on it, or, when it came from the Fire button, as an event when it lands. A `fire` call while the button's shot is up joins it. |
@@ -43,47 +45,51 @@ read). No other key is used.
 
 ## What the API could not do
 
-Status before the first live run of this version (the run of 2026-10-23 was
-of the earlier, tool-less port). **Expected**: not observed yet.
+Status after the live runs of 2026-10-23 on staging (the shared test avatar
+`2cd3ec08`, then Theo's own host `98bac537`). **Seen**: observed live.
+**Expected**: not observed yet.
 
-1. **Tools are called when the host decides.** *Expected.* Postmark's host
-   occasionally narrated an action instead of calling it. Here the safety net
-   catches "fire", "start over" and a named challenge; a narrated aim ("sure,
-   steeper!") without a call changes nothing, and the arrow on screen shows
-   the truth.
-2. **Exact numbers cannot be forced.** *Expected.* Results are said in Theo's
-   own words, so "2.24 m below the top" may come out as "about two metres". The
-   sentence under the board is the exact source. (Before tools, both landing
-   lines kept every figure.)
-3. **One filler line while `fire` waits.** *Expected.* An `await` tool allows
-   one filler line during the ~3 s flight, so "here it goes!" may come before
-   the landing. The original wanted silence until the ball was down.
+1. **Tools are called when the host decides.** *Seen.* Eight of nine requests
+   on the test avatar became calls 2.4 to 4.0 s after the words began. "Start
+   over." got none and the host said "I've wiped the board clean" anyway; on
+   Theo's host, "Fire!" said during his welcome got "go ahead and hit fire".
+   The safety net did both 7 s later and the host carried on from its event.
+   The instructions now say every screen-changing request is a call, "fire"
+   counts even mid-sentence, and no action is claimed without a result.
+2. **Exact numbers cannot be forced.** *Seen kept, not guaranteed.* Every
+   landing line kept its figures ("0.76 m going past 40 m, 2.24 m below the
+   top", "Over with 9.75 m to spare, landing at 58.72 m after 3.46 s"). The
+   sentence under the board stays the exact source.
+3. **One filler line while a tool runs.** *Expected.* The platform says a
+   filler of its own; results now open with their outcome so it cannot be
+   contradicted by what follows. The original wanted silence until landing.
 4. **The button's landing waits for the floor.** *Expected.* A shot fired with
    the Fire button is told as an event: it follows Theo's current sentence and
-   expires after 20 s if he never gets the floor. Shots Theo fires carry the
-   landing in the tool result.
-5. **Aim and fire as two calls.** *Expected.* For "forty and fire" Theo should
-   set `then_fire`; if he calls `aim` and `fire` together and the shot is
-   handled first, the aim is refused ("still in the air") and the shot uses
-   the old aim.
-6. **The ~10 s check-in nags a student who is thinking.** *Expected* (seen
-   before tools). The original nudged after 45 s of silence; the built-in one
+   expires after 20 s. Shots Theo fires carry the landing in the tool result.
+5. **Aim and fire as two calls.** *Not seen:* "Forty-five at twenty-four, and
+   fire." came as one `aim` with `then_fire`. If two simultaneous calls ever
+   arrive shot-first, the aim is refused ("still in the air").
+6. **The ~10 s check-in nags a student who is thinking.** *Seen* ("Still
+   there? Take the shot"). The original nudged after 45 s; the built-in one
    cannot be tuned.
-7. **No per-session persona or greeting.** *Expected* (seen before tools: the
-   test avatar greeted as itself before the opening). `avatar.json` is the
-   host the product was designed for; the instructions say "keep your own
-   name".
-8. **No speech hints.** *Expected* (seen before tools: "Lob it" heard as
-   "Lobbied"). The original biased recognition toward "degrees", "metres per
-   second", "headwind". Theo passes the words he heard; the rules read number
-   words, and the model reads the rest.
+7. **No per-session persona or greeting.** *Seen* on the shared test avatar
+   ("Hey everyone, I'm Emily, a livestream host…" before the opening). Theo's
+   own host greets as Theo; the opening no longer greets a second time.
+8. **No speech hints.** *Seen:* "Lob it like a mortar" arrived as "Lobbied
+   like a mortar"; Theo passed "lobbed like a mortar" as words and the range
+   aimed from them.
+9. **Theo's host's idle video.** *Seen once:* large orange 3-D letters across
+   his face for a few seconds, then a dark frame. A renderer issue of that
+   avatar's idle clip, not the page.
 
-Fixed by tools, compared with the first port: the reply to "fire" no longer
-says "let's watch it fly!" and leaves the result to a later event; the reply
-to "make it steeper" knows the new angle; a request the range cannot read is
-answered as such instead of "let's send it!" over a range that did nothing;
-"try ninety" is refused once, from the range, instead of twice. The page's
-speech and typing judges and the answers staged in the state are gone.
+Fixed by tools, compared with the first port: the reply to "fire" is the
+landing; the reply to "make it steeper" knows the new angle; a request the
+range cannot read is answered as such instead of "let's send it!" over a
+range that did nothing; "try ninety" is refused once, from the range. Fixed
+after the live run: "a bit steeper" got "way more arc to sail right over the
+wall!" before any shot; the result now names the new angle and forbids a
+prediction (on Theo's host: "steepen the launch angle up to forty-eight
+degrees"). The range screen now opens scrolled to its top.
 
 ## Differences from the original (deliberate)
 
@@ -101,14 +107,25 @@ speech and typing judges and the answers staged in the state are gone.
 
 ## Tested
 
-- `npx vitest run apps/trajectory-coach` (278 tests): the physics against
+- `npx vitest run apps/trajectory-coach` (283 tests): the physics against
   hand-worked numbers and the marking; the launcher's refusals and projection;
   the golden test against the Python engine (273 graded shots, the curves and
   trails, a scripted session's every snapshot and refusal); the range's
   landing clock; the judge's ~100 phrasings and the safety net's phrases; the
-  tools and instructions against the API limits and the original's rules; the
+  tools and instructions against the API limits, the lenient schemas and the
+  original's rules; loose arguments (capitals, nicknames, numbers in words,
+  extra fields); every result opening with its outcome; the
   state's size and that it leaks no result in flight and no lesson early; every
   tool's result, the one-account-per-landing rule and the net's guards; the
   logbook; the board and the whole page with the call replaced by a recorder.
 - `npx tsc --noEmit`: clean for this app.
-- Live: not yet run as Arcwise.
+- Live on staging, 2026-10-23, spoken through `tools/live-test/harness.js`:
+  on the test avatar `2cd3ec08` (session `fc1f58d6`, 253 s, completed),
+  "Fire!", "Make it a bit steeper.", "Try ninety degrees.", "Forty-five at
+  twenty-four, and fire.", "Next challenge.", "Let's do the moon." and "Lob it
+  like a mortar." each called their tool and the first reply carried the
+  range's outcome; "Why did that miss?" was answered from the board; "Start
+  over." was done by the safety net; after hanging up the logbook showed "1 of
+  6 cleared". On Theo's host `98bac537` (session `051ff9c1`, 129 s), "Make it a
+  bit steeper." and "Start over." called their tools; "Fire!" during the
+  welcome was done by the safety net.

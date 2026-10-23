@@ -32,18 +32,20 @@ Open it at `/apps/room-planner/`, optionally with the floor's starting size:
 
 ## What the API could not do
 
-Status after the rebuild of 2026-10-23, before its live run. **Seen**: observed
-live. **Expected**: not observed with this build yet.
+Status after the live run of 2026-10-23 on staging (own host, avatar
+`eeba4d67`). **Seen**: observed live. **Expected**: not observed yet.
 
-1. **Tools are called when the host decides.** *Expected.* Iris may narrate a
-   change ("I've given the bedroom a metre") without calling `trade_area`; the
-   instructions forbid it and the screen would not move. The safety net covers
-   only the actions that are safe to repeat; a missed trade, layout or undo is
-   left for the client to ask again or do by hand.
-2. **The persona and the greeting belong to the avatar.** *Expected* (seen in
-   the first port: the shared test avatar greeted as a lighthouse keeper,
-   "Aye, got that logged!"). `avatar.json` ("Iris") needs a dedicated avatar;
-   the instructions give a job, not a name.
+1. **Tools are called when the host decides.** *Seen.* Eleven of twelve
+   requests went through their tools with the real numbers in the first reply
+   ("eight point four… five point seven"). "Add a grand piano to the living
+   room" got no call and a made-up "nearly four square metres". The
+   instructions and `add_furniture` now say to call the tool even for a piece
+   the plan may lack, so the refusal comes from the plan. The safety net covers
+   only the actions that are safe to repeat.
+2. **The persona and the greeting belong to the avatar.** *Seen, and solved
+   by its own host.* On the shared test avatar a lighthouse keeper ran the
+   plan; on its own host built from `avatar.json`, Iris greeted as herself and
+   asked the size and the bedrooms. The opening event no longer greets again.
 3. **The ~10 s check-in cannot be tuned.** *Expected* (seen in the first port:
    "What are you thinking for our next move on the plan?"). The original waited
    40 s and nudged at most twice, for a client studying the drawing.
@@ -52,10 +54,22 @@ live. **Expected**: not observed with this build yet.
    names resolve by whole words and room kinds, so most mishearings still land.
 5. **Iris does not see a photo.** *Expected.* She can only say what the app's
    reader put in; "what do you think of my sofa?" about its look is lost.
-6. **A long tool list.** *Expected.* 25 tools (the original had 27) sit well
-   inside the limits (16.5 KB of 24 KB, instructions 3,348 of 4,000
-   characters); whether the host picks `trade_area` over `grow_room`, and reads
-   the trade direction right, is for the live run.
+6. **A call that does not fit its schema never arrives.** *Seen in other
+   apps.* The platform answers it "invalid arguments" and the host may say it
+   happened. The schemas are lenient (no enums, no length or range limits,
+   nothing required); the accepted words are in the descriptions and
+   normalised in `engine/tools.ts` ("Open Plan", "Square Feet", "the north
+   wall"), and an unreadable value comes back as a question.
+7. **The platform's filler can pre-judge a result.** *Seen* ("What does that
+   mean? ummm…"). Every result now starts with its outcome: "Done:",
+   "Refused:", "Not yet:".
+
+Fixed after the live run: open plan really is one room (the kitchen, dining
+and living were three rooms under an "open plan" name while Iris described one);
+adding an upstairs keeps the ground floor's layout, gives the stairs a door and
+says which room they came from; the drawing sheet has a page for every floor
+that has rooms (it drew the empty upstairs); the opening no longer greets a
+second time; room names sit above the furniture.
 
 Fixed by tools, compared with the first port: Iris no longer answers before the
 plan changes ("eight point three square metres" before the real 8.4); there is
@@ -79,7 +93,7 @@ is kept where it shows (halves round to even, `round(x, 1)`, `:g`).
 
 ## Tested
 
-- `npx vitest run apps/room-planner`: 285 tests. The engine suites ported from
+- `npx vitest run apps/room-planner`: 299 tests. The engine suites ported from
   the Python (geometry, home, layouts, checks, planner, sheet) and the original
   phrase rules; the tools against the real planner (real numbers, refusals with
   the plan's reasons, "the second bedroom", square feet, questions for missing
@@ -91,7 +105,7 @@ is kept where it shows (halves round to even, `round(x, 1)`, `:g`).
   sheet, a typed line, the safety net firing and holding back, the end of the
   call).
 - `npx tsc --noEmit`: clean for this folder.
-- Live: not run yet with this build. The plan is below.
+- Live: one run on staging (above), before the fixes; the plan below is what it followed.
 
 ### Live test plan
 

@@ -138,6 +138,20 @@ export function typedMove(text: string, s: Pick<ChessSnapshot, 'fen' | 'turn' | 
   }
 }
 
+/**
+ * A typed line written as a move in notation, legal or not: SAN ("Nf6",
+ * "exd5", "e8=Q+", "O-O") or UCI ("e2e4", "e2-e4"), one token, a trailing
+ * full stop allowed. The board rules on it: played, or refused on screen.
+ * Once a typed "Nf6" that White could not play went to the host, who said it
+ * was played, while nothing moved and nothing said why.
+ */
+export function readsAsMove(text: string): boolean {
+  const line = String(text ?? '').trim().replace(/\.$/, '');
+  return /^[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](=?[QRBN])?[+#!?]*$/.test(line)
+    || /^[a-h][1-8]-?[a-h][1-8][qrbn]?$/.test(line)
+    || /^([O0]-[O0](-[O0])?)[+#!?]*$/.test(line);
+}
+
 /** What a line typed or said means to the board, by rules. */
 export function judge(input: string, ctx: JudgeContext = { moves: 0 }): Verdict {
   const text = tidy(input);

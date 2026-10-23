@@ -221,11 +221,11 @@ function startOver(v: Visit): Outcome {
 /** The host's tools the server answers: what each did, as the words the host speaks from. */
 async function run(v: Visit, name: string, args: Record<string, unknown>, open: string | null): Promise<Outcome> {
   switch (name) {
-    case 'look_up_food': return lookUp(v, foodsFrom(args.foods));
-    case 'compare_foods': return compare(v, foodsFrom(args.foods));
+    case 'look_up_food': return lookUp(v, foodsFrom(foodsArg(args)));
+    case 'compare_foods': return compare(v, foodsFrom(foodsArg(args)));
     case 'open_recipe': {
       const ctx = { ideas: v.advisor.nutrition?.recipes ?? [], kept: v.advisor.recipes.map((r) => r.recipe_name), openRecipe: open };
-      const idea = resolveRecipe(text(args.recipe, 80), ctx);
+      const idea = resolveRecipe(text(args.recipe ?? args.name ?? args.dish ?? args.recipe_name, 80), ctx);
       if (!idea) return { view: v.advisor.view(), kind: 'failed', text: said.whichRecipe() };
       return openRecipe(v, idea, true);
     }
@@ -237,6 +237,9 @@ async function run(v: Visit, name: string, args: Record<string, unknown>, open: 
 // -- the request bodies, checked ------------------------------------------------------
 
 const text = (value: unknown, max: number) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
+
+/** The foods a call names, under whichever name the host gave them. */
+const foodsArg = (args: Record<string, unknown>) => args.foods ?? args.food ?? args.items ?? args.name;
 
 function imageOf(value: unknown): Image | null {
   const v = value as Partial<Image> | null;

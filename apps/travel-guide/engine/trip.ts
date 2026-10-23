@@ -274,12 +274,13 @@ async function presentSpot(state: TravelState, lookups: Lookups, first: boolean)
   spot.distance = distancePhrase(haversineM(origin[0], origin[1], spot.lat, spot.lon));
   spot.mapsUrl = mapsUrl(spot.name, spot.lat, spot.lon);
   if (spot.imageUrl === undefined) {
-    spot.imageUrl = null;
+    // The photo the source already had (Wikipedia's ranked sights have one), unless the article has a better one.
+    spot.imageUrl = spot.image ?? null;
     spot.summary = '';
-    const found = await lookups.summary(spot.name).catch(() => null);
+    const found = await lookups.summary(spot.wiki || spot.name).catch(() => null);
     const near = found?.coordinates && haversineM(found.coordinates[0], found.coordinates[1], spot.lat, spot.lon) <= SAME_PLACE_M;
     if (found && near) {
-      spot.imageUrl = found.image;
+      spot.imageUrl = found.image ?? spot.imageUrl;
       spot.summary = found.extract;
     }
   }

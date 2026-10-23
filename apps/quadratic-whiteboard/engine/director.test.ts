@@ -1,7 +1,7 @@
 // What the host is told: within the API's limits, and never a line of working
 // before the board puts it up.
 import { describe, expect, test } from 'vitest';
-import { boardState, eventFor, INSTRUCTIONS, said, TOOLS } from './director.ts';
+import { boardState, eventFor, GREETED, INSTRUCTIONS, said, TOOLS } from './director.ts';
 import { Table } from './table.ts';
 import type { MethodId } from './types.ts';
 
@@ -31,6 +31,13 @@ describe('the API limits', () => {
       expect(tool['x-atmee']!.timeoutSeconds!).toBeLessThanOrEqual(28);
     }
     expect(JSON.stringify(TOOLS).length).toBeLessThanOrEqual(24576);
+  });
+
+  test('the schemas are lenient: a call that does not fit never reaches the board', () => {
+    // Live, the platform answered such a call "invalid arguments" and the host said it happened anyway.
+    const schemas = JSON.stringify(TOOLS.map((t) => t.parameters));
+    for (const strict of ['"enum"', '"additionalProperties"', '"pattern"', '"format"', '"minLength"', '"required"']) expect(schemas).not.toContain(strict);
+    for (const [, max] of schemas.matchAll(/"maxLength":(\d+)/g)) expect(Number(max)).toBeGreaterThanOrEqual(500);
   });
 
   test('the instructions fit and name every tool', () => {
@@ -69,6 +76,8 @@ describe('the instructions keep the hard-won rules', () => {
     'Call the tool every time',
     'answer from the live board in your context, with no tool',
     'only when the teacher asks for it',
+    'even a single word answering your own question',
+    'Never say anything went up, changed or was cleared unless the tool\'s result said so',
   ])('%s', (rule) => {
     expect(INSTRUCTIONS).toContain(rule);
   });
@@ -150,7 +159,7 @@ describe('results and events', () => {
     const table = await working();
     const { result } = await table.tool('next_line', {});
     const [first, ...rest] = table.board.derivation();
-    expect(result).toContain('Line 1 of 6');
+    expect(result).toContain('Done: line 1 of 6');
     expect(result).toContain(first.working);
     expect(result).toContain(first.say);
     expect(result).toContain('5 more to come; wait to be asked');
@@ -164,15 +173,32 @@ describe('results and events', () => {
     expect(said.revealAll(table.view())).toContain('not decimals');
   });
 
-  test('the opening greets in one line and teaches nothing', () => {
-    expect(said.start()).toContain('ONE short line');
-    expect(said.start()).toContain('Do not teach');
+  test('the opening does not greet again: the host\'s own greeting already did', () => {
+    // Live: the avatar's greeting, then "Hello! The board is clear…" from the opening.
+    for (const opening of [said.start(), said.resume(new Table().view())]) {
+      expect(opening.startsWith('You have just greeted them; do not greet or introduce yourself again.')).toBe(true);
+      expect(opening).toContain('Do not teach');
+    }
+    expect(GREETED).toBe('You have just greeted them; do not greet or introduce yourself again.');
+  });
+
+  test('every result opens with the plain outcome, so a filler cannot pre-judge it', async () => {
+    const table = await working();
+    const results = [
+      (await table.tool('next_line', {})).result, (await table.tool('previous_line', {})).result, (await table.tool('previous_line', {})).result,
+      (await table.tool('choose_method', { method: 'factoring' })).result, (await table.tool('choose_method', { method: 'guessing' })).result,
+      (await table.tool('put_up_equation', { equation: 'x^2 - 4x + 3' })).result, (await table.tool('put_up_equation', { equation: 'hello' })).result,
+      (await table.tool('put_up_equation', {})).result, (await table.tool('hide_graph', {})).result, (await table.tool('show_all_working', {})).result,
+      (await table.tool('show_all_working', {})).result, (await table.tool('clear_board', {})).result, said.failed(),
+    ];
+    for (const result of results) expect(result, result).toMatch(/^(Done|Done, but not the method|Already done|Not done|Refused): /);
   });
 
   test('calling back describes the board as the teacher left it, and reads no working', async () => {
     const table = await working();
     await table.tool('next_line', {});
     const text = said.resume(table.view());
+    expect(text.startsWith(GREETED)).toBe(true);
     expect(text).toContain('y = x² - 4x + 3, factoring, 1 of 6 lines up');
     expect(text).toContain('Do not read any working');
     expect(said.resume(new Table().view())).toBe(said.start());

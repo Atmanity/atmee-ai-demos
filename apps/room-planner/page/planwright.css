@@ -144,8 +144,8 @@ select.pw-input { flex: 1 1 140px; cursor: pointer; }
 .pw-plan { width: 100%; height: 100%; display: block; user-select: none; -webkit-user-select: none; touch-action: pan-y pinch-zoom; }
 .pw-room { cursor: pointer; }
 .pw-plan.is-readonly .pw-room { cursor: default; }
-.pw-room-name { font: 700 27px var(--pw-display); font-stretch: 82%; fill: var(--pw-graphite); }
-.pw-room-area { font: 500 21px var(--pw-mono); fill: var(--pw-graphite); opacity: .66; }
+.pw-room-name { font: 700 27px var(--pw-display); font-stretch: 82%; fill: var(--pw-graphite); paint-order: stroke; stroke: var(--pw-paper); stroke-width: 7px; stroke-linejoin: round; }
+.pw-room-area { font: 500 21px var(--pw-mono); fill: #4a5361; paint-order: stroke; stroke: var(--pw-paper); stroke-width: 6px; stroke-linejoin: round; }
 .pw-piece { cursor: grab; touch-action: none; }
 .pw-piece:active { cursor: grabbing; }
 .pw-plan.is-readonly .pw-piece { cursor: default; }

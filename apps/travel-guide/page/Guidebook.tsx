@@ -146,7 +146,7 @@ function Eat({ s, busy, host, onAction }: { s: Snapshot; busy: boolean; host: st
         {food.dishes.map((dish, i) => (
           <li key={`${i}-${dish.name}`} className="yd-dish">
             <div className="yd-dish-photo">
-              {dish.imageUrl ? <img src={dish.imageUrl} alt={dish.name} loading="lazy" /> : <span aria-hidden="true">{dish.name.slice(0, 1)}</span>}
+              {dish.imageUrl ? <img src={dish.imageUrl} alt={dish.name} loading="lazy" /> : <NoPhoto />}
             </div>
             <div className="yd-dish-text">
               <span className="yd-num">0{i + 1}</span>
@@ -231,7 +231,7 @@ function Sight({ view, busy, onAction }: { view: SpotView; busy: boolean; onActi
     <article className="yd-sight" aria-label={spot.name}>
       <p className="yd-kicker">Around {view.place}</p>
       <a className="yd-sight-photo" href={spot.mapsUrl || undefined} target="_blank" rel="noreferrer" aria-label={`${spot.name}, open in Google Maps`}>
-        {spot.imageUrl ? <img key={spot.imageUrl} src={spot.imageUrl} alt="" /> : <span aria-hidden="true">{spot.name.slice(0, 1)}</span>}
+        {spot.imageUrl ? <img key={spot.imageUrl} src={spot.imageUrl} alt="" /> : <NoPhoto label={`No photo of this ${spot.category} yet`} hint="Open it in Maps to look around" />}
       </a>
       <p className="yd-sight-meta"><span>{spot.category}</span>{spot.distance && <span>{spot.distance}</span>}</p>
       <h2 className="yd-sight-name">{spot.name}</h2>
@@ -306,6 +306,25 @@ function Route({ trip, stage, busy, onAction }: { trip: TripView; stage: Snapsho
       </ol>
       <p className="yd-hint">Nothing is lost when you move on: tap a place to bring it back.</p>
     </section>
+  );
+}
+
+/**
+ * Where a photo would be and none was found: a small travel poster of the
+ * place's kind, sea, sun and swell, rather than a grey box with a letter.
+ */
+export function NoPhoto({ label, hint }: { label?: string; hint?: string }) {
+  return (
+    <span className="yd-nophoto" role={label ? 'img' : undefined} aria-label={label} aria-hidden={label ? undefined : true}>
+      <svg viewBox="0 0 160 100" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <rect width="160" height="100" fill="var(--yd-sea)" />
+        <circle cx="112" cy="40" r="22" fill="var(--yd-sun)" />
+        <path d="M0 70c13-8 27-8 40 0s27 8 40 0 27-8 40 0 27 8 40 0v30H0z" fill="var(--yd-sea-soft)" />
+        <path d="M0 82c13-6 27-6 40 0s27 6 40 0 27-6 40 0 27 6 40 0v18H0z" fill="var(--yd-paper)" fillOpacity=".14" />
+        <path d="M18 34c10-12 24-16 38-12" fill="none" stroke="var(--yd-coral)" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="1 6" />
+      </svg>
+      {label && <span className="yd-nophoto-text"><b>{label}</b>{hint && <small>{hint}</small>}</span>}
+    </span>
   );
 }
 

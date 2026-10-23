@@ -17,6 +17,14 @@ interface Lesson { tutor: StrokeTutor; at: number }
 const lessons = new Map<string, Lesson>();
 const TOOLS_BY_NAME = new Set<string>(TOOL_NAMES);
 
+/** A call's arguments as an object, whatever shape they came in (an object, a JSON string, nothing). */
+function argumentsOf(args: unknown): Record<string, unknown> {
+  if (typeof args === 'string') {
+    try { return argumentsOf(JSON.parse(args)); } catch { return { character: args }; }
+  }
+  return args && typeof args === 'object' && !Array.isArray(args) ? args as Record<string, unknown> : {};
+}
+
 /** The page's buttons: each runs the tool Ren would call, under the label the learner pressed. */
 const BUTTONS: Record<Command, [string, string]> = {
   show: ['show_stroke', 'Show me'],
@@ -58,9 +66,9 @@ const app: AppServer = {
     router.post('/lessons/:id/tool', (req, res) => {
       const lesson = lessonOf(req.params.id);
       if (!lesson) return void res.status(404).json({ error: 'no_lesson' });
-      const { name, arguments: args } = (req.body ?? {}) as { name?: string; arguments?: Record<string, unknown> };
+      const { name, arguments: args } = (req.body ?? {}) as { name?: string; arguments?: unknown };
       if (!name || !TOOLS_BY_NAME.has(name)) return void res.status(400).json({ error: 'unknown_tool' });
-      const done = runTool(lesson.tutor, name, args ?? {});
+      const done = runTool(lesson.tutor, name, argumentsOf(args));
       res.json({ view: done.view, result: done.text } satisfies { view: Snapshot; result: string });
     });
 

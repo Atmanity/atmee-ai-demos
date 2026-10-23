@@ -146,6 +146,7 @@ describe('a drill', () => {
   test('the chosen drill is ready while Alex is on his way; he opens with the safety line and its first question', async () => {
     await begin(/Choking at a dinner table/, CHOKING_ADULT.steps[0].prompt);
     const opening = fake.events[0];
+    expect(opening.text.startsWith('You have just greeted them')).toBe(true);
     expect(opening.text).toContain(SAFETY_LINE);
     expect(opening.text).toContain(CHOKING_ADULT.steps[0].prompt);
     expect(opening.ttl).toBe(60);
@@ -283,7 +284,7 @@ describe('the red card', () => {
   test('Alex cannot talk anyone off it: resume_practice needs the learner\'s own plain words', async () => {
     await begin();
     await spoken("he's not breathing");
-    expect(await tool('resume_practice')).toContain('The red card stays up');
+    expect(await tool('resume_practice')).toContain('Refused: the red card stays up');
     expect(screen.getByRole('alert')).toBeTruthy();
     await spoken("False alarm, nobody's hurt.");
     expect(await tool('resume_practice')).toContain('glad everyone is safe');

@@ -192,8 +192,9 @@ describe("Ren's tools", () => {
     tool(tutor, 'choose_character', { character: 'ten' });
     const done = tool(tutor, 'choose_character', { character: 'dragon' });
     expect(done.refused).toBe(UNKNOWN_CHARACTER);
+    expect(done.text).toMatch(/^Refused: "dragon" is not on the menu, so nothing changed\./);
     expect(done.text).toContain('永 eternity');
-    expect(done.text).toContain('do not claim anything happened');
+    expect(done.text).toContain('ask which of these they would like');
     expect(done.view.character?.id).toBe('juu');
   });
 
@@ -208,7 +209,11 @@ describe("Ren's tools", () => {
   });
 
   test('choose_character with nothing named asks which one', () => {
-    expect(tool(new StrokeTutor(), 'choose_character', { character: '  ' }).text).toContain('ask them which one');
+    for (const args of [{ character: '  ' }, {}, { character: 7 }]) {
+      const text = tool(new StrokeTutor(), 'choose_character', args).text;
+      expect(text).toMatch(/^Not yet: no character was named/);
+      expect(text).toContain('Ask them which one they would like');
+    }
   });
 
   test('show_stroke draws the live stroke and hands back its lesson, told as asked for', () => {
@@ -283,5 +288,46 @@ describe("Ren's tools", () => {
         for (const secret of later) if (!earned.has(secret)) expect(next, `${character.id} after stroke ${i + 1}`).not.toContain(secret);
       }
     }
+  });
+});
+
+describe('lenient arguments: the app normalises what the host passes', () => {
+  test('capitalised names, synonyms and readings all choose the character', () => {
+    for (const [said, id] of [['Tree', 'ki'], ['THE TREE', 'ki'], ['Wood', 'ki'], ['Eternity', 'ei'], ['The Letter A', 'latin_a'], ['Capital E', 'latin_e'], ['Jū', 'juu'], ['Kanji for river', 'kawa'], [' 永 ', 'ei']] as const) {
+      expect(runTool(new StrokeTutor(), 'choose_character', { character: said }).view.character?.id, said).toBe(id);
+    }
+  });
+
+  test('an extra unknown field is accepted, and a name under another key is still read', () => {
+    expect(runTool(new StrokeTutor(), 'choose_character', { character: 'tree', confidence: 0.9 }).view.character?.id).toBe('ki');
+    expect(runTool(new StrokeTutor(), 'choose_character', { name: 'river' }).view.character?.id).toBe('kawa');
+    const tutor = new StrokeTutor();
+    runTool(tutor, 'choose_character', { character: 'ten' });
+    expect(runTool(tutor, 'show_stroke', { stroke: 1 }).text).toMatch(/^Done:/);
+    expect(runTool(tutor, 'next_stroke', { reason: 'learner said next' }).text).toMatch(/^Done:/);
+  });
+});
+
+describe('every result opens with the plain outcome, so a filler cannot pre-judge it', () => {
+  test('across a whole lesson, done and refused alike', () => {
+    const OUTCOME = /^(Done|Not yet|Refused|Nothing changed|Shown|Right|Not right): /;
+    const tutor = new StrokeTutor();
+    const texts = [
+      runTool(tutor, 'choose_character', { character: '' }).text,
+      runTool(tutor, 'choose_character', { character: 'dragon' }).text,
+      runTool(tutor, 'next_stroke').text,                        // refused before any character
+      runTool(tutor, 'choose_character', { character: 'ten' }).text,
+      runTool(tutor, 'choose_character', { character: 'ten' }).text,
+      runTool(tutor, 'next_stroke').text,                        // refused: unfinished
+      runTool(tutor, 'show_stroke').text,
+      runTool(tutor, 'show_stroke').text,                        // refused: already shown
+      runTool(tutor, 'next_stroke').text,
+      perform(tutor, { kind: 'stroke', points: drawing(JUU, 1).reverse() }, 'panel').event!,
+      perform(tutor, { kind: 'stroke', points: drawing(JUU, 1) }, 'panel').event!,
+      runTool(tutor, 'next_stroke').text,                        // the debrief
+      runTool(tutor, 'start_over').text,
+      runTool(tutor, 'next_character').text,
+    ];
+    for (const text of texts) expect(text, text).toMatch(OUTCOME);
   });
 });

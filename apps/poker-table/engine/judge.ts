@@ -241,17 +241,20 @@ export function backs(move: ParsedMove, lines: readonly string[]): boolean {
 }
 
 /** The safety net's actions: safe to do twice, and never a move. */
-export type NetAction = 'deal_hand' | 'new_match' | 'read_my_cards';
+export type NetAction = 'deal_hand' | 'new_match' | 'read_my_cards' | 'show_hand_rankings';
 
 // Asking for a hand, narrower than NEW_HAND: "what's the deal with the
 // blinds?" between hands would otherwise deal one.
 const DEAL = /^(?:ok(?:ay)?,? |alright,? |right,? )?deal\b|\bdeal (?:me|us|them|'?em|again|it|another|the next)\b|\b(?:new|next|another) hand\b|\bone more hand\b/;
+// Asking what beats what. Live, Dex recited the rankings and offered the
+// chart instead of opening it; opening it twice changes nothing.
+const RANKINGS = /\bwhat beats what\b|\bhand rankings?\b|\brankings\b|\bwhich hands? (?:beats?|wins?|is better)\b|\bwhat(?:'s| is) the best hand\b|\bwhat hands? beats?\b|\bshow (?:me )?the (?:chart|rankings?)\b/;
 const REMATCH = /\b(?:rematch|new match|another match|play (?:it )?again|run it back)\b/;
 
 /**
  * The table action the player's words clearly ask for, among those safe to
  * repeat: a second deal or rematch is refused while a hand is in play, and
- * reading their cards twice costs nothing. Moves are never here: a bet the
+ * reading their cards or opening the rankings chart twice costs nothing. Moves are never here: a bet the
  * net played on top of the host's would be a bet applied twice.
  */
 export function mustDo(text: string): NetAction | null {
@@ -260,5 +263,6 @@ export function mustDo(text: string): NetAction | null {
   if (REMATCH.test(t)) return 'new_match';
   if (DEAL.test(t)) return 'deal_hand';
   if (parseTurn(t).asksOwnCards) return 'read_my_cards';
+  if (RANKINGS.test(t)) return 'show_hand_rankings';
   return null;
 }

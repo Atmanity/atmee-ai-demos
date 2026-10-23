@@ -13,9 +13,9 @@
 // call waiting is told as an event. A host `fire` while a shot from the screen
 // is already up joins that shot rather than being refused, so the student who
 // pressed Fire and said "fire" gets one shot and one line.
-import { BY_ID, find } from './challenges.ts';
+import { BY_ID } from './challenges.ts';
 import { pressed, said } from './director.ts';
-import { commandIn, contextOf, worthAsking, type JudgeContext } from './judge.ts';
+import { challengeIdFrom, commandIn, contextOf, worthAsking, type JudgeContext } from './judge.ts';
 import type { Range } from './range.ts';
 import type { Change, Command, Intent, Result, Source } from './types.ts';
 
@@ -82,7 +82,7 @@ export class Controls {
     switch (name) {
       case 'aim': return this.aim(args);
       case 'fire': return this.fire();
-      case 'choose_challenge': return Promise.resolve(this.choose(String(args.challenge ?? '').trim(), by));
+      case 'choose_challenge': return Promise.resolve(this.choose(args.challenge, by));
       case 'start_over': return Promise.resolve(this.startOver());
     }
     return Promise.reject(new Error(`unknown tool ${name}`));
@@ -123,18 +123,25 @@ export class Controls {
   // ---- the tools ------------------------------------------------------------
 
   private async aim(args: Record<string, unknown>): Promise<string> {
+    const before = this.range.snapshot();
     let angle = numberArg(args.angle_deg);
     let speed = numberArg(args.speed_ms);
-    let thenFire = args.then_fire === true;
-    if (angle === undefined && speed === undefined) {
-      const request = typeof args.request === 'string' ? args.request.trim().slice(0, 120) : '';
-      if (!request) return said.noAim();
-      const ctx = contextOf(this.range.snapshot());
-      let command = commandIn(request, ctx);
+    let thenFire = yes(args.then_fire);
+    // Whatever was not a plain number is read as words, with its unit: "forty-five" for an angle still counts.
+    const words = [
+      typeof args.request === 'string' ? args.request : '',
+      angle === undefined && wordy(args.angle_deg) ? `${args.angle_deg} degrees` : '',
+      speed === undefined && wordy(args.speed_ms) ? `${args.speed_ms} metres a second` : '',
+    ].map((w) => w.trim()).filter(Boolean).join(', ').slice(0, 200);
+    const fromWords = angle === undefined && speed === undefined;
+    if (fromWords) {
+      if (!words) return said.noAim();
+      const ctx = contextOf(before);
+      let command = commandIn(words, ctx);
       // "Fire" passed as words to aim: it is the shot, at the aim there is.
       if (command?.kind === 'fire') return this.fire();
-      if (command?.kind !== 'aim' && this.opts.interpret && worthAsking(request)) command = await this.opts.interpret(request, ctx).catch(() => null);
-      if (command?.kind !== 'aim') return said.unreadable(request);
+      if (command?.kind !== 'aim' && this.opts.interpret && worthAsking(words)) command = await this.opts.interpret(words, ctx).catch(() => null);
+      if (command?.kind !== 'aim') return said.unreadable(words);
       angle = command.angle_deg;
       speed = command.speed_ms;
       thenFire ||= command.thenFire === true;
@@ -142,8 +149,8 @@ export class Controls {
     // Never clamped: the launcher refuses what it cannot do, with the numbers.
     const r = this.apply({ kind: 'set_aim', angle_deg: angle ?? null, speed_ms: speed ?? null }, 'host');
     if (!r.applied) return said.aimRefused(r.reason, this.range.snapshot());
-    if (!thenFire) return said.aimed(r.snapshot);
-    return said.aimedAndFired(r.snapshot, await this.fire());
+    if (thenFire) return said.aimedAndFired(r.snapshot, await this.fire());
+    return fromWords ? said.stepped(r.snapshot, before) : said.aimed(r.snapshot);
   }
 
   private fire(): Promise<string> {
@@ -158,20 +165,21 @@ export class Controls {
     });
   }
 
-  private choose(asked: string, by: 'host' | 'net'): string {
+  private choose(value: unknown, by: 'host' | 'net'): string {
     const before = this.range.snapshot();
+    const asked = String(value ?? '').trim().slice(0, 80);
+    const id = challengeIdFrom(asked);
     let intent: Intent;
-    if (asked.toLowerCase() === 'next') {
+    if (id === 'next') {
       // The safety net put the next one up because the host had not; a late
       // "next" from the host is that same request, not one more.
       if (by === 'host' && this.now - this.netChallengeAt < NET_GRACE_MS) return said.alreadyUp(before);
       intent = { kind: 'next_challenge' };
     } else {
-      const c = find(asked);
-      if (!c) return said.unknownChallenge(asked);
+      if (!id) return said.unknownChallenge(asked);
       // Naming the challenge already up is not a request to wipe its scoreboard.
-      if (c.id === before.challenge.id) return said.alreadyUp(before);
-      intent = { kind: 'start_challenge', id: c.id };
+      if (id === before.challenge.id) return said.alreadyUp(before);
+      intent = { kind: 'start_challenge', id };
     }
     const r = this.apply(intent, 'host');
     if (!r.applied) return said.refused(r.reason);
@@ -203,8 +211,16 @@ export class Controls {
   }
 }
 
-/** A number the host passed, or undefined (a string of digits counts; anything else does not). */
+/** A number the host passed, or undefined (a string of digits counts, "45°" too; words do not). */
 function numberArg(value: unknown): number | undefined {
-  const n = typeof value === 'number' ? value : typeof value === 'string' && value.trim() !== '' ? Number(value) : Number.NaN;
-  return Number.isFinite(n) ? n : undefined;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value !== 'string') return undefined;
+  const m = /^\s*(-?\d+(?:\.\d+)?)\s*(?:°|deg(?:rees?)?|m\/s|ms|metres? (?:a|per) second|meters? (?:a|per) second)?\s*$/i.exec(value);
+  return m ? Number(m[1]) : undefined;
 }
+
+/** A value that is neither empty nor a number: words to read ("forty-five"). */
+const wordy = (value: unknown) => typeof value === 'string' && value.trim() !== '' && numberArg(value) === undefined;
+
+/** true, "true", "yes": the host's ways of saying yes in a boolean slot. */
+const yes = (value: unknown) => value === true || (typeof value === 'string' && /^(?:true|yes|y|1)$/i.test(value.trim()));

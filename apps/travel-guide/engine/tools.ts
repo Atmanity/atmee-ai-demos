@@ -18,18 +18,21 @@ export const isToolName = (name: unknown): name is ToolName => typeof name === '
 export const DESCRIPTION_WAIT_MS = 2500;
 
 const text = (value: unknown, max: number) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
+/** The first usable text among the names a host might give an argument ("place", or "country", "city"…): the schemas are lenient, so the app reads widely. */
+const first = (args: Record<string, unknown>, keys: string[], max: number) => keys.map((k) => text(args[k], max)).find(Boolean) ?? '';
+const PLACE_KEYS = ['place', 'country', 'destination', 'city', 'location', 'where', 'query', 'name'];
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /** A host's tool call. Arguments are what the host heard; everything else is the app's to decide. */
 export async function runTool(state: TravelState, lookups: Lookups, name: ToolName, args: Record<string, unknown> = {}): Promise<string> {
   switch (name) {
-    case 'choose_destination': return chooseDestination(state, lookups, text(args.place, 120));
+    case 'choose_destination': return chooseDestination(state, lookups, first(args, PLACE_KEYS, 120));
     case 'show_food': return showFood(state);
     case 'show_news': return showNews(state);
-    case 'explore_near': return trip.explorePlace(state, lookups, text(args.place, 120));
+    case 'explore_near': return trip.explorePlace(state, lookups, first(args, PLACE_KEYS, 120));
     case 'next_sight': return moveSight(state, lookups, 'next', args.from);
     case 'previous_sight': return moveSight(state, lookups, 'previous', args.from);
-    case 'remember_name': return trip.rememberTraveler(state, titleCase(text(args.name, 60)));
+    case 'remember_name': return trip.rememberTraveler(state, titleCase(first(args, ['name', 'first_name', 'traveler', 'traveller'], 60)));
   }
 }
 
@@ -85,7 +88,7 @@ async function showFood(state: TravelState): Promise<string> {
 }
 
 async function showNews(state: TravelState): Promise<string> {
-  if (!state.newsAvailable) return 'There is no local news in Yonder, so nothing changed on screen. Say so in a few words and suggest the food instead.';
+  if (!state.newsAvailable) return 'Not done: there is no local news in Yonder, so nothing changed on screen. Say so in a few words and suggest the food instead.';
   if (state.here) leaveSights(state);
   return trip.showHeadlines(state);
 }
@@ -104,7 +107,7 @@ function leaveSights(state: TravelState) {
 async function moveSight(state: TravelState, lookups: Lookups, way: 'next' | 'previous', from?: unknown): Promise<string> {
   if (typeof from === 'number' && state.spots.length && from !== state.spotIndex) {
     const view = state.spotView()?.spot;
-    return view ? `That is done already: sight ${state.spotIndex + 1} of ${state.spots.length} is on screen, ${view.name}. Carry on from it.` : say.nothingToShow();
+    return view ? `Already done: sight ${state.spotIndex + 1} of ${state.spots.length} is on screen, ${view.name}. Carry on from it.` : say.nothingToShow();
   }
   if (state.spots.length && state.stage !== 'around') {
     state.stage = 'around';

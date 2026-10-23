@@ -17,6 +17,8 @@ import { notesFileName, notesText, record, type NoteEntry } from './notes.ts';
 import './chalkline.css';
 
 const API = '/api/apps/quadratic-whiteboard';
+/** How long the safety net waits on a typed line (a spoken one: the kit's 7 s). */
+export const TYPED_NET_MS = 15_000;
 
 async function post<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) });
@@ -64,15 +66,22 @@ export function App() {
   }, [show, track]);
 
   // If Ada narrates "hiding the graph" without calling it, the board does it and tells her.
-  const net = useToolNet({
-    match: (text) => {
+  // Typed lines get longer: live, Ada answered them up to a turn late, and the
+  // net's own message then queued ahead of her reply and made the call twice.
+  const netOptions = {
+    match: (text: string) => {
       const call = mustDo(text);
       return call ? { id: `net-${Date.now()}`, ...call } : null;
     },
-    run: (call) => onToolCall(call),
+    run: (call: ToolCall) => onToolCall(call),
     avatar: () => avatarRef.current,
+  };
+  const spokenNet = useToolNet(netOptions);
+  const typedNet = useToolNet({ ...netOptions, waitMs: TYPED_NET_MS });
+  const avatar = useAvatar('quadratic-whiteboard', {
+    onToolCall: typedNet.watch(spokenNet.watch(onToolCall)),
+    onUserSaid: (text, how) => (how === 'typed' ? typedNet : spokenNet).heard(text),
   });
-  const avatar = useAvatar('quadratic-whiteboard', { onToolCall: net.watch(onToolCall), onUserSaid: (text) => net.heard(text) });
   const avatarRef = useRef(avatar);
   avatarRef.current = avatar;
   const live = avatar.phase === 'live';

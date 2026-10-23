@@ -51,6 +51,9 @@ export interface QueuedSpot {
   /** undefined: not looked up yet; null: looked up, no photo. */
   imageUrl?: string | null;
   summary?: string;
+  /** From the source: its Wikipedia article (when the name is not the exact title) and its lead photo. */
+  wiki?: string;
+  image?: string | null;
 }
 
 /** Runs one task at a time, in arrival order. */

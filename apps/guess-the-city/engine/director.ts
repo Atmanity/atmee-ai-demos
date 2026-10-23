@@ -16,13 +16,15 @@ export const INSTRUCTIONS = `You are hosting "Guess the City" for one player. A 
 - If the player presses a button on screen, the game tells you what happened; carry on from that.
 Scoring: a city guessed with no clues is worth 4 points, each clue costs one point, never below 1; a game is three cities. Keep every reply to one or two short spoken sentences: no lists.`;
 
-const noArgs = { type: 'object', properties: {}, additionalProperties: false };
+// Lenient on purpose: Causeur answers a call whose arguments miss the schema with an error the
+// page never sees, and the host may then say it happened anyway. The game checks every value.
+const noArgs = { type: 'object', properties: {} };
 const awaits = { mode: 'await' as const, timeoutSeconds: 12 };
 
 /** The game's tools. Each is answered by the server, which owns the city. */
 export const TOOLS: AppTool[] = [
   { type: 'function', name: 'check_guess', description: 'Judges the player\'s answer against the mystery city. Call it whenever the player names a place as their guess, before reacting to it.',
-    parameters: { type: 'object', properties: { place: { type: 'string', minLength: 1, maxLength: 80, description: 'The place the player named, as they said it.' } }, required: ['place'], additionalProperties: false },
+    parameters: { type: 'object', properties: { place: { type: 'string', maxLength: 500, description: 'The place the player named, as they said it.' } }, required: ['place'] },
     'x-atmee': awaits },
   { type: 'function', name: 'get_clue', description: 'Gives the next clue for the mystery city (it costs the player a point). Call it when the player asks for a clue or a hint.', parameters: noArgs, 'x-atmee': awaits },
   { type: 'function', name: 'reveal_answer', description: 'Reveals the city when the player gives up.', parameters: noArgs, 'x-atmee': awaits },
@@ -46,7 +48,7 @@ export function boardState(v: View): string {
 
 /** What a tool call (or a button) did, in words the host speaks from. */
 export const said = {
-  start: (v: View) => `A new game starts: round 1 of ${v.rounds}, the first mystery city's photo is on the player's screen. Welcome them in one or two sentences and invite a first guess; they can ask for a clue any time.`,
+  start: (v: View) => `You have just greeted them; do not greet or introduce yourself again. A new game starts: round 1 of ${v.rounds}, and the first mystery city's photo is on the player's screen. In one sentence, invite their first guess and say they can ask for a clue any time.`,
   right: (v: View, points: number) => `Correct: it is ${v.city!.name}, ${v.city!.country}. The player wins ${points} point${points === 1 ? '' : 's'} (score ${v.score}). Celebrate briefly, share this fun fact in your own words: ${v.city!.funFact} Then offer the next city.`,
   wrong: (place: string, v: View) => `${place} is not the city. Tell them kindly; ${v.hints.length < v.hintsTotal ? 'they can guess again or ask for a clue' : 'no clues are left: they can guess again or give up'}.`,
   clue: (clue: string, v: View) => `Clue ${v.hints.length} of ${v.hintsTotal}: "${clue}". Give it in your own words, adding nothing. A right guess is now worth ${roundValue(v.hints.length)} points.`,

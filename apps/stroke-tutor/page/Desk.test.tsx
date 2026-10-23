@@ -139,6 +139,11 @@ describe('the lesson', () => {
     expect(screen.getByText('Verticals travel top to bottom — start at the top.')).toBeTruthy();
   });
 
+  it('a stroke drawn backwards shows what they drew, then which way it goes', () => {
+    lesson(snapshot({ last_verdict: { ok: false, kind: 'direction', note: 'Top to bottom.', travel: { drawn: 'from the bottom up', right: 'from the top down' } }, attempts: 1 }));
+    expect(screen.getByText('You drew it from the bottom up. This stroke goes from the top down.')).toBeTruthy();
+  });
+
   it('says when a stroke was shown after two misses rather than on request', () => {
     const shown = { ok: false, kind: 'reveal', note: 'N', revealed: true } as const;
     expect(verdictLabel(shown, 0)).toBe('Shown to you');

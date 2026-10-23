@@ -64,11 +64,16 @@ export function Studio({
 }) {
   const [message, setMessage] = useState("");
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [page, setPage] = useState(0);
   const [tab, setTab] = useState<Tab>("layout");
   const trayRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => { if (notice) setMessage(notice.text); }, [notice]);
-  useEffect(() => { if (sheetSignal) setSheetOpen(true); }, [sheetSignal]);
+  useEffect(() => {
+    if (!sheetSignal) return;
+    setSheetOpen(true);
+    setPage(0);
+  }, [sheetSignal]);
   // A redline note fades once it has been read.
   useEffect(() => {
     if (!message) return;
@@ -82,7 +87,10 @@ export function Studio({
     async (intent: Intent) => {
       const result = await send(intent);
       setMessage(result.applied ? "" : result.reason);
-      if (result.applied && intent.kind === "draw_sheet") setSheetOpen(true);
+      if (result.applied && intent.kind === "draw_sheet") {
+        setSheetOpen(true);
+        setPage(0);
+      }
       return result.applied;
     },
     [send],
@@ -93,9 +101,16 @@ export function Studio({
   const moveWall = useCallback((a: string, b: string, delta: number) => void intend({ kind: "move_wall", a, b, delta }), [intend]);
 
   // The sheet as a file the client can keep.
+  // One page per floor that has rooms, the floor on screen first.
+  const pages = useMemo(() => {
+    const sheet = state?.sheet;
+    if (!sheet || sheet.status !== "ready") return [];
+    return sheet.pages?.length ? sheet.pages : sheet.svg ? [{ floor: sheet.floor ?? "ground", svg: sheet.svg }] : [];
+  }, [state?.sheet]);
+  const shown = pages[Math.min(page, pages.length - 1)] ?? null;
   const sheetUrl = useMemo(
-    () => (state?.sheet?.svg ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(state.sheet.svg)}` : null),
-    [state?.sheet?.svg],
+    () => (shown ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(shown.svg)}` : null),
+    [shown],
   );
 
   if (!state) {
@@ -210,8 +225,20 @@ export function Studio({
               ) : sheetUrl ? (
                 <>
                   <div className="pw-sheetview-bar">
-                    <strong>Drawing sheet · {state.sheet.floor === "upper" ? "Upper floor" : "Ground floor"}</strong>
-                    <a className="pw-primary is-small" href={sheetUrl} download={`planwright-${state.sheet.floor ?? "floor"}.svg`}>
+                    <strong>Drawing sheet · {shown?.floor === "upper" ? "Upper floor" : "Ground floor"}</strong>
+                    {pages.length > 1 && (
+                      <span className="pw-segment" role="group" aria-label="Sheet for">
+                        {pages.map((p, index) => (
+                          <button
+                            key={p.floor} type="button" aria-pressed={p === shown} className={p === shown ? "is-on" : undefined}
+                            onClick={() => setPage(index)}
+                          >
+                            {p.floor === "upper" ? "Upstairs" : "Ground"}
+                          </button>
+                        ))}
+                      </span>
+                    )}
+                    <a className="pw-primary is-small" href={sheetUrl} download={`planwright-${shown?.floor ?? "floor"}.svg`}>
                       Download (SVG)
                     </a>
                     <button type="button" className="pw-secondary is-small" onClick={() => setSheetOpen(false)}>
@@ -227,7 +254,7 @@ export function Studio({
         <footer className="pw-titleblock">
           <span><b>Planwright</b></span>
           <span>{floorName}</span>
-          <span>1 square = 1 m²</span>
+          <span>1 square = 1 m²{state.unit === "ft2" ? " (10.8 ft²)" : ""}</span>
           <span className="pw-titleblock-change">
             {state.can_undo && state.last_change ? <>Last change: {state.last_change}</> : "Drag a wall or a piece to move it. Tap a room to work on it."}
           </span>

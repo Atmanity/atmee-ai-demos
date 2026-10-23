@@ -159,6 +159,20 @@ describe('the page', () => {
     expect(call.events.at(-1)).toMatch(/^You did not call clear_board, so the app did it for the player just now: The board is clear\./);
   });
 
+  it('the safety net brings a stock on the board to the front when Reese only said so', async () => {
+    await enter();
+    answer = () => ({ seq: 2, board: { ...withNvda, watchlist: [quote('NVDA'), quote('TSLA')] }, text: 'ok' });
+    await act(async () => { await call.handlers.onToolCall!({ id: 't1', name: 'add_symbols', arguments: { stocks: ['NVDA', 'TSLA'] } }); });
+    act(() => call.setPhase('live'));
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    answer = (_path, body) => ({ seq: 3, board: { ...withNvda, focus: 'TSLA' }, text: body.name === 'focus_symbol' ? 'Done: TSLA is front and centre now.' : 'ok' });
+    // A while after the add (the net stands down if another tool ran just before the words).
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    act(() => call.handlers.onUserSaid?.('Pull up Tesla.', 'spoken'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(7100); });
+    expect(posts.at(-1)).toEqual({ path: '/desks/d1/tool', body: { name: 'focus_symbol', arguments: { stock: 'TSLA' } } });
+  });
+
   it('the safety net stays out of it when Reese called the tool', async () => {
     await enter();
     act(() => call.setPhase('live'));

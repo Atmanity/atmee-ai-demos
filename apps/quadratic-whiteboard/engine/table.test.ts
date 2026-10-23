@@ -131,7 +131,7 @@ describe('put_up_equation', () => {
     await table.tool('next_line', {});
     const seq = table.view().seq;
     const { result } = await table.tool('put_up_equation', { equation: 'x^2 - 4x + 3' });
-    expect(result).toContain('already on the board, so nothing changed');
+    expect(result).toContain('Already done: y = x² - 4x + 3 is on the board, so nothing changed');
     expect(table.board.revealed).toBe(1);
     expect(table.view().seq).toBe(seq);
   });
@@ -181,6 +181,32 @@ describe('put_up_equation', () => {
 
   test('an empty equation asks which one', async () => {
     expect((await new Table().tool('put_up_equation', { equation: '  ' })).result).toContain('which equation');
+    expect((await new Table().tool('put_up_equation', {})).result).toContain('which equation');
+  });
+
+  test('extra fields are accepted, and a, b, c stand in for the words', async () => {
+    const table = new Table();
+    await table.tool('put_up_equation', { equation: 'x^2 - 9', note: 'from the teacher', confidence: 0.9 });
+    expect(table.board.snapshot().equation!.display).toBe('y = x² - 9');
+    await table.tool('put_up_equation', { a: 2, b: '-3', c: 1 });
+    expect(table.board.snapshot().equation!.display).toBe('y = 2x² - 3x + 1');
+    await table.tool('next_line', { please: true });
+    await table.tool('choose_method', { method: 'Factoring', why: 'it factors' });
+    expect(table.board.method).toBe('factoring');
+  });
+
+  test('a method word the board cannot place leaves the equation up, and the result asks for one', async () => {
+    const table = new Table();
+    const { result } = await table.tool('put_up_equation', { equation: 'x^2 - 5x + 6', method: 'the usual way' });
+    expect(table.board.snapshot().equation!.display).toBe('y = x² - 5x + 6');
+    expect(table.board.method).toBeNull();
+    expect(result).toContain('ask which method they want');
+  });
+
+  test('a capitalised method named with the equation works', async () => {
+    const table = new Table();
+    await table.tool('put_up_equation', { equation: 'x^2 - 4x + 1', method: 'Quadratic Formula' });
+    expect(table.board.method).toBe('quadratic_formula');
   });
 });
 
@@ -205,15 +231,34 @@ describe('choose_method', () => {
     const table = await working();
     await table.tool('next_line', {});
     await table.tool('next_line', {});
-    expect((await table.tool('choose_method', { method: 'factoring' })).result).toContain('already set up for factoring, with 2 of 6 lines up');
+    expect((await table.tool('choose_method', { method: 'factoring' })).result).toContain('Already done: the board is set up for factoring, with 2 of 6 lines up');
     expect(table.board.revealed).toBe(2);
     await table.tool('choose_method', { method: 'quadratic_formula' });
     expect(table.board.revealed).toBe(0);
   });
 
-  test('refusals: no equation, an unknown method', async () => {
+  test('no equation is refused; a word the board cannot place is asked about, and nothing changes', async () => {
     expect((await new Table().tool('choose_method', { method: 'factoring' })).message).toBe(NO_EQUATION);
-    expect((await (await posed()).tool('choose_method', { method: 'guessing' })).message).toBe(UNKNOWN_METHOD);
+    const table = await posed();
+    const seq = table.view().seq;
+    for (const method of ['guessing', '', undefined]) {
+      const outcome = await table.tool('choose_method', { method });
+      expect(outcome.result).toMatch(/^Not done: /);
+      expect(outcome.result).toContain('Ask the teacher in one short line which they want: factoring, completing the square or the quadratic formula');
+      expect(outcome.message).toBeUndefined();
+    }
+    expect(table.view().seq).toBe(seq);
+    expect(UNKNOWN_METHOD).toContain('three methods');
+  });
+
+  test.each([
+    ['Quadratic Formula', 'quadratic_formula'], ['the formula', 'quadratic_formula'], ['QUADRATIC_FORMULA', 'quadratic_formula'],
+    ['Factorise', 'factoring'], ['by factoring', 'factoring'], ['Completing-the-square', 'completing_square'], ['complete the square', 'completing_square'],
+  ])('a method in the teacher\'s words, %j, is %s', async (method, id) => {
+    const table = await posed();
+    const { result } = await table.tool('choose_method', { method });
+    expect(table.board.method).toBe(id);
+    expect(result).toMatch(/^Done: /);
   });
 });
 
@@ -363,7 +408,7 @@ describe('the equation box', () => {
 
 describe('openings', () => {
   test('a new board opens empty; a resumed one describes itself', async () => {
-    expect(new Table().open()).toContain('ready and empty');
+    expect(new Table().open()).toContain('The board is clean and ready');
     const table = await working();
     expect(table.resume()).toContain('as they left it');
   });

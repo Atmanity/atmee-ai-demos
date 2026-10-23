@@ -31,6 +31,36 @@ test('the tools fit the API: names, descriptions, schemas, timeouts, all await',
   expect(JSON.stringify(TOOLS).length).toBeLessThanOrEqual(24576);
 });
 
+test('the schemas are lenient: a call that does not fit never reaches the page', () => {
+  // Live (another app): "Beginner, please." failed the schema, never arrived, and the host said it was done.
+  for (const tool of TOOLS) {
+    const schema = JSON.stringify(tool.parameters);
+    for (const strict of ['"enum"', '"additionalProperties"', '"pattern"', '"minLength"', '"minItems"', '"maxItems"', '"format"', '"required"']) expect(schema, tool.name).not.toContain(strict);
+    for (const m of schema.matchAll(/"maxLength":(\d+)/g)) expect(Number(m[1])).toBeGreaterThanOrEqual(500);
+  }
+});
+
+test('the instructions say every change is a call, and nothing happened unless a result said so', () => {
+  expect(INSTRUCTIONS).toContain('Every request that changes the screen is a tool call, even a single word answering your own question');
+  expect(INSTRUCTIONS).toContain("Never say an action happened (a stock up, off, front and centre, refreshed, the board cleared) unless the tool's result said so");
+});
+
+test('every result begins with the plain outcome, so the filler before it cannot decide it', () => {
+  const b = boardOf([quote()]);
+  const q = quote();
+  const texts = [
+    said.added(report({ landed: [{ quote: q }] }), b), said.added(report({ already: [q] }), b),
+    said.added(report({ landed: [{ quote: q }], failed: [{ symbol: 'ZZZZ', reason: 'x' }] }), b), said.added(report({ failed: [{ symbol: 'ZZZZ', reason: 'x' }] }), b),
+    said.added(report({ pending: ['GOOGL'] }), b), said.added(report({ unresolved: ['x'] }), b), said.added(report(), b),
+    said.focused({ kind: 'focused', quote: q }, b), said.focused({ kind: 'missing', said: 'x' }, b),
+    ...(['fresh', 'failed', 'tooSoon', 'pending', 'missing', 'empty'] as const).map((kind) => said.refreshed({ kind, quote: q, samePrint: false, reason: 'x', symbol: 'AAPL' } as never)),
+    said.removed({ removed: ['TSLA'], refused: [], board: b }), said.removed({ removed: [], refused: ['x'], board: b }),
+    said.cleared({ cleared: true }), said.cleared({ cleared: false, reason: 'x' }),
+  ];
+  for (const text of texts) expect(text).toMatch(/^(Done|Partly done|Not done|Not yet|Not refreshed|Failed|Refused):/);
+  expect(texts.slice(0, 7).map((t) => t.split(':')[0])).toEqual(['Done', 'Done', 'Partly done', 'Not done', 'Not yet', 'Not done', 'Not done']);
+});
+
 test('the instructions fit 4,000 characters and name every tool', () => {
   expect(INSTRUCTIONS.length).toBeLessThanOrEqual(4000);
   for (const tool of TOOLS) expect(INSTRUCTIONS).toContain(tool.name);
@@ -160,6 +190,9 @@ test('removing, clearing and a button press are said plainly', () => {
 // ─── the desk's own lines ────────────────────────────────────────────────
 
 test('the opening quotes no price; a late landing names what the user called it; a failure takes the promise back', () => {
+  // The host's own greeting already introduced them: the opening must not greet again.
+  for (const opening of [say.start(), say.startWith(boardOf([quote()]))]) expect(opening).toMatch(/^You have just greeted them; do not greet or introduce yourself again\./);
+  expect(say.start()).not.toMatch(/welcome/i);
   expect(say.start()).toMatch(/Do not quote any price/);
   expect(say.startWith(boardOf([quote({ symbol: 'NVDA' })]), 1785861561)).toContain('read NVDA (NVDA Inc.) at 306.83');
   expect(say.landed([{ quote: quote({ symbol: 'GOOGL' }), said: 'the search engine one' }])).toContain('for "the search engine one"');

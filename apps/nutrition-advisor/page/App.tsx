@@ -39,7 +39,8 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
 
 /** What the table says the app is doing while one of Rachel's tools runs. */
 export function workLabel(name: string, args: Record<string, unknown>): string | null {
-  const foods = (Array.isArray(args.foods) ? args.foods : [args.foods])
+  const given = args.foods ?? args.food;
+  const foods = (Array.isArray(given) ? given : [given])
     .filter((f): f is string => typeof f === 'string' && f.trim().length > 0)
     .map((f) => f.trim().slice(0, 40));
   const named = foods.join(' and ');
