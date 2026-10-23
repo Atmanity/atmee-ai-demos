@@ -133,6 +133,33 @@ export class Advisor {
   private prepared = new Map<string, RecipeDetails>();
   /** Bumped by every change the page can see. */
   private seq = 0;
+  /**
+   * Tickets for work that may change the screen, taken when it starts (a
+   * lookup, a recipe, a photo: each waits on a model). Work that finishes
+   * after newer work never undoes it: nothing started before a "start over"
+   * writes after it, and nothing started before the card or recipe now in
+   * front takes the front from it.
+   */
+  private tickets = 0;
+  private clearedAt = 0;
+  private frontAt = 0;
+
+  // -- the order of work -----------------------------------------------------
+
+  /** A ticket for work about to start. */
+  begin(): number {
+    return ++this.tickets;
+  }
+
+  /** Whether work that began with `ticket` may still write: not if the table was cleared since. */
+  current(ticket: number): boolean {
+    return ticket > this.clearedAt;
+  }
+
+  /** Whether it may still put something in front: not if work that began later already did. */
+  mayFront(ticket: number): boolean {
+    return this.current(ticket) && ticket >= this.frontAt;
+  }
 
   // -- the shelf ------------------------------------------------------------
 
@@ -198,13 +225,17 @@ export class Advisor {
    * told about so it stops claiming a side-by-side it did not produce and
    * starts describing the one that is actually on screen.
    */
-  show(card: NutritionData): string[] {
+  show(card: NutritionData, ticket = this.begin()): string[] {
     this.seq += 1;
-    this.nutrition = card;
-    // A new food invalidates the recipe CARD: leaving it up would pair one
-    // food's name with another's ingredients. The recipe itself is kept on
-    // `recipes`, so it is still reachable.
-    this.recipe = null;
+    // Work overtaken by newer work files its food in the table, behind what is in front.
+    if (this.mayFront(ticket)) {
+      this.frontAt = ticket;
+      this.nutrition = card;
+      // A new food invalidates the recipe CARD: leaving it up would pair one
+      // food's name with another's ingredients. The recipe itself is kept on
+      // `recipes`, so it is still reachable.
+      this.recipe = null;
+    }
     this.rememberFood(card);
     this.cards.set(fold(card.product_name), card);
     for (const key of this.cards.keys()) if (!this.shelf.some((r) => fold(r.product_name) === key)) this.cards.delete(key);
@@ -222,7 +253,10 @@ export class Advisor {
    * out loud never went through a tap, so the blurb comes from the card's own
    * suggestion when there is one.
    */
-  open(recipe: RecipeDetails): RecipeDetails {
+  open(recipe: RecipeDetails, ticket = this.begin()): RecipeDetails | null {
+    // A recipe asked for before the card now in front would cover the newer answer.
+    if (!this.mayFront(ticket)) return null;
+    this.frontAt = ticket;
     const name = recipe.recipe_name.trim();
     this.seq += 1;
     const data: RecipeDetails = {
@@ -251,9 +285,10 @@ export class Advisor {
    * something watched going past. The blurb it was tapped with fills in one the
    * kept copy lacks.
    */
-  reopen(name: string, description = ''): RecipeDetails | null {
+  reopen(name: string, description = '', ticket = this.begin()): RecipeDetails | null {
     const kept = this.recipeNamed(name);
-    if (!kept) return null;
+    if (!kept || !this.mayFront(ticket)) return null;
+    this.frontAt = ticket;
     this.seq += 1;
     if (description && !kept.description) kept.description = description;
     this.recipe = kept;
@@ -268,7 +303,8 @@ export class Advisor {
     return (this.nutrition?.recipes ?? []).filter((idea) => !this.recipeNamed(idea.name) && !this.prepared.has(prepKey(food, idea.name)));
   }
 
-  prepare(food: string, recipe: RecipeDetails) {
+  prepare(food: string, recipe: RecipeDetails, ticket = this.begin()) {
+    if (!this.current(ticket)) return;
     this.seq += 1;
     this.prepared.set(prepKey(food, recipe.recipe_name), recipe);
   }
@@ -287,6 +323,7 @@ export class Advisor {
    */
   reset() {
     this.seq += 1;
+    this.clearedAt = this.frontAt = this.begin();
     this.nutrition = null;
     this.recipe = null;
     this.shelf = [];

@@ -13,6 +13,8 @@ import { bounded, serial } from './engine/bounded.ts';
 import { CARD_SCHEMA, CARD_SYSTEM, cardFrom, cardPrompt, PHOTO_PROMPT, PHOTO_SCHEMA, RECIPE_SCHEMA, RECIPE_SYSTEM, recipeFrom, recipePrompt } from './engine/card.ts';
 import { started } from './engine/cook.ts';
 import { INSTRUCTIONS, pressed, said, SAMPLE_FAILED, SERVER_TOOLS, TOOLS } from './engine/director.ts';
+
+const list = (names: string[]) => names.map((n) => `“${n}”`).join(' and ');
 import { builtInCard, SAMPLE_CARD } from './engine/fallback.ts';
 import { asked, foodsFrom, resolveRecipe } from './engine/judge.ts';
 import type { FoodAsk, Image, NutritionData, Outcome, RecipeDetails, RecipeIdea } from './engine/types.ts';
@@ -108,18 +110,25 @@ function recipeJob(v: Visit, idea: RecipeIdea, food: string): Promise<RecipeDeta
 async function lookUp(v: Visit, foods: FoodAsk[]): Promise<Outcome> {
   const { advisor } = v;
   if (!foods.length) return { view: advisor.view(), kind: 'failed', text: said.noFood() };
+  const ticket = advisor.begin();
   const before = new Set(advisor.shelf.map((r) => r.product_name.toLowerCase()));
   // A food already looked at comes back as it was (same figures, no second call), unless they said how much this time.
   const cards = await Promise.all(foods.map(async (f) => (f.quantity ? null : advisor.cardFor(f.name)) ?? cardForFood(f)));
+  // Cleared while the cards were being made: they never come back.
+  if (!advisor.current(ticket)) return { view: advisor.view(), kind: 'failed', text: said.clearedMeanwhile(list(foods.map(asked))) };
   const put: NutritionData[] = [];
   const missing: string[] = [];
+  let front = false;
   cards.forEach((card, i) => {
     if (!card) return void missing.push(asked(foods[i]));
-    advisor.show(card);
+    front = advisor.mayFront(ticket);
+    advisor.show(card, ticket);
     put.push(card);
   });
   const notice = missing.length ? `Couldn't find ${missing.join(' or ')} just now. Try again in a moment, or ask about another food.` : undefined;
   if (!put.length) return { view: advisor.view(), kind: 'failed', text: said.lookupFailed(missing), notice };
+  // Overtaken by a card asked for later: these joined the table behind it.
+  if (!front) return { view: advisor.view(), kind: 'card', card: false, text: said.filed(put, advisor.nutrition?.product_name ?? ''), notice };
   const names = put.map((c) => c.product_name);
   const others = advisor.shelf.map((r) => r.product_name).filter((name) => !names.includes(name));
   const again = names.every((name) => before.has(name.toLowerCase()));
@@ -128,15 +137,19 @@ async function lookUp(v: Visit, foods: FoodAsk[]): Promise<Outcome> {
 
 async function compare(v: Visit, foods: FoodAsk[]): Promise<Outcome> {
   const { advisor } = v;
+  const ticket = advisor.begin();
   const before = advisor.nutrition?.product_name ?? '';
   // Only what the table lacks goes up: "compare it with an apple" is a request to display the apple.
   const needed = foods.filter((f) => f.quantity || !advisor.onShelf(f.name));
   const cards = await Promise.all(needed.map((f) => cardForFood(f)));
+  if (!advisor.current(ticket)) return { view: advisor.view(), kind: 'failed', text: said.clearedMeanwhile(list(foods.map(asked))) };
   const put: string[] = [];
   const missing: string[] = [];
+  let front = false;
   cards.forEach((card, i) => {
     if (!card) return void missing.push(asked(needed[i]));
-    advisor.show(card);
+    front = advisor.mayFront(ticket);
+    advisor.show(card, ticket);
     put.push(card.product_name);
   });
   const notice = missing.length ? `Couldn't find ${missing.join(' or ')} just now. Try again in a moment, or ask about another food.` : undefined;
@@ -152,24 +165,28 @@ async function compare(v: Visit, foods: FoodAsk[]): Promise<Outcome> {
     const card = advisor.nutrition;
     if (!card) return { view: advisor.view(), kind: 'failed', text: said.noFood() };
     // Nothing to compare against yet: it is a card like any other.
-    if (advisor.shelf.length < 2) return { view: advisor.view(), kind: 'card', card: put.length > 0, text: said.cards([card], [], put.length === 0), notice };
+    if (advisor.shelf.length < 2) return { view: advisor.view(), kind: 'card', card: front, text: said.cards([card], [], put.length === 0), notice };
     rows = advisor.shelf;
   }
-  return { view: advisor.view(), kind: 'compare', card: put.length > 0, text: said.compare(rows, put, advisor.shelf.length, missing), notice };
+  return { view: advisor.view(), kind: 'compare', card: front, text: said.compare(rows, put, advisor.shelf.length, missing), notice };
 }
 
 /** Open a recipe: the kept copy, the one made ahead, or a new one. `talk`: the host will walk it through (a tool), not a tap. */
 async function openRecipe(v: Visit, idea: RecipeIdea, talk: boolean): Promise<Outcome> {
   const { advisor } = v;
+  const ticket = advisor.begin();
   const food = advisor.nutrition?.product_name ?? '';
-  const kept = advisor.reopen(idea.name, idea.description);
+  const kept = advisor.reopen(idea.name, idea.description, ticket);
   let recipe = kept;
   if (!recipe) {
     const full = { name: idea.name, description: idea.description || advisor.suggestedDescription(idea.name) };
     const made = advisor.preparedFor(idea.name) ?? (await recipeJob(v, full, food));
+    // Cleared, or overtaken by a newer card, while it was being made: it does not cover what is there now.
+    if (!advisor.current(ticket)) return { view: advisor.view(), kind: 'failed', text: said.clearedMeanwhile(`the recipe “${idea.name}”`) };
     if (!made) return { view: advisor.view(), kind: 'failed', text: said.recipeFailed(idea.name), notice: `Couldn't open the recipe “${idea.name}” just now. Try again in a moment.` };
     // Titled with the name the user chose, whatever the model called it.
-    recipe = advisor.open({ ...made, recipe_name: idea.name, description: full.description });
+    recipe = advisor.open({ ...made, recipe_name: idea.name, description: full.description }, ticket);
+    if (!recipe) return { view: advisor.view(), kind: 'failed', text: said.recipeOvertaken(idea.name, advisor.nutrition?.product_name ?? 'a newer card') };
   }
   const text = talk ? said.recipe(recipe, food, started(recipe.preparation_steps.length)) : said.recipeTapped(recipe);
   return { view: advisor.view(), kind: kept ? 'kept' : 'recipe', recipe, text };
@@ -179,21 +196,27 @@ async function openRecipe(v: Visit, idea: RecipeIdea, talk: boolean): Promise<Ou
 async function prepare(v: Visit): Promise<Outcome> {
   const { advisor } = v;
   const food = advisor.nutrition?.product_name ?? '';
+  const ticket = advisor.begin();
   if (llmAvailable() && food) {
     await Promise.all(advisor.ideasToPrepare().map(async (idea) => {
       const made = await recipeJob(v, idea, food);
-      if (made) advisor.prepare(food, made);
+      if (made) advisor.prepare(food, made, ticket);
     }));
   }
   return { view: advisor.view(), kind: 'prepared', text: '' };
 }
 
 function photo(v: Visit, image: Image, sample: boolean): Promise<Outcome> {
+  // The photo's place in line is when it was added, not when it is read.
+  const ticket = v.advisor.begin();
   return v.photos(async () => {
     const reading = await readPhoto(image, sample);
     const { advisor } = v;
+    if (!advisor.current(ticket)) return { view: advisor.view(), kind: 'failed', text: said.clearedMeanwhile('the photo') };
     if ('card' in reading) {
-      const others = advisor.show(reading.card);
+      const front = advisor.mayFront(ticket);
+      const others = advisor.show(reading.card, ticket);
+      if (!front) return { view: advisor.view(), kind: 'photo', card: false, text: said.filed([reading.card], advisor.nutrition?.product_name ?? '') };
       return { view: advisor.view(), kind: 'photo', card: true, text: said.photo(reading.card, reading.seen, sample, others) };
     }
     if ('notFood' in reading) return { view: advisor.view(), kind: 'failed', text: said.notFood(reading.notFood), notice: "That photo doesn't look like a food or a food label. Try another, or just name the food." };

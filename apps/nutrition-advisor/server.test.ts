@@ -316,6 +316,84 @@ describe('start_over', () => {
   });
 });
 
+describe('work that finishes after something newer', () => {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  /** The model, with each food's card taking its own time. */
+  const slow = (ms: Record<string, number>) => async (req: { user: string; schema: unknown }) => {
+    const name = /asked about: "([^"]+)"/.exec(req.user)?.[1] ?? '';
+    await sleep(ms[name] ?? (req.schema === RECIPE_SCHEMA ? ms.recipe ?? 0 : 0));
+    return model(req);
+  };
+
+  it('a lookup that finishes after "start over" leaves the table clear', async () => {
+    const { tool } = await open();
+    fake.respond = slow({ kiwi: 40 });
+    const lookup = tool('look_up_food', { foods: ['kiwi'] });
+    await sleep(5);
+    const cleared = await tool('start_over');
+    expect(cleared.body.kind).toBe('cleared');
+    const { body } = await lookup;
+    expect(body.view.nutrition).toBeNull();
+    expect(body.view.shelf.items).toEqual([]);
+    expect(body.card).toBeFalsy();
+    expect(body.text).toMatch(/^Not done: the table was cleared while/);
+  });
+
+  it('a slow lookup never covers a card asked for after it: it joins the table instead', async () => {
+    const { tool } = await open();
+    fake.respond = slow({ kiwi: 40, pear: 0 });
+    const kiwi = tool('look_up_food', { foods: ['kiwi'] });
+    await sleep(5);
+    const pear = await tool('look_up_food', { foods: ['pear'] });
+    expect(pear.body.view.nutrition?.product_name).toBe('Medium pear');
+    const { body } = await kiwi;
+    expect(body.view.nutrition?.product_name).toBe('Medium pear');
+    expect(body.view.shelf.items.map((r) => r.product_name)).toEqual(['Medium pear', 'Medium kiwi']);
+    expect(body.card).toBeFalsy();
+    expect(body.text).toMatch(/^Done: "Medium kiwi" joined the comparison table; the card on screen stays "Medium pear"/);
+  });
+
+  it('a recipe still being made when a newer card goes up is not opened over it', async () => {
+    const { tool } = await open();
+    await tool('look_up_food', { foods: ['banana'] });
+    fake.respond = slow({ recipe: 40 });
+    const recipe = tool('open_recipe', { recipe: 'banana bread' });
+    await sleep(5);
+    await tool('look_up_food', { foods: ['apple'] });
+    const { body } = await recipe;
+    expect(body.kind).toBe('failed');
+    expect(body.recipe).toBeUndefined();
+    expect(body.view.nutrition?.product_name).toBe('Medium apple');
+    expect(body.view.shelf.recipes).toEqual([]);
+    expect(body.text).toMatch(/^Not done: the recipe "banana bread" was not opened, because "Medium apple" was put on screen after it was asked for/);
+  });
+
+  it('a recipe still being made when the table is cleared is not opened', async () => {
+    const { tool } = await open();
+    await tool('look_up_food', { foods: ['banana'] });
+    fake.respond = slow({ recipe: 40 });
+    const recipe = tool('open_recipe', { recipe: 'banana bread' });
+    await sleep(5);
+    await tool('start_over');
+    const { body } = await recipe;
+    expect(body.recipe).toBeUndefined();
+    expect(body.view.shelf.recipes).toEqual([]);
+    expect(body.text).toMatch(/^Not done: the table was cleared while/);
+  });
+
+  it('a photo read after "start over" leaves the table clear', async () => {
+    const { act } = await open();
+    fake.delay = 40;
+    const photo = act('photo', { image: { mimeType: 'image/jpeg', base64: 'aGVsbG8=' } });
+    await sleep(5);
+    fake.delay = 0;
+    await act('start_over');
+    const { body } = await photo;
+    expect(body.view.nutrition).toBeNull();
+    expect(body.text).toMatch(/^Not done: the table was cleared while/);
+  });
+});
+
 describe('buttons', () => {
   it('a quick pick looks the food up and tells the host what was pressed, with the figures', async () => {
     const { act } = await open();

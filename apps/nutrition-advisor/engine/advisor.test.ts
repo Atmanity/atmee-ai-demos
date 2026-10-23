@@ -165,7 +165,7 @@ describe('the card is not blank under its title', () => {
   it('a recipe asked for out loud borrows the blurb from the card that suggested it', () => {
     const a = new Advisor();
     a.show(food('Greek yogurt', { recipes: [{ name: 'Berry parfait', description: 'Layer with fruit and granola.' }] }));
-    expect(a.open(recipe('Berry parfait')).description).toBe('Layer with fruit and granola.');
+    expect(a.open(recipe('Berry parfait'))!.description).toBe('Layer with fruit and granola.');
   });
 
   it('a kept recipe replays with its description rather than blank', () => {
@@ -187,7 +187,7 @@ describe('the card is not blank under its title', () => {
     const a = new Advisor();
     a.show(food('Greek yogurt', { recipes: [{ name: 'Berry parfait', description: 'Layered.' }] }));
     a.open(recipe('Berry parfait', { ingredients: ['yogurt'] }));
-    const bread = a.open(recipe('Banana bread', { ingredients: ['flour', 'banana'] }));
+    const bread = a.open(recipe('Banana bread', { ingredients: ['flour', 'banana'] }))!;
     expect(bread.recipe_name).toBe('Banana bread');
     expect(bread.description).toBe('');
     expect(a.recipeNamed('Berry parfait')?.ingredients).toEqual(['yogurt']);
@@ -292,5 +292,45 @@ describe('one food, said several ways', () => {
     expect(sameFood('chicken breast', 'chicken thigh')).toBe(false);
     expect(sameFood('', 'apple')).toBe(false);
     expect(sameFood('big mac', 'mac')).toBe(false);
+  });
+});
+
+describe('work that started before something newer', () => {
+  it('a card from older work joins the table without taking the card from newer work', () => {
+    const a = new Advisor();
+    const older = a.begin();
+    const newer = a.begin();
+    a.show(food('Medium pear'), newer);
+    expect(a.mayFront(older)).toBe(false);
+    a.show(food('Medium kiwi'), older);
+    expect(a.nutrition?.product_name).toBe('Medium pear');
+    expect(a.shelf.map((r) => r.product_name)).toEqual(['Medium pear', 'Medium kiwi']);
+    expect(a.cardFor('kiwi')?.product_name).toBe('Medium kiwi');
+  });
+
+  it('cards from one piece of work all go up in turn, the last on the card', () => {
+    const a = new Advisor();
+    const t = a.begin();
+    a.show(food('Medium banana'), t);
+    a.show(food('Medium apple'), t);
+    expect(a.nutrition?.product_name).toBe('Medium apple');
+  });
+
+  it('a recipe from older work is not opened over newer work, nor kept', () => {
+    const a = new Advisor();
+    a.show(food('Medium banana'));
+    const older = a.begin();
+    a.show(food('Medium apple'));
+    expect(a.open(recipe('Banana bread'), older)).toBeNull();
+    expect(a.recipes).toEqual([]);
+    expect(a.open(recipe('Apple crumble'))).not.toBeNull();
+  });
+
+  it('nothing started before "start over" may write after it', () => {
+    const a = new Advisor();
+    const older = a.begin();
+    a.reset();
+    expect(a.current(older)).toBe(false);
+    expect(a.current(a.begin())).toBe(true);
   });
 });

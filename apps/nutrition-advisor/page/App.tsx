@@ -105,17 +105,21 @@ export function App() {
   /** An action's outcome on the table. `via`: Rachel's tool, or the user's own button. */
   function apply(outcome: Outcome, via: 'tool' | 'button') {
     const current = viewRef.current;
-    // A reply overtaken by a newer one keeps its words, not its screen.
-    const stale = Boolean(current && outcome.view.seq < current.seq);
-    if (!stale) setView({ ...outcome.view, shelf: parseShelf(outcome.view.shelf) });
-    const food = (stale ? current : outcome.view)?.nutrition?.product_name ?? '';
+    // A reply overtaken by a newer one keeps its words (they are still said), never
+    // its screen: no card, no recipe, no clearing over what came after it.
+    if (current && outcome.view.seq < current.seq) {
+      if (outcome.notice) setNotice(outcome.notice);
+      return;
+    }
+    setView({ ...outcome.view, shelf: parseShelf(outcome.view.shelf) });
+    const food = outcome.view.nutrition?.product_name ?? '';
     if (outcome.kind === 'cleared') {
       setRecipeView(closed(recipeViewRef.current));
       setCook(unstarted());
       setOpened([]);
     }
     // A new card is what the user just asked for: it comes forward, even over an open recipe.
-    if (outcome.card && !stale && recipeViewRef.current.selected) {
+    if (outcome.card && recipeViewRef.current.selected) {
       setRecipeView(closed(recipeViewRef.current));
       setCook(unstarted());
     }
@@ -134,7 +138,7 @@ export function App() {
     }
     if (outcome.notice) setNotice(outcome.notice);
     // Make the new card's recipes ahead, so opening one is instant.
-    if (outcome.card && !stale) void call('/act', { command: 'prepare' }).then((done) => apply(done, 'button'), () => {});
+    if (outcome.card) void call('/act', { command: 'prepare' }).then((done) => apply(done, 'button'), () => {});
   }
 
   /** Rachel's next_steps, and the "Next steps" button: the next batch, lit up. */

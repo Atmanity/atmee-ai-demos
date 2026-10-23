@@ -5,7 +5,7 @@
 // until the test answers it, so answers can come late: after a hang-up, after
 // a failed call was placed again, after a new call set a fresh table.
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { AvatarHandlers, ToolCall } from '../../../src/kit/index.ts';
 import { Advisor } from '../engine/advisor.ts';
 import type { NutritionData, Outcome, View } from '../engine/types.ts';
@@ -144,4 +144,41 @@ test('a new call starts from an empty table, not the last call\'s board', async 
   phase('ended');
   phase('starting');   // the new table has not answered yet
   expect(fake.states.at(-1)).toMatch(/Nothing is on the user's screen yet/);
+});
+
+describe('an overtaken reply keeps its words, not its screen', () => {
+  const smoothie = { recipe_name: 'Banana oat smoothie', description: 'Blend it.', ingredients: ['1 banana'], preparation_steps: ['Peel it.', 'Blend it.'] };
+  const at = (seq: number, view: View): View => ({ ...view, seq });
+  const toolCall = (name: string, args: Record<string, unknown> = {}) =>
+    act(async () => { void Promise.resolve(fake.handlers.onToolCall!({ id: name, name, arguments: args } as ToolCall)).catch(() => {}); });
+
+  test('a "start over" overtaken by a newer recipe neither closes it nor wipes the notes', async () => {
+    fake.phase = 'idle';
+    Object.assign(page, render(<App />));
+    await liveCall('v1', at(1, withCard('Medium banana')));
+    await toolCall('start_over');
+    const clear = requests.at(-1)!;
+    await toolCall('open_recipe', { recipe: 'the first one' });
+    const open = requests.at(-1)!;
+    await act(async () => { open.answer({ view: at(3, withCard('Medium banana')), kind: 'recipe', recipe: smoothie, text: 'Done: on screen now, the recipe.' }); });
+    expect(fake.states.at(-1)).toContain('On screen: the recipe card "Banana oat smoothie"');
+    await act(async () => { clear.answer({ view: at(2, empty()), kind: 'cleared', text: 'Done: cleared.' }); });
+    expect(fake.states.at(-1)).toContain('On screen: the recipe card "Banana oat smoothie"');
+    expect(fake.states.at(-1)).toContain('Steps 1 and 2 are lit up');
+    expect(screen.getByText('Save notes').closest('button')!.disabled).toBe(false);
+  });
+
+  test('a recipe overtaken by a newer card never opens over it', async () => {
+    fake.phase = 'idle';
+    Object.assign(page, render(<App />));
+    await liveCall('v1', at(1, withCard('Medium banana')));
+    await toolCall('open_recipe', { recipe: 'the first one' });
+    const open = requests.at(-1)!;
+    await toolCall('look_up_food', { foods: ['apple'] });
+    const lookup = requests.at(-1)!;
+    await act(async () => { lookup.answer({ ...cardOutcome('Medium apple'), view: at(5, withCard('Medium apple')) }); });
+    await act(async () => { open.answer({ view: at(4, withCard('Medium banana')), kind: 'recipe', recipe: smoothie, text: 'Done: on screen now, the recipe.' }); });
+    expect(fake.states.at(-1)).not.toContain('On screen: the recipe card');
+    expect(fake.states.at(-1)).toContain('the nutrition card for "Medium apple"');
+  });
 });

@@ -253,6 +253,17 @@ export const said = {
   lookupFailed: (missing: string[]) =>
     `Not found: the app could not pull up ${list(missing)} just now, and nothing about it is on the user's screen. Say so in one short line, without mentioning an error or a system, and ask whether they would like you to try again; do it only if they say so. If they want a rough idea meanwhile, you may give typical figures from general knowledge, saying clearly that they are rough.`,
 
+  /** Cards from work overtaken by newer work: in the table, behind the card asked for after them. */
+  filed: (put: NutritionData[], front: string) =>
+    `Done: ${list(put.map((c) => c.product_name))} joined the comparison table; the card on screen stays ${q(front)}, which was asked for after it. ${put.map((c) => capital(cardText(c, 'names'))).join(' ')} Answer what they asked from these figures in one or two short sentences; do not read the figures back.`,
+
+  /** Work that finished after the user cleared the table: it wrote nothing. */
+  clearedMeanwhile: (what: string) =>
+    `Not done: the table was cleared while ${what} was being prepared, so nothing about it is on screen. Ask whether they still want it; do it only if they say so.`,
+
+  recipeOvertaken: (name: string, front: string) =>
+    `Not done: the recipe ${q(name)} was not opened, because ${q(front)} was put on screen after it was asked for. Ask whether they still want the recipe; open it only if they say so.`,
+
   noFood: () => 'Not done: no food was named, so nothing changed on screen. Ask which food they mean.',
 
   /** A comparison: `rows` side by side (the foods asked about), `put` looked up for it, `tableSize` rows in the table now. */
