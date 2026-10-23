@@ -165,7 +165,7 @@ Each was run live on staging; its README has the runs and what the API could not
 ```
 cp .env.example .env     # as above; the mini-apps also read GEMINI_API_KEY
 npm install
-npm run dev              # http://localhost:5190/apps/ (and every app from the home page)
+npm run dev              # http://localhost:5190/ (every app on the home page)
 npm test                 # engines, judges, directors, the kit
 npm run typecheck
 ```

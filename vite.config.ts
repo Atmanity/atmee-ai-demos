@@ -1,4 +1,4 @@
-// One multi-page app: the mini-apps' index (apps/index.html) plus apps/<app>/index.html for every app.
+// One multi-page app: apps/<app>/index.html for every app (the home page is server.js's public/index.html).
 // In development the Express server (server/index.ts) runs Vite as middleware,
 // so `npm run dev` is one process serving the pages and the /api routes.
 import { existsSync, readdirSync } from 'node:fs';
@@ -20,7 +20,7 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      input: { home: 'apps/index.html', ...Object.fromEntries(apps.map((app) => [app, `apps/${app}/index.html`])) },
+      input: Object.fromEntries(apps.map((app) => [app, `apps/${app}/index.html`])),
     },
   },
   test: {
