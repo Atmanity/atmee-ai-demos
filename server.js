@@ -165,6 +165,57 @@ app.use(express.json({ limit: "6mb" }));
 app.use(express.static(fileURLToPath(new URL("./public", import.meta.url))));
 app.get("/api/usecases", (_req, res) => res.json(Object.fromEntries(Object.entries(USECASES).map(([k, v]) => [k, { title: v.title, page: v.page, avatarId: process.env[`AVATAR_${k.toUpperCase()}`] || null, conductor: !!v.conductor, tools: v.appTools ? v.appTools.tools.map((t) => t.name) : [] }]))));
 
+// Each app's avatar face for the home page cards. The API hands out the
+// portrait (thumbnailUrl) as a presigned link that expires within the hour, so
+// the page never sees it: the server fetches the image right away, keeps the
+// bytes, and serves them from here. A kept image is checked again after
+// PORTRAIT_TTL_MS (a replaced portrait shows up then); when that check fails
+// the old image is served on. No avatar, or one without a portrait, is a 404
+// and the card keeps its emoji.
+const PORTRAIT_TTL_MS = 30 * 60 * 1000;
+const portraits = new Map(); // usecase -> { at, avatarId, image?: { bytes, type, etag } }
+const portraitLoads = new Map(); // usecase -> the fetch in flight
+async function loadPortrait(avatarId) {
+  const r = await fetch(`${BASE}/v1/avatars/${encodeURIComponent(avatarId)}`, { headers: { "X-Api-Key": KEY }, signal: AbortSignal.timeout(10_000) });
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error(`GET /v1/avatars -> ${r.status}`);
+  const url = (await r.json()).thumbnailUrl;
+  if (!url) return null;
+  const img = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+  const type = img.headers.get("content-type") || "";
+  if (!img.ok || !type.startsWith("image/")) throw new Error(`portrait -> ${img.status} ${type}`);
+  const bytes = Buffer.from(await img.arrayBuffer());
+  // The storage object's name changes when the portrait is replaced.
+  const etag = `"${createHmac("sha256", "portrait").update(new URL(url).pathname).digest("hex").slice(0, 16)}"`;
+  return { bytes, type, etag };
+}
+app.get("/api/avatars/:usecase/portrait", async (req, res) => {
+  const name = req.params.usecase;
+  const avatarId = USECASES[name] ? hub(name).avatarId : null;
+  if (!avatarId) return res.status(404).set("Cache-Control", "no-store").json({ error: "no avatar for this use case" });
+  let entry = portraits.get(name);
+  if (!entry || entry.avatarId !== avatarId || Date.now() - entry.at > PORTRAIT_TTL_MS) {
+    if (!portraitLoads.has(name)) {
+      portraitLoads.set(name, loadPortrait(avatarId)
+        .then((image) => portraits.set(name, { at: Date.now(), avatarId, image }))
+        .catch((err) => {
+          console.log(`[${name}] portrait failed: ${err.message}`);
+          // Keep serving the image we have; without one, ask again next time.
+          const kept = portraits.get(name);
+          if (kept && kept.avatarId === avatarId && kept.image) kept.at = Date.now() - PORTRAIT_TTL_MS + 60_000;
+        })
+        .finally(() => portraitLoads.delete(name)));
+    }
+    await portraitLoads.get(name);
+    entry = portraits.get(name);
+  }
+  const image = entry && entry.avatarId === avatarId ? entry.image : null;
+  if (!image) return res.status(404).set("Cache-Control", "no-store").json({ error: "no portrait" });
+  res.set({ "Cache-Control": "private, max-age=1800, stale-while-revalidate=86400", ETag: image.etag, "Content-Type": image.type });
+  if (req.headers["if-none-match"] === image.etag) return res.status(304).end();
+  res.send(image.bytes);
+});
+
 app.post("/api/:usecase/session", async (req, res) => {
   const h = hub(req.params.usecase);
   if (!h) return res.status(404).json({ error: "unknown use case" });
