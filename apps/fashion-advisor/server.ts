@@ -1,35 +1,29 @@
-// Fashion Advisor's server side. It owns each user's styling session (the
-// stylist in engine/stylist.ts): the photo, the try-ons, the read and the
-// pieces, because the images and the model keys live here. The page sends
-// commands (from a button, a typed line or speech) and waits for the slow
-// ones as jobs; it gets views, with every image behind an opaque URL.
+// Notch's server side. It owns each fitting (engine/fitting.ts over the
+// stylist): the photo, the try-ons, the verdict and the pieces, because the
+// images and the model keys live here. Emery's tool calls and the user's
+// buttons arrive as the same intents; slow work (a read, a try-on) is a job
+// the page follows milestone by milestone. Every image is behind an opaque URL.
 //
-//   POST /studios                        a new session: { id, outcome }
-//   GET  /studios/:id                    the current view (the page polls while thumbnails render)
-//   POST /studios/:id/judge {text,offer} what a line means: { command, clearOffer }
-//   POST /studios/:id/act {command}      do it: an Outcome, maybe with a job
-//   GET  /studios/:id/jobs/:job/:stage   wait for a job's milestone ('image', 'done')
-//   GET  /studios/:id/images/:token      a photo or a try-on
-//   GET  /thumbs/:key                    a suggestion's catalogue shot
+//   POST /studios                          a new fitting: { id, view }
+//   GET  /studios/:id                      the current view (the page polls while catalogue shots render)
+//   POST /studios/:id/tool {name, arguments}   Emery's call: { view, text | job + result }
+//   POST /studios/:id/act {button, ...}    the user's button: the same, worded as what they pressed
+//   GET  /studios/:id/jobs/:job/:milestone a job's milestone, once it lands: { view, text }
+//   GET  /studios/:id/images/:token        a photo or a try-on
+//   GET  /thumbs/:key                      a piece's catalogue shot
 import { randomBytes } from 'node:crypto';
 import type { AppServer } from '../../server/app-server.ts';
-import { llmAvailable, structured } from '../../server/llm.ts';
-import { say } from './engine/director.ts';
-import {
-  chat, fromIntentModel, fromNameModel, fromStyleModel, INTENT_SCHEMA, intentPrompt, judgeRules, NAME_SCHEMA, namePrompt,
-  parseCommand, STYLE_SCHEMA, stylePrompt, type JudgeContext,
-} from './engine/judge.ts';
-import { retryTransient } from './engine/prompts.ts';
-import { matchStyleKeyword, styleHintFromNameReply } from './engine/style.ts';
+import { instructions, tools } from './engine/director.ts';
+import { Fitting, intentOfButton, intentOfTool } from './engine/fitting.ts';
 import { Stylist } from './engine/stylist.ts';
 import { ThumbnailRack } from './engine/thumbnails.ts';
-import type { Command, Milestone, Outcome } from './engine/types.ts';
+import type { Milestone } from './engine/types.ts';
 import { createModels } from './models.ts';
 
 const ID = 'fashion-advisor';
 const API = `/api/apps/${ID}`;
-const MAX_STUDIOS = 40;
-const STUDIO_TTL_MS = 3 * 3600_000;
+const MAX_FITTINGS = 40;
+const FITTING_TTL_MS = 3 * 3600_000;
 
 const models = createModels();
 const thumbnails = new ThumbnailRack((item) => models.renderThumbnail(item), {
@@ -37,11 +31,11 @@ const thumbnails = new ThumbnailRack((item) => models.renderThumbnail(item), {
   urlFor: (key) => `${API}/thumbs/${encodeURIComponent(key)}`,
 });
 const amazon = { domain: process.env.AMAZON_STORE_DOMAIN, tag: process.env.AMAZON_ASSOCIATE_TAG };
-const studios = new Map<string, Stylist>();
+const fittings = new Map<string, Fitting>();
 
-function newStudio(): [string, Stylist] {
-  for (const [key, s] of studios) if (Date.now() - s.at > STUDIO_TTL_MS) studios.delete(key);
-  while (studios.size >= MAX_STUDIOS) studios.delete(studios.keys().next().value!);
+function newFitting(): [string, Fitting] {
+  for (const [key, f] of fittings) if (Date.now() - f.at > FITTING_TTL_MS) fittings.delete(key);
+  while (fittings.size >= MAX_FITTINGS) fittings.delete(fittings.keys().next().value!);
   const id = randomBytes(9).toString('hex');
   const stylist = new Stylist(models, {
     imageUrl: (token) => `${API}/studios/${id}/images/${token}`,
@@ -49,97 +43,69 @@ function newStudio(): [string, Stylist] {
     amazon,
     newId: () => randomBytes(8).toString('hex'),
   });
-  studios.set(id, stylist);
-  return [id, stylist];
-}
-
-const ask = <T>(user: string, schema: Record<string, unknown>, system: string) =>
-  retryTransient(() => structured<T>({ system, user, schema, temperature: 0 }), { attempts: 2, baseDelayMs: 600 });
-
-/** Rules first; the model only where they could not tell (a bare name, a style in the user's own words, a request in loose words). */
-async function judge(stylist: Stylist, text: string, offer: string | null): Promise<{ command: Command | null; clearOffer?: boolean }> {
-  const ctx: JudgeContext = {
-    step: stylist.step,
-    suggestions: stylist.analysis?.suggestions.map((s) => s.item) ?? [],
-    offer,
-    hasPhoto: Boolean(stylist.current),
-    photoDeclined: stylist.photoDeclined,
-    hasName: Boolean(stylist.name),
-    hasTarget: Boolean(stylist.target),
-  };
-  const verdict = judgeRules(text, ctx);
-  let command = verdict.command;
-  if (verdict.ask && verdict.askText && llmAvailable()) {
-    try {
-      if (verdict.ask === 'name') {
-        const name = fromNameModel(await ask<{ name: string }>(namePrompt(verdict.askText), NAME_SCHEMA, "You extract the person's name from a short spoken reply."));
-        if (name) {
-          const hint = styleHintFromNameReply(text, name);
-          const style = hint ? matchStyleKeyword(hint) : '';
-          command = style ? { type: 'name', name, style } : { type: 'name', name };
-        } else if (command?.type === 'name') {
-          command = chat(text);   // the rule's guess was not a name ("Excited!")
-        }
-      } else if (verdict.ask === 'style' || verdict.ask === 'styleHint') {
-        const style = fromStyleModel(await ask<{ style: string }>(stylePrompt(verdict.askText), STYLE_SCHEMA, "You normalize a user's reply into a single short style or look phrase."));
-        if (style) command = verdict.ask === 'styleHint' && command?.type === 'name' ? { ...command, style } : { type: 'style', style };
-      } else if (verdict.ask === 'intent') {
-        command = fromIntentModel(await ask(intentPrompt(verdict.askText, ctx.suggestions, offer), INTENT_SCHEMA, 'You decide which app action a user asked for.'), ctx);
-      }
-    } catch (err) {
-      console.warn('[%s] judging with the model failed (%s); using the rules', ID, (err as Error).message);
-    }
-  }
-  return { command, ...(verdict.clearOffer ? { clearOffer: true } : {}) };
+  // Notch asks for no name: the occasion and the photo are all a fitting needs.
+  stylist.nameSkipped = true;
+  const fitting = new Fitting(stylist);
+  fittings.set(id, fitting);
+  return [id, fitting];
 }
 
 const app: AppServer = {
   id: ID,
-  title: 'Fashion Advisor',
-  tagline: 'Share a photo of your outfit: a stylist rates it for the look you want, suggests pieces and puts them on you.',
+  title: 'Notch',
+  tagline: 'A stylist rates your outfit for the occasion, names the one fix and the pieces that take it up a notch.',
   maxSeconds: 900,
+  // Try-ons need an image model; without one Emery is not offered them at all.
+  appTools: { instructions: instructions(models.tryOnAvailable), tools: tools(models.tryOnAvailable) },
   routes(router) {
     router.post('/studios', (_req, res) => {
-      const [id, stylist] = newStudio();
-      res.json({ id, outcome: { view: stylist.view(), handled: true, events: [say.start()] } satisfies Outcome });
+      const [id, fitting] = newFitting();
+      res.json({ id, view: fitting.view() });
     });
 
     router.get('/studios/:id', (req, res) => {
-      const stylist = studios.get(req.params.id);
-      if (!stylist) return void res.status(404).json({ error: 'no_session' });
-      res.json({ view: stylist.view() });
+      const fitting = fittings.get(req.params.id);
+      if (!fitting) return void res.status(404).json({ error: 'no_fitting' });
+      res.json({ view: fitting.view() });
     });
 
-    router.post('/studios/:id/judge', async (req, res) => {
-      const stylist = studios.get(req.params.id);
-      if (!stylist) return void res.status(404).json({ error: 'no_session' });
-      const { text, offer } = req.body as { text?: unknown; offer?: unknown };
-      if (typeof text !== 'string' || !text.trim()) return void res.status(400).json({ error: 'no_text' });
-      res.json(await judge(stylist, text.slice(0, 600), typeof offer === 'string' && offer.trim() ? offer.trim().slice(0, 80) : null));
-    });
-
-    router.post('/studios/:id/act', (req, res) => {
-      const stylist = studios.get(req.params.id);
-      if (!stylist) return void res.status(404).json({ error: 'no_session' });
-      const command = parseCommand((req.body as { command?: unknown }).command);
-      if (!command) return void res.status(400).json({ error: 'bad_command' });
+    // Emery's tool calls: the text (now, or with the job's result milestone) is what she says next.
+    router.post('/studios/:id/tool', (req, res) => {
+      const fitting = fittings.get(req.params.id);
+      if (!fitting) return void res.status(404).json({ error: 'no_fitting' });
+      const { name, arguments: args } = req.body as { name?: unknown; arguments?: unknown };
+      const intent = typeof name === 'string' ? intentOfTool(name, args && typeof args === 'object' ? args as Record<string, unknown> : {}) : null;
+      if (!intent) return void res.status(400).json({ error: 'unknown_tool' });
       try {
-        res.json(stylist.act(command));
+        res.json(fitting.do(intent, { by: 'host' }));
       } catch (err) {
-        console.warn('[%s] %s failed: %s', ID, command.type, (err as Error).message);
+        console.warn('[%s] tool %s failed: %s', ID, String(name), (err as Error).message);
+        res.status(500).json({ error: 'tool_failed' });
+      }
+    });
+
+    // The user's buttons: Emery cannot see them, so the outcome is worded as what they pressed.
+    router.post('/studios/:id/act', (req, res) => {
+      const fitting = fittings.get(req.params.id);
+      if (!fitting) return void res.status(404).json({ error: 'no_fitting' });
+      const button = intentOfButton(req.body);
+      if (!button) return void res.status(400).json({ error: 'unknown_button' });
+      try {
+        res.json(fitting.do(button.intent, { by: 'user', pressed: button.pressed }));
+      } catch (err) {
+        console.warn('[%s] button %s failed: %s', ID, button.intent.kind, (err as Error).message);
         res.status(500).json({ error: 'act_failed' });
       }
     });
 
     router.get('/studios/:id/jobs/:job/:milestone', async (req, res) => {
-      const stylist = studios.get(req.params.id);
-      const waiting = stylist?.wait(req.params.job, req.params.milestone as Milestone);
-      if (!waiting) return void res.status(404).json({ error: 'no_job' });
-      res.json(await waiting);
+      const step = fittings.get(req.params.id)?.step(req.params.job, req.params.milestone as Milestone);
+      if (!step) return void res.status(404).json({ error: 'no_job' });
+      res.json(await step);
     });
 
     router.get('/studios/:id/images/:token', (req, res) => {
-      const img = studios.get(req.params.id)?.image(req.params.token);
+      const img = fittings.get(req.params.id)?.stylist.image(req.params.token);
       if (!img) return void res.status(404).end();
       res.setHeader('Content-Type', img.mime);
       res.setHeader('Cache-Control', 'private, max-age=3600');

@@ -3,7 +3,7 @@
 // there; the page sees a View, with images behind opaque URLs.
 //
 // The analysis and suggestion shapes keep the original agent's snake_case
-// payloads, so the ported panel (page/FashionPanel.tsx) reads them unchanged.
+// payloads.
 
 export type Zone = 'head' | 'neck' | 'upper_body' | 'lower_body' | 'wrist' | 'feet';
 
@@ -97,23 +97,17 @@ export type Command =
 
 export type Milestone = 'image' | 'done';
 
-/** Something for the avatar to say in its own words. */
+/** Something for the host to say in its own words: a tool's result, or an event. */
 export interface SayEvent {
   text: string;
   ttl: number;
-  /**
-   * An acknowledgement of the request itself, which the avatar already gave
-   * (from what its state staged) when the request was spoken: the page sends
-   * it only for buttons and typed lines.
-   */
-  ack?: boolean;
-  /** The avatar is asked to offer this piece: a bare "yes" next means "try it on". */
+  /** The host is asked to offer this piece (a piece asked for before the photo is then forgotten once offered). */
   offer?: string;
 }
 
 export interface Outcome {
   view: View;
-  /** Whether the input was an app action (a typed one is then recorded, not sent to the avatar). */
+  /** Whether the command was an app action (a `chat` is not). */
   handled: boolean;
   events: SayEvent[];
   /** Work still running: wait for each milestone in turn (GET .../jobs/<id>/<milestone>). */

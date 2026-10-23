@@ -4,10 +4,11 @@
 // try-on and the catalogue shots).
 //
 // Keys come from the environment. GEMINI_API_KEY is the repo's; XAI_API_KEY
-// is optional, and without it try-ons and thumbnails are switched off (the
-// page and the avatar are told). The original could also draw with Gemini's
-// image model (FASHION_IMAGE_PROVIDER=gemini), but `server/llm.ts` only asks
-// Gemini for JSON text, so that path is not available here (see README).
+// is optional, and without it try-ons and thumbnails are switched off (Emery
+// is not given the try-on tools; the rail shows drawn marks and shop links).
+// The original could also draw with Gemini's image model
+// (FASHION_IMAGE_PROVIDER=gemini), but `server/llm.ts` only asks Gemini for
+// JSON text, so that path is not available here (see README).
 import { createHash } from 'node:crypto';
 import { structured } from '../../server/llm.ts';
 import {

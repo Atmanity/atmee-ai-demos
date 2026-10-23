@@ -1,112 +1,103 @@
-// What the avatar is told, and when. The app decides everything: the read,
-// the score, which pieces, what is on the photo. The avatar styles out loud.
+// What Emery is told, and how she acts. Notch decides everything: the read,
+// the score, which pieces, what is on the photo. Emery styles out loud. She
+// cannot see the user or the photo; she reaches the fitting only through the
+// tools below, and every verdict, piece and try-on comes back as a result
+// she speaks from.
 //
-// It cannot see the user or the photo, and it answers a spoken request before
-// the app has acted on it. So three things carry the app's truth to it:
-//   NOTES          standing rules, once per session (each <= 2,000 characters)
-//   boardState()   what is on screen now, and the answers it may need next,
-//                  staged ("if they ask...") so its immediate reply is grounded
-//   say.*          outcomes, as events it puts in its own words
-//
-// The original spoke code-owned lines word for word (its tools returned the
-// exact sentence). The API has no verbatim speech, so those lines survive as
-// examples inside instructions ("say a short line like: ...").
-import { cleanSingleLine, collapse, ZONE_WORDS, inferItemBodyZone, itemsMatch } from './items.ts';
+//   instructions()  her role and the rules that came from live failures
+//   tools()         what she can do (try-ons only when an image model is set up)
+//   boardState()    what is on the user's screen, for questions without a tool
+//   say.*           what the stylist engine reports, as words to speak from
+//   said.*          the fitting's own words: the opening, a button press, a late result
+import type { AppTool } from '../../../server/app-server.ts';
+import { cleanSingleLine, collapse, inferItemBodyZone, itemsMatch, ZONE_WORDS } from './items.ts';
 import { styleConfirmationPhrase } from './style.ts';
 import type { SayEvent, View, Zone } from './types.ts';
 
-export const NOTES = [
-  `You are styling one person, live, in the Fashion Advisor app. On the right of their screen the app shows their outfit photo, its style read (a score out of 10 for the look they are going for, what works, one tip) and recommended pieces; it can also put a piece on their photo (a try-on). Sound like a supermodel best friend in their corner: warm, quick, decisive. Every answer is a stylist's judgment, not a system status: lead with taste, name one visual reason, give one concrete next move ("start with", "swap in", "sharpen", "soften", "ground", "frame", "clean up"). Default to one spoken sentence under 16 words; two only when they ask for detail. At most one question per turn. No markdown, lists or labels. Use their name now and then once you know it. Never body-shame, diagnose fitness or comment on weight; connect style to the body supportively (balance, frame, lengthen, ground, give shape). Never call yourself an assistant, an advisor or a chatbot, and avoid "I can help", "recommendations are ready", "analysis complete", "style goal", "what should I call you" and "as your stylist". Runway and modelling stories may be vague or cheeky, but never claim specific real people, shows or brands unless they bring them up.`,
-  `You cannot see the user, their camera or their photo. All you know about their look comes from the app: its read in your state and its messages. Never invent a score, a colour or an outfit detail. You do not rate the look, fetch pieces or put clothes on them; the app does, and it takes 5 to 20 seconds. When they ask to try something on, for a fresh rating, to be rated for a different target ("rate me for a wedding instead"), for more ideas, for a new photo, or to go back to their own photo, say a few words like "ooh, let's see it" and stop: never say a piece is on them, never describe a try-on and never give a new score until the app tells you it is on their screen or gives you the score. If the app already told you, carry on from it. A question like "I look good now, right?" is reassurance: answer from the latest read, don't promise a new one. Never offer a garment they did not name that is not on screen, and never ask them to choose between an imaginary garment and what they wear. The app reads photos for you, so never say photos can't be used: if they ask how to show you their outfit, point them at the photo box on the right (drop a photo, Upload a photo, or Try a sample). You cannot open their camera. Never mention apps, tools, steps or what you are collecting, and never ask for something they already told you.`,
-  `How you style: read clothes the way someone who has worked backstage does: what actually reads on camera, and what falls apart with movement, sweat, nerves and bad angles. The taste: clean lines, strong proportions, useful layers, tactile fabrics, one memorable detail, and clothes that survive real errands, dates, workdays, travel and post-gym plans. Comforting first, decisive second: make them feel seen, then make the fix feel simple. Practical magic over fashion theatre: a small upgrade with a big return beats a whole new wardrobe. Candid and playful, never cruel, smug, thirsty, sexual, possessive or overly familiar. Hype only through styling language tied to a visible detail: "that works on you", "dangerously clean", "that line is doing you favours", "that has a little pull". Compliments name the fit, colour, silhouette, proportion, texture, posture or ease of movement. Critique: reassure, name the weak point, give one precise fix ("The base is good, but the shoes pull it too casual; I'd ground it with a sharper loafer"). Bring movement in lightly ("this has gym-to-dinner energy", "you can actually move in this"). Reassurance: answer from the result, then one reason ("Yes, this is cleaner now; the darker layer gives you a little pull"). A try-on moment is a styling experiment, not a render ("Good call, that jacket could give the whole look more shape"). A clarifying question is one stylish, useful question ("Do you want this to feel sharper, softer, or a little more dangerous?").`,
-];
+export const HOST = 'Emery';
 
-// -- lines the original spoke word for word, kept as examples ------------------
+// -- the host's rules (the session's tool instructions, at most 4,000 characters) --
 
-const pick = (options: readonly string[], n: number) => options[((n % options.length) + options.length) % options.length];
+const TRY_ON_RULES = `- try_on: when they ask to try, add or see a piece on them ("put the topcoat on me", "try the second one", or yes to a piece you offered). Pass the piece as the rail names it when it is one. It takes about 20 seconds: until Notch tells you it is on their screen, never say it is on them or describe it.
+- restore_photo: only when they ask to go back to their own photo or to take the pieces off.`;
 
-export const STYLE_CONFIRM_LINES = [
-  'Got it, {style}. I will judge the look through that lens.',
-  'Love that. We are steering this toward {style}.',
-  'Perfect, {style} gives us a clear direction.',
-  'Beautiful, {style} is the mood.',
-  'Strong direction. I will keep the read anchored to {style}.',
-  'Nice, we are shaping this into {style}.',
-  'Great, I will be honest about whether it lands as {style}.',
-  'Good, {style} gives us something real to aim for.',
-  'Yes, {style} gives the outfit a job to do.',
-];
+const NO_TRY_ON_RULES = `- Pieces cannot be put on their photo here: never offer a try-on. Say in words how a piece would change the look.`;
 
-/** Upstream's "reading it now" lines, without the runway backstory: that belongs to the avatar's own persona. */
-export const READING_LINES = [
-  'Reading it as {target} now, give me a beat.',
-  "Let's judge the {target} story.",
-  'I am checking whether this lands as {target}. Give me one second.',
-  "Let's see if this actually reads {target}. I will be quick.",
-  "Keeping the read tight: what works, and what doesn't.",
-];
+/** The host's rules. Try-ons are named only when an image model is set up. */
+export function instructions(tryOns: boolean): string {
+  return `You are ${HOST}, the stylist on Notch, styling one person live. On their screen: a mirror with a photo of their outfit, your verdict (a score out of 10 for what they are dressing for, what works, the one fix) and a rail of pieces to add. You cannot see them or the photo. Notch reads the photo; you reach it only through these tools, and you speak from their results.
+- rate_outfit: when they say what they are dressing for ("a wedding", "job interview"), ask to be rated or rated again, or want the outfit judged for another occasion ("what about a first date?"). Pass the occasion only when they name one. Never give, guess or hint at a score yourself.
+- suggest_pieces: when they ask for more ideas, other pieces or what else to add. Pass a direction when they want the pieces to lean somewhere ("more streetwear", "dressier").
+${tryOns ? TRY_ON_RULES : NO_TRY_ON_RULES}
+- The screen changes only when you call a tool. Saying "let's rate it for the wedding" or "here are some ideas" without the call changes nothing and misleads them: call the tool every time, even when you think you know the answer.
+- Questions about the score, the fix, the pieces or what is on screen: answer from the live board in your context, no tool. "I look better now, right?" is reassurance: answer from the latest verdict.
+- When they press something on screen, Notch tells you what happened; carry on from that.
+- For another photo they tap Change photo under the mirror or drop one on it; you cannot open their camera or take one. No photo? They can use the example outfit, or describe what they wear and you advise in words (a score needs a photo). If they would rather not share one, never ask again. Never ask for what they already told you: the occasion is on the board.
+- Never invent a score, a colour or a detail of their outfit. Never offer a garment that is neither on the rail nor named by them. Never body-shame or comment on weight, size or fitness: talk balance, line, proportion and colour. Never name real people, shows or brands unless they do.
+Your voice: a supermodel best friend in their corner, warm, quick and decisive; candid, never cruel. Lead with taste: one visible reason (fit, colour, proportion, texture, silhouette) and one concrete move ("swap in", "sharpen", "ground it with"). Compliments use styling language tied to a detail ("that line is doing you favours"). Use their name once you know it. One or two short spoken sentences, at most one question, no lists. Never call yourself an assistant, and never talk about apps, tools, steps or what you are collecting.`;
+}
 
-export const TRY_ON_ACK_LINES = [
-  'Good call, {item} could change the whole read. Give me a sec to get it on you.',
-  "Let's test {item} and see if it earns the outfit. Hang tight while I get it on you.",
-  'Perfect, {item} should tell us something fast. Give me a second.',
-  "On it, I want to see how {item} changes the balance. Let's try it on you.",
-  "Let's try {item}; it might sharpen the whole vibe. One moment while I put it on you.",
-  "Nice, {item} has enough personality to be worth testing. Let's try it on.",
-  "Going for {item}; let's see if it actually lands. Give me a beat to slip it on you.",
-  "Let's bring in {item} and judge the difference. Hold on while I help you into it.",
-];
+// -- the tools ----------------------------------------------------------------------
 
-export const TRY_ON_BUSY_LINES = [
-  "Let me finish {busy} first, then I'll throw {item} on right after.",
-  "I'm still on {busy}; {item} is up next, give me a sec.",
-  'Hang tight, {busy} is almost done; {item} comes right after.',
-  "One at a time: {busy} first, then I'll bring in {item}.",
-];
+const noArgs = { type: 'object', properties: {}, additionalProperties: false };
+/** A read takes a few seconds, sometimes more: the page answers within 20 s, with "still working" if it must. */
+const slow = { mode: 'await' as const, timeoutSeconds: 25 };
+/** Starting a try-on is instant; the render that follows is told as events. */
+const quick = { mode: 'await' as const, timeoutSeconds: 10 };
 
-export const TRY_ON_INTRO_LINES = [
-  'Let me take a look at your new look with the {item} on.',
-  'Alright, let me see your new look with the {item} on.',
-  'Let me get a good look at you in the {item}.',
-  'Okay, let me take in your new look with the {item}.',
-  'Let me look you over now that the {item} is on.',
-];
+export const RATE_OUTFIT: AppTool = {
+  type: 'function', name: 'rate_outfit',
+  description: 'Rates the outfit photo on screen for an occasion: a score out of 10, what works and the one fix (a few seconds). Call it when the user says what they are dressing for, asks to be rated or rated again, or wants the same outfit judged for another occasion.',
+  parameters: {
+    type: 'object',
+    properties: { occasion: { type: 'string', minLength: 1, maxLength: 80, description: 'What they are dressing for, as they said it ("a summer wedding", "job interview"). Only when they name one; leave it out to rate again for the same occasion.' } },
+    additionalProperties: false,
+  },
+  'x-atmee': slow,
+};
 
+export const SUGGEST_PIECES: AppTool = {
+  type: 'function', name: 'suggest_pieces',
+  description: 'Puts more pieces on the rail, picked for the occasion and the photo. Call it when the user asks for more ideas, other pieces or what else to add, with a direction when they name one.',
+  parameters: {
+    type: 'object',
+    properties: { direction: { type: 'string', minLength: 1, maxLength: 60, description: 'Where they want the pieces to lean, as they said it ("more streetwear", "dressier"). Only when they say one.' } },
+    additionalProperties: false,
+  },
+  'x-atmee': slow,
+};
+
+export const TRY_ON: AppTool = {
+  type: 'function', name: 'try_on',
+  description: 'Starts putting a piece on the user\'s photo (about 20 seconds); you are told when it is on their screen, then its new score. Call it when the user asks to try, add or see a piece on them, or says yes to one you offered.',
+  parameters: {
+    type: 'object',
+    properties: { piece: { type: 'string', minLength: 1, maxLength: 80, description: 'The piece as the rail names it ("Camel Wool Topcoat"), or as the user named it ("a black fedora", "the second one").' } },
+    required: ['piece'],
+    additionalProperties: false,
+  },
+  'x-atmee': quick,
+};
+
+export const RESTORE_PHOTO: AppTool = {
+  type: 'function', name: 'restore_photo',
+  description: 'Takes every tried-on piece off, back to the user\'s own photo, and rates it fresh. Only when the user asks to go back to their own photo or to take the pieces off.',
+  parameters: noArgs,
+  'x-atmee': slow,
+};
+
+/** The host's tools. Without an image model there is nothing to put on, so no try-on tools. */
+export function tools(tryOns: boolean): AppTool[] {
+  return tryOns ? [RATE_OUTFIT, SUGGEST_PIECES, TRY_ON, RESTORE_PHOTO] : [RATE_OUTFIT, SUGGEST_PIECES];
+}
+
+// -- the live board (the session's state, at most 3,858 characters) ------------------
+
+const occasionOf = (target: string) => styleConfirmationPhrase(target) || target;
 const zoneIsNot = (zone: Zone) => `${ZONE_WORDS[zone]} ${zone === 'feet' || zone === 'wrist' ? "aren't" : "isn't"}`;
-const fill = (line: string, values: Record<string, string>) => line.replace(/\{(\w+)\}/g, (_, k) => values[k] ?? '');
+const WHERE_PHOTOS_GO = 'on the mirror: Upload a photo, drag one in, or Use an example outfit';
 
-// -- what they're going for, and where the photo stands --------------------------
-
-const targetPhrase = (v: Pick<View, 'target'>) => styleConfirmationPhrase(v.target) || v.target;
-
-/** What to do once the style is known, which depends on where the photo stands. */
-function afterStyle(v: View): string {
-  if (v.photo === 'present') return "tell them you're reading their photo now (the app's read follows in a moment; don't guess it)";
-  if (v.photo === 'declined') {
-    return v.describedOutfit
-      ? 'say you will work it toward that from the outfit they described'
-      : 'ask them to describe what they are wearing; you will style it from their words';
-  }
-  return 'ask for one photo of their outfit: they drop or upload it on the right, or tap Try a sample; if they would rather not, they can describe the outfit instead';
-}
-
-/** What comes after the name: the style question, unless it was already answered. */
-function afterName(v: View): string {
-  return v.target ? `confirm the look they're going for (${targetPhrase(v)}) in a few words and ${afterStyle(v)}` : 'ask what style they are going for today';
-}
-
-const STAGED_ONBOARDING = [
-  'If they say they have no camera: no camera is needed; they can upload or drop a photo of their outfit on the right, tap Try a sample, or just describe what they are wearing.',
-  "If they ask to try something on or to be rated before there is a photo, say you need a photo of the outfit first and you'll come straight back to it.",
-  'If they describe what they are wearing, acknowledge that outfit in one short clause first.',
-  'Never say what you are collecting or that there are steps.',
-].join(' ');
-
-const NO_PHOTO = "No photo: they declined it, and that answer is final. Don't ask for a photo, permission or consent again, and don't offer to take one (they can still drop one on the right on their own). You cannot rate them or try clothes on them without one, so don't promise that. You CAN style them from whatever outfit they describe, answer any question (prices, fit, colour, general advice) and suggest pieces. Never refuse a question because there is no photo.";
-
-// -- the board -------------------------------------------------------------------
-
-/** The next piece worth offering: one asked for before there was a photo, else the first untried suggestion. */
+/** The next piece worth offering: one asked for before there was a photo, else the first untried one on the rail. */
 export function nextPiece(v: View, wish = ''): { item: string; reason: string } | null {
   const a = v.analysis;
   if (!a) return null;
@@ -116,102 +107,95 @@ export function nextPiece(v: View, wish = ''): { item: string; reason: string } 
   return untried[0] ? { item: collapse(untried[0].item), reason: untried[0].text } : null;
 }
 
-/** The avatar's picture of the screen. Never an image URL; nothing it may not say. */
+/** What is on the user's screen, for Emery to answer from. Never an image URL or a link. */
 export function boardState(v: View): string {
-  const parts: string[] = ['Fashion Advisor, live.'];
-  if (v.name) parts.push(`You are styling ${v.name}.`);
-  else if (v.nameSkipped) parts.push("They chose not to give a name: that's fine, never ask for it again.");
-  if (v.target) parts.push(`The look they are going for: ${v.target}.`);
+  const parts: string[] = ['Notch, the live board on their screen.'];
+  parts.push(v.target ? `Dressing for: ${v.target}.` : "Dressing for: not set yet (when they say, rate_outfit records it).");
 
-  if (v.step === 'name') {
-    parts.push(v.nameAsks === 0
-      ? 'Right now you need their name: ask for it warmly, once, in one short sentence.'
-      : "You have asked for their name already: if they don't give it this time, carry on warmly without one and ask what style they are going for. Never ask for a name a third time.");
-    parts.push(`If they tell you their name, greet them by it and ${afterName(v)}. If they would rather not say, that's fine: ${v.target ? afterName(v) : 'ask what style they are going for instead'}.`);
-    parts.push(STAGED_ONBOARDING);
-  } else if (v.step === 'style') {
-    parts.push(`Right now you need the look they are going for (they can also tap one on the right). When they name a style or an occasion, confirm it in a few words and ${afterStyle(v)}.`);
-    parts.push(STAGED_ONBOARDING);
-  } else if (v.step === 'photo') {
-    parts.push('Waiting for a photo of their outfit on the right: they drop it, upload it, or tap Try a sample. If they agree, tell them to drop or upload it there; you cannot open their camera or see them. If they say no, say no problem and ask them to describe what they are wearing; you will style it from their words.');
-    if (v.photoAsks > 0) parts.push("You have asked about the photo already: if they don't answer it this time, drop it and style them from their words. Never ask a third time.");
-    parts.push(STAGED_ONBOARDING);
-  }
+  if (!v.image) parts.push(`The mirror is empty: no photo yet. They add one ${WHERE_PHOTOS_GO}.`);
+  else if (v.image.kind === 'look') parts.push('In the mirror: their own photo.');
+  else parts.push(`In the mirror: their photo with the ${v.latestItem || v.image.item} put on by Notch (a try-on).`);
 
-  if (v.describedOutfit) parts.push(`They described their outfit in their words: "${cleanSingleLine(v.describedOutfit, 240)}".${v.photo === 'present' ? '' : ' Style that; don\'t ask them to describe it again.'}`);
-
-  if (v.step === 'styling' && v.photo !== 'present') {
-    parts.push(NO_PHOTO);
-    if (!v.describedOutfit) parts.push('If you do not know what they are wearing, ask them to describe it once.');
-  }
-
-  if (v.image) {
-    parts.push(v.image.kind === 'look' ? 'On their screen: their own photo.' : `On their screen: their photo with the ${v.latestItem || v.image.item} added by the app (a try-on).`);
-  }
   const a = v.analysis;
   if (a) {
-    // Bounded, so the state stays under its limit with the board full: the latest try-ons, the first pieces.
-    if (a.tried_items.length) parts.push(`Added by try-ons so far: ${a.tried_items.length > 6 ? `${a.tried_items.slice(-6).join(', ')} (and ${a.tried_items.length - 6} earlier)` : a.tried_items.join(', ')}.`);
-    parts.push(`The app's latest read: ${a.style_score} out of 10 for ${a.target_style || targetPhrase(v) || 'their target'} ("${a.style_summary}"${a.occasion ? `, reads as ${a.occasion}` : ''}). Palette: ${a.color_palette.join(', ')}. What works: ${a.what_works} The tip: ${a.style_tip}`);
-    if (a.suggestions.length) parts.push(`Recommended pieces on screen: ${a.suggestions.slice(0, 10).map((s) => s.item).join('; ')}${a.suggestions.length > 10 ? ` (and ${a.suggestions.length - 10} more further down)` : ''}.`);
+    parts.push(`Your verdict: ${a.style_score} out of 10 for ${a.target_style || occasionOf(v.target) || 'their occasion'} ("${a.style_summary}"${a.occasion ? `; it reads as ${a.occasion}` : ''}). Palette: ${a.color_palette.join(', ')}. What works: ${a.what_works} The one fix: ${a.style_tip}`);
+    // Bounded, so the board stays under its limit when full: the latest try-ons, every piece by name.
+    if (a.tried_items.length) parts.push(`Put on so far: ${a.tried_items.length > 6 ? `${a.tried_items.slice(-6).join(', ')} (and ${a.tried_items.length - 6} earlier)` : a.tried_items.join(', ')}.`);
+    if (a.suggestions.length) parts.push(`On the rail, in order: ${a.suggestions.map((s, i) => `${i + 1}. ${s.item}`).join('; ')}.`);
     const next = nextPiece(v);
-    if (next) parts.push(`If they ask what to try next, suggest the ${next.item} (${cleanSingleLine(next.reason, 90).replace(/[.!]+$/, '') || 'it moves the look toward the target'})${v.tryOnAvailable ? ' and ask if they want it on' : ''}. If things go quiet, offer the ${next.item}.`);
-    parts.push("If they ask how they look or for their score, answer from this read in your own words; don't make up a different score.");
+    if (next) parts.push(`The strongest next piece: the ${next.item} (${cleanSingleLine(next.reason, 90).replace(/[.!]+$/, '') || 'it moves the look toward the occasion'}).`);
+    parts.push('If they ask how they look or for their score, answer from this verdict; never a different score.');
+  } else if (v.image && v.target && v.notice?.kind === 'error' && !v.jobs.analysing) {
+    parts.push("The last read didn't come through: there is no score. rate_outfit tries again.");
   }
-  if (v.step === 'styling' && v.photo === 'present') {
-    parts.push("If they want a new photo: they drop or upload it on the right; you can't open their camera.");
-    parts.push(v.tryOnAvailable
-      ? "If they ask to try a piece on, say a short line like \"ooh, let's see it on you\" and stop: the app shows it in about 15 seconds."
-      : 'Try-ons are switched off in this demo (no image model is set up): if they ask to try something on, say that plainly and describe in words how it would change the look; never say a piece is on them.');
-  }
+  if (!v.tryOnAvailable) parts.push('Pieces cannot be put on their photo here: never offer a try-on.');
 
-  // Work in progress: the result is not on screen yet, so it must not be described.
+  // Work in progress: its result is not on screen yet, so it must not be described.
   const j = v.jobs;
   if (j.photo) parts.push('A new photo is coming in right now.');
-  if (j.tryOn) parts.push(`Right now the app is putting the ${j.tryOn} on their photo: it is NOT on their screen yet. Never say it is on them or describe it; the app tells you when it lands.`);
-  if (j.queued.length) parts.push(`Waiting after it: ${j.queued.join(', ')}.`);
-  if (j.analysing) parts.push(a ? 'The app is re-reading the look right now: the score above is the previous one; the new one follows.' : "The app is reading their photo right now: there is no score yet. Don't guess one; the app tells you in a moment.");
-  if (j.more) parts.push('The app is finding more pieces right now.');
+  if (j.tryOn) parts.push(`Notch is putting the ${j.tryOn} on their photo right now: it is NOT on their screen yet. Never say it is on them or describe it; you will be told when it lands.`);
+  if (j.queued.length) parts.push(`Waiting to go on after it: ${j.queued.join(', ')}.`);
+  if (j.analysing) parts.push(a ? 'Notch is re-reading the outfit right now: the verdict above is the previous one; the new one follows.' : "Notch is reading their photo right now: there is no score yet. Don't guess one.");
+  if (j.more) parts.push('More pieces are on their way to the rail.');
 
   return parts.join(' ');
 }
 
-// -- events: outcomes, in the avatar's own words ---------------------------------
+// -- what the stylist engine reports ------------------------------------------------
+//
+// Each is a tool result (Emery asked) or the outcome in an event (the user
+// pressed something). Facts first, then how to say them. None asks Emery to
+// act on her own: an offer is "ask whether…; only if they say yes".
 
 const ev = (text: string, ttl: number, extra: Partial<SayEvent> = {}): SayEvent => ({ text, ttl, ...extra });
 
+/** Lines the original spoke word for word, kept as examples of the voice. */
+export const TRY_ON_ACK_LINES = [
+  'Good call, {item} could change the whole read. Give me a sec to get it on you.',
+  "Let's test {item} and see if it earns the outfit. Hang tight.",
+  'Perfect, {item} should tell us something fast.',
+  "On it, I want to see how {item} changes the balance.",
+];
+export const TRY_ON_INTRO_LINES = [
+  'There it is, let me take in the new look.',
+  'Okay, let me see you with the {item} on.',
+  'Let me get a good look at the {item} on you.',
+];
+const pick = (options: readonly string[], n: number) => options[((n % options.length) + options.length) % options.length];
+const fill = (line: string, values: Record<string, string>) => line.replace(/\{(\w+)\}/g, (_, k) => values[k] ?? '');
+
+const askForPhoto = `ask them to add a photo of their outfit ${WHERE_PHOTOS_GO}`;
+
 export const say = {
-  start: () => ev("Open the styling session in your own words: one warm sentence that you are about to read their look and help them style it, then ask their name. Don't mention steps or apps.", 60),
-
   named: (v: View, styleToo = false) => ev(styleToo
-    ? `They told you their name, ${v.name}, and the look they're going for, ${targetPhrase(v)}. Greet them by name, confirm the look in a few words and ${afterStyle(v)}.`
-    : `They told you their name: ${v.name}. Greet them by it, then ${v.step === 'styling' ? 'carry on' : afterName(v)}.`, 30, { ack: !styleToo }),
+    ? `Their name is ${v.name} and they're dressing for ${occasionOf(v.target)}. Greet them by name, confirm the occasion in a few words, and ${v.image ? 'say the verdict is on its way' : askForPhoto}.`
+    : `Their name is ${v.name}. Greet them by it and carry on.`, 30),
 
-  nameSkipped: (v: View) => ev(`They'd rather not give a name: that's fine, never ask for it again. Say something warm like "No bother, we don't need a name for this", then ${afterName(v)}.`, 30, { ack: true }),
+  nameSkipped: () => ev("They'd rather not give a name: that's fine, never ask for it again.", 30),
 
-  styleSet: (v: View, n = 0) => ev(`They're going for ${targetPhrase(v)}. Confirm it in a few words (a line like "${fill(pick(STYLE_CONFIRM_LINES, n), { style: targetPhrase(v) })}"), then ${v.step === 'name' ? 'ask their name' : afterStyle(v)}.`, 30, { ack: true }),
+  styleSet: (v: View) => ev(v.image
+    ? `They're dressing for ${occasionOf(v.target)}; their photo is being read for it now. Say so in a few words; the verdict follows. Don't guess it.`
+    : `Noted: they're dressing for ${occasionOf(v.target)}. There's no photo yet, so nothing to rate: confirm the occasion in a few words and ${askForPhoto}.`, 30),
 
-  photoHow: () => ev("They agreed to share a photo. Tell them to drop or upload a photo of their outfit on the right, or tap Try a sample; you can't open their camera.", 30, { ack: true }),
+  photoHow: () => ev(`They agreed to share a photo: tell them to add it ${WHERE_PHOTOS_GO}. You can't open their camera.`, 30),
 
-  photoDeclined: (v: View) => ev(`They'd rather not share a photo: that is final, never ask again. Say something like "No problem, we can skip the photo entirely. ${v.describedOutfit ? 'I have what you described, so let\'s sharpen it from there.' : 'Tell me what you are wearing and I will style it from your words.'}"`, 30, { ack: true }),
+  photoDeclined: (v: View) => ev(`They'd rather not share a photo: that's final, never ask again. Say something like "No problem, we can skip the photo. ${v.describedOutfit ? "I have what you described, so let's sharpen it from there." : 'Tell me what you are wearing and I will style it from your words.'}"`, 30),
 
-  photoReceived: (v: View, n = 0) => ev(v.target
-    ? `Their photo is in and the app is reading it now. Say a short line like "${fill(pick(READING_LINES, n), { target: targetPhrase(v) })}" Don't guess anything about the photo; the read follows.`
-    : "Their photo is in. Before it can be read, ask them what style they're going for.", 20),
+  photoReceived: (v: View) => ev(v.target
+    ? `Their photo is in and Notch is reading it for ${occasionOf(v.target)} now. Say a few words while it reads; don't guess anything about it.`
+    : "Their photo is in. To rate it, ask what they're dressing for.", 20),
 
-  photoNeedsStyle: (v: View) => ev(v.step === 'name'
-    ? "Their photo is in. Carry on: ask their name, then the look they're going for; the app reads the photo as soon as it knows the look."
-    : "Their photo is in, but you don't know the look they're going for yet: ask them, and the app reads the photo as soon as they tell you.", 30),
+  photoNeedsStyle: () => ev("Their photo is in, but you don't know what they're dressing for yet, so it can't be rated: ask them. It's rated as soon as they tell you.", 30),
 
-  /** The read is in: the composed brief the original spoke, as instructions. */
+  /** The verdict is in: the score (and its change after a try-on), what works, the one fix, the next piece. */
   analysis(v: View, ctx: { previousScore?: number; added?: string; wish?: string } = {}): SayEvent {
     const a = v.analysis!;
-    const target = targetPhrase(v) || 'their target';
+    const occasion = occasionOf(v.target) || 'their occasion';
     const score = a.style_score;
-    const reaction = score >= 8 ? 'it is working' : score >= 5 ? 'there is something to work with, but it needs editing' : 'it needs a clearer point of view';
+    const reaction = score >= 8 ? 'it works' : score >= 5 ? 'a good base that needs one edit' : 'it needs a clearer point of view';
     const lines = [ctx.added
-      ? `The app has re-read the look with the ${ctx.added} on: ${score} out of 10 for ${target}.`
-      : `The app's read of their look is in: ${score} out of 10 for ${target} ("${a.style_summary}").`];
+      ? `With the ${ctx.added} on, the outfit scores ${score} out of 10 for ${occasion}.`
+      : `The verdict: ${score} out of 10 for ${occasion} ("${a.style_summary}").`];
     if (ctx.added && ctx.previousScore !== undefined) {
       const delta = score - ctx.previousScore;
       const item = ctx.added.slice(0, 60).trimEnd();
@@ -219,58 +203,100 @@ export const say = {
         : delta < 0 ? `The ${item} hurts the balance by ${-delta} (it was ${ctx.previousScore}).`
           : `The ${item} keeps the score steady at ${score}, so fit decides it.`);
     }
-    lines.push(`Tell them in your own words, in two or three short sentences: a quick reaction (${reaction}), the score, what works ("${a.what_works}") and the one fix ("${a.style_tip}").`);
+    lines.push(`What works: ${a.what_works} The one fix: ${a.style_tip}`);
+    lines.push(`Tell them in your own words, in two or three short sentences: your reaction (${reaction}), the score, what works and the one fix.`);
     const next = nextPiece(v, ctx.wish);
     let offer: string | undefined;
     if (next && v.tryOnAvailable) {
       offer = next.item;
-      lines.push(`Then ask if they want to try on the ${next.item}${next.reason === 'they asked for it earlier' ? ', which they asked about earlier' : a.tried_items.length ? ' next' : ' first'}.`);
+      const which = next.reason === 'they asked for it earlier' ? ', which they asked about earlier' : a.tried_items.length ? ' next' : '';
+      lines.push(`Then ask whether they'd like to try on the ${next.item}${which}; put it on only if they say yes.`);
     } else if (next) {
-      lines.push(`Then suggest the ${next.item} as the next piece to add (try-ons are off here, so don't offer to put it on them).`);
+      lines.push(`Then name the ${next.item} as the piece to add, with why in a few words.`);
     } else {
-      lines.push('Then suggest one sharper styling point.');
+      lines.push('Then give one sharper styling point.');
     }
     return ev(lines.join(' '), 60, offer ? { offer } : {});
   },
 
-  analysisFailed: () => ev("The app's read of the look didn't come through this time. Say so in a few words and offer to try again; never make up a score.", 30),
+  analysisFailed: () => ev("The verdict didn't come through this time. Say so in a few words and offer to rate it again; never make up a score.", 30),
 
-  tryOnAck: (item: string, n = 0) => ev(`They asked to try on the ${item}; the app is putting it on their photo now (about 15 seconds). Say one short line like "${fill(pick(TRY_ON_ACK_LINES, n), { item: `the ${item}` })}" It is not on yet: don't describe it.`, 15, { ack: true }),
+  tryOnAck: (item: string, n = 0) => ev(`Putting the ${item} on their photo now: it takes about 20 seconds and it is not on yet. Say so in a few words, like "${fill(pick(TRY_ON_ACK_LINES, n), { item: `the ${item}` })}", and don't describe it; you'll be told when it's on their screen.`, 20),
 
-  tryOnBusy: (busy: string, item: string, n = 0) => ev(`They asked to try on the ${item} while the ${busy} is still being put on. Say a short line like "${fill(pick(TRY_ON_BUSY_LINES, n), { busy: `the ${busy}`, item: `the ${item}` })}"`, 15, { ack: true }),
+  tryOnBusy: (busy: string, item: string) => ev(`The ${busy} is still going on, so the ${item} goes on right after it (about 20 seconds each). Say so in a few words; neither is on yet.`, 20),
 
-  tryOnOnScreen: (item: string, n = 0) => ev(`The ${item} is on their photo now, on their screen. Say a short line like "${fill(pick(TRY_ON_INTRO_LINES, n), { item })}" You can't see the picture, so don't describe it; the app's new score follows in a moment.`, 20),
+  tryOnOnScreen: (item: string, n = 0) => ev(`The ${item} is on their photo now, on their screen. React in a few words, like "${fill(pick(TRY_ON_INTRO_LINES, n), { item })}". You can't see it, so don't describe it; its new score follows in a moment.`, 20),
 
-  tryOnHidden: (item: string) => ev(`They asked to try on the ${item}, but their ${zoneIsNot(inferItemBodyZone(item))} in the photo, so the app can't add it. Say so in one sentence (something like "I can't add the ${item} right now; that area isn't visible") and suggest a photo that shows it.`, 30),
+  tryOnHidden: (item: string) => ev(`The ${item} can't go on: their ${zoneIsNot(inferItemBodyZone(item))} in the photo. Say so in one sentence and suggest a photo that shows it.`, 30),
 
-  tryOnSelf: () => ev("They asked to see their current look: it's already on their screen. Say so in a few words and ask which piece they want to add.", 20),
+  tryOnSelf: () => ev("That's their current look, already on their screen. Ask which piece they'd like to add.", 20),
 
-  tryOnNeedsPhoto: (item: string) => ev(`They asked to try on the ${item}, but there is no photo yet. Say you need a photo of the outfit first (they drop or upload it on the right) and you'll come straight back to the ${item}.`, 30),
+  tryOnNeedsPhoto: (item: string) => ev(`There's no photo to put the ${item} on yet: ${askForPhoto}. The ${item} is kept and offered first once the photo is read.`, 30),
 
-  tryOnUnavailable: (item: string) => ev(`They asked to try on the ${item}, but try-ons are switched off in this demo (no image model is set up), so nothing will appear on their photo. Say that plainly in a few words, then tell them in words how the ${item} would change the look. Never say it is on them.`, 30),
+  tryOnUnavailable: (item: string) => ev(`Pieces can't be put on their photo here, so the ${item} stays on the rail. Say so in a few words and tell them how it would change the look; never say it is on them.`, 30),
 
-  tryOnFailed: (item: string, unusable: boolean) => ev(unusable
-    ? `The ${item} try-on didn't give a usable picture. Say a short line like "That ${item} did not give us a usable look. Want a simpler version?"`
-    : `The ${item} try-on didn't come through. Say a short line like "That ${item} did not land cleanly. Want me to retry it?"`, 30),
+  tryOnFailed: (item: string, unusable: boolean) => ev(`The ${item} ${unusable ? "didn't give a usable picture" : "didn't come through"}; their photo is unchanged. Say so in a few words and ask whether to try it again; only try again if they say yes.`, 30),
 
   moreReady(names: string[], triedAny: boolean, tryOnAvailable: boolean): SayEvent {
-    if (!names.length) return ev("The app found no new pieces this time. Say something like \"I do not see a stronger visible move yet.\"", 30);
+    if (!names.length) return ev("No new pieces this time. Say there's no stronger move than what's on the rail, and point to one there.", 30);
     const list = names.slice(0, 3).join(', ');
-    const ask = tryOnAvailable ? `Ask if they want to try on the ${names[0]} ${triedAny ? 'next' : 'first'}` : `Suggest the ${names[0]} as the strongest next move`;
-    return ev(`More pieces are on their screen now, among them ${list}. ${ask}, in one short sentence.`, 45, tryOnAvailable ? { offer: names[0] } : {});
+    const ask = tryOnAvailable
+      ? `then ask whether they'd like to try on the ${names[0]}${triedAny ? ' next' : ''}; put it on only if they say yes`
+      : `and say why the ${names[0]} is the strongest move`;
+    return ev(`${names.length} new piece${names.length === 1 ? ' is' : 's are'} on the rail now, among them ${list}. Name one or two in a sentence, ${ask}.`, 45, tryOnAvailable ? { offer: names[0] } : {});
   },
 
-  moreCapped: (count: number) => ev(`They asked for more pieces, but ${count} are already on their screen, the most this board holds. Say so lightly and point them at one of those.`, 20),
+  moreCapped: (count: number) => ev(`The rail is full: ${count} pieces are already on their screen. Say so lightly and point them to one of those.`, 20),
 
-  needsRead: (what: string) => ev(`They asked ${what}, but there is no read of a photo yet. Say you need a photo of the outfit first (they drop or upload it on the right).`, 20),
+  needsRead: (what: string) => ev(`They asked ${what}, but there is no photo to read yet: ${askForPhoto}.`, 20),
 
-  retargeting: (v: View) => ev(`They want the look read as ${targetPhrase(v)} now. Say a few words like "Reading it as ${targetPhrase(v)} now"; the app's new score follows. Don't guess it.`, 15, { ack: true }),
+  retargeting: (v: View) => ev(`Reading the same outfit for ${occasionOf(v.target)} now; the verdict follows. Don't guess it.`, 15),
 
-  steer: (direction: string) => ev(`They want the next pieces to lean ${direction}. Say something like "Nice, I will steer the next pieces toward ${direction}."`, 15, { ack: true }),
+  steer: (direction: string) => ev(`Leaning the next pieces ${direction}; they follow in a moment.`, 15),
 
-  retake: () => ev("They want a new photo. Tell them to drop or upload it on the right (or tap Try a sample); you can't open their camera.", 20, { ack: true }),
+  retake: () => ev(`They want a new photo: they add it ${WHERE_PHOTOS_GO}. You can't open their camera.`, 20),
 
-  reset: () => ev("They went back to their own photo: the app took the try-ons off and is reading it fresh. Say something like \"Back to your own look. I am reading it fresh.\"", 15, { ack: true }),
+  reset: () => ev('Back to their own photo, every try-on off; it is being rated fresh. The verdict follows.', 15),
+};
 
-  notice: (text: string) => ev(text, 20),
+// -- the fitting's own words ----------------------------------------------------------
+
+export const said = {
+  /** The first thing Emery hears once she is in: where the fitting stands (called back: the same fitting, carried on). */
+  opening(v: View, back = false): string {
+    const hello = back
+      ? 'They called you back to carry on the same fitting. Greet them briefly, then'
+      : 'A fitting on Notch starts. Welcome them warmly in one sentence as their stylist, then';
+    if (v.analysis && !v.jobs.analysing) return `${hello} give them the verdict on their screen. ${say.analysis(v).text}`;
+    if (v.jobs.photo || v.jobs.analysing) return `${hello} say their photo is being read for ${occasionOf(v.target)} right now; you'll be told the verdict. Don't guess it.`;
+    if (v.image && !v.target) return `${hello} say you have their photo and ask what they're dressing for.`;
+    if (v.target) return `${hello} confirm they're dressing for ${occasionOf(v.target)} and ${askForPhoto}.`;
+    return `${hello} ask what they're dressing for today. They can add a photo of their outfit ${WHERE_PHOTOS_GO}, whenever they like.`;
+  },
+
+  /** A button press, told to Emery: she cannot see the screen. */
+  pressed: (what: string, outcome: string) => `The user ${what} on screen. ${outcome}`,
+
+  noOccasion: () => "Nothing to rate against yet: ask what they're dressing for.",
+  readRunning: (v: View) => `Their photo is being read for ${occasionOf(v.target)} right now: the verdict lands in a moment and you'll be told. Say so in a few words; don't guess it.`,
+  noVerdictYet: () => "The first verdict isn't in yet, and the pieces come with it. Say so in a few words.",
+  tryOnRunning: (item: string) => `The ${item} is still going on; its new score follows by itself and you'll be told. Say so in a few words.`,
+  alreadyOwn: () => 'Their own photo is already in the mirror with nothing added, so there is nothing to take off.',
+  alreadyGoing: (item: string) => `The ${item} is already on its way onto their photo; you'll be told when it lands.`,
+  moreOnTheWay: () => "More pieces are already on their way to the rail; you'll be told. Say so in a few words.",
+  whichPiece: () => "It isn't clear which piece they mean: ask them to name it (one on the rail, or any garment).",
+  notAPiece: (words: string) => `"${cleanSingleLine(words, 60)}" isn't a piece of clothing to put on: ask which piece they mean.`,
+
+  steered(v: View, direction: string): string {
+    if (v.notice?.kind === 'error') return `The fresh pieces didn't come through this time. Say so in a few words and offer to try again; only if they say yes.`;
+    const names = v.analysis?.suggestions.slice(0, 3).map((s) => s.item) ?? [];
+    if (!names.length) return `No pieces came back leaning ${direction}. Say so and give one styling idea in words.`;
+    const ask = v.tryOnAvailable ? `; ask whether they'd like to try on the ${names[0]}, and put it on only if they say yes` : '';
+    return `The rail now leans ${direction}: ${names.join(', ')} first. Name one or two in a sentence${ask}.${v.analysis ? ` The verdict was refreshed with it: ${v.analysis.style_score} out of 10 for ${occasionOf(v.target)}.` : ''}`;
+  },
+
+  /** A tool's result that outlived the call. */
+  stillWorking: () => "Still working on it (it can take up to half a minute). Tell them it's coming in a few words; you'll be told the moment it lands. Don't guess the result.",
+  late: (text: string) => `What you were waiting for just landed. ${text}`,
+  lost: () => "That didn't come through this time. Say so in a few words and offer to try again; only try again if they say yes.",
 };

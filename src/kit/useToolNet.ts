@@ -16,8 +16,8 @@ const EARLY_MS = 6000;
 export function useToolNet(opts: {
   /** The tool call the player's words clearly ask for, or null. Only for actions that are safe to repeat. */
   match: (text: string) => ToolCall | null;
-  /** Runs a call the way the host's call would run; its result is what the host is told. */
-  run: (call: ToolCall) => Promise<string>;
+  /** Runs a call the way the host's call would run; its result is what the host is told. Null or undefined: nothing to do now (stand down quietly). */
+  run: (call: ToolCall) => Promise<string | null | undefined>;
   avatar: () => Avatar;
   waitMs?: number;
 }) {
@@ -40,6 +40,7 @@ export function useToolNet(opts: {
       if (calls.current.some((c) => c.name === wanted.name && c.at >= at - EARLY_MS)) return;
       calls.current.push({ name: wanted.name, at: Date.now() });
       void optsRef.current.run(wanted).then((result) => {
+        if (result === null || result === undefined) return;
         optsRef.current.avatar().event(`You did not call ${wanted.name}, so the app did it for the player just now: ${result} Carry on from this, and if you said something different a moment ago, correct it briefly.`, 30);
       }).catch((err) => console.warn('[tools] safety net failed:', err));
     }, optsRef.current.waitMs ?? WAIT_MS);

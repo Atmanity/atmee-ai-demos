@@ -80,18 +80,17 @@ describe('onboarding: name, style, photo', () => {
     expect(stylist.view().step).toBe('name');
     const named = stylist.act({ type: 'name', name: 'Sam' });
     expect(named.view.step).toBe('style');
-    expect(named.events[0]).toMatchObject({ ack: true });
     expect(named.events[0].text).toContain('Sam');
     const styled = stylist.act({ type: 'style', style: 'smart casual' });
     expect(styled.view.step).toBe('photo');
     expect(styled.events[0].text).toContain('smart casual');
-    expect(styled.events[0].text).toMatch(/drop or upload/);
+    expect(styled.events[0].text).toMatch(/add a photo of their outfit on the mirror/);
 
     const photo = stylist.act({ type: 'photo', mime: 'image/jpeg', data: PHOTO, source: 'upload' });
     expect(photo.job?.milestones).toEqual(['image', 'done']);
     expect(photo.view.step).toBe('styling');
     expect(photo.view.image?.kind).toBe('look');
-    expect(texts(photo.events)).toMatch(/reading it now/i);
+    expect(texts(photo.events)).toMatch(/reading it for smart casual now/);
     const [image, done] = await settle(stylist, photo);
     expect(image.view.jobs.analysing).toBe(true);   // no "no read" flash between the photo and its read
     expect(done.view.analysis?.style_score).toBe(6);
@@ -104,7 +103,6 @@ describe('onboarding: name, style, photo', () => {
     const { stylist } = studio();
     const out = stylist.act({ type: 'name', name: 'Sam', style: 'smart casual' });
     expect(out.view.step).toBe('photo');
-    expect(out.events[0].ack).toBe(false);   // the avatar's staged answer only covered the name
     expect(out.events[0].text).toContain('smart casual');
   });
 
@@ -122,7 +120,7 @@ describe('onboarding: name, style, photo', () => {
     stylist.act({ type: 'skipName' });
     const photo = stylist.act({ type: 'photo', mime: 'image/jpeg', data: PHOTO, source: 'upload' });
     const [, done] = await settle(stylist, photo);
-    expect(texts(done.events)).toMatch(/don't know the look/);
+    expect(texts(done.events)).toMatch(/don't know what they're dressing for/);
     expect(models.reads).toHaveLength(0);
     const styled = stylist.act({ type: 'style', style: 'streetwear' });
     expect(styled.job).toBeDefined();
@@ -186,11 +184,11 @@ describe('a refused try-on', () => {
     expect(out.job).toBeUndefined();
     expect(models.tryOns).toEqual([]);
     expect(out.view.jobs.tryOn).toBeNull();   // nothing latches the board busy
-    // The avatar must not acknowledge a try-on that never happened.
-    expect(out.events.some((e) => e.ack)).toBe(false);
+    // The host must not hear of a try-on that never happened.
+    expect(out.events[0].text).not.toMatch(/Putting the/);
     expect(out.events[0].text).toContain('white sneakers');
     expect(out.events[0].text).toContain("feet aren't in the photo");
-    expect(out.view.notice?.text).toBe('Cannot add white sneakers: body area not currently visible.');
+    expect(out.view.notice?.text).toBe("The white sneakers can't go on: your feet aren't in the photo.");
   });
 
   test('your own current look is refused the same way', async () => {
@@ -209,21 +207,21 @@ describe('a refused try-on', () => {
     expect(models.tryOns).toEqual([]);
   });
 
-  test('with no image model the avatar is told plainly, and nothing is promised', async () => {
+  test('with no image model the host is told plainly, and nothing is promised', async () => {
     const models = new FakeModels();
     models.tryOnAvailable = false;
     const { stylist } = await styled(models);
     const out = stylist.act({ type: 'tryOn', item: 'Camel Wool Topcoat' });
     expect(out.job).toBeUndefined();
-    expect(out.events[0].text).toMatch(/switched off/);
-    expect(out.events[0].text).toContain('Never say it is on them');
+    expect(out.events[0].text).toMatch(/can't be put on their photo here/);
+    expect(out.events[0].text).toContain('never say it is on them');
   });
 
   test('before there is a photo, the piece is remembered and offered first once there is one', async () => {
     const { stylist } = studio();
     stylist.act({ type: 'name', name: 'Sam', style: 'smart casual' });
     const early = stylist.act({ type: 'tryOn', item: 'black fedora hat' });
-    expect(early.events[0].text).toMatch(/photo of the outfit first/);
+    expect(early.events[0].text).toMatch(/no photo to put the black fedora hat on yet/);
     const [, done] = await settle(stylist, stylist.act({ type: 'photo', mime: 'image/jpeg', data: PHOTO, source: 'upload' }));
     expect(done.events[0].offer).toBe('black fedora hat');
     expect(done.events[0].text).toContain('asked about earlier');
@@ -238,8 +236,8 @@ describe('an accepted try-on', () => {
     const out = stylist.act({ type: 'tryOn', item: 'navy tie', text: 'Sharpens the neckline.' });
     // Resolved to the card on screen, and acknowledged by name.
     expect(out.events).toHaveLength(1);
-    expect(out.events[0]).toMatchObject({ ack: true });
     expect(out.events[0].text).toContain('Slim Navy Silk Tie');
+    expect(out.events[0].text).toContain('about 20 seconds');
     expect(out.view.jobs.queued).toEqual(['Slim Navy Silk Tie']);
     const [image, done] = await settle(stylist, out);
     expect(models.tryOns[0]).toContain('Add Slim Navy Silk Tie to this person');
@@ -260,7 +258,7 @@ describe('an accepted try-on', () => {
     models.tryOnResult = 'throw';
     const { stylist } = await styled(models);
     const [image] = await settle(stylist, stylist.act({ type: 'tryOn', item: 'Camel Wool Topcoat' }));
-    expect(image.events[0].text).toMatch(/did not land cleanly/);
+    expect(image.events[0].text).toMatch(/didn't come through; their photo is unchanged/);
     expect(image.view.image?.kind).toBe('look');
     expect(image.view.notice?.text).toContain('Camel Wool Topcoat');
     expect(stylist.tried).toEqual([]);
@@ -308,7 +306,6 @@ describe('the read and the pieces', () => {
     const { stylist, models } = await styled();
     const calls = models.suggestCalls;
     const out = stylist.act({ type: 'retarget', style: 'wedding' });
-    expect(out.events[0]).toMatchObject({ ack: true });
     expect(out.events[0].text).toContain('wedding');
     const [done] = await settle(stylist, out);
     expect(models.reads.at(-1)?.target).toBe('wedding');
@@ -375,7 +372,7 @@ describe('the read and the pieces', () => {
     expect(suggestions).toHaveLength(MAX_TRACKED_SUGGESTIONS);
     expect(suggestions[0].item).toBe(first);
     expect(stylist.view().canLoadMore).toBe(false);
-    expect(stylist.act({ type: 'more' }).events[0].text).toContain(`${MAX_TRACKED_SUGGESTIONS} are already on their screen`);
+    expect(stylist.act({ type: 'more' }).events[0].text).toContain(`${MAX_TRACKED_SUGGESTIONS} pieces are already on their screen`);
   });
 
   test('more pieces loaded by scrolling come quietly, as the original panel loaded them', async () => {

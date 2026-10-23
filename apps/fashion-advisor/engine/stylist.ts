@@ -5,11 +5,11 @@
 //
 // Framework-free: the model calls come in through `Models` (server.ts wires
 // Gemini and xAI; the tests wire fakes), and everything it says goes out as
-// event texts from director.ts.
+// texts from director.ts (fitting.ts turns them into tool results and events).
 import { say } from './director.ts';
 import {
   ALL_BODY_ZONES, buildAmazonSearchUrl, buildAmazonShopLinks, buildItemAttributes, CURRENT_LOOK_LABEL, cleanSingleLine, inferItemBodyZone,
-  isNonGarmentSelfReference, itemsMatch, markItemTried, resolveSuggestionItemName, titleCase, withThumbnails, type AmazonConfig,
+  isNonGarmentSelfReference, itemsMatch, markItemTried, resolveSuggestionItemName, titleCase, withThumbnails, ZONE_WORDS, type AmazonConfig,
 } from './items.ts';
 import { looksLikeNonName, MAX_NAME_ATTEMPTS, MAX_PHOTO_CONSENT_ASKS } from './judge.ts';
 import { FALLBACK_SUGGESTIONS, tryOnPrompt, type CleanAnalysis } from './prompts.ts';
@@ -171,7 +171,7 @@ export class Stylist {
       case 'skipName': {
         this.nameSkipped = true;
         this.touch();
-        return this.out(true, [say.nameSkipped(this.view())]);
+        return this.out(true, [say.nameSkipped()]);
       }
       case 'style':
         if (this.step === 'styling' && this.current) return this.retarget(c.style);
@@ -224,7 +224,7 @@ export class Stylist {
     if (!target) return this.out(false, []);
     this.target = target;
     this.touch();
-    const events = [say.styleSet(this.view(), this.lines++)];
+    const events = [say.styleSet(this.view())];
     if (!this.current) return this.out(true, events);
     // A photo came first: read it now.
     const queued = this.queued(['done'], () => this.read({ context: 'Initial camera look', refresh: true }));
@@ -248,7 +248,7 @@ export class Stylist {
     this.category = direction;
     if (!this.target) this.target = cleanSingleLine(style, 140);
     this.touch();
-    if (!this.current) return this.out(true, [say.styleSet(this.view(), this.lines++)]);
+    if (!this.current) return this.out(true, [say.styleSet(this.view())]);
     // The original's RefreshSuggestionsJob: a quiet re-read with fresh pieces.
     const queued = this.queued(['done'], () => this.read({ context: 'Refreshing suggestions after preference change', refresh: true, narrate: false }));
     return { ...queued, events: [say.steer(direction)] };
@@ -308,10 +308,10 @@ export class Stylist {
       this.touch();
       mark('image', []);
       if (this.base?.token !== token) return [];   // a newer photo replaced it; that one gets the read
-      if (!this.target) return [say.photoNeedsStyle(this.view())];
+      if (!this.target) return [say.photoNeedsStyle()];
       return this.read({ context: 'Initial camera look', refresh: true });
     });
-    return { ...accepted, events: this.target ? [say.photoReceived(this.view(), this.lines++)] : [] };
+    return { ...accepted, events: this.target ? [say.photoReceived(this.view())] : [] };
   }
 
   private tryOn(raw: string, detail: string): Outcome {
@@ -328,12 +328,13 @@ export class Stylist {
     // before the outcome is known is the avatar confirming a try-on that
     // never happened (the original's worst failure mode, with a frozen board).
     if (!this.isVisible(item)) {
-      this.notice = { kind: 'error', text: `Cannot add ${item}: body area not currently visible.` };
+      const zone = inferItemBodyZone(item);
+      this.notice = { kind: 'error', text: `The ${item} can't go on: your ${ZONE_WORDS[zone]} ${zone === 'feet' || zone === 'wrist' ? "aren't" : "isn't"} in the photo.` };
       this.touch();
       return this.out(true, [say.tryOnHidden(item)]);
     }
     if (!this.models.tryOnAvailable) {
-      this.notice = { kind: 'info', text: `Try-ons are off in this demo (no image model), so ${item} can't be put on your photo.` };
+      this.notice = { kind: 'info', text: `Pieces can't be tried on your photo right now, so the ${item} stays on the rail.` };
       this.touch();
       return this.out(true, [say.tryOnUnavailable(item)]);
     }
@@ -344,7 +345,7 @@ export class Stylist {
     const prompt = tryOnPrompt(item, detail, normalizeStyleCategory(this.category));
     this.jobs.queued.push(item);
     this.touch();
-    const ack = busy ? say.tryOnBusy(busy, item, this.lines++) : say.tryOnAck(item, this.lines++);
+    const ack = busy ? say.tryOnBusy(busy, item) : say.tryOnAck(item, this.lines++);
     const accepted = this.queued(['image', 'done'], async (mark) => {
       this.jobs.queued.splice(this.jobs.queued.indexOf(item), 1);
       const source = this.current;
@@ -357,14 +358,14 @@ export class Stylist {
       } catch {
         result = null;
         this.jobs.tryOn = null;
-        this.notice = { kind: 'error', text: `Couldn't generate ${item}. Try again.` };
+        this.notice = { kind: 'error', text: `The ${item} didn't come out. Try it again.` };
         this.touch();
         mark('image', [say.tryOnFailed(item, false)]);
         return [];
       }
       this.jobs.tryOn = null;
       if (!result) {
-        this.notice = { kind: 'error', text: `Couldn't generate ${item}. Try again.` };
+        this.notice = { kind: 'error', text: `The ${item} didn't come out. Try it again.` };
         this.touch();
         mark('image', [say.tryOnFailed(item, true)]);
         return [];
@@ -452,7 +453,7 @@ export class Stylist {
         keepPieces ? Promise.resolve([]) : this.models.suggest({ image: shown.img, zones: this.zones, target: this.targetBrief(), recent: this.tried }).catch(() => []),
       ]);
       if (!read) {
-        this.notice = { kind: 'error', text: 'The style read did not come through. Try "Rate it again".' };
+        this.notice = { kind: 'error', text: 'The verdict didn\'t come through. Tap "Rate it again".' };
         return opts.narrate === false ? [] : [say.analysisFailed()];
       }
       // Pieces appended while this read ran are kept too.

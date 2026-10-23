@@ -1,277 +1,325 @@
-// Fashion Advisor: the avatar styles; the server's stylist owns the photo, the
-// read, the pieces and the try-ons. Every action has a control on the board;
-// the same actions typed or spoken go through the server's judge first. The
-// page keeps the avatar's state in step with the board and passes outcomes on
-// as events, so the avatar never claims a try-on or a score the app has not
-// produced.
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { AvatarStage, Composer, Transcript, useAvatar } from '../../../src/kit/index.ts';
-import { boardState, NOTES } from '../engine/director.ts';
-import { CURRENT_LOOK_LABEL } from '../engine/items.ts';
-import { consumes, extractTryOnOffer } from '../engine/judge.ts';
-import { STYLE_CHIPS } from '../engine/style.ts';
-import type { Command, Outcome, SayEvent, View } from '../engine/types.ts';
-import { FashionPanel, type FashionImage } from './FashionPanel.tsx';
-import { Onboarding, PhotoDrop } from './Onboarding.tsx';
+// Notch: a fitting with Emery. Emery calls the fitting's tools (rate the
+// outfit, more pieces, try one on, back to the own photo) and speaks from
+// their results; the page answers those calls through the server, shows the
+// mirror, the verdict and the rail, keeps Emery's picture of the board
+// current, and tells her about every button press. The board works with or
+// without her: a photo, an occasion and a verdict need no call.
+import { useEffect, useRef, useState } from 'react';
+import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, type ToolCall } from '../../../src/kit/index.ts';
+import { boardState, HOST, said } from '../engine/director.ts';
+import type { Ran, Step } from '../engine/fitting.ts';
+import { mustDo } from '../engine/judge.ts';
+import type { Milestone, View } from '../engine/types.ts';
+import { Mirror, OccasionPicker, Rail, Verdict } from './Fitting.tsx';
+import { Lobby, Logo } from './Lobby.tsx';
+import { Notes, type Rating } from './Notes.tsx';
 import { preparePhoto } from './photo.ts';
-import sampleUrl from './sample-outfit.jpg';
-import './fashion.css';
+import exampleOutfit from './sample-outfit.jpg';
+import './notch.css';
 
 const API = '/api/apps/fashion-advisor';
-/** How long the avatar's offer of a piece stands for a bare "yes" (the original's 30 s). */
-const OFFER_TTL_MS = 30_000;
+/** How long a tool call waits for slow work before Emery hears "still working" (the tools time out at 25 s). */
+const TOOL_WAIT_MS = 20_000;
+/** The kit's safety net acts 7 s after the words and counts calls from 6 s before them. */
+const NET_WINDOW_MS = 13_000;
 
-type From = 'spoken' | 'typed' | 'button';
+type Button =
+  | { button: 'photo'; mime: string; data: string; example: boolean }
+  | { button: 'occasion'; occasion: string }
+  | { button: 'tryOn'; piece: string; why: string }
+  | { button: 'rerate' | 'more' | 'restore' };
 
-async function call<T>(path: string, body?: unknown): Promise<T> {
+async function request<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(API + path, body === undefined ? undefined : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error(`${path}: ${res.status}`);
   return res.json();
 }
 
-/** What the image stage shows: a try-on being rendered over the last image, the image on screen, or the photo just dropped. */
-function stageImage(view: View | null, preview: string | null): FashionImage | null {
-  if (preview) return { status: 'result', item: CURRENT_LOOK_LABEL, image_url: preview };
-  if (!view) return null;
-  if (view.jobs.tryOn) return { status: 'loading', item: view.jobs.tryOn, previous_image_url: view.image?.url };
-  if (view.image) return { status: 'result', item: view.image.item, image_url: view.image.url, shop_links: view.image.shop_links };
-  return null;
-}
+/** The sentence being spoken, for the phone's host strip. */
+const lastWords = (text: string) => {
+  const sentences = text.trim().split(/(?<=[.!?…])\s+/);
+  const line = sentences.pop() ?? '';
+  return line.length > 110 ? `…${line.slice(-110)}` : line;
+};
+
+const PencilIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z" /></svg>;
 
 export function App() {
   const [view, setView] = useState<View | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [photoError, setPhotoError] = useState('');
-  const [ready, setReady] = useState('');        // "<item> is ready." for a moment after a try-on lands
-  const [picking, setPicking] = useState(false); // the target picker on the toolbar
+  const [trouble, setTrouble] = useState('');
+  const [roomFailed, setRoomFailed] = useState(false);
+  const [ratings, setRatings] = useState<Rating[]>([]);
+  const [notes, setNotes] = useState(false);
+  const [picking, setPicking] = useState(false);
   const studio = useRef<string | null>(null);
+  const opening = useRef(false);        // a fitting room is being opened
+  const openingOwed = useRef(false);    // Emery arrived before the room was open
+  const lastArrival = useRef<string | null>(null);   // the fitting Emery last arrived to
   const rev = useRef(-1);
-  const offer = useRef<{ item: string; at: number } | null>(null);
+  const viewRef = useRef<View | null>(null);
+  const hostCalls = useRef<number[]>([]);
+  const lastState = useRef('');
+  const lastRating = useRef('');
+
+  function apply(v: View) {
+    if (v.rev < rev.current) return;   // an answer overtaken by a newer one
+    rev.current = v.rev;
+    viewRef.current = v;
+    setView(v);
+  }
+
+  /** Tell Emery, if she is in the call. If not, her opening covers the board when she arrives. */
+  function tell(text: string, ttl = 30) {
+    const a = avatarRef.current;
+    if (a?.phase === 'live') a.event(text, ttl);
+  }
+
+  /** Follow a job's milestones: each brings a newer board. The result milestone's words are returned; the others are told. */
+  function follow(id: string, job: NonNullable<Ran['job']>, result: Milestone | null): Promise<string | null> {
+    return new Promise((resolve) => {
+      void (async () => {
+        for (const m of job.milestones) {
+          const step = await request<Step>(`/studios/${id}/jobs/${job.id}/${m}`).catch(() => null);
+          if (id !== studio.current) break;
+          if (!step) continue;
+          apply(step.view);
+          if (m === result) resolve(step.text);
+          else if (step.text) tell(step.text);
+        }
+        resolve(null);
+      })();
+    });
+  }
+
+  // Emery's tool calls: the fitting acts, the board follows, the words are what she says next.
+  async function onToolCall({ name, arguments: args }: ToolCall): Promise<string> {
+    const id = studio.current;
+    if (!id) throw new Error('the fitting room is still opening; try again in a moment');
+    const ran = await request<Ran>(`/studios/${id}/tool`, { name, arguments: args });
+    if (id !== studio.current) throw new Error('that fitting is over');
+    apply(ran.view);
+    if (ran.text !== null || !ran.job || !ran.result) {
+      if (ran.job) void follow(id, ran.job, null);   // a try-on: its picture and its new score are told as they land
+      return ran.text ?? said.lost();
+    }
+    const outcome = follow(id, ran.job, ran.result);
+    const first = await Promise.race([outcome, new Promise<'late'>((r) => setTimeout(r, TOOL_WAIT_MS, 'late'))]);
+    if (first !== 'late') return first ?? said.lost();
+    void outcome.then((text) => { if (text && id === studio.current) tell(said.late(text), 45); });
+    return said.stillWorking();
+  }
+
+  // If Emery says "let's rate it for the wedding" without calling it, the fitting does it and tells her.
+  const net = useToolNet({
+    match: (text) => {
+      const call = mustDo(text, { tryOns: viewRef.current?.tryOnAvailable ?? false });
+      return call ? { id: `net-${Date.now()}`, ...call } : null;
+    },
+    run: async (call) => {
+      // She acted on those words her own way (another tool, say suggest_pieces for "how would this do at a party?"): leave it.
+      if (hostCalls.current.some((at) => Date.now() - at < NET_WINDOW_MS)) return null;
+      return onToolCall(call);
+    },
+    avatar: () => avatarRef.current!,
+  });
 
   const avatar = useAvatar('fashion-advisor', {
-    // The avatar hears the user too and answers at once; the app judges the
-    // same words and acts, and the outcome follows as an event.
-    onUserSaid: (text, how) => { if (how === 'spoken') void hear(text, 'spoken'); },
-    // An offer the avatar makes on its own ("want to try the navy blazer?"), so a bare "yes" can act on it.
-    onAvatarSaid: (text) => {
-      const item = extractTryOnOffer(text);
-      if (item) offer.current = { item, at: Date.now() };
+    onToolCall: net.watch((call: ToolCall) => {
+      hostCalls.current = [...hostCalls.current.filter((at) => Date.now() - at < 60_000), Date.now()];
+      return onToolCall(call);
+    }),
+    onUserSaid: (text) => net.heard(text),
+    onLive: () => {
+      const v = viewRef.current;
+      if (!v) return void (openingOwed.current = true);
+      const back = lastArrival.current === studio.current;
+      lastArrival.current = studio.current;
+      avatarRef.current?.event(said.opening(v, back), 60);
     },
+    // The fitting's ending: the notes, once there is a verdict to keep.
+    onEnded: () => { if (viewRef.current?.analysis) setNotes(true); },
   });
+  const avatarRef = useRef(avatar);
+  avatarRef.current = avatar;
   const live = avatar.phase === 'live';
 
-  const apply = useCallback((v: View) => {
-    if (v.rev < rev.current) return;   // an answer that overtook a newer one
-    rev.current = v.rev;
-    setView(v);
-  }, []);
-
-  const tell = useCallback((events: SayEvent[], from: From) => {
-    for (const e of events) {
-      // The avatar already answered a spoken request from its staged state; the acknowledgement would repeat it.
-      if (e.ack && from === 'spoken') continue;
-      avatar.event(e.text, e.ttl);
-      if (e.offer) offer.current = { item: e.offer, at: Date.now() };
-    }
-  }, [avatar.event]);
-
-  /** Follow a job through its milestones: each brings a newer board and, maybe, something to say. */
-  async function follow(id: string, job: NonNullable<Outcome['job']>, command: Command, from: From) {
-    for (const milestone of job.milestones) {
-      const out = await call<Outcome>(`/studios/${id}/jobs/${job.id}/${milestone}`).catch(() => null);
-      if (id !== studio.current) return;   // that session is over
-      if (milestone === 'image' && command.type === 'photo') setPreview(null);
-      if (!out) return;
-      apply(out.view);
-      tell(out.events, from);
-      if (milestone === 'image' && command.type === 'tryOn' && out.view.image?.kind === 'tryon') {
-        setReady(`${out.view.image.item} is ready.`);
-        setTimeout(() => setReady(''), 2200);
-      }
-    }
-  }
-
-  async function run(command: Command, from: From): Promise<Outcome | null> {
-    const id = studio.current;
-    if (!id) return null;
+  /** A fresh fitting room: an empty mirror, no occasion. */
+  async function openFitting() {
+    if (opening.current) return;
+    opening.current = true;
+    studio.current = null;
+    rev.current = -1;
+    viewRef.current = null;
+    lastRating.current = '';
+    setView(null);
+    setRatings([]);
+    setTrouble('');
+    setRoomFailed(false);
     try {
-      const out = await call<Outcome>(`/studios/${id}/act`, { command });
-      if (id !== studio.current) return null;
-      apply(out.view);
-      tell(out.events, from);
-      if (out.job) void follow(id, out.job, command, from);
-      else if (command.type === 'photo') setPreview(null);
-      return out;
-    } catch (err) {
-      console.warn('[fashion-advisor]', err);
-      if (command.type === 'photo') setPreview(null);
-      return null;
-    }
-  }
-
-  /** A typed or spoken line: judged first; an app action is done, anything else is the avatar's to answer. */
-  async function hear(text: string, from: 'spoken' | 'typed') {
-    const id = studio.current;
-    if (!id) {
-      if (from === 'typed') avatar.say(text);
-      return;
-    }
-    const pending = offer.current && Date.now() - offer.current.at < OFFER_TTL_MS ? offer.current.item : null;
-    const verdict = await call<{ command: Command | null; clearOffer?: boolean }>(`/studios/${id}/judge`, { text, offer: pending }).catch(() => ({ command: null } as { command: Command | null; clearOffer?: boolean }));
-    if (verdict.clearOffer || verdict.command?.type === 'tryOn') offer.current = null;
-    const { command } = verdict;
-    if (from === 'typed') {
-      if (consumes(command)) {
-        avatar.record(text);
-        await run(command!, 'typed');
-      } else {
-        // Its state first (a described outfit, a question now closed), then the line itself, so the answer knows.
-        const out = command ? await run(command, 'typed') : null;
-        if (out) avatar.state(boardState(out.view));
-        avatar.say(text);
+      const { id, view: first } = await request<{ id: string; view: View }>('/studios', {});
+      studio.current = id;
+      apply(first);
+      if (openingOwed.current || avatarRef.current.phase === 'live') {
+        openingOwed.current = false;
+        lastArrival.current = id;
+        avatarRef.current.event(said.opening(first), 60);
       }
-    } else if (command) {
-      await run(command, 'spoken');
+    } catch (err) {
+      console.warn('[notch] could not open a fitting room', err);
+      setRoomFailed(true);
+    } finally {
+      opening.current = false;
     }
   }
 
-  async function sendPhoto(file: Blob, source: 'upload' | 'sample') {
-    setPhotoError('');
+  // The first call opens the fitting room while Emery is on her way; calling her again keeps it.
+  useEffect(() => {
+    if (avatar.phase === 'starting' && !studio.current) void openFitting();
+  }, [avatar.phase]);
+
+  // A button acts at once; Emery cannot see the screen, so she is told what was pressed and what came of it.
+  async function press(body: Button) {
+    const id = studio.current;
+    if (!id) return;
+    setTrouble('');
+    try {
+      const ran = await request<Ran>(`/studios/${id}/act`, body);
+      if (id !== studio.current) return;
+      apply(ran.view);
+      if (ran.text) tell(ran.text);
+      if (ran.job) {
+        const outcome = follow(id, ran.job, ran.result ?? null);
+        if (ran.result) void outcome.then((text) => { if (text && id === studio.current) tell(text, 45); });
+      }
+    } catch (err) {
+      console.warn('[notch] %s failed', body.button, err);
+      setTrouble("That didn't go through. Check your connection and try again.");
+    }
+  }
+
+  async function sendPhoto(file: Blob, example = false) {
+    setTrouble('');
     try {
       const photo = await preparePhoto(file);
       setPreview(photo.preview);
-      await run({ type: 'photo', mime: photo.mime, data: photo.data, source }, 'button');
+      await press({ button: 'photo', mime: photo.mime, data: photo.data, example });
     } catch (err) {
+      setTrouble((err as Error).message);
+    } finally {
       setPreview(null);
-      setPhotoError((err as Error).message);
     }
   }
-  const sendSample = () => void fetch(sampleUrl).then((r) => r.blob()).then((blob) => sendPhoto(blob, 'sample'));
-  const press = (command: Command) => void run(command, 'button');
+  const sendExample = () => void fetch(exampleOutfit).then((r) => r.blob()).then((blob) => sendPhoto(blob, true))
+    .catch(() => setTrouble("The example outfit didn't load. Try again, or upload your own photo."));
 
-  // Each session gets its own studio, set up while the avatar is on its way (the rules, then the opening).
-  useEffect(() => {
-    if (avatar.phase !== 'starting') return;
-    studio.current = null;
-    offer.current = null;
-    for (const note of NOTES) avatar.note(note);
-    void call<{ id: string; outcome: Outcome }>('/studios', {}).then(({ id, outcome }) => {
-      studio.current = id;
-      rev.current = -1;
-      apply(outcome.view);
-      tell(outcome.events, 'button');
-    }).catch((err) => console.warn('[fashion-advisor] could not open a studio', err));
-  }, [avatar.phase]);
+  function newFitting() {
+    setNotes(false);
+    setPicking(false);
+    void openFitting();
+    if (avatar.phase === 'ended' || avatar.phase === 'failed') void avatar.start({ mic: avatar.micOn });
+  }
 
-  // A dropped photo's local preview is let go once it is replaced.
+  // A photo's local preview is let go once it is replaced.
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
 
-  // The avatar's picture of the board follows the board.
-  useEffect(() => { if (view) avatar.state(boardState(view)); }, [view]);
+  // Emery's picture of the board follows the board.
+  useEffect(() => {
+    if (!view) return;
+    const text = boardState(view);
+    if (text !== lastState.current) {
+      lastState.current = text;
+      avatar.state(text);
+    }
+  }, [view]);
 
   // Catalogue shots land in the background: look again while some are still rendering.
   useEffect(() => {
     const id = studio.current;
     if (!id || !view?.thumbnailsPending) return;
-    const timer = setTimeout(() => { void call<{ view: View }>(`/studios/${id}`).then((r) => { if (id === studio.current) apply(r.view); }).catch(() => {}); }, 2500);
+    const timer = setTimeout(() => { void request<{ view: View }>(`/studios/${id}`).then((r) => { if (id === studio.current) apply(r.view); }).catch(() => {}); }, 2500);
     return () => clearTimeout(timer);
   }, [view]);
 
-  const busy = !live || !view;
+  // Every verdict of the fitting, as it lands, for the notes and the score change.
+  useEffect(() => {
+    const a = view?.analysis;
+    if (!view || !a || view.jobs.analysing || view.jobs.tryOn) return;
+    const withItem = view.image?.kind === 'tryon' ? view.image.item : undefined;
+    const key = [a.target_style, a.style_score, a.style_summary, withItem ?? ''].join('|');
+    if (key === lastRating.current) return;
+    lastRating.current = key;
+    setRatings((rs) => [...rs, { occasion: a.target_style || view.target, score: a.style_score, summary: a.style_summary, ...(withItem ? { with: withItem } : {}) }]);
+  }, [view]);
+
+  if (avatar.phase === 'idle') return <Lobby onStart={(mic) => void avatar.start({ mic })} />;
+
+  const ready = Boolean(view);
   const jobs = view?.jobs;
-  const statusText = jobs?.tryOn
-    ? `Generating ${jobs.tryOn}...${jobs.queued.length ? ` Then ${jobs.queued.join(', ')}.` : ''}`
-    : jobs?.queued.length ? `Queued ${jobs.queued.join(', ')}...`
-      : ready || (view?.notice?.text ?? '');
-  const onboarding = <Onboarding view={view} live={live} busy={busy} onCommand={press} onFile={(f) => void sendPhoto(f, 'upload')} onSample={sendSample} />;
-  const hasPhoto = view?.photo === 'present' || Boolean(preview);
+  const failed = Boolean(view && !view.analysis && view.image && view.target && jobs && !jobs.analysing && !jobs.photo && !jobs.tryOn && !jobs.queued.length);
+  const latest = ratings[ratings.length - 1];
+  const before = ratings[ratings.length - 2];
+  const delta = latest?.with && before && before.occasion === latest.occasion ? { by: latest.score - before.score, item: latest.with } : null;
+  const notice = trouble || (roomFailed ? "We couldn't open your fitting room. Start a new fitting to try again." : '') || (!failed && view?.notice ? view.notice.text : '');
+  const left = avatar.secondsLeft;
+  const pickOccasion = (occasion: string) => { setPicking(false); void press({ button: 'occasion', occasion }); };
 
   return (
-    <div className="kit-layout fashion-page">
-      <div className="kit-side">
-        <AvatarStage
-          avatar={avatar}
-          name="Your stylist"
-          startLabel="Start styling"
-          lobby={<><div className="kit-title">Fashion Advisor</div><div className="kit-detail">Tell your stylist the look you want, share one photo of your outfit, and get a rating, pieces to try, and try-ons on your own photo.</div></>}
-        />
-        <Composer avatar={avatar} placeholder='Type, or try "rate me for a wedding instead"…' onSubmit={(t) => { void hear(t, 'typed'); }} />
-        <Transcript avatar={avatar} names={{ avatar: 'Stylist' }} />
-      </div>
-
-      <main className="fashion-app">
-        <header className="fashion-app-header">
-          <div>
-            <span className="fashion-image-kicker">Fashion Advisor</span>
-            <h1 className="fashion-app-title">{view?.name ? `Styling ${view.name}` : 'Your look'}</h1>
-          </div>
-          {view?.target && (
-            <button type="button" className="fashion-target" disabled={busy} onClick={() => setPicking((p) => !p)} title="Change the look you are going for">
-              For <strong>{view.target}</strong> <span aria-hidden="true">✎</span>
-            </button>
-          )}
-        </header>
-
-        {picking && view?.target && (
-          <TargetPicker
-            current={view.target}
-            onPick={(style) => { setPicking(false); press({ type: view.photo === 'present' ? 'retarget' : 'style', style }); }}
-            onClose={() => setPicking(false)}
-          />
+    <div className="nt-app">
+      <header className="nt-top">
+        <Logo />
+        {view?.target && (
+          <button type="button" className="nt-pill" onClick={() => setPicking((p) => !p)} aria-expanded={picking} disabled={!ready}>
+            <span className="nt-label">Dressing for</span> {view.target} <PencilIcon />
+          </button>
         )}
+        <div className="nt-top-end">
+          {live && left !== null && left <= 120 && <span className="nt-timer" aria-live="polite">{Math.floor(left / 60)}:{String(left % 60).padStart(2, '0')} left</span>}
+          {view?.analysis && <button type="button" className="nt-quiet" onClick={() => setNotes(true)}>Fitting notes</button>}
+          {roomFailed && <button type="button" className="nt-quiet" onClick={newFitting}>Start a new fitting</button>}
+          <CallControls avatar={avatar} className="nt-controls" />
+        </div>
+      </header>
 
-        {hasPhoto && view?.step === 'styling' && (
-          <div className="fashion-toolbar">
-            <button type="button" className="fashion-upload" disabled={busy || Boolean(jobs?.analysing)} onClick={() => press({ type: 'rerate' })}>Rate it again</button>
-            <button type="button" className="fashion-upload" disabled={busy || Boolean(jobs?.more) || !view.canLoadMore} onClick={() => press({ type: 'more' })}>More ideas</button>
-            <button type="button" className="fashion-upload" disabled={busy} onClick={() => press({ type: 'retake' })}>New photo</button>
-          </div>
-        )}
+      <main className="nt-room">
+        <div className="nt-mirror-cell">
+          <Mirror view={view} preview={preview} ready={ready} notice={notice}
+            onFile={(file) => void sendPhoto(file)} onExample={sendExample} onRestore={() => void press({ button: 'restore' })} />
+        </div>
 
-        {view?.wantsPhoto && hasPhoto && (
-          <PhotoDrop onFile={(f) => void sendPhoto(f, 'upload')} onSample={sendSample} disabled={busy} compact label="Drop the new photo here, or upload it." />
-        )}
-        {photoError && <p className="fashion-upload__error" role="alert">{photoError}</p>}
-        {!photoError && !view?.analysis && view?.notice?.kind === 'error' && <p className="fashion-upload__error" role="alert">{view.notice.text}</p>}
-
-        <FashionPanel
-          analysis={view?.analysis ?? null}
-          analysisLoading={Boolean(jobs?.analysing || (jobs?.photo && view?.target))}
-          fashionImage={stageImage(view, preview)}
-          onTrySuggestion={(item, text) => press({ type: 'tryOn', item, text })}
-          onLoadMoreSuggestions={(quiet) => press(quiet ? { type: 'more', quiet } : { type: 'more' })}
-          tryOnStatusText={statusText}
-          tryOnBusy={Boolean(jobs?.tryOn || jobs?.queued.length)}
-          tryOnActiveItem={jobs?.tryOn ?? jobs?.queued[0] ?? ''}
-          tryOnAvailable={view?.tryOnAvailable ?? false}
-          canLoadMore={Boolean(view?.canLoadMore)}
-          loadingMore={Boolean(jobs?.more)}
-          onResetBaseImage={() => press({ type: 'reset' })}
-          empty={onboarding}
-          waiting={view && view.step !== 'styling' ? onboarding : (
-            <div className="fashion-capture-cta">
-              <p>{view?.notice?.text || 'The read of this photo did not come through.'}</p>
-              <button type="button" className="fashion-upload" disabled={busy} onClick={() => press({ type: 'rerate' })}>Rate it again</button>
+        <div className="nt-verdict-cell">
+          {picking && view?.target && (
+            <div className="nt-picker" role="group" aria-label="Rate it for something else">
+              <p>Same outfit, another occasion. Now: <b>{view.target}</b></p>
+              <OccasionPicker current={view.target} autoFocus onPick={pickOccasion} onClose={() => setPicking(false)} />
             </div>
           )}
+          <Verdict view={view} failed={failed} delta={delta} ready={ready}
+            onRerate={() => void press({ button: 'rerate' })} onOccasion={pickOccasion} onChangeOccasion={() => setPicking(true)} />
+        </div>
+
+        <aside className="nt-host" aria-label={`${HOST}, your stylist`}>
+          <HostVideo avatar={avatar} name={HOST} className="nt-host-video">
+            <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} />
+          </HostVideo>
+          <div className="nt-nameplate">
+            <p><b>{HOST}</b> <span>your stylist</span></p>
+            {live && <span className="nt-oncall">On call</span>}
+            {live && avatar.speaking && avatar.caption && <p className="nt-saying">{lastWords(avatar.caption)}</p>}
+          </div>
+        </aside>
+
+        <div className="nt-rail-cell">
+          <Rail view={view} ready={ready} onTry={(piece, why) => void press({ button: 'tryOn', piece, why })} onMore={() => void press({ button: 'more' })} />
+        </div>
+
+        <ChatPanel
+          avatar={avatar} name={HOST} className="nt-chat" placeholder={`Message ${HOST}, or try “rate it for a wedding”`}
+          empty={<>Talk to {HOST} out loud, or type here.</>}
         />
       </main>
-    </div>
-  );
-}
 
-function TargetPicker({ current, onPick, onClose }: { current: string; onPick: (style: string) => void; onClose: () => void }) {
-  const [value, setValue] = useState('');
-  return (
-    <div className="fashion-picker">
-      <p className="fashion-capture-hint">Read it for something else. Now: <strong>{current}</strong></p>
-      <div className="fashion-chips">
-        {STYLE_CHIPS.filter((c) => c !== current).map((chip) => <button key={chip} type="button" className="fashion-chip" onClick={() => onPick(chip)}>{chip}</button>)}
-      </div>
-      <div className="fashion-field">
-        <input className="kit-input" placeholder="Or type a style or occasion" value={value} maxLength={80} onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && value.trim()) onPick(value.trim()); if (e.key === 'Escape') onClose(); }} />
-        <button type="button" className="kit-btn kit-primary" disabled={!value.trim()} onClick={() => onPick(value.trim())}>Read it</button>
-      </div>
+      {notes && view && <Notes view={view} ratings={ratings} ended={!live} onClose={() => setNotes(false)} onNewFitting={newFitting} />}
     </div>
   );
 }
