@@ -1,30 +1,28 @@
-// Turning words into actions. The original agent had five tools the model
-// chose between (play_user_move, choose_side, set_difficulty, resign,
-// new_game) plus a deterministic move gate in front of the model. The Avatar
-// API has no function calling, so the app decides: the same gate and
-// parsers by rules first, and the app's own model call (server-side) only for
-// the lines the rules cannot settle. Whatever the route, the BOARD has the
-// last word: a "move" is still resolved and judged by game.ts.
+// What a line the player said or typed asks the board to do, by rules. The
+// host decides that itself and calls the board's tools; these rules are the
+// safety net under it: when the player's words CLEARLY ask for an action that
+// is safe to do twice (resign, a new game, a side before any move, a
+// strength) and the host does not call the tool, the page does it (`mustDo`).
 //
 // Two kinds of mistake, unequal: acting on a line the player did not mean as
-// an action (a move they cannot take back, a reset game, a resignation) is far
-// worse than ignoring one (they say it again, or press the button). So rules
-// act only on clear phrasings, and everything doubtful goes to the model with
-// the same bias.
+// an action (a reset game, a resignation) is far worse than missing one (the
+// host still has it). So the rules act only on clear phrasings, and
+// everything doubtful is left to the host. A move is never the net's: a move
+// played twice is two moves.
+import { Chess } from 'chess.js';
 import { FIRST_PHRASES, parseSide, parseStrength, SECOND_PHRASES } from './game.ts';
 import { despellRanks, looksLikeMoveStatement } from './spoken.ts';
-import type { Action, Side, Strength } from './types.ts';
+import type { ChessSnapshot, Side, Strength } from './types.ts';
 
-export type Via = 'rules' | 'model';
 export type Verdict =
-  | { kind: 'move'; text: string; via: Via }
-  | { kind: 'side'; side: Side | 'other'; via: Via }
-  | { kind: 'difficulty'; level: Strength; via: Via }
-  | { kind: 'resign'; via: Via }
-  | { kind: 'new'; via: Via }
-  /** The rules cannot settle it; the server's model may. */
-  | { kind: 'model' }
-  /** Not an action: the avatar answers it. */
+  | { kind: 'move'; text: string }
+  | { kind: 'side'; side: Side | 'other' }
+  | { kind: 'difficulty'; level: Strength }
+  | { kind: 'resign' }
+  | { kind: 'new' }
+  /** It may be an action, but the rules cannot settle it: the host decides. */
+  | { kind: 'unsure' }
+  /** Not an action: talk. */
   | { kind: 'none' };
 
 export interface JudgeContext {
@@ -33,7 +31,7 @@ export interface JudgeContext {
 }
 
 const NONE: Verdict = { kind: 'none' };
-const MODEL: Verdict = { kind: 'model' };
+const UNSURE: Verdict = { kind: 'unsure' };
 
 /**
  * A recogniser's transcript, tidied for the move gate: its sentence-final full
@@ -87,7 +85,7 @@ const WANTS_BEGINNER = /\b(i'm a (complete |total |real )?(beginner|novice)|i am
 const WANTS_CASUAL = /\b(go(ing)? easy|go easier|take it easy|(make it|play|be|go) (a (bit|little) )?(easier|gentler|softer)|easier (please|on me|for me)|be gentle|too (hard|strong|difficult|tough)|hold back|tone it down|dial it (down|back)|lower the (difficulty|level)|casual (mode|level|strength|please)|(set|switch|change|put) (it |the difficulty |the level )?(to|on) casual)\b|^easier( please)?$/;
 const DIFFICULTY_WORDS = /\b(easy|easier|hard|harder|beginner|novice|strength|strong|difficulty|level|mercy|gentle|casual)\b/;
 
-/** Anything that might be one of the board's actions, for the model to look at. */
+/** Anything that might be one of the board's actions, for the host to look at. */
 const ACTION_WORDS = /[a-h][1-8]|\b(castl\w*|o-o|0-0|knight|night|bishop|rook|queen|king|pawn|takes|captures?|white|black|sides?|colou?rs?|first|second|easy|easier|harder|beginner|strength|difficulty|mercy|resign\w*|concede|give up|forfeit|surrender|new game|again|restart|rematch|start over)\b/;
 
 function sideVerdict(t: string, form: Form, hedged: boolean, ctx: JudgeContext): Verdict | null {
@@ -95,18 +93,18 @@ function sideVerdict(t: string, form: Form, hedged: boolean, ctx: JudgeContext):
   const colour = COLOUR.test(talk);
   const turnOrder = SECOND_PHRASES.test(talk) || FIRST_PHRASES.test(talk);
   if (!SWAP.test(talk) && !colour && !turnOrder) return null;
-  if (form === 'question') return NONE;   // "am I white?", "is black winning?": the state answers
+  if (form === 'question') return NONE;   // "am I white?", "is black winning?": the board answers
   // "take black's knight" names a colour and a request verb and is about a piece.
-  if (PIECE_NAMES.test(talk) || hedged) return MODEL;
-  if (SWAP.test(talk)) return { kind: 'side', side: 'other', via: 'rules' };
+  if (PIECE_NAMES.test(talk) || hedged) return UNSURE;
+  if (SWAP.test(talk)) return { kind: 'side', side: 'other' };
   const side = parseSide(talk);
-  if (!side) return MODEL;
+  if (!side) return UNSURE;
   const words = talk.split(' ');
   const bare = words.length <= 4 && words.every((w) => SIDE_FILLER.has(w));
-  if (colour && (SIDE_REQUEST.test(talk) || bare)) return { kind: 'side', side, via: 'rules' };
+  if (colour && (SIDE_REQUEST.test(talk) || bare)) return { kind: 'side', side };
   // "you go first" seats someone only before the game has begun.
-  if (!colour && turnOrder && ctx.moves === 0) return { kind: 'side', side, via: 'rules' };
-  return MODEL;
+  if (!colour && turnOrder && ctx.moves === 0) return { kind: 'side', side };
+  return UNSURE;
 }
 
 function difficultyVerdict(t: string, form: Form): Verdict | null {
@@ -115,11 +113,29 @@ function difficultyVerdict(t: string, form: Form): Verdict | null {
   const casual = WANTS_CASUAL.test(t);
   if (!full && !beginner && !casual && !DIFFICULTY_WORDS.test(t)) return null;
   if (form === 'question') return NONE;   // "are you going easy on me?", "how strong are you?"
-  if (full) return { kind: 'difficulty', level: 'full', via: 'rules' };
-  if (/\b(not|don't|dont|never)\b/.test(t)) return MODEL;   // "I'm not a beginner"
-  if (beginner) return { kind: 'difficulty', level: 'beginner', via: 'rules' };
-  if (casual) return { kind: 'difficulty', level: parseStrength(t) === 'beginner' ? 'beginner' : 'casual', via: 'rules' };
-  return MODEL;
+  if (full) return { kind: 'difficulty', level: 'full' };
+  if (/\b(not|don't|dont|never)\b/.test(t)) return UNSURE;   // "I'm not a beginner"
+  if (beginner) return { kind: 'difficulty', level: 'beginner' };
+  if (casual) return { kind: 'difficulty', level: parseStrength(t) === 'beginner' ? 'beginner' : 'casual' };
+  return UNSURE;
+}
+
+/**
+ * A typed line that is exactly a legal move in the position, as chess.js reads
+ * SAN or UCI ("Nf6", "exd5", "e2e4", "O-O"; a trailing full stop allowed), or
+ * null. Typed text has no recognition errors, so such a line is played at once
+ * like a move by hand: once typed "Nf6" went to the host as chat, was praised
+ * as "developing your knight", and never reached the board.
+ */
+export function typedMove(text: string, s: Pick<ChessSnapshot, 'fen' | 'turn' | 'result'>): string | null {
+  if (s.result || s.turn !== 'user') return null;
+  const line = String(text ?? '').trim().replace(/\.$/, '');
+  if (!line || /\s/.test(line) || line.length > 12) return null;
+  try {
+    return new Chess(s.fen).move(line).lan;
+  } catch {
+    return null;
+  }
 }
 
 /** What a line typed or said means to the board, by rules. */
@@ -127,7 +143,7 @@ export function judge(input: string, ctx: JudgeContext = { moves: 0 }): Verdict 
   const text = tidy(input);
   if (!text) return NONE;
   // The move gate first: a move is the commonest thing said at a board.
-  if (looksLikeMoveStatement(text)) return { kind: 'move', text, via: 'rules' };
+  if (looksLikeMoveStatement(text)) return { kind: 'move', text };
 
   const t = norm(text);
   const form = formOf(text, t);
@@ -135,99 +151,63 @@ export function judge(input: string, ctx: JudgeContext = { moves: 0 }): Verdict 
 
   if (RESIGN.test(t) || RESIGN_WORDS.test(t)) {
     // A resignation cannot be taken back: only a plain statement of it counts.
-    if (RESIGN.test(t) && form === 'statement' && !hedged) return { kind: 'resign', via: 'rules' };
-    return form === 'request' ? MODEL : NONE;   // "can I resign?" -> the model; "should I resign?" -> the avatar
+    if (RESIGN.test(t) && form === 'statement' && !hedged) return { kind: 'resign' };
+    return form === 'request' ? UNSURE : NONE;   // "can I resign?" -> unsure; "should I resign?" -> talk
   }
   if (NEW_GAME.test(t)) {
     if (form === 'question' && !/^(can|could|shall) we\b/.test(t)) return NONE;
-    return hedged ? MODEL : { kind: 'new', via: 'rules' };
+    return hedged ? UNSURE : { kind: 'new' };
   }
   const side = sideVerdict(t, form, hedged, ctx);
   if (side) return side;
   const difficulty = difficultyVerdict(t, form);
   if (difficulty) return difficulty;
-  if (form !== 'question' && ACTION_WORDS.test(despellRanks(t))) return MODEL;
+  if (form !== 'question' && ACTION_WORDS.test(despellRanks(t))) return UNSURE;
   return NONE;
 }
 
-export function toAction(v: Verdict): Action | null {
-  switch (v.kind) {
-    case 'move': return { kind: 'move', text: v.text };
-    case 'side': return { kind: 'side', side: v.side };
-    case 'difficulty': return { kind: 'difficulty', level: v.level };
-    case 'resign': return { kind: 'resign' };
-    case 'new': return { kind: 'new' };
-    default: return null;
-  }
+/**
+ * The recogniser's spellings of the words the net listens for: "I re-sign",
+ * "re-match", "start-over" are how "I resign", "rematch" and "start over"
+ * can come back.
+ */
+export function heardAs(text: string): string {
+  return String(text ?? '')
+    .replace(/\bre[-\s]sign(ing|s)?\b/gi, (_m, end: string | undefined) => `resign${end ?? ''}`)
+    .replace(/\bre[-\s]match\b/gi, 'rematch')
+    .replace(/\bstart-over\b/gi, 'start over');
 }
 
-// ---------------------------------------------------------------------------
-// the model's half (called from server.ts; the key never reaches the page)
-
-export interface ModelContext {
-  userColor: Side;
-  turn: 'user' | 'agent' | null;
-  /** The player's legal moves in SAN (empty when it is not their move). */
-  legal: string[];
-  moves: number;
-  over: boolean;
+/** The tool call the safety net makes when the host does not. */
+export interface NetCall {
+  name: 'resign' | 'new_game' | 'choose_side' | 'set_strength';
+  arguments: Record<string, unknown>;
 }
-
-export const JUDGE_SCHEMA = {
-  type: 'object',
-  properties: {
-    action: { type: 'string', enum: ['move', 'side', 'difficulty', 'resign', 'new_game', 'none'], description: 'What the player is asking the board to do right now.' },
-    move: { type: 'string', description: 'For a move: the move in SAN, from the legal list (e.g. Nf3, exd5, O-O). Empty otherwise.' },
-    side: { type: 'string', enum: ['white', 'black', 'none'], description: 'For a side request: the colour the player wants to play.' },
-    level: { type: 'string', enum: ['full', 'casual', 'beginner', 'none'], description: 'For a difficulty request: the level.' },
-  },
-  required: ['action', 'move', 'side', 'level'],
-};
-
-export function judgePrompt(text: string, ctx: ModelContext): string {
-  const turn = ctx.over ? 'The game is over.' : ctx.turn === 'user' ? "It is the player's move." : "It is the opponent's move.";
-  return `In a spoken chess game against an AI opponent, the player said: "${text}"
-(Speech recognition may mishear squares: "before" can be "b4", "e for" can be "e4".)
-The player is ${ctx.userColor}. ${turn} ${ctx.moves} half-moves played.${ctx.legal.length ? `\nThe player's legal moves: ${ctx.legal.join(', ')}.` : ''}
-
-Is the player asking the board to do one of these right now?
-- move: they state THEIR OWN move, to play now ("knight to f3", "okay, e4", "I'll take on d5 with the knight"). Give it as SAN from the legal list. NOT a move: a question ("can I castle?", "should I play e4?"), a plan or hypothetical ("I might play d4 next"), commentary on a piece or a square ("your knight on f3 is strong"), or a move already played.
-- side: they ask to play white or black, to switch sides, or to go first or second.
-- difficulty: they ask the opponent to go easier (casual), say they are a beginner (beginner), or ask for its full strength (full).
-- resign: they clearly concede the game now. Asking about resigning is not resigning.
-- new_game: they ask to start a new game now.
-- none: anything else: questions, small talk, reactions.
-When unsure, answer none: a wrong action cannot be undone.`;
-}
-
-const destination = (san: string) => (san.match(/[a-h][1-8]/g) ?? []).pop() ?? null;
 
 /**
- * The model's answer as a verdict, or none. Bounded by the player's own
- * words: a move must land on a square they said (or be a castle they named),
- * and a resignation must be said in so many words. The board still judges
- * the move itself.
+ * The board action the player's words clearly ask for, among those safe to do
+ * twice: a second resignation is refused, a second new game is the same empty
+ * board, a strength or a side set twice is set once. Never a move (a doubled
+ * move is two moves), and never a side swap that would throw away a game in
+ * progress: the host may rightly be asking "abandon this one?" first.
  */
-export function verdictFrom(raw: unknown, text: string): Verdict {
-  const r = (raw ?? {}) as Record<string, unknown>;
-  const said = despellRanks(tidy(text)).toLowerCase();
-  switch (r.action) {
-    case 'move': {
-      const move = typeof r.move === 'string' ? r.move.trim() : '';
-      if (!move || move.length > 12) return NONE;
-      if (/^[O0]-[O0]/.test(move)) return /castl|o-o|0-0/.test(said) ? { kind: 'move', text: move.replace(/0/g, 'O'), via: 'model' } : NONE;
-      const square = destination(move);
-      return square && said.includes(square) ? { kind: 'move', text: move, via: 'model' } : NONE;
-    }
+export function mustDo(text: string, ctx: { moves: number; over: boolean }): NetCall | null {
+  const heard = heardAs(text);
+  let verdict = judge(heard, { moves: ctx.moves });
+  // "Yes, start over as Black" answers a side question: it is a side request
+  // (choose_side), not a bare reset. Read as a reset, the net once dealt a
+  // second fresh game after the host had already seated the player.
+  if (verdict.kind === 'new') {
+    const side = parseSide(norm(tidy(heard)).replace(SQUARE_TALK, ' '));
+    if (side) verdict = { kind: 'side', side };
+  }
+  switch (verdict.kind) {
+    case 'resign': return ctx.over ? null : { name: 'resign', arguments: {} };
+    case 'new': return { name: 'new_game', arguments: {} };
     case 'side':
-      return r.side === 'white' || r.side === 'black' ? { kind: 'side', side: r.side, via: 'model' } : NONE;
-    case 'difficulty':
-      return r.level === 'full' || r.level === 'casual' || r.level === 'beginner' ? { kind: 'difficulty', level: r.level, via: 'model' } : NONE;
-    case 'resign':
-      return RESIGN_WORDS.test(norm(text)) ? { kind: 'resign', via: 'model' } : NONE;
-    case 'new_game':
-      return { kind: 'new', via: 'model' };
-    default:
-      return NONE;
+      if (ctx.moves > 0 && !ctx.over) return null;
+      return { name: 'choose_side', arguments: { side: verdict.side === 'other' ? 'switch' : verdict.side } };
+    case 'difficulty': return { name: 'set_strength', arguments: { level: verdict.level } };
+    default: return null;
   }
 }

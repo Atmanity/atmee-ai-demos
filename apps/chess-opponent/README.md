@@ -1,121 +1,103 @@
-# Chess Opponent
+# Kibitz
 
-A real game of chess against the avatar: it moves on its own, says why it
-played what it played, needles you a little and teaches a little. Drag a
-piece, or say or type your move ("e4", "knight to f3", "castle"). Pick your
-side, how hard it tries, resign or start over with the controls, or just ask.
+Chess with a club player who talks back. Sasha plays her own moves, tells you
+why she played each one, names the opening when she spots it and needles you a
+little. Say your move, type it, drag the piece or tap it; ask for Black, for an
+easier game, to resign or for a rematch. At the end, take the game away as a
+PGN scoresheet. Rebuilt from the `chess-opponent` mini-app as a standalone
+product on the Avatar API.
 
-Ported from `Atmanity/apps/apps/chess-opponent` (a Python LiveKit agent on
-python-chess with five voice tools, plus a React panel on react-chessboard).
+Open it at `/apps/chess-opponent/`.
 
-## How it works on the API
+## How it works
 
-| Feature | Mechanism |
+| Part | Where |
 |---|---|
-| The board (rules, legality, results) | `engine/game.ts`: chess.js for move generation and FEN, our layer on top: seating, strength, the spoken-move resolver, refusals, the snapshot. Runs **in the page**: chess has no secrets |
-| The opponent's move | `engine/engine.ts`: the original one-ply heuristic (material, piece-square tables, one-exchange hang check), seeded tie-break, difficulty = how far down its own ranking it plays (full 0, casual 2, beginner 5; never declines a mate). Never the model |
-| Reading moves from words | `engine/spoken.ts` (the conservative "is this a move?" gate) and `game.ts` (candidates, piece agreement, castle vs rook talk), with SAN/UCI read the way python-chess does (`engine/san.ts`): an ambiguous "knight to d2" is a question, never a guess |
-| Side, difficulty, resign, new game | buttons (`page/GameControls.tsx`; a swap, a resignation or a reset mid-game asks for a second press), typed lines and speech |
-| Typed and spoken lines | `engine/judge.ts`: the move gate and the side/strength parsers by rules; the doubtful ones ("Okay, e4.", "the dark pieces this time") go to `POST /api/apps/chess-opponent/judge` (Gemini `structured()`), bounded by the player's own words, and the board still judges the move |
-| What happens when | `engine/table.ts`: one action at a time; the opponent replies after a 0.7 s beat; each change gives the avatar exactly one event |
-| The opponent's rules | two standing `note`s (`engine/director.ts`), condensed from the original 5,070-character prompt |
-| The board | `state`: seating, strength, whose move, last move, the moves so far, opening, material count, FEN, the player's legal moves (so "can I castle?" is answered from the board), and the staged answers to "can I play black?" and "go easier" |
-| Its own move, refusals, results | `event`s: "The player played e4 … you replied e5 … say why", "The board REFUSED 'Rook to a5': …", the result line once |
-| Panel | the original's components and styles (`ChessBoard`, `CapturedPieces`, `status`, `notices`, `sounds`), only the data layer changed |
+| The board: rules, legality, results | `engine/game.ts`: chess.js plus our layer (seating, strength, the spoken-move resolver, refusals, the snapshot). Runs **in the page**: chess has no secrets, so the page answers Sasha's tool calls itself. |
+| Sasha's own move | `engine/engine.ts`: the original one-ply heuristic (material, piece-square tables, a one-exchange hang check), a seeded tie-break; strength = how far down her own ranking she plays (full 0, casual 2, beginner 5; she never declines a mate). Never the model. |
+| Sasha's actions | Five `await` tools (`engine/director.ts`): `play_move(move)`, `choose_side(side)`, `set_strength(level)`, `resign`, `new_game`. The page answers each `atmee.tool` call through the board (`engine/table.ts`): `play_move` plays the player's move, waits a 0.7 s beat, plays Sasha's reply and returns both, so her first reply carries the board's ruling and her own move. |
+| Reading a move | Sasha passes what she heard ("knight to f three", "Nf3"); `engine/spoken.ts`, `game.ts` and `san.ts` resolve it against the position. An ambiguous "knight to d2" is a question back, an unreadable phrase is "say it again", never "illegal". |
+| Sasha's rules | The session's tool `instructions`: the board plays her moves, she acts only through the tools, no takebacks, an honest strength, the original's "never" rules. |
+| What Sasha sees | `state`: seating, strength, whose move, last move, the moves so far, opening, material count, FEN, and the player's legal moves (for "can I castle?"). No staged answers: the tools give them. |
+| Moves by hand and buttons | Drag or tap a piece; the side, strength, resign and new-game controls (a swap, a resignation or a reset mid-game asks for a second press). They act at once and Sasha is told by an event ("The player pressed "Resign" on screen. …"). |
+| Typed lines | A line that is exactly a legal move as chess.js reads it ("Nf6", "exd5", "e2e4") is played at once like a move by hand, shown in the chat, and told to Sasha (`typedMove`, `engine/judge.ts`): typed text has no recognition errors. Anything else goes to Sasha as a chat turn. |
+| The safety net | `useToolNet` (kit) with `mustDo` (`engine/judge.ts`): when the player clearly says "I resign", "new game", "go easy on me", or names a side before the first move, and Sasha does not call the tool within 7 s, the page does it and tells her. Never a move (a doubled move is two moves), and never a side swap that would throw a game away. A reset that names a side ("start over as Black") is a side request, and the net stands down when the same action, or any new game, was already taken since the words (by Sasha's other tool or a button). |
+| The screens | The front door (`page/Lobby.tsx`), the table (`page/Game.tsx`: Sasha's side, the board, your side, refusals, the controls, the result), Sasha's frame and the conversation (`page/App.tsx`), the scoresheet with its PGN download (`page/Scoresheet.tsx`, `page/pgn.ts`), styled in `page/kibitz.css`. |
 
-Keys: `GEMINI_API_KEY` (optional). Without it, the rules still play every
-clear move and command; lines only a model could read are left to the avatar
-as conversation.
+No keys needed: the board, the rules and Sasha's moves are local code.
 
-Deliberate differences from the original:
+Deliberate differences from the original engine, kept from the first port:
 
 - **The exchange check can only cost.** `engine.py` scored "their queen takes
   our defended pawn, our rook takes the queen" as +800, so at full strength it
-  answered 1.e4 with 1...h5 and 2.Nf3 with 2...a6 (the Python original does the
-  same on the same position). The exchange is now clamped at zero gain.
+  answered 1.e4 with 1...h5. The exchange is clamped at zero gain.
 - The seeded tie-break hashes with FNV-1a (the page has no synchronous
-  blake2b): same contract (stable, only reorders equal scores), other digests.
-- The opening table is one copy (the original had one in the agent, one in the panel).
-- New controls for side, difficulty, resign and a mid-game new game (voice only before).
+  blake2b): same contract, other digests.
 - The board is wrapped in a redraw boundary: react-chessboard throws when it
   cannot measure a square to animate a move, and here the board shares a React
-  tree with the avatar's video.
-- Not ported, and why: `RecentMove`/`claim` (there is one path per utterance, not
-  a deterministic path plus a tool); `IdleNudge` (the platform's check-in);
-  `stt_keyterms` and `instructionsExtra` (no API equivalent; see below).
+  tree with Sasha's video.
+
+Gone with the tools: the page-side judging of spoken and typed lines, the
+server's model judge (`/judge`, Gemini) for doubtful lines, and the answers
+staged in `state` for "can I play black?" and "go easier".
 
 ## What the API could not do
 
-Status after the live run of 2026-10-23 (below): **seen** = observed live,
-**expected** = not yet observed.
+Status after the first live run of the rebuild (2026-10-23, staging).
+**Seen**: observed live. **Expected**: not observed yet.
 
-1. **The avatar answers a spoken move before the board acts.** seen.
-   The final transcript reaches the app about a second after the player stops,
-   and the avatar is already replying. The original applied the move inside the
-   model's turn (`llm_node`) so the reply knew the outcome. Mitigations: the
-   player's legal moves are in `state`, the notes say "say a few words and wait",
-   and the outcome follows as an event. Expect both orders, and an illegal
-   spoken move may get a reaction before the refusal. Live, "E four." got "Did
-   you mean e4? Okay, let's see." and then the opponent's reply; "Rook to a
-   five." was refused twice, first from the staged legal moves ("your rooks
-   are still tucked away on the back rank"), then by the event.
-2. **Agreeing before doing.** seen, and true: "Can I play black instead?" got
-   the staged answer ("flip the board and start a fresh game with you as
-   Black") while the board reseated. "Can I play black?" is answered
-   before the app can reseat. The answer is staged in `state` (what the board
-   will do), so it should be true; if the app does not recognise the request,
-   the avatar may still agree with nothing changed.
-3. **No speech hints for squares.** expected ("e4", "f3", "a5" and "d4" were
-   heard right in one run). The original gave Deepgram
-   the 64 squares and the piece words as keyterms; "b4" can come back as
-   "before", "e4" as "e for". The resolver de-spells ranks and the model judge is
-   told about mishearings; the recogniser itself cannot be biased per session.
-4. **The ~10 s check-in hurries a thinking player.** seen ("Take your time,…",
-   "No rush at all, take your time…"). The
-   original waited 45 s, nudged at most twice, and reset on any speech. Not tunable.
-5. **Commentary can be dropped or doubled.** seen once: after the switch to
-   Black, the opponent's first move (1.Nf3) was never named; the avatar said
-   only "It's your turn as Black". Events are
-   paraphrased and wait for the floor (ttl 45 s); a player who keeps talking can
-   outlast one. A spoken mate can be answered twice (the avatar's own reply and
-   the result event): there is no "claim".
-6. **One persona per avatar.** seen ("I'm Emily, a twenty-one-year-old college
-   student…"). The rules are two notes here
-   (about 2,900 characters); the shared test avatar keeps its own name and
-   greeting, so the board names it "Opponent". `avatar.json` is the dedicated persona.
-7. **A model judgement adds latency.** expected. Lines the rules cannot
-   read ("Okay, e4.") wait for one more model call (about a second) before the board moves.
+1. **Tools are called when the host decides.** *Seen.* Spoken moves went
+   through `play_move` within 2 to 3 s ("E four", "Knight to f three", and
+   "Rook to a five", refused on screen), and so did resigning and a new game.
+   But a typed "Nf6" was answered "Nice, developing your knight to f6!" with
+   no call, and the board never moved. Fixed: a typed line that is exactly a
+   legal move is now played by the page itself. A spoken move Sasha narrates
+   without calling still leaves the board as it was (the net never plays
+   moves); the player sees nothing moved and says it again or drags.
+2. **The safety net can misread a request the host handled with another
+   tool.** *Seen.* "Can I play black instead?" called `choose_side(black)`;
+   the follow-up "Yes, start over as Black." called it again (refused: already
+   Black), but the net had read "start over" as a new game, and 7 s later dealt
+   one ("Oops, my bad, let me actually reset that board"). Fixed: such a line
+   is a side request, a second `choose_side` for the side the player has says
+   "nothing changed", and the net deals no game after any reset.
+3. **Moves by hand and buttons reach Sasha as events.** *Expected* (seen once
+   in the first port: after a switch to Black her first move was never named).
+   A spoken move's reply is in the tool result; a dragged move's is an event,
+   paraphrased once she has the floor (ttl 45 s), and a player who keeps
+   talking can outlast it.
+4. **One persona per avatar.** *Expected* (seen in the first port: "I'm Emily,
+   a twenty-one-year-old college student…"). The screen names her Sasha;
+   the shared test avatar keeps its own name and greeting. `avatar.json` is
+   the dedicated persona.
+5. **No speech hints for squares.** *Expected.* The original gave the
+   recogniser the 64 squares as keyterms; "b4" can come back as "before". The
+   resolver de-spells ranks ("e four"), and Sasha, who now reads the move
+   before passing it on, may correct "e for" herself.
+6. **The ~10 s check-in hurries a thinking player.** *Expected* (seen in the
+   first port: "Take your time…"). The original waited 45 s. Not tunable.
+
+Fixed by tools, compared with the first port: Sasha no longer answers a
+spoken move before the board has ruled ("Did you mean e4? Okay, let's see."),
+no longer agrees to a side or a strength before the board has changed it, and
+her own move is in her first reply rather than an event that could be dropped.
 
 ## Tested
 
-- `npx vitest run apps/chess-opponent`: 431 tests (about 290 ported, 140 new). Ported: the engine suite
-  (`test_engine.py`), the board/resolver suite including the vocabulary class
-  sweeps (`test_game_and_table.py`, proved to fail when the rules are broken),
-  and the panel's pure tests plus `ChessGame.test.tsx` (new fake: props instead
-  of the bridge). New: `judge.test.ts` (real phrasings for every route),
-  `director.test.ts` (note and state limits on the busiest board, the honest
-  strength, staging, no refusal in state), `table.test.ts` (each original
-  wiring lesson restated: a refusal reaches screen and avatar, a mate by any
-  route is conceded once, a resignation is thanked once, the new-game button is
-  not silent), the controls, and `App.test.tsx`: the page's wiring with the
-  avatar faked (typed, spoken and model-judged lines through to state and events).
-- Live: one run on staging, below.
-
-### Live run (staging, avatar `baf61f2c`, 2026-10-23)
-
-Spoken lines through `tools/live-test/harness.js`. A first attempt never got
-its board up: the dev server rebundled its libraries when another app opened,
-and react-chessboard met a second copy of React. `vite.config.ts` now bundles
-every page library at start.
-
-- "E four." → e4, then the opponent's reply with its opening named.
-- "Knight to f three." → Nf3. "Rook to a five." → refused twice, nothing moved,
-  the refusal under the board.
-- "Should I play d four?" → talk, no move.
-- "Can I play black instead?" → board flipped; the opponent opened 1.Nf3 (not
-  named). "Go easy on me, I'm a beginner." → Beginner, from the staged answer.
-- "Can I take that back?" → kindly refused. "How strong are you?" → "one move
-  ahead", no rating.
-- Typed "d5" → played; the opponent answered 2.Ne5 ("Réti Opening").
-- "I resign." → Opponent wins, one thank-you.
-- Session `completed`, `ended_by_api`, 233 s billed.
+- `npx vitest run apps/chess-opponent`: 508 tests. The engine suites ported
+  from the original (`test_engine.py`, `test_game_and_table.py`, with the
+  vocabulary class sweeps), the board's table, and the panel's pure modules;
+  the director against the API limits (names, sizes, timeouts, reserved
+  names; instructions under 4,000 characters naming every tool; the busiest
+  board's state under 3,858) and its "only when the player asks" wording;
+  every tool's argument checks; the safety net's phrases, the recogniser's
+  spellings, and what it must never do (a move, a swap mid-game, a second
+  game after a side request); the typed-move reader; the PGN
+  (read back by chess.js); the table (tap-to-move, refusals, the lock, the
+  result, the controls); and the page with the call faked: each tool through
+  to the board and its result, buttons, hand and typed moves as events, the
+  net acting only when nothing has done it already. The two live failures
+  above each have a test that fails with the fix taken out.
+- Live on staging, 2026-10-23: spoken moves, a refusal, resigning and a new
+  game all went through the tools; the typed move and the doubled game above
+  were fixed after the run.

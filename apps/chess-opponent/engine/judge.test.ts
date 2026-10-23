@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { judge, judgePrompt, tidy, toAction, verdictFrom, type Verdict } from './judge.ts';
+import { ChessMatch } from './game.ts';
+import { judge, mustDo, tidy, typedMove } from './judge.ts';
 
 const kind = (said: string, moves = 0) => {
   const v = judge(said, { moves });
@@ -19,25 +20,25 @@ describe('a recogniser transcript, tidied', () => {
 describe('moves, by rules', () => {
   test.each(['e4', 'E4.', 'Knight to f3.', 'e four', 'E 4', 'castle kingside', 'O-O', 'bishop takes c6', 'Nf3!', 'e8=Q#', 'play e4', 'E four, please.', 'Knight to f3, please.'])(
     '%s is a move',
-    (said) => expect(judge(said)).toMatchObject({ kind: 'move', via: 'rules' }),
+    (said) => expect(judge(said)).toMatchObject({ kind: 'move' }),
   );
 
   test('the full stop a recogniser adds does not hide the move', () => {
-    expect(judge('Knight to f3.')).toEqual({ kind: 'move', text: 'Knight to f3', via: 'rules' });
+    expect(judge('Knight to f3.')).toEqual({ kind: 'move', text: 'Knight to f3' });
   });
 
   test.each(['Should I play e4?', 'what about e4', 'is e4 any good', 'Can I castle?'])('a question about a move is not a move: %s', (said) => {
     expect(judge(said).kind).not.toBe('move');
   });
 
-  test('a question about a move goes to the avatar, not the model', () => {
+  test('a question about a move is talk', () => {
     expect(kind('Should I play e4?')).toBe('none');
     expect(kind('what about e4')).toBe('none');
   });
 
   test.each(['Okay, e4.', 'I think I will play knight to f3', 'Alright so knight f3, I guess'])(
-    'a move the gate is too careful to read goes to the model: %s',
-    (said) => expect(kind(said)).toBe('model'),
+    'a move the gate is too careful to read is left to the host: %s',
+    (said) => expect(kind(said)).toBe('unsure'),
   );
 });
 
@@ -47,13 +48,13 @@ describe('resigning: only a plain statement counts', () => {
     '%s does not',
     (said) => expect(kind(said)).toBe('none'),
   );
-  test('a request to resign is the model’s call', () => expect(kind('Can I resign?')).toBe('model'));
+  test('a request to resign is the host’s call', () => expect(kind('Can I resign?')).toBe('unsure'));
 });
 
 describe('a new game', () => {
   test.each(['New game', 'Can we play again?', "Let's start over", 'Rematch!', 'Reset the board', 'One more game'])('%s', (said) => expect(kind(said)).toBe('new'));
   test('a question about the game is not a reset', () => expect(kind('Is this a new game?')).toBe('none'));
-  test('a deferred one is the model’s call', () => expect(kind("Let's play again after this one")).toBe('model'));
+  test('a deferred one is the host’s call', () => expect(kind("Let's play again after this one")).toBe('unsure'));
 });
 
 describe('sides', () => {
@@ -65,15 +66,15 @@ describe('sides', () => {
   ])('%s', (said, expected) => expect(kind(said)).toBe(expected));
 
   test('turn order seats the player only before the first move', () => {
-    expect(kind('Let me go second', 6)).toBe('model');
+    expect(kind('Let me go second', 6)).toBe('unsure');
   });
 
-  test.each(['Am I white?', 'Which side am I?', 'Is black winning?'])('a question about the seating is the avatar’s: %s', (said) => {
+  test.each(['Am I white?', 'Which side am I?', 'Is black winning?'])('a question about the seating is talk: %s', (said) => {
     expect(kind(said)).toBe('none');
   });
 
-  test.each(['Take black’s knight', 'Black is looking strong', 'White to move'])('colour talk that is not a request goes to the model: %s', (said) => {
-    expect(kind(said)).toBe('model');
+  test.each(['Take black’s knight', 'Black is looking strong', 'White to move'])('colour talk that is not a clear request is left to the host: %s', (said) => {
+    expect(kind(said)).toBe('unsure');
   });
 
   test('a remark about the squares is not a request for a colour', () => {
@@ -89,68 +90,101 @@ describe('difficulty', () => {
     ['Full strength, please', 'difficulty:full'], ['Make it harder', 'difficulty:full'],
   ])('%s', (said, expected) => expect(kind(said)).toBe(expected));
 
-  test.each(['Are you going easy on me?', 'How strong are you?', "What's your rating?"])('a question about strength is the avatar’s: %s', (said) => {
+  test.each(['Are you going easy on me?', 'How strong are you?', "What's your rating?"])('a question about strength is talk: %s', (said) => {
     expect(kind(said)).toBe('none');
   });
 
-  test("a negation the patterns don't cover is the model's call", () => expect(kind("I'm not a beginner")).toBe('model'));
+  test("a negation the patterns don't cover is the host's call", () => expect(kind("I'm not a beginner")).toBe('unsure'));
 });
 
 describe('talk', () => {
   test.each(['Hello! How are you?', 'Nice move', "What's the opening called?", 'Can I take that back?', 'Ha, you got me', ''])(
-    '%s goes to the avatar',
+    '%s is talk',
     (said) => expect(kind(said)).toBe('none'),
   );
 
-  test('commentary that looks like a move is a move for the board to judge (it reads it as unreadable, then the model decides)', () => {
-    expect(judge('that knight belongs on g5')).toMatchObject({ kind: 'move', via: 'rules' });
+  test('commentary that looks like a move passes the gate, and the net still leaves it alone (it never plays moves)', () => {
+    expect(judge('that knight belongs on g5')).toMatchObject({ kind: 'move' });
+    expect(mustDo('that knight belongs on g5', { moves: 0, over: false })).toBeNull();
   });
 });
 
-describe('verdicts become actions', () => {
-  test.each<[Verdict, unknown]>([
-    [{ kind: 'move', text: 'e4', via: 'rules' }, { kind: 'move', text: 'e4' }],
-    [{ kind: 'side', side: 'other', via: 'rules' }, { kind: 'side', side: 'other' }],
-    [{ kind: 'difficulty', level: 'casual', via: 'model' }, { kind: 'difficulty', level: 'casual' }],
-    [{ kind: 'resign', via: 'rules' }, { kind: 'resign' }],
-    [{ kind: 'new', via: 'rules' }, { kind: 'new' }],
-    [{ kind: 'none' }, null],
-    [{ kind: 'model' }, null],
-  ])('%j', (verdict, action) => expect(toAction(verdict)).toEqual(action));
+describe('the safety net: what it does when the host does not, and only what is safe to repeat', () => {
+  const at = (moves: number, over = false) => ({ moves, over });
+  const net = (said: string, ctx = at(0)) => {
+    const call = mustDo(said, ctx);
+    return call ? [call.name, ...Object.values(call.arguments)].join(':') : null;
+  };
+
+  test.each<[string, string | null]>([
+    ['I resign.', 'resign'], ['I give up', 'resign'], ["I'm resigning", 'resign'],
+    ['New game', 'new_game'], ['Rematch!', 'new_game'], ["Let's start over", 'new_game'], ['Can we play again?', 'new_game'],
+    ['Go easy on me.', 'set_strength:casual'], ["Go easy on me, I'm a beginner.", 'set_strength:beginner'], ['Play properly', 'set_strength:full'], ['This is too hard', 'set_strength:casual'],
+    ['Can I play black?', 'choose_side:black'], ['Switch sides', 'choose_side:switch'], ['You go first', 'choose_side:black'],
+  ])('%s -> %s', (said, expected) => expect(net(said)).toBe(expected));
+
+  test.each<[string, string]>([['I re-sign.', 'resign'], ['I re sign', 'resign'], ['Re-match!', 'new_game'], ["Let's start-over", 'new_game']])(
+    'the recogniser’s spellings: %s -> %s',
+    (said, expected) => expect(net(said)).toBe(expected),
+  );
+
+  test.each(['e4', 'Knight to f3.', 'Castle kingside', 'Okay, e4.'])('never a move, which is not safe to repeat: %s', (said) => {
+    expect(net(said)).toBeNull();
+  });
+
+  test.each(['Should I resign?', "Don't give up!", 'Can I take that back?', 'How strong are you?', 'Am I white?', 'Is this a new game?', 'Nice move', "Let's play again after this one", 'Can I resign?'])(
+    'talk, questions and doubtful lines are left to the host: %s',
+    (said) => expect(net(said)).toBeNull(),
+  );
+
+  test('a side swap that would throw away a game in progress is left to the host', () => {
+    expect(net('Can I play black?', at(6))).toBeNull();
+    expect(net('Switch sides', at(6))).toBeNull();
+    expect(net('Can I play black?', at(6, true))).toBe('choose_side:black');
+  });
+
+  test('a reset that names a side is a side request, never a bare new game', () => {
+    // Seen live: after choose_side(black), "Yes, start over as Black." made the net deal a second game.
+    expect(net('Yes, start over as Black.', at(1))).toBeNull();
+    expect(net('Yes, start over as Black.', at(0))).toBe('choose_side:black');
+    expect(net("New game, I'll be white", at(30, true))).toBe('choose_side:white');
+    expect(net('Rematch, same colours', at(30, true))).toBe('new_game');
+  });
+
+  test('a finished game cannot be resigned again', () => {
+    expect(net('I resign.', at(20, true))).toBeNull();
+    expect(net('Rematch!', at(20, true))).toBe('new_game');
+  });
 });
 
-describe("the model's answer, bounded by the player's words", () => {
-  test('a move must land on a square they said', () => {
-    expect(verdictFrom({ action: 'move', move: 'Nf3' }, 'okay so knight to f three then')).toEqual({ kind: 'move', text: 'Nf3', via: 'model' });
-    expect(verdictFrom({ action: 'move', move: 'Nf3' }, 'okay, the horse')).toEqual({ kind: 'none' });
-    expect(verdictFrom({ action: 'move', move: '' }, 'e4')).toEqual({ kind: 'none' });
+describe('a typed line that is exactly a legal move', () => {
+  const start = () => new ChessMatch('white', 1).snapshot();
+  const afterE4 = () => {
+    const match = new ChessMatch('black', 1);
+    match.applyMove('agent', 'e4');
+    return match.snapshot();
+  };
+
+  test.each<[string, string]>([['e4', 'e2e4'], ['Nf3', 'g1f3'], ['e2e4', 'e2e4'], ['g1f3', 'g1f3'], ['Nf3.', 'g1f3'], ['  e4  ', 'e2e4'], ['e4!', 'e2e4']])(
+    '%s is played as %s',
+    (typed, uci) => expect(typedMove(typed, start())).toBe(uci),
+  );
+
+  test('as Black after 1.e4, "Nf6" is a move (it once went to the host as chat and never reached the board)', () => {
+    expect(typedMove('Nf6', afterE4())).toBe('g8f6');
   });
 
-  test('a castle must be one they named', () => {
-    expect(verdictFrom({ action: 'move', move: '0-0' }, "alright, let's castle")).toEqual({ kind: 'move', text: 'O-O', via: 'model' });
-    expect(verdictFrom({ action: 'move', move: 'O-O' }, 'hmm, not sure')).toEqual({ kind: 'none' });
-  });
+  test.each(['e5', 'Nf6', 'nf3', 'E4', 'knight to f3', 'e4 please', 'Nice game', 'castle', '', 'O-O'])(
+    'anything else goes to the host: %s',
+    (typed) => expect(typedMove(typed, start())).toBeNull(),
+  );
 
-  test('a resignation must be said in so many words', () => {
-    expect(verdictFrom({ action: 'resign' }, "I'm done, I give up")).toEqual({ kind: 'resign', via: 'model' });
-    expect(verdictFrom({ action: 'resign' }, 'whatever')).toEqual({ kind: 'none' });
-  });
-
-  test('sides, levels and resets', () => {
-    expect(verdictFrom({ action: 'side', side: 'black' }, 'the dark pieces this time')).toEqual({ kind: 'side', side: 'black', via: 'model' });
-    expect(verdictFrom({ action: 'side', side: 'none' }, 'x')).toEqual({ kind: 'none' });
-    expect(verdictFrom({ action: 'difficulty', level: 'beginner' }, 'x')).toEqual({ kind: 'difficulty', level: 'beginner', via: 'model' });
-    expect(verdictFrom({ action: 'new_game' }, 'x')).toEqual({ kind: 'new', via: 'model' });
-    expect(verdictFrom({ action: 'none' }, 'x')).toEqual({ kind: 'none' });
-    expect(verdictFrom(null, 'x')).toEqual({ kind: 'none' });
-    expect(verdictFrom('garbage', 'x')).toEqual({ kind: 'none' });
-  });
-
-  test('the prompt carries the words, the seating and the legal moves', () => {
-    const prompt = judgePrompt('okay, e4', { userColor: 'black', turn: 'user', legal: ['e5', 'Nf6'], moves: 1, over: false });
-    expect(prompt).toContain('"okay, e4"');
-    expect(prompt).toContain('The player is black');
-    expect(prompt).toContain('e5, Nf6');
-    expect(prompt).toContain('When unsure, answer none');
+  test('nothing is played out of turn or after the game', () => {
+    const match = new ChessMatch('white', 1);
+    match.applyMove('user', 'e4');
+    expect(typedMove('e5', match.snapshot())).toBeNull();
+    const over = new ChessMatch('white', 1);
+    over.resign('user');
+    expect(typedMove('e4', over.snapshot())).toBeNull();
   });
 });

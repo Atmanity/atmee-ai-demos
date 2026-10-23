@@ -1,145 +1,253 @@
 // @vitest-environment jsdom
 /**
- * The page's wiring, with the avatar faked: what the avatar is told (notes,
- * state, events), what goes to it as a typed turn, and what the board does,
- * for each way in (typing, speech, the model's judgement). No network: the
- * model route is a stubbed fetch.
+ * The page's wiring, with the call faked: Sasha's tool calls reach the board
+ * and come back as the words she speaks from (her reply move included);
+ * buttons act at once and she is told by an event; the safety net acts only
+ * when she does not, and never on a move. The safety net itself is the kit's.
  */
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
-import { useState } from 'react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const fake = vi.hoisted(() => ({
-  notes: [] as string[],
   states: [] as string[],
   events: [] as string[],
   said: [] as string[],
   recorded: [] as string[],
-  onUserSaid: undefined as undefined | ((text: string, how: 'spoken' | 'typed') => void),
-  onSubmit: undefined as undefined | ((text: string) => void),
+  starts: [] as unknown[],
+  chatProps: null as null | Record<string, unknown>,
+  handlers: {} as {
+    onToolCall?: (call: { id: string; name: string; arguments: Record<string, unknown> }) => Promise<unknown>;
+    onUserSaid?: (text: string, how: 'spoken' | 'typed') => void;
+  },
   setPhase: undefined as undefined | ((phase: string) => void),
 }));
 
-vi.mock('../../../src/kit/index.ts', () => ({
-  useAvatar: (_app: string, handlers: { onUserSaid?: (text: string, how: 'spoken' | 'typed') => void }) => {
-    const [phase, setPhase] = useState('idle');
-    fake.setPhase = setPhase;
-    fake.onUserSaid = handlers.onUserSaid;
-    return {
-      phase,
-      note: (t: string) => fake.notes.push(t),
-      state: (t: string) => fake.states.push(t),
-      event: (t: string) => fake.events.push(t),
-      say: (t: string) => fake.said.push(t),
-      record: (t: string) => fake.recorded.push(t),
-    };
-  },
-  AvatarStage: () => null,
-  Transcript: () => null,
-  Composer: ({ onSubmit }: { onSubmit: (text: string) => void }) => {
-    fake.onSubmit = onSubmit;
-    return null;
-  },
-}));
+vi.mock('../../../src/kit/index.ts', async () => {
+  const { useToolNet } = await vi.importActual<typeof import('../../../src/kit/useToolNet.ts')>('../../../src/kit/useToolNet.ts');
+  return {
+    useToolNet,
+    useAvatar: (_app: string, handlers: typeof fake.handlers) => {
+      const [phase, setPhase] = useState('idle');
+      fake.setPhase = setPhase;
+      fake.handlers = handlers;
+      return {
+        phase, secondsLeft: null, micOn: false,
+        start: (opts: unknown) => { fake.starts.push(opts); setPhase('starting'); return Promise.resolve(); },
+        state: (t: string) => fake.states.push(t),
+        event: (t: string) => fake.events.push(t),
+        say: (t: string) => fake.said.push(t),
+        record: (t: string) => fake.recorded.push(t),
+      };
+    },
+    HostVideo: ({ children }: { children?: ReactNode }) => <div className="host">{children}</div>,
+    CallStatus: () => null,
+    CallControls: () => null,
+    ChatPanel: (props: Record<string, unknown>) => { fake.chatProps = props; return null; },
+  };
+});
 
 import { App } from './App.tsx';
 
 const lastState = () => fake.states[fake.states.length - 1] ?? '';
-const say = (text: string) => act(() => fake.onUserSaid!(text, 'spoken'));
-const type = (text: string) => act(() => fake.onSubmit!(text));
+const tool = (name: string, args: Record<string, unknown> = {}) => act(() => fake.handlers.onToolCall!({ id: `t-${name}`, name, arguments: args })) as Promise<unknown>;
+const call = async (name: string, args: Record<string, unknown> = {}) => String(await tool(name, args));
+const type = (text: string) => act(() => { (fake.chatProps!.onSubmit as (t: string) => void)(text); });
+/** The player says `words`, `meanwhile` happens, and the safety net's 7 s pass (on a fake clock set before the words). */
+async function netAfter(words: string, meanwhile: () => Promise<unknown> | void = () => {}) {
+  vi.useFakeTimers();
+  act(() => fake.handlers.onUserSaid!(words, 'spoken'));
+  await act(async () => { await meanwhile(); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(7100); });
+  vi.useRealTimers();
+}
 
 async function live() {
   render(<App />);
-  act(() => fake.setPhase!('starting'));
+  fireEvent.click(screen.getByRole('button', { name: 'Play with your voice' }));
   act(() => fake.setPhase!('live'));
   await waitFor(() => expect(fake.events.length).toBe(1));
 }
 
 beforeEach(() => {
-  // react-chessboard measures a square to animate a move; jsdom lays nothing out.
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, top: 0, left: 0, right: 48, bottom: 48, width: 48, height: 48, toJSON: () => ({}) } as DOMRect);
-  for (const list of [fake.notes, fake.states, fake.events, fake.said, fake.recorded]) list.length = 0;
-  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ kind: 'none', why: 'no_model' }))));
+  vi.spyOn(console, 'info').mockImplementation(() => {});
+  for (const list of [fake.states, fake.events, fake.starts, fake.said, fake.recorded]) list.length = 0;
+  fake.chatProps = null;
 });
 afterEach(() => {
   cleanup();
-  vi.unstubAllGlobals();
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
-describe('the page', () => {
-  it('sets up the board while the avatar arrives: notes, the state, and the opening', async () => {
+describe('the front door', () => {
+  it('says what it is and starts a voice or a typed game', () => {
+    render(<App />);
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('A real game');
+    expect(screen.getAllByText('Kibitz').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'Play by typing' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Play with your voice' }));
+    expect(fake.starts).toEqual([{ mic: true }]);
+  });
+});
+
+describe('the game', () => {
+  it('sets up the board while Sasha arrives, and opens with one event', async () => {
     await live();
-    expect(fake.notes).toHaveLength(2);
     expect(fake.events[0]).toContain('invite their first move');
     expect(lastState()).toContain("It is the player's move");
-    expect(screen.getByText('Your move')).toBeTruthy();
+    expect(screen.getAllByText('Your move').length).toBeGreaterThan(0);
+    expect(screen.getByText('No moves yet. White starts.')).toBeTruthy();
   });
 
-  it('a typed move is played, recorded, never sent as a turn, and answered by the opponent in one event', async () => {
+  it("play_move: the board plays the move and Sasha's reply, and the result says both", async () => {
     await live();
-    await type('e4');
-    await waitFor(() => expect(fake.events).toHaveLength(2), { timeout: 3000 });
-    expect(fake.recorded).toEqual(['e4']);
-    expect(fake.said).toEqual([]);
-    expect(fake.events[1]).toContain('The player played e4');
-    expect(lastState()).toMatch(/Moves so far: 1\. e4 \S+/);
+    const result = await call('play_move', { move: 'e4' });
+    expect(result).toContain('The player played e4 and it is on the board');
+    expect(result).toMatch(/You replied \S+, already on the board/);
+    expect(result).toContain('why you played it');
+    await waitFor(() => expect(lastState()).toMatch(/Moves so far: 1\. e4 \S+/));
+    expect(document.querySelector('.kb-sheet-moves')?.textContent).toContain('e4');
+    expect(fake.events).toHaveLength(1);   // the result is the news: no event besides it
   });
 
-  it('a typed line that is not an action goes to the avatar as a turn', async () => {
+  it('play_move with an illegal move: refused in the result and on screen, nothing moves', async () => {
     await live();
-    await type('Hello! Ready to lose?');
-    await waitFor(() => expect(fake.said).toEqual(['Hello! Ready to lose?']));
-    expect(fake.events).toHaveLength(1);
-  });
-
-  it('a spoken "can I play black?" reseats the player and the opponent opens with the news', async () => {
-    await live();
-    await say('Can I play black instead?');
-    await waitFor(() => expect(fake.events.some((e) => e.includes('player on Black'))).toBe(true), { timeout: 3000 });
-    expect(document.querySelector('.chess-player-row--bottom .chess-side-chip')?.textContent).toBe('Black');
-    expect(lastState()).toContain('The player is Black');
-  });
-
-  it('a spoken "go easier" changes the strength without a second line (it was staged)', async () => {
-    await live();
-    await say("Go easy on me, I'm a beginner.");
-    await waitFor(() => expect(lastState()).toContain('beginner strength'));
-    expect(fake.events).toHaveLength(1);
-    expect(document.querySelector('.chess-difficulty')?.textContent).toBe('beginner');
-  });
-
-  it('a spoken illegal move is refused out loud and on screen', async () => {
-    await live();
-    await say('Rook to a five.');
-    await waitFor(() => expect(fake.events.some((e) => e.includes('REFUSED'))).toBe(true));
-    expect(screen.getByText(/not a legal move in this position/)).toBeTruthy();
-  });
-
-  it('a line only the model can read is judged on the server, and the board plays it', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ kind: 'move', text: 'Nf3', via: 'model' }))));
-    await live();
-    await say('Okay, knight to f three then.');
-    await waitFor(() => expect(fake.events.some((e) => e.includes('The player played Nf3'))).toBe(true), { timeout: 3000 });
-    const [url, init] = (fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0];
-    expect(url).toBe('/api/apps/chess-opponent/judge');
-    expect(JSON.parse(String(init.body))).toMatchObject({ text: 'Okay, knight to f three then.', userColor: 'white', turn: 'user' });
-  });
-
-  it('commentary that looks like a move is talk when the model says so: nothing moves, nothing is said', async () => {
-    await live();
-    await say('Your knight on f3 is strong.');
-    await waitFor(() => expect(fetch).toHaveBeenCalled());
-    await new Promise((r) => setTimeout(r, 50));
-    expect(fake.events).toHaveLength(1);
+    const result = await call('play_move', { move: 'Rook to a five' });
+    expect(result).toContain('REFUSED');
+    expect(result).toContain('NOT played');
+    await waitFor(() => expect(screen.getByText(/not a legal move in this position/)).toBeTruthy());
     expect(lastState()).toContain('No moves have been played yet');
   });
 
-  it('a spoken resignation ends the game with one thank-you', async () => {
+  it("choose_side: a new game with the player on Black, and Sasha's first move in the same result", async () => {
     await live();
-    await say('I resign.');
-    await waitFor(() => expect(fake.events.some((e) => e.includes('resigned'))).toBe(true));
+    const result = await call('choose_side', { side: 'black' });
+    expect(result).toContain('player on Black');
+    expect(result).toMatch(/You opened with \S+, already on the board/);
+    await waitFor(() => expect(document.querySelector('.kb-strip.is-you .kb-chip')?.textContent).toBe('Black'));
+    expect(lastState()).toContain('The player is Black');
+  });
+
+  it('set_strength: the chip shows it and the result says so', async () => {
+    await live();
+    expect(await call('set_strength', { level: 'beginner' })).toContain('beginner strength from your next move');
+    await waitFor(() => expect(document.querySelector('.kb-chip.is-strength')?.textContent).toBe('beginner'));
+  });
+
+  it('resign: the game ends, the result screen shows, and another game is only offered', async () => {
+    await live();
+    const result = await call('resign');
+    expect(result).toContain('The player resigned');
+    expect(result).toContain('start one only if they say so');
+    await waitFor(() => expect(screen.getByText('Sasha wins.')).toBeTruthy());
+    expect(await call('resign')).toContain('already over');
+  });
+
+  it('a call with a missing argument changes nothing and says what to ask; an unknown tool is an error', async () => {
+    await live();
+    expect(await call('choose_side', { side: 'purple' })).toContain('White or Black');
+    await expect(tool('take_back')).rejects.toThrow(/unknown tool/);
+  });
+
+  it('a button acts at once and Sasha is told by an event', async () => {
+    await live();
+    fireEvent.click(screen.getByRole('button', { name: 'Resign' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Really resign?' }));
+    await waitFor(() => expect(fake.events).toHaveLength(2));
+    expect(fake.events[1]).toMatch(/^The player pressed "Resign" on screen\. The player resigned/);
+  });
+
+  it("a move made by hand is answered by Sasha's, and she is told about both", async () => {
+    await live();
+    fireEvent.click(document.querySelector("[data-square='e2']")!);
+    fireEvent.click(document.querySelector("[data-square='e4']")!);
+    await waitFor(() => expect(fake.events).toHaveLength(2), { timeout: 3000 });
+    expect(fake.events[1]).toMatch(/^The player moved a piece by hand on screen\. The player played e4/);
+    expect(fake.events[1]).toContain('You replied');
+  });
+});
+
+describe('typing', () => {
+  it('a typed line that is exactly a legal move is played at once, recorded, and told to Sasha', async () => {
+    // Seen live: typed "Nf6" went to Sasha as chat, she praised it, and the board never moved.
+    await live();
+    type('e4');
+    await waitFor(() => expect(fake.events).toHaveLength(2), { timeout: 3000 });
+    expect(fake.recorded).toEqual(['e4']);
+    expect(fake.said).toEqual([]);
+    expect(fake.events[1]).toMatch(/^The player typed the move "e4" on screen\. The player played e4 and it is on the board\. You replied/);
+    expect(lastState()).toMatch(/Moves so far: 1\. e4 \S+/);
+  });
+
+  it('a move in UCI is played the same way', async () => {
+    await live();
+    type('g1f3');
+    await waitFor(() => expect(fake.events).toHaveLength(2), { timeout: 3000 });
+    expect(fake.events[1]).toContain('The player played Nf3');
+  });
+
+  it('anything else typed goes to Sasha: talk, an illegal move, a move in words', async () => {
+    await live();
+    for (const text of ['Nice to meet you!', 'e5', 'knight to f3']) type(text);
+    expect(fake.said).toEqual(['Nice to meet you!', 'e5', 'knight to f3']);
+    expect(fake.recorded).toEqual([]);
+    expect(fake.events).toHaveLength(1);
+    expect(lastState()).toContain('No moves have been played yet');
+  });
+});
+
+describe('choosing a side', () => {
+  it('asked twice, Black is dealt once: the second call and the net both leave the game alone', async () => {
+    // Seen live: "Can I play black instead?", then "Yes, start over as Black." dealt a second fresh game.
+    await live();
+    expect(await call('choose_side', { side: 'black' })).toContain('player on Black');
+    const dealt = lastState();
+    let second = '';
+    await netAfter('Yes, start over as Black.', async () => { second = await call('choose_side', { side: 'black' }); });
+    expect(second).toContain('already playing Black, so nothing changed');
+    expect(fake.events.some((e) => e.startsWith('You did not call'))).toBe(false);
+    expect(lastState()).toBe(dealt);
+  });
+});
+
+describe('the safety net', () => {
+  it('"I resign" with no call: the page resigns after a few seconds and tells Sasha', async () => {
+    await live();
+    vi.useFakeTimers();
+    act(() => fake.handlers.onUserSaid!('I resign.', 'spoken'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(7100); });
+    vi.useRealTimers();
+    await waitFor(() => expect(fake.events.some((e) => e.startsWith('You did not call resign'))).toBe(true));
+    expect(screen.getByText('Sasha wins.')).toBeTruthy();
+  });
+
+  it('when Sasha calls the tool herself, the net stays out of it', async () => {
+    await live();
+    vi.useFakeTimers();
+    act(() => fake.handlers.onUserSaid!('Go easy on me.', 'spoken'));
+    await call('set_strength', { level: 'casual' });
+    await act(async () => { await vi.advanceTimersByTimeAsync(7100); });
+    vi.useRealTimers();
+    expect(fake.events.some((e) => e.startsWith('You did not call'))).toBe(false);
+  });
+
+  it('a button pressed for the same thing counts: the net does not do it again', async () => {
+    await live();
+    await netAfter('Go easy on me.', () => { fireEvent.click(screen.getByRole('button', { name: 'Casual' })); });
     expect(fake.events).toHaveLength(2);
-    expect(screen.getByText('Opponent wins.')).toBeTruthy();
+    expect(fake.events[1]).toContain('casual strength from your next move');
+    expect(fake.events.some((e) => e.startsWith('You did not call'))).toBe(false);
+  });
+
+  it('never plays a move, even one said plainly', async () => {
+    await live();
+    vi.useFakeTimers();
+    act(() => fake.handlers.onUserSaid!('e4', 'spoken'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(7100); });
+    vi.useRealTimers();
+    expect(fake.events).toHaveLength(1);
+    expect(lastState()).toContain('No moves have been played yet');
   });
 });

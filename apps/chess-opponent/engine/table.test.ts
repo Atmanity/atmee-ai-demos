@@ -189,25 +189,45 @@ describe('sides and strength', () => {
     expect(back.event!.text).toContain('they move first');
   });
 
-  test('the side they already have is refused, the game survives, and a spoken request is already answered', () => {
+  test('the side they already have is refused, the game survives, and the host is told nothing changed', () => {
     const t = table();
     play(t, 'e4');
     const outcome = t.act({ kind: 'side', side: 'white' });
     expect(outcome.applied).toBe(false);
     expect(outcome.reason).toMatch(/already playing white/);
-    expect(outcome.staged).toBe(true);
+    expect(outcome.event!.text).toContain('already playing White, so nothing changed and the game goes on');
     expect(t.snapshot().history).toHaveLength(2);
   });
 
-  test('a difficulty change takes effect without a reset, and its outcome was staged', () => {
+  test('asking twice for Black deals one game, not two: the second ask changes nothing', () => {
+    // Seen live: "Can I play black instead?" then "Yes, start over as Black." dealt a second fresh game.
+    const t = table();
+    const first = t.act({ kind: 'side', side: 'black' });
+    t.reply(first.next!);
+    const dealt = t.snapshot();
+    const again = t.act({ kind: 'side', side: 'black' });
+    expect(again.applied).toBe(false);
+    expect(again.next).toBeUndefined();
+    expect(again.event!.text).toContain('already playing Black, so nothing changed: this game has only just started');
+    expect(t.snapshot()).toEqual(dealt);
+  });
+
+  test('a difficulty change takes effect without a reset', () => {
     const t = table();
     play(t, 'e4');
     const outcome = t.act({ kind: 'difficulty', level: 'beginner' });
+    expect(outcome.applied).toBe(true);
     expect(outcome.snapshot.difficulty).toBe('beginner');
     expect(t.match.rank).toBe(5);
     expect(outcome.snapshot.history).toHaveLength(2);
-    expect(outcome.staged).toBe(true);
     expect(outcome.event!.text).toContain('beginner strength from your next move');
+  });
+
+  test('the strength it already plays at changes nothing, and says so', () => {
+    const t = table();
+    const outcome = t.act({ kind: 'difficulty', level: 'full' });
+    expect(outcome.applied).toBe(false);
+    expect(outcome.event!.text).toContain('already playing at full strength');
   });
 
   test('the opening line invites the first move, or leads the opening move when the opponent is White', () => {

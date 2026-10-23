@@ -1,31 +1,32 @@
 import { useEffect, useState } from "react";
 
 import type { ChessSnapshot, Side, Strength } from "../engine/types.ts";
-import type { Intent } from "./ChessGame.tsx";
+import type { Intent } from "./Game.tsx";
 
 /**
- * The controls the original left to voice alone: which side you play, how
- * hard the opponent tries, resigning, and starting over mid-game.
+ * Which side you play, how hard Sasha tries, resigning, and starting over.
  *
  * Anything that throws a game in progress away (a side swap, a resignation,
  * a new game) asks for a second press: there is no takeback on this board.
- * The difficulty takes effect from the opponent's next move and loses
- * nothing, so it acts at once.
+ * The strength takes effect from Sasha's next move and loses nothing, so it
+ * acts at once.
  */
 type Armed = "side" | "resign" | "new" | null;
 
 const LEVELS: { level: Strength; label: string; title: string }[] = [
-  { level: "full", label: "Full", title: "Its favourite move every time (it still only looks one move ahead)" },
-  { level: "casual", label: "Casual", title: "Its third choice each move; it never declines a mate" },
-  { level: "beginner", label: "Beginner", title: "Its sixth choice each move; it never declines a mate" },
+  { level: "full", label: "Full", title: "Her favourite move every time (she still only looks one move ahead)" },
+  { level: "casual", label: "Casual", title: "Her third choice each move; she never misses a mate" },
+  { level: "beginner", label: "Beginner", title: "Her sixth choice each move; she never misses a mate" },
 ];
 
 export function GameControls({
   state,
+  host,
   disabled,
   onIntent,
 }: {
   state: ChessSnapshot;
+  host: string;
   disabled: boolean;
   onIntent: (intent: Intent) => void;
 }) {
@@ -50,10 +51,10 @@ export function GameControls({
   };
 
   return (
-    <div className="chess-controls" role="group" aria-label="Game controls">
-      <div className="chess-control">
-        <span className="chess-control__label">You play</span>
-        <div className="chess-segmented">
+    <div className="kb-controls-bar" role="group" aria-label="Game controls">
+      <div className="kb-control">
+        <span className="kb-control-label" id="kb-side-label">You play</span>
+        <div className="kb-segmented" role="group" aria-labelledby="kb-side-label">
           {(["white", "black"] as const).map((side) => {
             const mine = side === state.user_color;
             const confirming = armed === "side" && !mine;
@@ -61,7 +62,7 @@ export function GameControls({
               <button
                 key={side}
                 type="button"
-                className={`chess-segmented__option${mine ? " is-on" : ""}${confirming ? " is-armed" : ""}`}
+                className={`kb-segment${mine ? " is-on" : ""}${confirming ? " is-armed" : ""}`}
                 aria-pressed={mine}
                 disabled={disabled}
                 title={mine ? `You are playing ${side}` : `Start a new game as ${side}`}
@@ -76,16 +77,16 @@ export function GameControls({
         </div>
       </div>
 
-      <div className="chess-control">
-        <span className="chess-control__label">Opponent</span>
-        <div className="chess-segmented">
+      <div className="kb-control">
+        <span className="kb-control-label" id="kb-strength-label">{host}'s strength</span>
+        <div className="kb-segmented" role="group" aria-labelledby="kb-strength-label">
           {LEVELS.map(({ level, label, title }) => {
             const on = (state.difficulty || "full") === level;
             return (
               <button
                 key={level}
                 type="button"
-                className={`chess-segmented__option${on ? " is-on" : ""}`}
+                className={`kb-segment${on ? " is-on" : ""}`}
                 aria-pressed={on}
                 disabled={disabled}
                 title={title}
@@ -101,10 +102,10 @@ export function GameControls({
       </div>
 
       {!over && (
-        <div className="chess-control chess-control--actions">
+        <div className="kb-control is-actions">
           <button
             type="button"
-            className={`chess-btn chess-btn--quiet${armed === "resign" ? " is-armed" : ""}`}
+            className={`kb-quiet is-danger${armed === "resign" ? " is-armed" : ""}`}
             disabled={disabled}
             onClick={() => guarded("resign", { kind: "resign" }, true)}
           >
@@ -112,7 +113,7 @@ export function GameControls({
           </button>
           <button
             type="button"
-            className={`chess-btn chess-btn--quiet${armed === "new" ? " is-armed" : ""}`}
+            className={`kb-quiet${armed === "new" ? " is-armed" : ""}`}
             disabled={disabled}
             onClick={() => guarded("new", { kind: "new_game" }, inProgress)}
           >

@@ -1,73 +1,84 @@
-// Chess Opponent: a real game against the avatar. The board (rules, the
-// opponent's move choice, every refusal) runs here in the page, because chess
-// has no secrets; the avatar is the opponent across the table, told what the
-// board did and asked to say why it played what it played.
-//
-// Three ways in, one way through: a button or a drag acts at once; a typed
-// line and the player's speech are judged first (engine/judge.ts: rules, then
-// the server's model for the doubtful ones). Every action then goes through
-// the same Table, one at a time, and the avatar gets the new state and one
-// event about what happened.
+// Kibitz: chess against Sasha, a club player who explains her moves. The
+// board (the rules, Sasha's move choice, every refusal) runs here in the page,
+// because chess has no secrets. Sasha calls the board's tools for whatever the
+// player asks it to do (a move, a side, a strength, resigning, a new game) and
+// speaks from what they return: a move's result already carries her reply.
+// Moves made by hand and buttons act at once, and she is told by an event.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AvatarStage, Composer, Transcript, useAvatar } from '../../../src/kit/index.ts';
-import { boardState, NOTES, say } from '../engine/director.ts';
+import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
+import { actionFor, boardState, pressed, say } from '../engine/director.ts';
 import { ChessMatch } from '../engine/game.ts';
-import { judge, toAction, type Verdict } from '../engine/judge.ts';
+import { mustDo, typedMove } from '../engine/judge.ts';
 import { Table, type Outcome } from '../engine/table.ts';
 import type { Action, ChessSnapshot } from '../engine/types.ts';
-import { ChessGame, type Intent, type Sent } from './ChessGame.tsx';
-import './styles.css';
+import { Game, type Intent, type Sent } from './Game.tsx';
+import { Logo, Lobby } from './Lobby.tsx';
+import { Scoresheet } from './Scoresheet.tsx';
+import { isSoundMuted, setSoundMuted, sounds } from './sounds.ts';
+import './kibitz.css';
 
 const ID = 'chess-opponent';
-const API = `/api/apps/${ID}`;
-/** A beat between the player's move landing and the opponent's reply, so both are seen. */
+export const HOST = 'Sasha';
+/** A beat between the player's move landing and Sasha's reply, so both are seen. */
 const REPLY_MS = 700;
-/** The board names the opponent by role: the avatar on screen has its own name. */
-const OPPONENT = 'Opponent';
-
-type How = 'button' | 'typed' | 'spoken';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const NONE: Verdict = { kind: 'none' };
-const VERDICTS = new Set(['move', 'side', 'difficulty', 'resign', 'new', 'none']);
 
-function intentAction(intent: Intent): Action {
+/** Tools that start a new game: after one, the safety net deals no other. */
+const RESETS = new Set(['choose_side', 'new_game']);
+/** As the kit's net counts a call made shortly before the words. */
+const EARLY_MS = 6000;
+
+/** What an action did: the words Sasha speaks from, and whether the board changed. */
+interface Done { text: string; ttl: number; applied: boolean; reason: string }
+
+/** An intent as a board action, the tool it stands for, and how Sasha is told of it. */
+function intentAction(intent: Intent): [Action, string, string] {
   switch (intent.kind) {
-    case 'move': return { kind: 'move', text: intent.move };
-    case 'new_game': return { kind: 'new' };
-    case 'set_side': return { kind: 'side', side: intent.side };
-    case 'set_difficulty': return { kind: 'difficulty', level: intent.level };
-    case 'resign': return { kind: 'resign' };
+    case 'move': return [{ kind: 'move', text: intent.move }, 'play_move', 'moved a piece by hand'];
+    case 'new_game': return [{ kind: 'new' }, 'new_game', 'pressed "New game"'];
+    case 'set_side': return [{ kind: 'side', side: intent.side }, 'choose_side', `pressed "Play ${intent.side === 'white' ? 'White' : 'Black'}"`];
+    case 'set_difficulty': return [{ kind: 'difficulty', level: intent.level }, 'set_strength', `set Sasha's strength to "${intent.level}"`];
+    case 'resign': return [{ kind: 'resign' }, 'resign', 'pressed "Resign"'];
   }
 }
 
+/** What the board says while nothing can be played, in Sasha's terms. */
+function lockedCopy(avatar: Avatar): string | null {
+  switch (avatar.phase) {
+    case 'live': return null;
+    case 'ended': return `Call ended. Call ${HOST} again to play on from here.`;
+    case 'failed': return `${HOST} couldn't make it. Try calling her again.`;
+    default: return `${HOST} is taking her seat…`;
+  }
+}
+
+function gameLine(s: ChessSnapshot | null): string {
+  if (!s) return 'Setting up';
+  if (s.result) return 'Game over';
+  const move = Math.floor(s.history.length / 2) + 1;
+  return s.opening ? `Move ${move} · ${s.opening}` : `Move ${move}`;
+}
+
+const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+
 export function App() {
   const [snapshot, setSnapshot] = useState<ChessSnapshot | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [thinking, setThinking] = useState(false);
   const table = useRef<Table | null>(null);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const avatarRef = useRef<Avatar | null>(null);
+  /** When each action was last taken, by anyone (Sasha, the net, a button); 'reset' for any new game. */
+  const acted = useRef(new Map<string, number>());
+  const touch = useCallback((name: string) => {
+    acted.current.set(name, Date.now());
+    if (RESETS.has(name)) acted.current.set('reset', Date.now());
+  }, []);
 
-  const avatar = useAvatar(ID, {
-    // The avatar hears the player too and starts its own reply at once; the
-    // board's outcome follows as an event (the notes tell it to wait for that).
-    onUserSaid: (text, how) => { if (how === 'spoken') void heard(text, 'spoken'); },
-  });
-  const avatarRef = useRef(avatar);
-  avatarRef.current = avatar;
-  const live = avatar.phase === 'live';
-
-  /** The same board twice is no change (so the panel's own refusal message survives). */
+  /** The same board twice is no change (so a local refusal message survives). */
   const show = useCallback((next: ChessSnapshot) => {
     setSnapshot((prev) => (prev && JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
   }, []);
-
-  /** The state first, then the event, so the avatar's words are grounded. */
-  const tell = useCallback((outcome: Outcome, how: How) => {
-    show(outcome.snapshot);
-    avatarRef.current.state(boardState(outcome.snapshot));
-    // A spoken request whose answer was staged in the state was already answered by the avatar.
-    if (outcome.event && !(how === 'spoken' && outcome.staged)) avatarRef.current.event(outcome.event.text, outcome.event.ttl);
-  }, [show]);
 
   /** One board change at a time, whatever its route. */
   const enqueue = useCallback(<T,>(task: () => Promise<T>): Promise<T> => {
@@ -76,145 +87,170 @@ export function App() {
     return run;
   }, []);
 
-  /** The opponent's move, after a beat, and the one event about it and what led to it. */
-  const reply = useCallback(async (lead: NonNullable<Outcome['next']>) => {
-    setBusy(true);
+  /** Sasha's own move, a beat after whatever made it her turn. */
+  const opponent = useCallback(async (lead: NonNullable<Outcome['next']>): Promise<Outcome> => {
+    setThinking(true);
     await sleep(REPLY_MS);
-    setBusy(false);
-    const t = table.current;
-    if (t) tell(t.reply(lead), 'button');
-  }, [tell]);
-
-  /** Act on the board. `quiet`: an unreadable move is not told (the rules guessed it was a move; the model decides next). */
-  const perform = useCallback((action: Action, how: How, quiet = false): Promise<Outcome | null> => enqueue(async () => {
-    const t = table.current;
-    if (!t) return null;
-    const outcome = t.act(action);
-    if (outcome.kind === 'unreadable' && quiet) {
-      show(outcome.snapshot);
-      return outcome;
-    }
-    if (outcome.next) {
-      show(outcome.snapshot);
-      avatarRef.current.state(boardState(outcome.snapshot));
-      await reply(outcome.next);
-    } else {
-      tell(outcome, how);
-    }
+    setThinking(false);
+    const outcome = table.current!.reply(lead);
+    show(outcome.snapshot);
     return outcome;
-  }), [enqueue, reply, show, tell]);
+  }, [show]);
 
-  /** The server's model, for a line the rules could not settle. None when it is unavailable. */
-  async function askModel(text: string): Promise<Verdict> {
-    const s = table.current?.snapshot();
-    if (!s) return NONE;
-    try {
-      const res = await fetch(`${API}/judge`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text,
-          userColor: s.user_color,
-          turn: s.turn,
-          legal: s.turn === 'user' ? s.legal_moves.map((m) => m.san) : [],
-          moves: s.history.length,
-          over: s.phase === 'game-over',
-        }),
-      });
-      if (!res.ok) return NONE;
-      const verdict = await res.json();
-      return verdict && VERDICTS.has(verdict.kind) ? (verdict as Verdict) : NONE;
-    } catch {
-      return NONE;
-    }
-  }
-
-  /** A line the player said or typed. Returns whether it was a board action. */
-  async function heard(text: string, how: 'spoken' | 'typed'): Promise<boolean> {
+  /** One board action, from any route, and what Sasha is to say about it (her own reply included). */
+  const act = useCallback((action: Action): Promise<Done> => enqueue(async () => {
     const t = table.current;
-    if (!t) return false;
-    let verdict = judge(text, { moves: t.snapshot().history.length });
-    if (verdict.kind === 'model') verdict = await askModel(text);
-    const action = toAction(verdict);
-    if (!action) return false;
-    const guessed = verdict.kind === 'move' && verdict.via === 'rules';
-    const outcome = await perform(action, how, guessed);
-    if (outcome?.kind === 'unreadable' && guessed) {
-      // It looked like a move and the board could not read it: a sentence like
-      // "that knight belongs on g5" is talk, "okay so knight to g5 then" is a
-      // move. The model decides; without one, it is talk.
-      const again = toAction(await askModel(text));
-      if (!again) return false;
-      await perform(again, how);
-    }
-    return true;
-  }
+    if (!t) throw new Error('the board is still being set up; try again in a moment');
+    const first = t.act(action);
+    show(first.snapshot);
+    const last = first.next ? await opponent(first.next) : first;
+    return { text: last.event?.text ?? 'Nothing changed on the board.', ttl: last.event?.ttl ?? 30, applied: first.applied, reason: first.reason ?? '' };
+  }), [enqueue, opponent, show]);
 
-  // The board is set up while the avatar is on its way (the player sees it
-  // during the wait); a second session on the same page carries on the game.
+  // Sasha's tool calls: the board acts, the screen follows, the result is what she says.
+  const onToolCall = useCallback(async ({ name, arguments: args }: ToolCall) => {
+    const action = actionFor(name, args ?? {});
+    if (typeof action === 'string') return action;
+    touch(name);
+    return (await act(action)).text;
+  }, [act, touch]);
+
+  // If Sasha agrees to "I resign" or "go easy on me" without calling the tool, the board does it and tells her.
+  const net = useToolNet({
+    match: (text) => {
+      const s = table.current?.snapshot();
+      if (!s) return null;
+      const call = mustDo(text, { moves: s.history.length, over: s.phase === 'game-over' });
+      return call ? { id: `net-${Date.now()}`, ...call } : null;
+    },
+    run: async (call) => {
+      // Already done since the words, by a button or another tool: a reset
+      // Sasha made with choose_side is not to be followed by the net's new_game.
+      // (A throw here is the kit's way to stand down: nothing is told.)
+      const heardAt = Number(call.id.slice(4)) || Date.now();
+      const since = acted.current.get(RESETS.has(call.name) ? 'reset' : call.name) ?? 0;
+      if (since >= heardAt - EARLY_MS) throw new Error(`${call.name} was already taken care of`);
+      return String(await onToolCall(call));
+    },
+    avatar: () => avatarRef.current!,
+  });
+  const avatar = useAvatar(ID, { onToolCall: net.watch(onToolCall), onUserSaid: (text) => net.heard(text) });
+  avatarRef.current = avatar;
+  const live = avatar.phase === 'live';
+
+  /** A move by hand or a button acts at once; Sasha cannot see the screen, so she is told. */
+  const send = useCallback(async (intent: Intent, what?: string): Promise<Sent> => {
+    const [action, name, how] = intentAction(intent);
+    touch(name);
+    try {
+      const done = await act(action);
+      avatarRef.current?.event(pressed(what ?? how, done.text), done.ttl);
+      return { applied: done.applied, reason: done.reason };
+    } catch (err) {
+      console.warn('[chess-opponent]', err);
+      return { applied: false, reason: 'The board is not set up yet.' };
+    }
+  }, [act, touch]);
+
+  /**
+   * A typed line that is exactly a legal move ("Nf6", "e2e4") is played at
+   * once, like a move by hand, and Sasha is told; anything else is a chat turn
+   * she answers (and calls the tools for).
+   */
+  const onTyped = (text: string) => {
+    const s = table.current?.snapshot();
+    const uci = s ? typedMove(text, s) : null;
+    if (!uci) return void avatar.say(text);
+    avatar.record(text);
+    void send({ kind: 'move', move: uci }, `typed the move "${text.trim()}"`);
+  };
+
+  // The board is set up while Sasha is on her way (the player sees it during
+  // the wait); calling her again on the same page carries on the same game.
   useEffect(() => {
     if (avatar.phase !== 'starting') return;
-    for (const note of NOTES) avatar.note(note);
-    const existing = table.current;
-    if (existing) {
-      const s = existing.snapshot();
-      tell({ kind: 'idle', applied: false, snapshot: s, event: { text: say.resume(s), ttl: 60 } }, 'button');
-      return;
-    }
-    const t = new Table(new ChessMatch());
-    table.current = t;
-    console.info('[chess-opponent] match seed=%d (new ChessMatch("white", seed) replays its tie-breaks)', t.match.seed);
-    const opening = t.start();
-    if (opening.next) {
-      show(opening.snapshot);
-      void enqueue(() => reply(opening.next!));
+    let t = table.current;
+    if (t) {
+      const s = t.snapshot();
+      show(s);
+      // A game under way is carried on; an untouched board (a call that never connected) is a fresh start.
+      if (s.history.length > 0 || s.result) {
+        avatar.event(say.resume(s), 60);
+        return;
+      }
     } else {
-      tell(opening, 'button');
+      t = new Table(new ChessMatch());
+      table.current = t;
+      console.info('[chess-opponent] match seed=%d (new ChessMatch("white", seed) replays its tie-breaks)', t.match.seed);
+    }
+    const opening = t.start();
+    show(opening.snapshot);
+    if (opening.next) {
+      void enqueue(async () => {
+        const reply = await opponent(opening.next!);
+        if (reply.event) avatarRef.current?.event(reply.event.text, reply.event.ttl);
+      });
+    } else if (opening.event) {
+      avatar.event(opening.event.text, opening.event.ttl);
     }
   }, [avatar.phase]);
 
-  // The avatar's picture of the board follows the board.
+  // Sasha's picture of the board follows the board.
   useEffect(() => { if (snapshot) avatar.state(boardState(snapshot)); }, [snapshot]);
 
-  const send = useCallback((intent: Intent): Promise<Sent> =>
-    perform(intentAction(intent), 'button').then((outcome) =>
-      outcome ? { applied: outcome.applied, reason: outcome.reason ?? '' } : { applied: false, reason: 'The board is not set up yet.' }),
-  [perform]);
+  if (avatar.phase === 'idle') return <Lobby onPlay={(mic) => void avatar.start({ mic })} />;
 
-  // A typed line is judged first; only what isn't a board action goes to the avatar.
-  const onTyped = (text: string) => {
-    void heard(text, 'typed').then((handled) => {
-      if (handled) avatar.record(text);
-      else avatar.say(text);
-    });
-  };
-
-  const status = !snapshot ? 'Press “Start the game”: your opponent sets up the board.'
-    : !live ? (avatar.phase === 'ended' ? 'The session has ended. Start again to play on.' : 'Your opponent is on the way…')
-      : busy ? 'Your opponent is thinking…'
-        : snapshot.phase === 'game-over' ? 'Game over.'
-          : snapshot.turn === 'user' ? 'Your move.' : 'Your opponent’s move.';
+  const theirSide = snapshot ? (snapshot.user_color === 'white' ? 'Black' : 'White') : null;
+  const showClock = live && avatar.secondsLeft !== null && avatar.secondsLeft <= 180;
 
   return (
-    <div className="kit-layout">
-      <div className="kit-side">
-        <AvatarStage
-          avatar={avatar} name="Your opponent" startLabel="Start the game"
-          lobby={<><div className="kit-title">Chess Opponent</div><div className="kit-detail">A real game against an opponent who moves on its own, says why, and needles you a little. Drag a piece, or say or type your move.</div></>}
+    <div className="kb-app">
+      <header className="kb-top">
+        <Logo />
+        <p className="kb-game-line">{gameLine(snapshot)}</p>
+        <SoundToggle />
+        <CallControls avatar={avatar} className="kb-call-controls" />
+      </header>
+
+      <main className="kb-main">
+        <section className={`kb-host${avatar.audioBlocked ? ' is-blocked' : ''}`} aria-label={`${HOST}, your opponent`}>
+          <HostVideo avatar={avatar} name={HOST} className="kb-host-video">
+            <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} />
+          </HostVideo>
+          <div className="kb-nameplate">
+            <p className="kb-nameplate-name"><b>{HOST}</b><span>Club player{theirSide ? ` · plays ${theirSide}` : ''}</span></p>
+            {showClock && <p className="kb-clock" title="Time left on this call">{clock(avatar.secondsLeft!)} left</p>}
+          </div>
+        </section>
+
+        <Game state={snapshot} send={send} thinking={thinking} host={HOST} locked={lockedCopy(avatar)} />
+
+        <ChatPanel
+          avatar={avatar} name={HOST} className="kb-chat" placeholder="Type a move, or say something to Sasha…" onSubmit={onTyped}
+          empty={<>Say your move out loud or type it here: <q>e4</q>, <q>knight to f3</q>, <q>castle</q>. Ask for Black or an easier game any time.</>}
         />
-        <Composer avatar={avatar} placeholder='Type a move ("e4", "knight to f3") or a message…' onSubmit={(t) => { onTyped(t); }} />
-        <Transcript avatar={avatar} names={{ avatar: OPPONENT }} />
-      </div>
-      <main className="chess-app">
-        <header className="chess-app__header">
-          <h1 className="chess-app__title">Chess</h1>
-          <span className="chess-app__tagline" role="status">{status}</span>
-        </header>
-        <ChessGame
-          state={snapshot} send={send} pending={busy} opponentName={OPPONENT} disabled={!live}
-          lobby="Press “Start the game”: your opponent sets up the board."
-        />
+
+        <Scoresheet state={snapshot} host={HOST} />
       </main>
     </div>
+  );
+}
+
+function SoundToggle() {
+  const [muted, setMuted] = useState(() => isSoundMuted());
+  const toggle = () => {
+    const next = !muted;
+    setMuted(next);
+    setSoundMuted(next);
+    if (!next) sounds.buttonTap();
+  };
+  return (
+    <button type="button" className="kb-icon-button" onClick={toggle} aria-pressed={!muted} title={muted ? 'Turn board sounds on' : 'Turn board sounds off'}>
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" />
+        {muted ? <path d="M16 9.5l5 5M21 9.5l-5 5" /> : <path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" />}
+      </svg>
+      <span className="kb-sr">{muted ? 'Board sounds are off' : 'Board sounds are on'}</span>
+    </button>
   );
 }

@@ -1,7 +1,8 @@
-// What happens when: the board, the opponent's turn, and what the avatar is
+// What happens when: the board, the opponent's turn, and what the host is
 // told about each change. Ported from table.py/tools.py, minus the platform
 // machinery they needed (the store, the claim, the turn driver), plus the one
-// rule those carried: every change is told to the avatar exactly once.
+// rule those carried: every change is told to the host exactly once (as the
+// result of its own tool call, or as an event after a button or a drag).
 //
 // Pure and synchronous: the page decides when (it waits a beat before the
 // opponent's reply, so the player sees their own move land first).
@@ -23,15 +24,9 @@ export interface Outcome {
   /** The board's refusal, in words fit for the player. */
   reason?: string;
   snapshot: ChessSnapshot;
-  /** What to tell the avatar now (in its own words). */
+  /** What to tell the host now: a tool's result, or an event (in its own words). */
   event?: { text: string; ttl: number };
-  /**
-   * The answer was staged in the avatar's state beforehand, so a SPOKEN request
-   * has already been answered by the avatar itself; tell it only for buttons
-   * and typing, or it says the same thing twice.
-   */
-  staged?: boolean;
-  /** It is the opponent's turn: call `reply(next)` (after a beat) for its move and the one event about both. */
+  /** It is the opponent's turn: call `reply(next)` (after a beat) for its move and the one text about both. */
   next?: Lead & { fen: string };
 }
 
@@ -49,7 +44,7 @@ export class Table {
     return this.match.snapshot();
   }
 
-  /** The opening: what the avatar says when the board is first set up. */
+  /** The opening: what the host says when the board is first set up. */
   start(): Outcome {
     const snapshot = this.snapshot();
     if (this.match.turn() === 'agent') {
@@ -80,11 +75,10 @@ export class Table {
       const why = clip(err.message, REFUSAL_REASON_MAX_BYTES);
       if (err instanceof UnreadableMove) {
         // This code could not read it: not a fact about the position, so
-        // nothing goes on screen claiming it is. The page decides whether to
-        // say anything (only when a model judged it a move).
+        // nothing goes on screen claiming it is; the host asks again.
         return { kind: 'unreadable', applied: false, reason: err.message, snapshot: this.snapshot(), event: { text: say.unreadable(said), ttl: TTL.refusal } };
       }
-      // On the screen as well as in the avatar's mouth.
+      // On the screen as well as in the host's mouth.
       this.match.noteRefusal(said, err.message, atFen);
       const snapshot = this.snapshot();
       if (err instanceof AmbiguousMove) {
@@ -103,13 +97,18 @@ export class Table {
 
   private side(side: Side | 'other' | string): Outcome {
     const want = side === 'other' ? opposite(this.match.userColor) : side;
+    // Asked twice ("can I play black?", then "yes, start over as Black"): the
+    // board stays as it is, and says so. A second fresh game was once dealt here.
+    if (want === this.match.userColor) {
+      const s = this.snapshot();
+      const played = s.history.length > (s.user_color === 'black' ? 1 : 0);
+      return { kind: 'refused', applied: false, reason: `you are already playing ${want}`, snapshot: s, event: { text: say.sideSame(s, played), ttl: TTL.command } };
+    }
     try {
       this.match.setSide(want);
     } catch (err) {
       if (!(err instanceof IllegalMove)) throw err;
-      // "you are already playing white" was staged: a spoken request already got it.
-      const staged = this.match.userColor === want;
-      return { kind: 'refused', applied: false, reason: err.message, snapshot: this.snapshot(), staged, event: { text: say.sideRefused(err.message), ttl: TTL.command } };
+      return { kind: 'refused', applied: false, reason: err.message, snapshot: this.snapshot(), event: { text: say.sideRefused(err.message), ttl: TTL.command } };
     }
     return this.reset('side');
   }
@@ -131,9 +130,10 @@ export class Table {
 
   private difficulty(level: string): Outcome {
     try {
+      const before = this.match.strength;
       const name = this.match.setStrength(level);
-      // The outcome of "go easier" was staged in the state.
-      return { kind: 'difficulty', applied: true, snapshot: this.snapshot(), staged: true, event: { text: say.difficulty(name), ttl: TTL.command } };
+      if (name === before) return { kind: 'difficulty', applied: false, snapshot: this.snapshot(), event: { text: say.difficultySame(name), ttl: TTL.command } };
+      return { kind: 'difficulty', applied: true, snapshot: this.snapshot(), event: { text: say.difficulty(name), ttl: TTL.command } };
     } catch (err) {
       if (!(err instanceof IllegalMove)) throw err;
       return { kind: 'refused', applied: false, reason: err.message, snapshot: this.snapshot(), event: { text: say.difficultyRefused(err.message), ttl: TTL.command } };

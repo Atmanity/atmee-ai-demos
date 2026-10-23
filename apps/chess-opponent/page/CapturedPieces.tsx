@@ -13,14 +13,13 @@ interface CapturedPiecesProps {
   label?: string;
 }
 
+/** Text presentation: some systems draw the black pawn as a colour emoji without it. */
+const TEXT = "︎";
+
 /**
- * The "pieces you have lost, and by how much" strip in a player row.
- *
- * Empty renders NOTHING. It used to print "Lost —" from the first move of the
- * game, which on the top row collided with the mute button and bought this
- * panel a padding hack; a row that says "nothing has been captured" in two
- * glyphs is noise standing where a real signal will go. "Lost" survives as the
- * strip's accessible name, which is where it was doing its actual work.
+ * The "pieces you have lost, and by how much" strip in a player row. Empty
+ * renders NOTHING: a row that says "nothing has been captured" in two glyphs
+ * is noise standing where a real signal will go.
  */
 export function CapturedPieces({
   pieces,
@@ -32,22 +31,21 @@ export function CapturedPieces({
   const lead = advantageLabel(advantage);
   if (sorted.length === 0 && !lead) return null;
   return (
-    <div
-      className={`chess-captured chess-captured--${capturedColor === "w" ? "white" : "black"}`}
+    <span
+      className={`kb-captured is-${capturedColor === "w" ? "white" : "black"}`}
       role="group"
       aria-label={`${label} pieces`}
     >
       {sorted.map((type, index) => (
-        <span key={`${type}-${index}`} className="chess-captured__piece">
-          {pieceGlyph(type, capturedColor)}
+        <span key={`${type}-${index}`} className="kb-captured-piece">
+          {pieceGlyph(type, capturedColor) + TEXT}
         </span>
       ))}
       {lead && (
-        <span className="chess-captured__advantage" title={lead.title}>
-          <span className="chess-captured__advantage-value">{lead.value}</span>
-          <span className="chess-captured__advantage-unit">{lead.unit}</span>
+        <span className="kb-captured-lead" title={lead.title}>
+          {lead.value} <small>{lead.unit}</small>
         </span>
       )}
-    </div>
+    </span>
   );
 }

@@ -1,17 +1,15 @@
 import { Component, Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Chessboard, type PieceDropHandlerArgs } from "react-chessboard";
-/** A board coordinate ("e4"). A local alias: the panel needs no chess library types. */
+import { Chessboard, type PieceDropHandlerArgs, type SquareHandlerArgs } from "react-chessboard";
+/** A board coordinate ("e4"). A local alias: the page needs no chess library types. */
 type Square = string;
 export type { Square };
 
 /**
- * The board itself. Ported from the source panel unchanged in substance:
- * react-chessboard renders its pieces as inline SVG, so nothing here reaches
- * the network — which is what makes it usable inside the panel sandbox at all.
- *
- * What this file decides is what a player can SEE at a glance while their eyes
- * are on the avatar rather than the panel: whose turn it is (the ring), what
- * just moved (the tint), and whether a king is under attack (the check mark).
+ * The board itself. What this file decides is what a player can SEE at a
+ * glance while they are listening to Sasha: whose turn it is (the frame),
+ * what just moved (the tint), whether a king is under attack (the check
+ * mark), and, for a tap-to-move player on a phone, which piece is picked up
+ * and where it can go.
  */
 interface ChessBoardProps {
   fen: string;
@@ -19,80 +17,61 @@ interface ChessBoardProps {
   draggable: boolean;
   lastMove?: { from: Square; to: Square } | null;
   inCheckSquare?: Square | null;
-  /** Whose move it is, for the ring around the board. */
+  /** Whose move it is, for the frame around the board. */
   turnState: "yours" | "theirs" | "over" | "none";
   onPieceDrop: (source: Square, target: Square) => boolean;
+  /** Tap to move: a square was tapped. */
+  onSquareClick?: (square: Square) => void;
+  /** The piece picked up by a tap, and the squares it can go to. */
+  selected?: Square | null;
+  targets?: readonly Square[];
 }
 
-const LIGHT_SQUARE = "#eadbc1";
-const DARK_SQUARE = "#7f6045";
+/** Maple and walnut: a club board on the felt. */
+export const LIGHT_SQUARE = "#ecdcbf";
+export const DARK_SQUARE = "#a2795a";
 
 /**
- * The last move must survive a GLANCE: the opponent moves while the player is
- * looking at the avatar, and this is the only cue that says what changed.
- *
- * It used to REPLACE the square's colour with a 45% yellow, which on a light
- * square lands at #e8d9a2 against #eadbc1 — invisible. These are inset shadow
- * overlays instead, so both parities keep their own colour underneath and the
- * DESTINATION is stronger than the origin (where the piece now is matters more
- * than where it was).
+ * The last move must survive a GLANCE: Sasha moves while the player is
+ * looking at her, and this is the only cue that says what changed. Inset
+ * overlays, so both square colours keep their own tone underneath, and the
+ * DESTINATION is stronger than the origin.
  */
-const LAST_MOVE_FROM = "inset 0 0 0 999px rgba(255, 205, 60, 0.30)";
-const LAST_MOVE_TO =
-  "inset 0 0 0 999px rgba(255, 205, 60, 0.46), inset 0 0 0 3px rgba(255, 226, 130, 0.95)";
+const LAST_MOVE_FROM = "inset 0 0 0 999px rgba(222, 176, 60, 0.30)";
+const LAST_MOVE_TO = "inset 0 0 0 999px rgba(222, 176, 60, 0.48), inset 0 0 0 3px rgba(246, 214, 120, 0.95)";
 
-/**
- * A check was a 4px inset of 50%-alpha red — a hairline on a 41px square at
- * 360px wide, on top of a sand-coloured square. It is now a filled radial
- * centred on the king plus a solid 3px ring, and the word "check" is said in
- * the status line as well, because a mark nobody notices is not a warning.
- */
+/** A check is a filled radial on the king plus a solid ring: a hairline nobody notices is not a warning. */
 const CHECK_STYLE: React.CSSProperties = {
   background:
-    "radial-gradient(circle at 50% 50%, rgba(226, 58, 58, 0.92) 0%, rgba(196, 36, 36, 0.72) 62%, rgba(160, 24, 24, 0.35) 100%)",
-  boxShadow: "inset 0 0 0 3px rgba(255, 120, 120, 0.95)",
+    "radial-gradient(circle at 50% 50%, rgba(214, 62, 44, 0.92) 0%, rgba(190, 44, 30, 0.72) 62%, rgba(150, 30, 20, 0.35) 100%)",
+  boxShadow: "inset 0 0 0 3px rgba(255, 130, 110, 0.95)",
+};
+
+const SELECTED_STYLE: React.CSSProperties = { boxShadow: "inset 0 0 0 999px rgba(29, 68, 54, 0.32), inset 0 0 0 3px #1d4436" };
+const TARGET_STYLE: React.CSSProperties = {
+  backgroundImage: "radial-gradient(circle at 50% 50%, rgba(29, 68, 54, 0.55) 0 17%, transparent 19%)",
+  cursor: "pointer",
 };
 
 /**
- * Coordinates are load-bearing here: a voice player maps "e4" to a square by
- * reading them. react-chessboard's defaults paint them in the opposite square
- * colour with no shadow, at 13px, in the corner — so at 360px the file letters
- * sit ON the black king and rooks and all but disappear. Explicit per-parity
- * styles: high-contrast, shadowed off the piece behind them, and small.
+ * Coordinates are load-bearing: a voice player maps "e4" to a square by
+ * reading them. High-contrast, shadowed off the piece behind them, and small.
  */
-const DARK_SQUARE_NOTATION: React.CSSProperties = {
-  color: "#f6ead2",
-  textShadow: "0 1px 2px rgba(0, 0, 0, 0.85)",
-};
-const LIGHT_SQUARE_NOTATION: React.CSSProperties = {
-  color: "#4a3520",
-  textShadow: "0 1px 2px rgba(255, 255, 255, 0.75)",
-};
+const DARK_SQUARE_NOTATION: React.CSSProperties = { color: "#f8ecd4", textShadow: "0 1px 2px rgba(0, 0, 0, 0.85)" };
+const LIGHT_SQUARE_NOTATION: React.CSSProperties = { color: "#5a3d24", textShadow: "0 1px 2px rgba(255, 255, 255, 0.75)" };
 const ALPHA_NOTATION: React.CSSProperties = {
-  fontSize: "9px",
-  fontWeight: 700,
-  position: "absolute",
-  bottom: 1,
-  right: 2,
-  userSelect: "none",
-  pointerEvents: "none",
+  fontSize: "9px", fontWeight: 700, position: "absolute", bottom: 1, right: 2, userSelect: "none", pointerEvents: "none",
 };
 const NUMERIC_NOTATION: React.CSSProperties = {
-  fontSize: "9px",
-  fontWeight: 700,
-  position: "absolute",
-  top: 1,
-  left: 2,
-  userSelect: "none",
-  pointerEvents: "none",
+  fontSize: "9px", fontWeight: 700, position: "absolute", top: 1, left: 2, userSelect: "none", pointerEvents: "none",
 };
 
 /**
  * Whether this viewer asked for less motion. The stylesheet cannot reach the
  * board's JS-driven piece animation, so it is read here and turned off at the
- * source rather than left sliding pieces around under a `reduce` preference.
+ * source.
  */
-function usePrefersReducedMotion(): boolean {
+export function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
@@ -118,6 +97,9 @@ export function ChessBoardView({
   inCheckSquare,
   turnState,
   onPieceDrop,
+  onSquareClick,
+  selected = null,
+  targets = [],
 }: ChessBoardProps) {
   const reducedMotion = usePrefersReducedMotion();
   const squareStyles = useMemo(() => {
@@ -126,35 +108,37 @@ export function ChessBoardView({
       styles[lastMove.from] = { boxShadow: LAST_MOVE_FROM };
       styles[lastMove.to] = { boxShadow: LAST_MOVE_TO };
     }
-    if (inCheckSquare) {
-      styles[inCheckSquare] = { ...CHECK_STYLE };
-    }
+    if (inCheckSquare) styles[inCheckSquare] = { ...CHECK_STYLE };
+    if (selected) styles[selected] = { ...styles[selected], ...SELECTED_STYLE };
+    for (const square of targets) styles[square] = { ...styles[square], ...TARGET_STYLE };
     return styles;
-  }, [lastMove, inCheckSquare]);
+  }, [lastMove, inCheckSquare, selected, targets]);
 
   return (
-    <div className={`chess-board-wrap chess-board-wrap--${turnState}`}>
+    <div className={`kb-board kb-board--${turnState}`}>
       <BoardBoundary>
-      <Chessboard
-        options={{
-          position: fen,
-          boardOrientation,
-          allowDragging: draggable,
-          onPieceDrop: ({ sourceSquare, targetSquare }: PieceDropHandlerArgs) => {
-            if (!targetSquare) return false;
-            return onPieceDrop(sourceSquare as Square, targetSquare as Square);
-          },
-          boardStyle: { borderRadius: 8, boxShadow: "0 10px 40px rgba(0,0,0,0.45)" },
-          darkSquareStyle: { backgroundColor: DARK_SQUARE },
-          lightSquareStyle: { backgroundColor: LIGHT_SQUARE },
-          darkSquareNotationStyle: DARK_SQUARE_NOTATION,
-          lightSquareNotationStyle: LIGHT_SQUARE_NOTATION,
-          alphaNotationStyle: ALPHA_NOTATION,
-          numericNotationStyle: NUMERIC_NOTATION,
-          squareStyles,
-          animationDurationInMs: reducedMotion ? 0 : 180,
-        }}
-      />
+        <Chessboard
+          options={{
+            id: "kb-board",
+            position: fen,
+            boardOrientation,
+            allowDragging: draggable,
+            onPieceDrop: ({ sourceSquare, targetSquare }: PieceDropHandlerArgs) => {
+              if (!targetSquare) return false;
+              return onPieceDrop(sourceSquare as Square, targetSquare as Square);
+            },
+            onSquareClick: ({ square }: SquareHandlerArgs) => onSquareClick?.(square),
+            boardStyle: { borderRadius: 4 },
+            darkSquareStyle: { backgroundColor: DARK_SQUARE },
+            lightSquareStyle: { backgroundColor: LIGHT_SQUARE },
+            darkSquareNotationStyle: DARK_SQUARE_NOTATION,
+            lightSquareNotationStyle: LIGHT_SQUARE_NOTATION,
+            alphaNotationStyle: ALPHA_NOTATION,
+            numericNotationStyle: NUMERIC_NOTATION,
+            squareStyles,
+            animationDurationInMs: reducedMotion ? 0 : 180,
+          }}
+        />
       </BoardBoundary>
     </div>
   );
@@ -162,12 +146,12 @@ export function ChessBoardView({
 
 /**
  * react-chessboard measures a square to animate a move and throws when the
- * square has no size (a board that is not laid out). In this page the board
- * shares a React tree with the avatar's video, so a throw would take the
- * whole session's screen down with it. This catches it and remounts the board
- * fresh: a fresh board has nothing to animate, so it does not measure.
+ * square has no size (a board that is not laid out). The board shares a React
+ * tree with Sasha's video, so a throw would take the whole screen down with
+ * it. This catches it and remounts the board fresh: a fresh board has nothing
+ * to animate, so it does not measure.
  */
-class BoardBoundary extends Component<{ children: ReactNode }, { mount: number; failures: number }> {
+export class BoardBoundary extends Component<{ children: ReactNode }, { mount: number; failures: number }> {
   state = { mount: 0, failures: 0 };
 
   static getDerivedStateFromError() {
@@ -180,7 +164,7 @@ class BoardBoundary extends Component<{ children: ReactNode }, { mount: number; 
   }
 
   render() {
-    if (this.state.failures > 3) return <div className="chess-lobby">The board could not be drawn. Reload the page to carry on.</div>;
+    if (this.state.failures > 3) return <div className="kb-board-error">The board could not be drawn. Reload the page to start a fresh game.</div>;
     return <Fragment key={this.state.mount}>{this.props.children}</Fragment>;
   }
 }
