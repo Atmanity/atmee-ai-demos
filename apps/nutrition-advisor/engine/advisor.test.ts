@@ -425,6 +425,7 @@ describe('a card is a food at a portion', () => {
     const a = new Advisor();
     a.show(usual('Chicken breast', '1 breast (120 g)', 198));
     a.show(stated('Chicken breast', '200 g', 330));
-    expect(a.shelfPayload()).toMatchObject({ current: 'Chicken breast', current_serving: '200 g' });
+    expect(a.shelfPayload()).toMatchObject({ current: 'Chicken breast', current_key: cardKey('Chicken breast', '200 g') });
+    expect(a.shelfPayload().items.map((r) => r.key)).toEqual([cardKey('Chicken breast', 'usual'), cardKey('Chicken breast', '200 g')]);
   });
 });

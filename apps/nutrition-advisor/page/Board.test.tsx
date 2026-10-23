@@ -8,6 +8,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Advisor } from '../engine/advisor.ts';
+import { parseShelf } from '../engine/shelf.ts';
 import { started, unstarted } from '../engine/cook.ts';
 import type { NutritionData, RecipeDetails } from '../engine/types.ts';
 import { App, workLabel } from './App.tsx';
@@ -136,6 +137,20 @@ describe('side by side', () => {
     expect(screen.getByText('Side by side · 2 foods')).toBeTruthy();
     expect(screen.getByText(/See all 2 foods side by side/)).toBeTruthy();
     expect(screen.getAllByRole('row')).toHaveLength(3);
+  });
+
+  it('two cards of one food at the same serving, the usual one and a stated amount, are two rows and only the one on the card is marked', () => {
+    const a = new Advisor();
+    a.show({ ...food('Chicken breast'), serving_size: '200 g', calories: 330, portion_assumed: true });
+    a.show({ ...food('Chicken breast'), serving_size: '200 g', calories: 331, portion_assumed: false });
+    const view = a.view();
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { container } = board({ view: { ...view, shelf: parseShelf(view.shelf) } });
+    const rows = [...container.querySelectorAll('.ms-table tbody tr')];
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.classList.contains('is-current'))).toEqual([false, true]);
+    expect(errors.mock.calls.flat().join(' ')).not.toMatch(/same key/);
+    errors.mockRestore();
   });
 
   it('starting over asks first', () => {

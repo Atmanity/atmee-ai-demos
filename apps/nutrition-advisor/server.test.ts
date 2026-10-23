@@ -176,7 +176,9 @@ describe('look_up_food', () => {
       expect(body.text).toContain('330 calories');
       expect(body.text).not.toContain('198 calories');
       expect(rows(body)).toEqual([['Chicken breast', '1 breast (120 g)', 198], ['Chicken breast', '200 g', 330]]);
-      expect(body.view.shelf).toMatchObject({ current: 'Chicken breast', current_serving: '200 g' });
+      expect(body.view.shelf.current).toBe('Chicken breast');
+      expect(body.view.shelf.current_key).toBe(body.view.shelf.items[1].key);
+      expect(body.view.shelf.items[0].key).not.toBe(body.view.shelf.items[1].key);
       const plain = await tool('look_up_food', { foods: ['chicken breast'] });
       expect(plain.body.view.nutrition?.calories).toBe(198);
       expect(calls(CARD_SCHEMA)).toBe(2);

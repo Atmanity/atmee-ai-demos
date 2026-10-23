@@ -37,7 +37,7 @@ export function shelfRow(data: NutritionData): ShelfRow {
     sugar_g: n.sugar_g || 0,
     sodium_mg: n.sodium_mg || 0,
     health_score: data.health_score || 0,
-    stated: !usualPortion(data),
+    key: identity(data),
   };
 }
 
@@ -167,8 +167,8 @@ export const cardKey = (name: string, portion: string) => `${foodKey(name)}\u000
 
 /** The identity of a card or of its row in the table. */
 export function identity(item: NutritionData | ShelfRow): string {
-  const stated = 'nutrients' in item ? !usualPortion(item) : Boolean(item.stated);
-  return cardKey(item.product_name, stated ? item.serving_size : 'usual');
+  if (!('nutrients' in item)) return item.key ?? cardKey(item.product_name, 'usual');
+  return cardKey(item.product_name, usualPortion(item) ? 'usual' : item.serving_size);
 }
 const keyOf = identity;
 
@@ -252,7 +252,7 @@ export class Advisor {
   shelfPayload(): Shelf {
     return {
       current: this.nutrition?.product_name ?? '',
-      ...(this.nutrition ? { current_serving: this.nutrition.serving_size } : {}),
+      ...(this.nutrition ? { current_key: identity(this.nutrition) } : {}),
       items: this.shelf.map((row) => ({ ...row })),
       // The page needs to know one is there; the steps come with the recipe when it is opened.
       recipes: this.recipes.map((r) => ({ recipe_name: r.recipe_name })),

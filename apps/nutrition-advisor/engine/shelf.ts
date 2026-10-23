@@ -33,21 +33,18 @@ export interface ShelfRow {
   sodium_mg: number | null;
   health_score: number;
   /**
-   * The portion is an amount the user stated ("200 g"), not the food's usual
-   * serving or a label's. Part of the row's identity (engine/advisor.ts
-   * `identity`); the page has no use for it.
+   * The row's identity, the food at a portion (engine/advisor.ts `cardKey`):
+   * two portions of one food can share a name and even a serving ("200 g" as
+   * the usual card and as an amount stated), so the page keys and marks rows
+   * by this, never by their words.
    */
-  stated?: boolean;
+  key?: string;
 }
 
 export interface Shelf {
   current: string;
-  /**
-   * The serving of the food on the card. Two portions of one food share a
-   * name ("Chicken breast", 1 breast and 200 g), so the name alone could
-   * mark both rows as the one on the card.
-   */
-  current_serving?: string;
+  /** The identity of the card on screen (see `ShelfRow.key`): the one row marked as on the card. */
+  current_key?: string;
   items: ShelfRow[];
   recipes: { recipe_name: string }[];
 }
@@ -84,6 +81,7 @@ export function parseShelf(value: unknown): Shelf {
         sugar_g: num(row.sugar_g),
         sodium_mg: numOrNull(row.sodium_mg),
         health_score: num(row.health_score),
+        ...(typeof row.key === 'string' && row.key ? { key: row.key } : {}),
       });
     }
   }
@@ -99,7 +97,7 @@ export function parseShelf(value: unknown): Shelf {
   }
   return {
     current: typeof raw.current === 'string' ? raw.current : '',
-    ...(typeof raw.current_serving === 'string' ? { current_serving: raw.current_serving } : {}),
+    ...(typeof raw.current_key === 'string' && raw.current_key ? { current_key: raw.current_key } : {}),
     items,
     recipes,
   };
@@ -117,7 +115,11 @@ function numOrNull(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Whether a row is the food on the card: its name, and its serving when the shelf says which. */
+/** Whether a row is the card on screen: by identity when both carry one, else by name. */
 export function isCurrent(shelf: Shelf, row: ShelfRow): boolean {
-  return row.product_name === shelf.current && (shelf.current_serving === undefined || row.serving_size === shelf.current_serving);
+  if (shelf.current_key !== undefined && row.key !== undefined) return row.key === shelf.current_key;
+  return row.product_name === shelf.current;
 }
+
+/** A row's React key: its identity, or its words for a row that carries none. */
+export const rowKey = (row: ShelfRow) => row.key ?? `${row.product_name}\u0000${row.serving_size}`;
