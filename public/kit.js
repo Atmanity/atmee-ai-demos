@@ -85,9 +85,11 @@
           if (spoken.size > 200) spoken.delete(spoken.keys().next().value);
         }
         if (final) seg.done = true;
-        // Hidden while it repeats a typed turn; an interim that goes on past
-        // it shows, and only the final decides it was the echo.
-        if (!text || echoOf(text, final)) { if (seg.d) seg.d.remove(); seg.d = null; return; }
+        // An interim never takes a bubble away (it may land after a fuller
+        // one): one that repeats a typed turn only waits to be shown, and the
+        // final decides whether the segment was that turn's echo.
+        const gone = final ? !text || echoOf(text, true) : !text || (!seg.d && echoOf(text, false));
+        if (gone) { if (final && seg.d) { seg.d.remove(); seg.d = null; } return; }
         if (!seg.d) {
           // A new utterance settles any whose final never came.
           spoken.forEach((x) => x.d && x.d.classList.remove('live'));
