@@ -44,6 +44,8 @@
   .tile.here { border: 2px solid var(--accent); box-shadow: 0 0 24px rgb(217 164 65 / .45); }
   .tile.here::before { content: "🧭"; position: absolute; top: 6px; right: 8px; font-size: 18px; }
   .tile.shrine:not(.fog) { background: radial-gradient(circle at 50% 40%, #4a3a7a, #1b1636); }
+  .tile.clue { border-color: #c9b8ff; box-shadow: 0 0 22px rgb(201 184 255 / .45); }
+  .tile.clue::after { content: "✨"; position: absolute; bottom: 6px; right: 8px; font-size: 16px; }
   .legend { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 15px; margin-top: 12px; flex-wrap: wrap; }
   kbd { font-family: ui-monospace, Menlo, monospace; font-size: 12px; border: 1px solid var(--line); border-bottom-width: 2px; padding: 1px 6px; border-radius: 5px; }
 
@@ -108,7 +110,7 @@
       <div class="caption" id="caption"></div>
       <div class="overlay" id="overlay"></div>
     </div></div>
-    <div class="inventory"><span class="muted" style="font-size:15px">Satchel</span><div class="slot" id="slotKey"></div><div class="slot" id="slotMap"></div><div class="slot" id="slotGold"></div></div>
+    <div class="inventory"><span class="muted" style="font-size:15px">Satchel</span><div class="slot" id="slotKey"></div><div class="slot" id="slotMap"></div><div class="slot" id="slotGold"></div><div class="slot" id="slotGift" title="The oracle's gift"></div></div>
     <div class="oracle" id="oracle" hidden>
       <b>🔮 THE ORACLE LISTENS</b>
       <form class="composer" id="ask"><input id="question" placeholder="Ask the oracle a question…" maxlength="300" autocomplete="off"><button class="icon-btn" id="send" type="submit" aria-label="Ask"></button></form>
@@ -138,7 +140,7 @@
     [['🌺', 'A hibiscus meadow'], ['🏚️', 'A wrecked hut'], ['🧭', 'A compass on a rock'], ['🧰', 'The treasure chest']],
   ];
   let s, here = [0, 0], steps = 0, atShrine = false, won = false;
-  const visited = new Set(['0,0']), inv = new Set();
+  const visited = new Set(['0,0']), inv = new Set(), clues = new Set();
   const caption = UI.captions($('caption'));
   const debug = UI.debugLog();
   const overlay = UI.stage($('overlay'), {
@@ -154,9 +156,9 @@
   }
   let liveEntry = null;
   function narrate(text, final) {
-    if (!liveEntry) { liveEntry = document.createElement('p'); liveEntry.className = 'entry tale'; $('chronicle').appendChild(liveEntry); }
+    if (!liveEntry) { liveEntry = document.createElement('p'); liveEntry.className = 'entry tale live'; $('chronicle').appendChild(liveEntry); }
     liveEntry.textContent = text; $('chronicle').scrollTop = 1e9;
-    if (final) liveEntry = null;
+    if (final) { liveEntry.classList.remove('live'); liveEntry = null; }
   }
   const near = (r, c) => Math.abs(r - here[0]) + Math.abs(c - here[1]) === 1;
   function render() {
@@ -164,15 +166,18 @@
     MAP.forEach((row, r) => row.forEach(([g, label], c) => {
       const t = document.createElement('button'); t.type = 'button';
       const k = `${r},${c}`, isHere = here[0] === r && here[1] === c, reach = !!s && near(r, c) && !won;
-      t.className = 'tile' + (visited.has(k) || isHere ? '' : ' fog') + (isHere ? ' here' : '') + (reach ? ' reach' : '') + (g === '🔮' ? ' shrine' : '');
+      const seen = visited.has(k) || isHere || clues.has(k) || (inv.has('lantern') && near(r, c)); // the lantern lights the tiles around you
+      t.className = 'tile' + (seen ? '' : ' fog') + (isHere ? ' here' : '') + (reach ? ' reach' : '') + (g === '🔮' ? ' shrine' : '') + (clues.has(k) && !visited.has(k) ? ' clue' : '');
       t.innerHTML = `<span class="glyph">${g}</span><span class="label">${label}</span>`;
-      t.setAttribute('aria-label', visited.has(k) || isHere ? label : 'Unexplored');
+      t.setAttribute('aria-label', seen ? label : 'Unexplored');
       t.disabled = !reach; t.onclick = () => move(r, c);
       $('board').appendChild(t);
     }));
     $('slotKey').textContent = inv.has('key') ? '🗝️' : ''; $('slotKey').className = 'slot' + (inv.has('key') ? ' full' : '');
     $('slotMap').textContent = inv.has('map') ? '📜' : ''; $('slotMap').className = 'slot' + (inv.has('map') ? ' full' : '');
     $('slotGold').textContent = inv.has('gold') ? '💰' : ''; $('slotGold').className = 'slot' + (inv.has('gold') ? ' full' : '');
+    const gift = (inv.has('lantern') ? '🏮' : '') + (inv.has('charm') ? '🧿' : '');
+    $('slotGift').textContent = gift; $('slotGift').className = 'slot' + (gift ? ' full' : '');
     $('steps').textContent = `${steps} step${steps === 1 ? '' : 's'}`;
     $('where').textContent = MAP[here[0]][here[1]][1];
   }
@@ -202,9 +207,33 @@
     chronicle('you', 'You rise and leave the shrine.');
     s.user('leave_shrine', 'The player leaves the shrine.');
   }
+  // The oracle's powers (app tools), only at the shrine. reveal_clue is an
+  // await tool: the island's secrets are the game's, so the oracle asks and
+  // speaks from the answer; the place then glows on the map.
+  const WHERE = { key: '🗝️', chest: '🧰', map: '💀' };
+  function find(glyph) { for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) if (MAP[r][c][0] === glyph) return [r, c]; }
+  function direction([r, c]) {
+    const dr = r - here[0], dc = c - here[1], n = (k, w) => `${Math.abs(k)} step${Math.abs(k) === 1 ? '' : 's'} ${w}`;
+    return [dr && n(dr, dr < 0 ? 'north' : 'south'), dc && n(dc, dc < 0 ? 'west' : 'east')].filter(Boolean).join(' and ') || 'right here';
+  }
+  const tools = {
+    reveal_clue: ({ seek }) => {
+      if (!atShrine) throw new Error('the oracle can only be consulted at the shrine');
+      if (inv.has(seek === 'chest' ? 'gold' : seek)) return `The player already holds the ${seek}.`;
+      const at = find(WHERE[seek]); clues.add(at.join(',')); render();
+      chronicle('you', `A light kindles on your map: ${MAP[at[0]][at[1]][1].toLowerCase()}.`);
+      return `The ${seek} lies at "${MAP[at[0]][at[1]][1]}", ${direction(at)} of the shrine. It now glows on the player's map.${seek === 'chest' && !inv.has('key') ? ' The chest is locked; the key opens it.' : ''}`;
+    },
+    give_item: ({ item }) => {
+      if (!atShrine) throw new Error('the oracle can only give gifts at the shrine');
+      if (inv.has(item)) return `The player already carries the ${item}.`;
+      inv.add(item); render();
+      chronicle('you', item === 'lantern' ? 'The oracle places a lantern in your satchel. The tiles around you glow.' : 'The oracle hangs a sea-glass charm around your neck.');
+    },
+  };
   function victory() {
     won = true; render();
-    $('victoryText').textContent = `${steps} steps, ${visited.size} places seen${inv.has('map') ? ', and the skeleton’s map in your satchel' : ''}.`;
+    $('victoryText').textContent = `${steps} steps, ${visited.size} places seen${inv.has('map') ? ', and the skeleton’s map in your satchel' : ''}${inv.has('charm') ? ', the oracle’s charm still warm' : ''}.`;
     $('victory').hidden = false;
   }
   $('stay').onclick = () => { $('victory').hidden = true; won = false; render(); };
@@ -220,7 +249,7 @@
   async function connect() {
     try {
       s = await Atmee.join({
-        usecase: 'game', video: $('video'), audio: $('audio'), mic: null,
+        usecase: 'game', video: $('video'), audio: $('audio'), mic: null, tools,
         onPhase: (p, d) => overlay.phase(p, d),
         onCaption: (text, final) => { caption(text, final); narrate(text, final); },
         onSpeaking: (v) => { $('narrator').classList.toggle('talking', v); sender.speaking(v); },

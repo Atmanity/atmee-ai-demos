@@ -41,6 +41,8 @@
   <span class="chip" id="badge">OFFLINE</span>
 </header>
 <div class="pinned">📌 End a message with “?” to ask the host directly. Everything else, the host catches up on every few seconds.</div>
+<div class="pin" id="pin" hidden></div>
+<div class="poll" id="poll" hidden></div>
 <div id="log"></div>
 <form id="f">
   <div class="composer"><input id="text" placeholder="Send a message" maxlength="300" autocomplete="off"><button class="icon-btn" id="send" aria-label="Send"></button></div>
@@ -67,6 +69,14 @@
     }
     $('log').scrollTop = 1e9;
   }
+  // What the host pins and the polls it starts (its app tools), from the server.
+  let lastPoll = null, myVote = null;
+  function showPoll(m) {
+    if (!lastPoll || lastPoll.id !== m.id) myVote = null;
+    lastPoll = m;
+    UI.poll($('poll'), m, (i) => { myVote = i; ws.send(JSON.stringify({ type: 'vote', option: i, name: $('name').value.trim() || 'viewer' })); }, myVote);
+  }
+  setInterval(() => { if (lastPoll && lastPoll.open) showPoll(lastPoll); }, 1000);
   let ws;
   function connect() {
     ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/?usecase=livestream&role=viewer`);
@@ -75,6 +85,8 @@
       if (msg.type === 'history') msg.transcript.forEach(render);
       else if (msg.type === 'chat' || msg.type === 'caption') render(msg);
       else if (msg.type === 'viewers') $('viewers').textContent = `${msg.count} watching`;
+      else if (msg.type === 'pin') { $('pin').hidden = false; $('pin').innerHTML = `<b>📌 Pinned by the host</b>${esc(msg.text)}`; }
+      else if (msg.type === 'poll') showPoll(msg);
     };
     ws.onclose = () => { $('viewers').textContent = 'Reconnecting…'; setTimeout(connect, 1500); };
   }

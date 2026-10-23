@@ -80,6 +80,8 @@
   </section>
   <aside class="chatcol">
     <div class="chathead">Stream chat <span class="chip" id="chatCount">0 in chat</span></div>
+    <div class="pin" id="pin" hidden></div>
+    <div class="poll" id="poll" hidden></div>
     <div class="chat" id="chat"><div class="empty" id="empty"><div style="font-size:28px">💬</div>Chat is quiet. Share the chat link so viewers can say hi.<br>Messages ending in “?” go straight to the host.</div></div>
     <div class="chatfoot">The host reads the chat. It can't hear anyone, so viewers type.</div>
   </aside>
@@ -111,6 +113,14 @@
     liveEl.innerHTML = `<b>Host</b>${esc(text)}`; $('chat').scrollTop = 1e9;
     if (final) { liveEl.classList.remove('live'); liveEl = null; }
   }
+  // The host pins lines and starts polls itself (app tools). The server keeps
+  // them and counts the viewers' votes, and shows them to the whole chat, this
+  // studio included, so the page only acknowledges the call.
+  const tools = { pin_message: () => 'pinned for the whole chat', start_poll: () => 'the poll is open in the chat' };
+  let lastPoll = null;
+  function showPin(text) { $('pin').hidden = false; $('pin').innerHTML = `<b>📌 Pinned</b>${esc(text)}`; }
+  function showPoll(m) { lastPoll = m; UI.poll($('poll'), m); }
+  setInterval(() => { if (lastPoll && lastPoll.open) UI.poll($('poll'), lastPoll); }, 1000);
   function viewers(n) { $('viewerBadge').textContent = `👁 ${n}`; $('statViewers').textContent = n; $('chatCount').textContent = `${n} in chat`; }
 
   $('share').onclick = async () => {
@@ -122,13 +132,16 @@
     $('golive').disabled = true; $('state').textContent = 'Starting…';
     try {
       s = await Atmee.join({
-        usecase: 'livestream', video: $('video'), audio: $('audio'), mic: null,
+        usecase: 'livestream', video: $('video'), audio: $('audio'), mic: null, tools,
         onPhase: (p, d) => overlay.phase(p, d),
+        onSpeaking: (v) => $('player').classList.toggle('talking', v),
         onCaption: (text, final) => { caption(text, final); hostSays(text, final); },
         onRelay: debug,
         onMessage: (m) => {
           if (m.type === 'chat') { msgs++; $('statMsgs').textContent = msgs; line(/\?\s*$/.test(m.text) ? 'q' : '', m.name, m.text); }
           if (m.type === 'viewers') viewers(m.count);
+          if (m.type === 'pin') { showPin(m.text); line('', 'Nightcap', `The host pinned: “${m.text}”`); }
+          if (m.type === 'poll') { if (!lastPoll || lastPoll.id !== m.id) line('', 'Nightcap', `The host started a poll: ${m.question}`); showPoll(m); }
         },
         onEnd: () => stopped('Stream ended'),
       });

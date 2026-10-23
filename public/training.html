@@ -61,6 +61,7 @@
   .quizcard { margin-top: 6px; padding: 22px; border-radius: var(--radius); background: var(--surface-2); font-size: 22px; font-family: var(--font-display); }
   .verdict { margin-top: 14px; display: inline-flex; gap: 8px; align-items: center; font-weight: 600; padding: 6px 12px; border-radius: 99px; }
   .verdict.right { background: #e3f5ec; color: #17734f; } .verdict.wrong { background: #fdecef; color: #9b2338; }
+  .feedback { margin-top: 10px; color: var(--muted); font-size: 18px; max-width: 52ch; }
   .done-badge { width: 72px; height: 72px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; margin-bottom: 18px; }
   .done-badge svg { width: 34px; height: 34px; }
   .decknav { display: flex; align-items: center; justify-content: space-between; padding: 12px 4px 0; gap: 12px; }
@@ -175,11 +176,12 @@
     { title: 'The first ten minutes', timeline: [['0', 'Declare the incident'], ['2', 'Assign the three roles'], ['5', 'Open the incident channel'], ['10', 'Post the first status update, even if it only says "investigating"']] },
   ];
   const QUIZ = [
-    { q: 'Who is the only person allowed to decide to roll back during an incident?', match: /roll ?back/i },
-    { q: 'By when should the first status update go out?', match: /status update|first update/i },
+    'Who is the only person allowed to decide to roll back during an incident?',
+    'By when should the first status update go out?',
   ];
 
-  let s, stage = 'intro', slideNo = 0, score = 0, answered = 0, quizAt = -1, verdicts = [], finished = false, stopClock = () => {};
+  // stage: lesson (slides 1-3) -> qna (the closing "Questions?" slide) -> quiz -> done
+  let s, stage = 'lesson', slideNo = 1, score = 0, answered = 0, quizAt = -1, verdicts = [], feedback = [], finished = false, stopClock = () => {};
   const tr = UI.transcript($('transcript'), { avatar: 'Trainer', user: 'You' });
   const caption = UI.captions($('caption'));
   const debug = UI.debugLog();
@@ -193,7 +195,7 @@
 
   function setStage(next) {
     stage = next; $('tracker').hidden = false;
-    const order = ['lesson', 'qna', 'quiz'], at = order.indexOf(next === 'intro' ? 'lesson' : next === 'done' ? 'end' : next);
+    const order = ['lesson', 'qna', 'quiz'], at = order.indexOf(next);
     [...$('tracker').children].forEach((el, i) => { el.className = next === 'done' || i < at ? 'done' : i === at ? 'now' : ''; });
   }
 
@@ -206,12 +208,10 @@
     } else if (stage === 'quiz' && quizAt >= 0) {
       const v = verdicts[quizAt];
       el.innerHTML = `<div class="num">QUIZ · QUESTION ${quizAt + 1} OF 2</div><h2>Check your understanding</h2>
-        <div class="quizcard">${UI.esc(QUIZ[quizAt].q)}</div>
-        ${v === undefined ? '<p class="lede" style="margin-top:16px">Answer out loud, or type it below.</p>' : `<div class="verdict ${v ? 'right' : 'wrong'}">${v ? '✓ Correct' : '✗ Not quite'}</div>`}`;
+        <div class="quizcard">${UI.esc(QUIZ[quizAt])}</div>
+        ${v === undefined ? '<p class="lede" style="margin-top:16px">Answer out loud, or type it below.</p>' : `<div class="verdict ${v ? 'right' : 'wrong'}">${v ? '✓ Correct' : '✗ Not quite'}</div>${feedback[quizAt] ? `<p class="feedback">${UI.esc(feedback[quizAt])}</p>` : ''}`}`;
     } else if (stage === 'qna') {
       el.innerHTML = `<div class="num">Q&amp;A</div><h2>Any questions before the quiz?</h2><p class="lede">Ask anything about the three lessons. When you're ready, say "start the quiz".</p>`;
-    } else if (!slideNo) {
-      el.innerHTML = `<div class="num">MODULE 1</div><h2>Incident response, in ten minutes</h2><p class="lede">Three short lessons, a Q&amp;A with your trainer, and a two-question quiz.</p>`;
     } else {
       const sl = SLIDES[slideNo];
       const body = sl.points
@@ -224,29 +224,58 @@
     $('prev').disabled = slideNo <= 1 || finished; $('next').disabled = slideNo >= 3 || finished;
     $('score').textContent = score;
   }
+  // The trainee can page back through the lessons at any time (reviewing);
+  // the trainer's show_slide also brings the deck back to the lessons.
   function goto(n, fromTrainer) {
     if (n < 1 || n > 3) return;
-    slideNo = n; if (!fromTrainer && (stage === 'qna' || stage === 'quiz')) { /* reviewing */ } else if (stage === 'intro') setStage('lesson');
-    renderSlide(); if (s && !fromTrainer) s.user('slide', String(n));
+    slideNo = n; if (fromTrainer) setStage('lesson');
+    renderSlide(); if (s) s.user('slide', String(n));
   }
   $('prev').onclick = () => goto(slideNo - 1); $('next').onclick = () => goto(slideNo + 1);
 
-  // Follow the trainer: lessons, the Q&A, the quiz and its verdicts come from what it says.
-  const WORDS = { one: 1, two: 2, three: 3, first: 1, second: 2, third: 3 };
-  function follow(text) {
-    const m = text.match(/\b(?:slide|lesson)\s+(\d|one|two|three)\b|\b(first|second|third)\s+(?:slide|lesson)\b/i);
-    if (m && stage !== 'quiz') { const n = Number(m[1]) || WORDS[(m[1] || m[2]).toLowerCase()]; if (n && n !== slideNo) goto(n, true); if (stage === 'intro') setStage('lesson'); }
-    if (stage === 'lesson' && slideNo === 3 && /question/i.test(text) && /\?/.test(text)) { setStage('qna'); renderSlide(); }
-    if (stage !== 'quiz' && /quiz/i.test(text) && QUIZ[0].match.test(text)) { setStage('quiz'); quizAt = 0; renderSlide(); return; }
-    if (stage === 'quiz') {
-      const v = text.match(/^\W*(correct|incorrect|not quite|that'?s right|spot on|exactly)/i);
-      if (v && verdicts[quizAt] === undefined) {
-        const right = !/incorrect|not quite/i.test(v[1]); verdicts[quizAt] = right; answered++; if (right) score++;
-        renderSlide();
-        if (answered >= 2) setTimeout(finish, 9000);
-      }
-      if (quizAt === 0 && verdicts[0] !== undefined && QUIZ[1].match.test(text) && /\?/.test(text)) { quizAt = 1; renderSlide(); }
+  // The trainer drives the deck, the quiz and the score with its tools. The
+  // deck opens on slide 1; show_slide puts up slides 2-3 and the closing
+  // "Questions?" slide (4). The quiz is the page's: ask_quiz_question and
+  // grade_answer are await tools, answered with what is on the screen now and
+  // what the trainer does next, so the page keeps the question order (a graded
+  // question is never asked again) and ends the module after the last grade.
+  const tools = {
+    show_slide: ({ n }) => {
+      if (stage === 'quiz' || finished) return 'the quiz has started; the slides stay down';
+      if (n === 4) { setStage('qna'); renderSlide(); if (s) s.user('slide', '4'); return; }
+      goto(n, true);
+    },
+    ask_quiz_question: ({ n }) => {
+      const next = nextQuestion();
+      if (finished || next < 0) return 'The quiz is over: both questions are graded. Do not ask anything more.';
+      const i = verdicts[n - 1] === undefined ? n - 1 : next;
+      showQuestion(i);
+      return `${i !== n - 1 ? `Question ${n} is already graded. ` : ''}Question ${i + 1} of 2 is on the trainee's screen: "${QUIZ[i]}" Ask it in these words, then wait for their answer.`;
+    },
+    grade_answer: ({ question, correct, feedback: line }) => grade(question, correct, line),
+  };
+  const nextQuestion = () => [0, 1].find((i) => verdicts[i] === undefined) ?? -1;
+  function reportQuiz() { if (s) s.user('quiz', `${quizAt + 1}/${answered}`); }
+  function showQuestion(i) { setStage('quiz'); quizAt = i; renderSlide(); reportQuiz(); }
+  function grade(question, right, line) {
+    const i = question - 1, next = nextQuestion();
+    if (finished || next < 0) return 'Both questions are already graded and the quiz is over. Do not grade or ask anything again.';
+    if (verdicts[i] !== undefined) return `Question ${question} is already graded. The question on screen is question ${next + 1}: "${QUIZ[next]}" If your verdict was on the answer to it, record it with grade_answer as question ${next + 1}; otherwise wait for the trainee's answer.`;
+    verdicts[i] = !!right; feedback[i] = line || ''; quizAt = i;
+    const before = score;
+    score = verdicts.filter(Boolean).length; answered = verdicts.filter((v) => v !== undefined).length;
+    setStage('quiz'); renderSlide();
+    if (s && score !== before) s.user('score', String(score));
+    reportQuiz();
+    const verdict = `Recorded: question ${question} ${right ? 'right' : 'wrong'}; score ${score} of 2.`;
+    const after = nextQuestion();
+    if (after < 0) {
+      setTimeout(finish, 9000);
+      return `${verdict} The quiz is over: the final score is ${score} of 2, and the app shows the completion screen. Tell the trainee whether they were right, give them the score, add one sentence of encouragement and close the module. Ask nothing more.`;
     }
+    // The verdict stays up for a moment, then the next question.
+    setTimeout(() => { if (!finished && quizAt === i) showQuestion(after); }, 3500);
+    return `${verdict} Tell the trainee in one sentence whether they were right and why, then ask question ${after + 1}, which the app is putting on their screen: "${QUIZ[after]}" Then wait for their answer.`;
   }
   function finish() { if (finished) return; finished = true; setStage('done'); renderSlide(); }
 
@@ -254,16 +283,16 @@
     $('lobbyError').hidden = true;
     let mic = null;
     if (withMic) { try { mic = await Atmee.requestMic(); } catch (e) { $('lobbyError').textContent = e.friendly; $('lobbyError').hidden = false; return; } }
-    $('lobby').hidden = true; $('room').hidden = false; setStage('intro'); renderSlide();
+    $('lobby').hidden = true; $('room').hidden = false; setStage('lesson'); renderSlide();
     tr.clear(); tr.note(mic ? 'You joined with your microphone' : 'You joined without a microphone');
     connect(mic);
   }
   async function connect(mic) {
     try {
       s = await Atmee.join({
-        usecase: 'training', video: $('video'), audio: $('audio'), mic,
+        usecase: 'training', video: $('video'), audio: $('audio'), mic, tools,
         onPhase: (p, d) => overlay.phase(p, d),
-        onCaption: (text, final) => { caption(text, final); tr.avatar(text, final); if (final) follow(text); },
+        onCaption: (text, final) => { caption(text, final); tr.avatar(text, final); },
         onSpeaking: (v) => { $('trainer').classList.toggle('talking', v); sender.speaking(v); $('hint').textContent = v && sender.waiting ? 'Your message will be sent when the trainer finishes the sentence.' : ''; },
         onRelay: debug,
         onEnd: () => { stopClock(); overlay.ended('<div class="title">The lesson has ended</div><button class="btn primary" onclick="location.reload()">Start again</button>'); lock(true); },
