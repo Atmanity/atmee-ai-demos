@@ -318,19 +318,38 @@ export function grade(step: Step, text: string): Verdict {
 }
 
 /**
- * Whether an answer (already in answerForm, padded with spaces) says a phrase.
- * A phrase is one or more parts joined by " + ", all of which must appear, in
- * any order ("check|see|listen + breathing"); a part is alternatives joined by
- * "|", any of which will do. Each alternative is matched from the start of a
- * word ("respon" takes "responds", "ok" does not take "look"), and one ending
- * in "$" only as whole words ("breath$" is not "breaths").
+ * Whether an answer (already in answerForm) says a phrase. A phrase is one or
+ * more parts joined by " + ", all of which must appear, in any order; a part
+ * is alternatives joined by "|", any of which will do; and "cue ~N target"
+ * means a cue no more than N words before the target ("check|see ~3
+ * breathing" takes "see if she is breathing", not a stray "if" five words
+ * off). Each alternative is matched from the start of a word ("respon" takes
+ * "responds", "ok" does not take "look"); one ending in "$" only as whole
+ * words ("breath$" is not "breaths").
  */
 export function matches(said: string, phrase: string): boolean {
-  return phrase.split(' + ').every((part) => part.split('|').some((alt) => {
+  const words = said.trim().split(' ').filter(Boolean);
+  return phrase.split(' + ').every((part) => {
+    const near = /^(.*) ~(\d+) (.*)$/.exec(part);
+    if (!near) return spans(words, part).length > 0;
+    const cues = spans(words, near[1]);
+    return spans(words, near[3]).some((t) => cues.some((c) => c.end < t.start && t.start - c.end <= Number(near[2])));
+  });
+}
+
+/** Where any alternative of a part occurs, as word spans. */
+function spans(words: string[], part: string): { start: number; end: number }[] {
+  const found: { start: number; end: number }[] = [];
+  for (const alt of part.split('|')) {
     const whole = alt.endsWith('$');
-    const form = answerForm(whole ? alt.slice(0, -1) : alt);
-    return Boolean(form) && said.includes(` ${form}${whole ? ' ' : ''}`);
-  }));
+    const want = answerForm(whole ? alt.slice(0, -1) : alt).split(' ').filter(Boolean);
+    if (!want.length) continue;
+    for (let i = 0; i + want.length <= words.length; i++) {
+      const last = want.length - 1;
+      if (want.every((w, k) => (k < last || whole ? words[i + k] === w : words[i + k].startsWith(w)))) found.push({ start: i, end: i + last });
+    }
+  }
+  return found;
 }
 
 const NUMBERS: Record<string, string> = {

@@ -78,21 +78,34 @@ const CALL_FOR_HELP = [
 
 /**
  * Finding out whether someone responds and breathes, as concepts rather than
- * exact strings (tutor.ts matches(): " + " all of, "|" any of, each from a
- * word start, "$" a whole word), so pronouns and word order do not matter:
- * asking whether they are ok is a checking word plus "ok"; a breathing check
- * is a looking or listening word plus breathing or a breath. "Breathe" on its
- * own, and "breaths", are how people say giving breaths, so neither counts.
+ * exact strings (tutor.ts matches(): " + " all of, "|" any of, "cue ~N
+ * target" a cue at most N words before its target, each from a word start,
+ * "$" a whole word), so pronouns and word order do not matter: asking whether
+ * they are ok is a checking word just before "ok", or the short shout ("you
+ * ok?", "he ok?", "ask him"); a breathing check is a looking or listening word
+ * just before breathing or a breath. "Breathe" on its own and "breaths" are
+ * how people say giving breaths, and only count after a looking word.
  */
 const CHECK_RESPONSE = [
   'respon', 'unrespon', 'shout', 'tap', 'shake', 'wake', 'can you hear',
-  'ask|check|see|is|are|whether|if|tap|shout|can + ok$',
-  'look|listen|feel|check|see|watch|whether|if|is|are + breathing|breathes|breathe$|breath$',
+  'ask|check|see|is|are|whether|if|can ~3 ok$', 'you|they ~1 ok$', 'ask they',
+  'look|listen|feel|check|see|watch|whether|if|is|are ~3 breathing|breathes|breathe$|breath$',
   'chest ris', 'chest move',
 ] as const;
 
-/** Lay rescuers do not check a pulse: the same correction wherever it comes up. */
-const NO_PULSE = { forbidden: ['pulse', 'carotid', 'wrist'], forbiddenNote: 'Lay rescuers do not check for a pulse — it wastes time and is unreliable. Check response and normal breathing.' } as const;
+/**
+ * A check step's correction: no pulse check, and no treatment yet. Any
+ * treatment verb acting on the casualty fails a check step outright, however
+ * the answer frames it ("if he's not breathing, give him two breaths").
+ */
+const CHECK_FIRST = {
+  forbidden: [
+    'pulse', 'carotid', 'wrist',
+    'give|do|start|begin|perform|add|try|use ~4 breaths$|breath$|compress|cpr$|blows|thrust|rescue|heimlich',
+    'push|pushing|press|pressing|pump ~3 chest|hard|down|fast|sternum', 'push on', 'rescue breaths', 'blow into', 'breathe into', 'breathe for',
+  ],
+  forbiddenNote: 'Check first, treat after: tap and shout, then look and listen for normal breathing for up to 10 seconds. Lay rescuers do not check for a pulse.',
+} as const;
 
 export const ADULT_CARDIAC_ARREST: Scenario = {
   id: 'adult_cardiac_arrest',
@@ -116,8 +129,7 @@ export const ADULT_CARDIAC_ARREST: Scenario = {
       expected: [...CHECK_RESPONSE, 'are you ok', 'talk to him'],
       teach: 'Tap his shoulders and shout. If there is no response, look at his chest for up to 10 seconds: no normal breathing, or only gasping, means cardiac arrest.',
       hint: 'Two things: can you wake him, and is he breathing normally?',
-      forbidden: ['pulse', 'carotid', 'wrist'],
-      forbiddenNote: 'Lay rescuers do not check for a pulse — it wastes time and is unreliable. Check response and normal breathing.',
+      ...CHECK_FIRST,
       visual: 'victim_face',
     }),
     step({
@@ -198,8 +210,7 @@ export const CHILD_CARDIAC_ARREST: Scenario = {
       expected: [...CHECK_RESPONSE, 'talk'],
       teach: 'Tap and shout. No response, and no normal breathing over up to 10 seconds — gasping does not count — means start CPR.',
       hint: 'Can you wake her, and is she breathing normally?',
-      forbidden: ['pulse', 'carotid'],
-      forbiddenNote: 'Lay rescuers do not check a pulse. Check response and normal breathing.',
+      ...CHECK_FIRST,
       visual: 'victim_face',
     }),
     step({
@@ -342,7 +353,7 @@ export const RECOVERY_POSITION: Scenario = {
       label: 'Confirm no response but normal breathing',
       prompt: 'He does not answer you. What do you establish before anything else?',
       expected: [...CHECK_RESPONSE, 'normal', '10 second'],
-      ...NO_PULSE,
+      ...CHECK_FIRST,
       teach: 'Tap and shout, then look and listen for up to 10 seconds. No response but normal, quiet breathing is a very different problem from cardiac arrest.',
       hint: 'Two findings decide everything that follows here.',
       visual: 'victim_face',

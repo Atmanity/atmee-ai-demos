@@ -28,8 +28,16 @@ const CHECK = {
     ...forEach('listen for his breathing', 'listen for her breathing', 'listen for their breathing'),
     ...forEach('check whether he is breathing', "check whether she's breathing", "check whether they're breathing"),
     'look at her chest to see if she is breathing', 'ask him if he is all right', 'listen to him breathe',
+    // the short shouts
+    'you ok?', 'hey, you okay?', ...forEach('he ok?', 'she ok?', 'they ok?'), ...forEach('ask him', 'ask her', 'ask them'), "ask her if she's alright",
   ],
-  wrong: ['give him two breaths', 'breathe into his mouth', "I'd breathe for her", 'give her a couple of breaths', 'blow into his mouth', 'breathe for him twice', 'give her two breaths', 'breathe into their mouth', 'give them rescue breathing'],
+  wrong: ['give him two breaths', 'breathe into his mouth', "I'd breathe for her", 'give her a couple of breaths', 'blow into his mouth', 'breathe for him twice', 'give her two breaths', 'breathe into their mouth', 'give them rescue breathing',
+    // a treatment framed as a condition, or a hedge around one
+    "if he's not breathing, give him two breaths", "if she isn't ok, start compressions", "if they are not breathing I'd do CPR",
+    "if he's unresponsive, give rescue breaths", 'check his airway and give two breaths', 'is it CPR? I would push hard on his chest',
+    "if he's not okay I'll do mouth to mouth", 'are breaths next? give her a breath', "I'm not sure if it is, but I'd start chest compressions",
+    'see if he is ok and then push on his chest',
+  ],
 };
 const withCheck = (rows: { right: string[]; wrong: string[] }) => ({ right: [...rows.right, ...CHECK.right], wrong: [...rows.wrong, ...CHECK.wrong] });
 
@@ -195,6 +203,13 @@ describe('the normaliser', () => {
     expect(matches(said('he is unresponsive'), 'unrespon')).toBe(true);
     expect(matches(said('check his breathing'), 'listen|check + breathing')).toBe(true);
     expect(matches(said('check his mouth'), 'listen|check + breathing')).toBe(false);
+    // "cue ~N target": the cue at most N words before its target, not anywhere.
+    expect(matches(said('see if he breathes'), 'see ~3 breathes')).toBe(true);
+    expect(matches(said('see if she is breathing'), 'see ~3 breathing')).toBe(false);   // four words apart
+    expect(matches(said('see if she is breathing'), 'see|if|is ~3 breathing')).toBe(true);
+    expect(matches(said('if you think about it he is breathing'), 'if ~3 breathing')).toBe(false);
+    expect(matches(said('breathing, is it?'), 'is ~3 breathing')).toBe(false);   // after, not before
+    expect(matches(said('he ok?'), 'you|they ~1 ok$')).toBe(true);
   });
 
   test('a range or a count that is not a ratio is left alone', () => {
