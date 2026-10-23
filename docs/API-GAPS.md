@@ -233,15 +233,21 @@ an app acting on speech acts twice on typed text.
   what?" met the opponent's move event; only the event was said. After a side
   switch, the opponent's first move was never named.
 - **One live session per avatar, one user token per session**, no viewers.
-- **A third session at once on the shared test avatars hung**: `POST
-  /v1/session` answered 524 (twice) after a long wait instead of 503
-  `no_capacity`. On the dedicated hosts, four sessions at once worked.
+- **Session starts can hang for minutes, then 524.** A third session at once
+  on the shared test avatars answered 524 (twice) after a long wait instead of
+  503 `no_capacity`. Later the same day (18:15–18:22 CST) every start on the
+  dedicated hosts did the same, one at a time too: about 100–126 s, then 524
+  with `retryAfter: 120`, while other API calls answered in 0.2 s and no
+  session was left holding credits. An app cannot tell "busy" from "broken",
+  or say how long to wait.
 - **Intermittent video artefacts on the v2 hosts.** Seen live, never in a
   host's seed clip: Theo's idle video showed large orange 3-D letters over his
   face (round 1) and later his plain grey backdrop turned into a rocky,
   sculpture-like scene; Reese's video sat on an eye-level close-up for a whole
-  call (round 2). A repeat of both hosts, six screenshots, was framed normally,
-  so they come and go. The page cannot tell or fix it.
+  call (round 2); Emery's video showed the empty backdrop, with no one in it,
+  for several seconds while she spoke (round 3). A repeat of Reese and Theo,
+  six screenshots, was framed normally, so they come and go. The page cannot
+  tell or fix it.
 - **Building the hosts:** the create-avatar skill's lip-sync contact sheet
   crops a fixed band that catches the chin, not the mouth, on a tight
   headshot; the hosts were judged on a mouth-centred crop instead.
