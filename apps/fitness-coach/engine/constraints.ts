@@ -143,20 +143,25 @@ function injuryShapes(v: InjuryVerb): RegExp[] {
 }
 const INJURY_SHAPES = INJURY_VERBS.map((v) => ({ label: v.label, shapes: injuryShapes(v) }));
 
-/** Words that cancel a report they lead into: a near miss or a denial ("I nearly broke", "never had a fracture", "didn't fracture"). */
-const HEDGE = /^(?:nearly|almost|never|not|no|without|hardly|barely)$|n't$/;
-/** Words that may sit between a hedge and the report it cancels ("never had a", "didn't ever"). */
-const LEAD_IN = new Set(['i', "i've", 'ive', "i'd", 'have', 'had', 'has', 'ever', 'been', 'got', 'gotten', 'a', 'an', 'any', 'my', 'even', 'actually', 'really', 'quite', 'completely']);
+/** Negations of the verb that follows: a near miss or a denial ("I nearly broke", "never had a fracture", "didn't fracture"). */
+const HEDGE = /^(?:nearly|almost|never|not|without|hardly|barely)$|n't$/;
+/** Auxiliaries that may sit between such a negation and its verb ("never had a", "haven't ever"). Never the subject. */
+const LEAD_IN = new Set(['have', 'had', 'has', 'ever', 'been', 'got', 'gotten', 'a', 'an', 'any', 'even']);
 
 /**
- * Whether the report at `at` is hedged: walking back from it within its
- * clause, over auxiliaries and articles only, a hedge word comes first ("I
- * nearly broke…", "I've never had a fracture", "I didn't fracture…"). Any
- * other word ends the walk: "I can't believe I broke my wrist" is a report.
+ * Whether the report at `at` is negated: walking back from it within its
+ * clause, over that verb's own auxiliaries only, a negation comes first ("I
+ * nearly broke…", "I've never had a fracture", "I didn't fracture…"); or "no"
+ * right before it ("no fractures", "no broken bones"). The subject or any
+ * other word ends the walk, so an interjection is not a hedge: "No, I have
+ * broken my wrist" and "oh no I broke my ankle" are reports. For a safety
+ * rule, when unsure, hold.
  */
 function hedgedAt(low: string, at: number): boolean {
   const clause = low.slice(Math.max(0, at - 80), at).split(/[,.;!?]|\b(?:and|but|so|because|though)\b/).pop() ?? '';
-  for (const word of clause.trim().split(/\s+/).reverse()) {
+  const words = clause.trim().split(/\s+/).filter(Boolean).reverse();
+  if (words[0] === 'no') return true;
+  for (const word of words) {
     if (HEDGE.test(word)) return true;
     if (!LEAD_IN.has(word)) return false;
   }
