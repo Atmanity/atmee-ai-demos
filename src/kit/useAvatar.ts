@@ -79,6 +79,10 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
   // What the app said before the avatar was live, to deliver on arrival.
   const pending = useRef<{ state?: string; notes: string[]; events: { text: string; ttl?: number }[] }>({ notes: [], events: [] });
   const sentNotes = useRef(new Set<string>());   // notes this session already has
+  // Between calls (one ended or failed, the next not yet placed) an event has no
+  // call to reach: it is dropped, not saved for the next call as if it were new.
+  // State (what is on screen) and notes (standing rules) still carry over.
+  const betweenCalls = useRef(false);
   // A typed turn comes back as a user transcription too; that echo is not new speech.
   const lastTyped = useRef<{ text: string; at: number } | null>(null);
   const isEcho = (text: string) => {
@@ -100,6 +104,7 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
   const start = useCallback(async ({ mic = false }: { mic?: boolean } = {}) => {
     if (sessionRef.current || starting.current) return;
     starting.current = true;
+    betweenCalls.current = false;
     setErrorCode(undefined); setDetail(''); setLines([]); setCaption(''); setHeard('');
     sentNotes.current.clear();
     let stream: MediaStream | null = null;
@@ -111,8 +116,9 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
       }
     }
     setMicOn(Boolean(stream));
+    let session: AvatarSession | null = null;
     try {
-      const session = await joinAvatar({
+      session = await joinAvatar({
         app, mic: stream, video: () => videoRef.current, audio: () => audioRef.current,
         onPhase: (p, d) => {
           setPhase(p);
@@ -146,6 +152,8 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
         onAudioBlocked: (blocked, resume) => { setAudioBlocked(blocked); resumeRef.current = resume; },
         onEnd: () => {
           sessionRef.current = null;
+          betweenCalls.current = true;
+          pending.current.events = [];
           setPhase((p) => (p === 'failed' ? p : 'ended'));
           setSpeaking(false);
           handlersRef.current.onEnded?.();
@@ -169,7 +177,14 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
       setDetail(ERRORS[code] ?? 'We could not place the call. Try again in a moment.');
       console.warn('[call] could not start: %s', code);
       setPhase('failed');
+      betweenCalls.current = true;
+      pending.current.events = [];
       stream?.getTracks().forEach((t) => t.stop());
+      // Joined, then failed (sending what was pending): end it, or the host stays busy and no call can start.
+      if (session) {
+        sessionRef.current = null;
+        await session.end().catch(() => {});
+      }
     } finally {
       starting.current = false;
     }
@@ -206,7 +221,7 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
     },
     event(text, ttl) {
       if (sessionRef.current) void sessionRef.current.event(text, ttl);
-      else pending.current.events.push({ text, ttl });
+      else if (!betweenCalls.current) pending.current.events.push({ text, ttl });
     },
     mute() { void sessionRef.current?.send({ type: 'mute' }); },
     unmute() { void sessionRef.current?.send({ type: 'unmute' }); },

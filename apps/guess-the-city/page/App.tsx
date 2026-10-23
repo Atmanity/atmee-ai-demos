@@ -66,11 +66,16 @@ export function App() {
   }
 
   // Every call is a new game, dealt while Marco is on his way (both take a while).
+  // Only the newest deal may install its game: one from a call that failed and
+  // was placed again can answer last.
+  const deal = useRef(0);
   useEffect(() => {
     if (avatar.phase !== 'starting') return;
+    const mine = ++deal.current;
     game.current = null;
     setView(null);
     void post<{ id: string; view: View; opening: string }>('/games').then(({ id, view: first, opening }) => {
+      if (mine !== deal.current) return;
       game.current = id;
       setView(first);
       avatar.event(opening, 60);

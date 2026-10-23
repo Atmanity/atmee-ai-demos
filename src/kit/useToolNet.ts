@@ -4,7 +4,7 @@
 // to do twice (give up, next, new game), an app names what the player's words
 // clearly ask for; if no call of that tool arrives soon after, the app does
 // it itself and tells the host, who corrects whatever it said meanwhile.
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { ToolCall } from '../avatar/room.ts';
 import type { Avatar } from './useAvatar.ts';
 
@@ -31,6 +31,12 @@ export function useToolNet(opts: {
   const calls = useRef<{ name: string; at: number }[]>([]);
   const optsRef = useRef(opts);
   optsRef.current = opts;
+  // What the net is waiting to do belongs to the call it was heard in: a
+  // hang-up (or leaving the page) cancels it, so it never acts on a new call.
+  const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
+  const cancelAll = () => { timers.current.forEach(clearTimeout); timers.current.clear(); };
+  useEffect(() => { if (timers.current.size && optsRef.current.avatar()?.phase !== 'live') cancelAll(); });
+  useEffect(() => cancelAll, []);
 
   /** Wraps the page's onToolCall so the net knows which calls the host made. */
   const watch = useCallback(<R,>(handler: (call: ToolCall) => Promise<R>) => async (call: ToolCall) => {
@@ -43,7 +49,9 @@ export function useToolNet(opts: {
     const wanted = optsRef.current.match(text);
     if (!wanted) return;
     const at = Date.now();
-    setTimeout(() => {
+    const id = setTimeout(() => {
+      timers.current.delete(id);
+      if (optsRef.current.avatar().phase !== 'live') return;
       if (calls.current.some((c) => c.at >= at - (c.name === wanted.name ? EARLY_MS : ANY_EARLY_MS))) return;
       calls.current.push({ name: wanted.name, at: Date.now() });
       void optsRef.current.run(wanted).then((result) => {
@@ -51,6 +59,7 @@ export function useToolNet(opts: {
         optsRef.current.avatar().event(`You did not call ${wanted.name}, so the app did it for the player just now: ${result} Carry on from this, and if you said something different a moment ago, correct it briefly.`, 30);
       }).catch((err) => console.warn('[tools] safety net failed:', err));
     }, optsRef.current.waitMs ?? WAIT_MS);
+    timers.current.add(id);
   }, []);
 
   return { watch, heard };
