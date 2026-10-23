@@ -310,28 +310,6 @@ describe('the clearance hold, as parsed', () => {
     }
   });
 
-  it('holds for a real injury: a break or fracture of a body part, or a dislocation', () => {
-    const cases: [string, string][] = [
-      ['I broke my wrist last month', 'a fracture'], ['I fractured my ankle in June', 'a fracture'], ['she broke her collarbone', 'a fracture'],
-      ['broken ribs', 'a fracture'], ['two fractures', 'a fracture'], ['a stress fracture in my foot', 'a fracture'],
-      ['my wrist is broken', 'a fracture'], ['my left ankle was fractured', 'a fracture'], ['I broke a bone in my hand', 'a fracture'],
-      ['I fractured a vertebra', 'a fracture'], ['I dislocated my shoulder', 'a dislocation'], ['a dislocation last year', 'a dislocation'],
-    ];
-    for (const [said, label] of cases) expect(parse(said).clearance, said).toContain(label);
-  });
-
-  it('does not hold for a stretch, a figure of speech or a near miss', () => {
-    // Bugbot: "I cracked my back" paused the workout, and the pause has no way back.
-    for (const said of [
-      'I cracked my back this morning', 'I cracked my neck', 'I crack my knuckles a lot', 'this is breaking my back',
-      'my back is killing me', 'I broke a sweat', 'I broke my back moving furniture all weekend', 'that nearly broke my neck',
-      'I almost broke my ankle on the stairs', 'break a leg', 'it broke my heart', "I'm breaking in new shoes", 'my neck is cracking',
-      'the team feels fractured', 'a fractured relationship', 'I felt dislocated after the move',
-    ]) {
-      expect(parse(said).clearance, said).toEqual([]);
-    }
-  });
-
   it('does not freeze a session on ordinary sentences', () => {
     // A match halts everything with no way back, so a false positive costs
     // the whole workout. "cooperation" contains "operation"; "broken" is what
@@ -392,4 +370,58 @@ describe('acknowledging what was just said', () => {
     expect(cons.acknowledgementLine(['20 minutes', 'no equipment'], false)).toBe("Noted on 20 minutes and no equipment — I'll build the plan around it.");
     expect(cons.acknowledgementLine([], true)).toBe('');
   });
+});
+
+/**
+ * The injury reader, as a table: each injury verb (broke, fractured, cracked,
+ * dislocated, and their nouns) with the body parts it is said of, in every
+ * shape people use, holds; the same words under a hedge ("nearly", "almost",
+ * "never", "didn't", "isn't"), and the idioms and stretches, do not. A pause
+ * has no way back, so a false hold costs the whole workout; a missed one
+ * coaches someone with a fracture.
+ */
+describe('the injury reader: verb × part × shape × hedge', () => {
+  const VERBS = [
+    { past: 'broke', participle: 'broken', base: 'break', noun: 'break', parts: ['wrist', 'ankle', 'collarbone'], label: 'a fracture' },
+    { past: 'fractured', participle: 'fractured', base: 'fracture', noun: 'fracture', parts: ['ankle', 'wrist', 'rib'], label: 'a fracture' },
+    { past: 'cracked', participle: 'cracked', base: 'crack', noun: 'crack', parts: ['rib', 'wrist'], label: 'a fracture' },
+    { past: 'dislocated', participle: 'dislocated', base: 'dislocate', noun: 'dislocation', parts: ['shoulder', 'knee'], label: 'a dislocation' },
+  ];
+  const holds: [string, string][] = [];
+  const hedged: string[] = [];
+  for (const v of VERBS) {
+    for (const part of v.parts) {
+      for (const said of [
+        `I ${v.past} my ${part}`, `I ${v.past} my left ${part} last year`, `she ${v.past} her ${part}`,
+        `my ${part} is ${v.participle}`, `my ${part} got ${v.participle}`, `my right ${part} was ${v.participle} in June`,
+        `a ${v.participle} ${part}`, `a ${part} ${v.noun}`, `a ${v.noun} in my ${part}`,
+      ]) holds.push([said, v.label]);
+      hedged.push(
+        `I nearly ${v.past} my ${part}`, `I almost ${v.past} my ${part}`, `I never ${v.past} my ${part}`,
+        `I didn't ${v.base} my ${part}`, `my ${part} isn't ${v.participle}`, `my ${part} is not ${v.participle}`,
+        `luckily my ${part} wasn't ${v.participle}`,
+      );
+    }
+  }
+  holds.push(
+    ['two fractures', 'a fracture'], ['a stress fracture in my foot', 'a fracture'], ['broken ribs', 'a fracture'],
+    ['I broke a bone in my hand', 'a fracture'], ['I fractured a vertebra', 'a fracture'], ['I cracked two ribs', 'a fracture'],
+    ['a dislocation last year', 'a dislocation'], ['I fractured my back', 'a fracture'], ['I broke my wrist, it is a fracture', 'a fracture'],
+    // A hedge elsewhere in the sentence does not cancel the report.
+    ["I can't believe I broke my wrist", 'a fracture'], ['I never thought I would say it but I fractured my ankle', 'a fracture'],
+    ['not sure it matters, I dislocated my shoulder', 'a dislocation'], ["I don't know how I cracked a rib", 'a fracture'],
+  );
+  hedged.push("I've never had a fracture", 'no dislocations so far', "nothing's broken, just bruised");
+  const idioms = [
+    'I cracked my back this morning', 'I cracked my neck', 'I crack my knuckles a lot', 'I cracked my knuckles', 'this is breaking my back',
+    'my back is killing me', 'I broke a sweat', 'I broke my back moving furniture all weekend', 'that nearly broke my neck', 'break a leg',
+    'it broke my heart', "I'm breaking in new shoes", 'my neck is cracking', 'my team feels fractured', 'a fractured relationship',
+    'I felt dislocated after the move', 'my phone screen is cracked', 'I broke the record', 'it sounds like a broken record', 'I cracked the code',
+    'I cracked my knee getting up', 'I crack my wrists before typing', 'the plan is broken', 'I need a break', 'I took a break in my workout',
+    'I broke my routine last week', 'my treadmill is broken',
+  ];
+
+  it.each(holds)('holds: %s', (said, label) => expect(parse(said).clearance).toContain(label));
+  it.each(hedged)('a hedge cancels it: %s', (said) => expect(parse(said).clearance).toEqual([]));
+  it.each(idioms)('an idiom or a stretch does not hold: %s', (said) => expect(parse(said).clearance).toEqual([]));
 });

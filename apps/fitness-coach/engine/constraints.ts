@@ -89,14 +89,97 @@ const NAMED_INJURIES: [string, string][] = [
  * to modify exercises for your safety" and returned the identical six moves,
  * deadlifts and lateral lunges included, and never suggested seeing anyone.
  */
+
 /**
- * Body parts a person says they broke when they mean a fracture. Not "back"
- * or "neck": "I broke my back moving furniture", "that nearly broke my neck"
- * are figures of speech, and a pause has no way back. A literal broken back
- * reaches the host's stop_for_safety, and "fractured" or a vertebra holds here.
+ * A broken, cracked, fractured or dislocated body part, read from what a
+ * person said: one injury verb (or its noun), a body part that verb is said
+ * of, in one of the shapes people use, and no hedge cancelling it. Composed
+ * rather than listed: patched phrase by phrase, the patterns pulled against
+ * each other ("cracked" dropped for "cracked my back" lost "I cracked a rib";
+ * a near-miss hedge on one verb but not the others). A pause has no way back,
+ * so a false hold costs the whole workout; a missed one coaches a fracture.
  */
-const BROKEN_PARTS = 'bones?|ankles?|wrists?|arms?|legs?|ribs?|foot|feet|hands?|collarbones?|toes?|fingers?|elbows?|hips?|knees?|shoulders?|pelvis|femur|tibia|fibula|jaw|skull|vertebrae?|vertebra';
-const PART = `(?:(?:left|right|lower|upper)\\s+)?(?:${BROKEN_PARTS})`;
+const BONES = ['bones?', 'ribs?', 'skull', 'collarbones?', 'clavicles?', 'vertebrae?', 'pelvis', 'femur', 'tibia', 'fibula', 'kneecaps?', 'patella', 'shins?', 'heels?', 'cheekbones?', 'sternum', 'nose'];
+const LIMBS = ['wrists?', 'ankles?', 'arms?', 'legs?', 'foot', 'feet', 'hands?', 'toes?', 'fingers?', 'thumbs?', 'elbows?', 'hips?', 'knees?', 'shoulders?', 'jaw'];
+const JOINTS = ['shoulders?', 'hips?', 'knees?', 'kneecaps?', 'patella', 'elbows?', 'fingers?', 'thumbs?', 'wrists?', 'ankles?', 'jaw', 'toes?'];
+
+interface InjuryVerb {
+  /** The past and participle forms ("broke|broken"): never the present, so "break a leg" and "I crack my knuckles" are not reports. */
+  forms: string;
+  /** The noun ("a wrist fracture", "a break in my arm"). */
+  noun: string;
+  /** Whether the noun holds with no body part ("two fractures"; not "a break", a rest). */
+  nounAlone: boolean;
+  /** The parts this verb is an injury of. "Broke my back/neck" and "cracked my back/neck/knee/knuckles" are idioms and stretches, so not here. */
+  parts: string[];
+  label: 'a fracture' | 'a dislocation';
+}
+const INJURY_VERBS: InjuryVerb[] = [
+  { forms: 'broke|broken', noun: 'breaks?', nounAlone: false, parts: [...BONES, ...LIMBS], label: 'a fracture' },
+  { forms: 'fractured|fracturing', noun: 'fractures?', nounAlone: true, parts: [...BONES, ...LIMBS, 'back', 'neck', 'spine'], label: 'a fracture' },
+  { forms: 'cracked', noun: 'cracks?', nounAlone: false, parts: [...BONES, 'wrists?', 'ankles?'], label: 'a fracture' },
+  { forms: 'dislocated|dislocating', noun: 'dislocations?', nounAlone: true, parts: JOINTS, label: 'a dislocation' },
+];
+
+const WHOSE = '(?:(?:my|a|an|her|his|their|the|both|one of my|two|three|a couple of|several|some)\\s+)?';
+const SIDE = '(?:(?:left|right|lower|upper)\\s+)?';
+const IS = "(?:is|was|are|were|got|gets|has been|have been|had been|'s|ended up)";
+/** The shapes, for one verb: each a pattern whose match is the report. */
+function injuryShapes(v: InjuryVerb): RegExp[] {
+  const part = `${SIDE}(?:${v.parts.join('|')})`;
+  const shapes = [
+    // "I broke my wrist", "a broken wrist", "cracked two ribs", "dislocated my shoulder"
+    `\\b(?:${v.forms})\\s+${WHOSE}${part}\\b`,
+    // "my shoulder is dislocated", "my wrist got broken", "my left ankle was fractured"
+    `\\b(?:my|her|his|their|the|both)\\s+${part}\\s+${IS}\\s+(?:(?:badly|completely|totally|clean)\\s+)?(?:${v.forms})\\b`,
+    // "a wrist fracture", "a knee dislocation", "a rib crack"
+    `\\b${part}\\s+(?:${v.noun})\\b`,
+    // "a break in my arm", "a fracture of the wrist"
+    `\\b(?:${v.noun})\\s+(?:in|of|to)\\s+${WHOSE}${part}\\b`,
+  ];
+  // "two fractures", "a stress fracture", "a dislocation last year"
+  if (v.nounAlone) shapes.push(`\\b(?:${v.noun})\\b`);
+  return shapes.map((shape) => new RegExp(shape, 'g'));
+}
+const INJURY_SHAPES = INJURY_VERBS.map((v) => ({ label: v.label, shapes: injuryShapes(v) }));
+
+/** Words that cancel a report they lead into: a near miss or a denial ("I nearly broke", "never had a fracture", "didn't fracture"). */
+const HEDGE = /^(?:nearly|almost|never|not|no|without|hardly|barely)$|n't$/;
+/** Words that may sit between a hedge and the report it cancels ("never had a", "didn't ever"). */
+const LEAD_IN = new Set(['i', "i've", 'ive', "i'd", 'have', 'had', 'has', 'ever', 'been', 'got', 'gotten', 'a', 'an', 'any', 'my', 'even', 'actually', 'really', 'quite', 'completely']);
+
+/**
+ * Whether the report at `at` is hedged: walking back from it within its
+ * clause, over auxiliaries and articles only, a hedge word comes first ("I
+ * nearly broke…", "I've never had a fracture", "I didn't fracture…"). Any
+ * other word ends the walk: "I can't believe I broke my wrist" is a report.
+ */
+function hedgedAt(low: string, at: number): boolean {
+  const clause = low.slice(Math.max(0, at - 80), at).split(/[,.;!?]|\b(?:and|but|so|because|though)\b/).pop() ?? '';
+  for (const word of clause.trim().split(/\s+/).reverse()) {
+    if (HEDGE.test(word)) return true;
+    if (!LEAD_IN.has(word)) return false;
+  }
+  return false;
+}
+
+/** The injuries a line reports, in the labels the stop sentence says. */
+export function injuriesIn(low: string): string[] {
+  const found: string[] = [];
+  for (const { label, shapes } of INJURY_SHAPES) {
+    if (found.includes(label)) continue;
+    for (const shape of shapes) {
+      shape.lastIndex = 0;
+      let match: RegExpExecArray | null;
+      let reported = false;
+      while ((match = shape.exec(low))) {
+        if (!hedgedAt(low, match.index)) { reported = true; break; }
+      }
+      if (reported) { found.push(label); break; }
+    }
+  }
+  return found;
+}
 
 /**
  * Each condition as people report it: a verb as well as a noun, any tense, a
@@ -117,24 +200,11 @@ const CLEARANCE_PATTERNS: [RegExp, string][] = [
   [/\bconcuss(?:ion|ions|ed)\b/, 'a recent concussion'],
   [/\bsurger(?:y|ies)\b/, 'recent surgery'],
   // NOT a bare "operation": "cooperation" contains it, and so does "my
-  // operation at work". Likewise not a bare "broken" ("my treadmill is
-  // broken") or "broke" ("I broke my routine", "broke a sweat"): a break is a
-  // fracture only with a bone or a body part after it. A match freezes the
-  // whole session with no un-halt path, so a false positive costs the user
-  // their entire workout.
+  // operation at work". (Breaks, cracks, fractures and dislocations are read
+  // by injuriesIn: a bare "broken" is a treadmill.) A match freezes the whole
+  // session with no un-halt path, so a false positive costs the user their
+  // entire workout.
   [/\b(?:had|having|have had|getting|got) (?:an? )?operations?\b|\boperated on\b/, 'recent surgery'],
-  // The noun holds on its own ("a stress fracture"); the verb only with a body
-  // part ("I fractured my ankle"), not "the team feels fractured".
-  [/\bfractures?\b/, 'a fracture'],
-  [new RegExp(`\\bfractur(?:ed|ing)\\s+(?:(?:my|a|her|his|their|the|both)\\s+)?${PART}\\b`), 'a fracture'],
-  // A break said about a body part: "I broke my wrist", "a broken rib", "my
-  // ankle is broken", "broke a bone in my hand". Only "broke"/"broken": "cracked
-  // my back/neck/knuckles" is a stretch and "breaking my back" an idiom, and a
-  // near miss ("nearly broke my ankle") is no injury.
-  [new RegExp(`(?<!\\b(?:nearly|almost)\\s)\\b(?:broke|broken)\\s+(?:(?:my|a|her|his|their|the|both)\\s+)?${PART}\\b`), 'a fracture'],
-  [new RegExp(`\\b(?:my|her|his|their|the)\\s+${PART}\\s+(?:is|was|got|has been|had been)\\s+(?:broken|fractured)\\b`), 'a fracture'],
-  [/\bdislocations?\b/, 'a dislocation'],
-  [new RegExp(`\\bdislocat(?:ed|ing)\\s+(?:(?:my|a|her|his|their|the|both)\\s+)?${PART}\\b`), 'a dislocation'],
   // Not "a dizzying number of reps".
   [/\bdizz(?:y|iness)\b/, 'dizziness'],
   // The past tense, because that is how anyone reports it: "I fainted at the
@@ -255,6 +325,7 @@ export function parseConstraints(text: string): Constraints {
   for (const [pattern, label] of CLEARANCE_PATTERNS) {
     if (pattern.test(low) && !clearance.includes(label)) clearance.push(label);
   }
+  for (const label of injuriesIn(low)) if (!clearance.includes(label)) clearance.push(label);
 
   const avoid: string[] = [];
   for (const part of injuries) {
