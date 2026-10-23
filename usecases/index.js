@@ -32,10 +32,10 @@ const livestream = {
   title: "Live stream host (chat-only)",
   page: "livestream-host.html",
   appTools: {
-    instructions: "You run this stream's chat as its host. When a viewer writes something worth keeping on screen for everyone (a great question, the topic of the night, a recommendation people asked for), pin it with pin_message, in a few words. When the chat disagrees, or you want the audience's opinion, start a poll with start_poll (two to four short options) and tell viewers to vote in the chat; the result comes back to you as a chat event when it closes. One poll at a time.",
+    instructions: "You run this stream's chat as its host, and the chat only shows what your tools put there. When a viewer asks you to pin something, or writes something worth keeping on screen for everyone (a great question, the topic of the night, a recommendation people asked for), pin it with pin_message, in a few words. When a viewer asks for a poll, or the chat disagrees and you want the audience's opinion, call start_poll right away in that turn (two to four short options), then tell viewers to vote: do not offer a poll, or say you might start one, without starting it. A pin or a poll exists only once its tool is called, so call it before you speak of it. The result comes back to you as a chat event when the poll closes. One poll at a time.",
     tools: [
       tool("pin_message", "Pin a short line to the top of the stream chat for every viewer to see; it replaces the last pin.", { text: { type: "string", minLength: 1, maxLength: 140 } }, ["text"]),
-      tool("start_poll", `Start a chat poll viewers vote on for ${POLL_SECONDS} seconds; you hear the result when it closes.`, {
+      tool("start_poll", `Start a chat poll viewers vote on for ${POLL_SECONDS} seconds; you hear the result when it closes. Call it whenever you would run, start or launch a poll.`, {
         question: { type: "string", minLength: 1, maxLength: 120 },
         options: { type: "array", minItems: 2, maxItems: 4, items: { type: "string", minLength: 1, maxLength: 40 } },
       }, ["question", "options"]),
@@ -222,16 +222,16 @@ const game = {
   // Only the oracle at the shrine uses them: the island's secrets are the
   // game's, so the oracle asks the game (await) instead of guessing.
   appTools: {
-    instructions: "These are the oracle's powers, used only while the player kneels at the oracle's shrine. The oracle does not know the island's layout by heart: when the player asks where something lies (the key, the chest, the map), always consult the island with reveal_clue first and answer from what it tells you, cryptic but true; the place then glows on the player's map. When the player asks for help, light or a blessing, you may grant one gift with give_item: the lantern lights the tiles around them, the charm brings luck. A gift is real only once give_item has put it in the satchel: call it before you speak of giving anything. Never use these powers away from the shrine.",
+    instructions: "You narrate this island, and at the oracle's shrine you also voice the oracle; these are the oracle's powers, used only while the player kneels there. The island's secrets belong to the game, not to your tale: when the player asks where something lies (the key, the chest, the map), call reveal_clue first and answer from what it tells you, cryptic but true; the place then glows on the player's map. When the player asks for help, light, luck or protection, grant a gift with give_item: the lantern for light (it lights the tiles around them), the charm for luck. Your tale and the player's satchel must agree: whenever your words hand over, bestow or grant anything, call give_item for it first, in that same turn, even for a second gift; if it answers that they already carry it, say so instead. Never use these powers away from the shrine.",
     tools: [
       tool("reveal_clue", "As the oracle, ask the island where something lies; it is marked on the player's map and you are told where it is.", { seek: { type: "string", enum: ["key", "chest", "map"] } }, ["seek"], { mode: "await", timeoutSeconds: 5 }),
-      tool("give_item", "As the oracle, put a gift in the player's satchel: the lantern (lights the tiles around them) or the charm (luck). Saying you give it is not enough: call this whenever you hand the player anything.", { item: { type: "string", enum: ["lantern", "charm"] } }, ["item"]),
+      tool("give_item", "As the oracle, put a gift in the player's satchel: the lantern (light; lights the tiles around them) or the charm (luck, protection). The satchel only holds what this call puts there: call it every time the oracle hands, bestows or grants the player anything, before you speak of it.", { item: { type: "string", enum: ["lantern", "charm"] } }, ["item"]),
     ],
   },
   onLinked(h) { h.memo.talking = false; return [mute(), state("You are the narrator of a short treasure-hunt game on a 4x4 island map. You speak ONLY when the game tells you something happened, in one or two vivid sentences, and never ask the player questions, except at the oracle's shrine where the player may talk to you.")]; },
   onUser(h, msg) {
     if (msg.kind === "move") return [event(msg.text, 12)];
-    if (msg.kind === "enter_shrine") { h.memo.talking = true; return [unmute(), state("The player is at the oracle's shrine and may now talk to you. Answer as the oracle: cryptic but helpful, two sentences at most. You can reveal where the key, the chest or the map lies, and grant one gift. When they leave, you go back to narrating only."), event("The player kneels at the oracle's shrine. Greet them as the oracle and invite one question.", 10)]; }
+    if (msg.kind === "enter_shrine") { h.memo.talking = true; return [unmute(), state("The player is at the oracle's shrine and may now talk to you. Answer as the oracle: cryptic but helpful, two sentences at most. You can reveal where the key, the chest or the map lies (reveal_clue), and grant the lantern or the charm (give_item). When they leave, you go back to narrating only."), event("The player kneels at the oracle's shrine. Greet them as the oracle and invite one question.", 10)]; }
     if (msg.kind === "leave_shrine") { h.memo.talking = false; return [mute(), state("The player left the shrine. Back to narrating only: speak only when the game tells you something happened.")]; }
     if (msg.kind === "typed" && h.memo.talking) return [say(msg.text)];
     return [];
