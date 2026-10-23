@@ -173,13 +173,19 @@ export const said = {
 
   /** An aim from their own numbers: they know them, so they are not repeated. */
   aimed: (s: RangeSnapshot) => `Done: the launcher is at ${aimWords(s)}, as they asked; the arrow shows it. Give one short opinion of the shape of that aim (steep, flat, plenty of speed, not much) without repeating their numbers. ${AFTER_AIM}`,
-  /** An aim from words ("a bit steeper"): they do not know the new number yet. */
-  stepped: (s: RangeSnapshot, before: RangeSnapshot) => {
+  /**
+   * An aim that came at least partly from words ("a bit steeper"): what the
+   * words set is new to them, so it is named; a number they gave themselves
+   * is not repeated.
+   */
+  stepped: (s: RangeSnapshot, before: RangeSnapshot, fromWords: { angle: boolean; speed: boolean }) => {
     const moved = [
       s.aim.angle_deg !== before.aim.angle_deg && `the angle from ${num(before.aim.angle_deg)} to ${num(s.aim.angle_deg)} degrees`,
       s.aim.speed_ms !== before.aim.speed_ms && `the speed from ${num(before.aim.speed_ms)} to ${num(s.aim.speed_ms)} metres a second`,
     ].filter(Boolean).join(' and ');
-    return `Done: moved ${moved || `nothing: it was already at ${aimWords(s)}`}. Tell them the new ${s.aim.angle_deg !== before.aim.angle_deg ? 'angle' : 'speed'} once, in words, with one short opinion of its shape. ${AFTER_AIM}`;
+    const name = [fromWords.angle && 'angle', fromWords.speed && 'speed'].filter(Boolean).join(' and ') || 'aim';
+    const own = [!fromWords.angle && s.aim.angle_deg !== before.aim.angle_deg && 'angle', !fromWords.speed && s.aim.speed_ms !== before.aim.speed_ms && 'speed'].filter(Boolean).join(' or ');
+    return `Done: moved ${moved || `nothing: it was already at ${aimWords(s)}`}. Tell them the new ${name} once, in words, with one short opinion of its shape${own ? `; do not repeat the ${own} they gave you` : ''}. ${AFTER_AIM}`;
   },
   aimRefused: (reason: string, s: RangeSnapshot) => `Refused: "${reason}" The launcher did not move; it is still at ${aimWords(s)}. Say that plainly in one short line, keeping the numbers.`,
   noAim: () => 'Nothing moved: no angle, speed or words came with the call. Ask them in one short line what they want to change.',

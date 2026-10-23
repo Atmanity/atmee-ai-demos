@@ -112,7 +112,7 @@ degrees"). The range screen now opens scrolled to its top.
 
 ## Tested
 
-- `npx vitest run apps/trajectory-coach` (292 tests): the physics against
+- `npx vitest run apps/trajectory-coach` (293 tests): the physics against
   hand-worked numbers and the marking; the launcher's refusals and projection;
   the golden test against the Python engine (273 graded shots, the curves and
   trails, a scripted session's every snapshot and refusal); the range's

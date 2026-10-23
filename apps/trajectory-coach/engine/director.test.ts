@@ -162,7 +162,7 @@ describe('what the host speaks from', () => {
     const l = new Launcher();
     const s = l.snapshot();
     const results = [
-      said.aimed(s), said.stepped(s, s), said.aimRefused('90 is off the rail.', s), said.noAim(), said.unreadable('welly'),
+      said.aimed(s), said.stepped(s, s, { angle: true, speed: false }), said.aimRefused('90 is off the rail.', s), said.noAim(), said.unreadable('welly'),
       said.fireRefused("It's already in the air."), said.cancelled(s), said.challenge(s), said.alreadyUp(s), said.unknownChallenge('dragon'),
       said.refused('No.'), said.reset(s),
     ];
@@ -216,7 +216,7 @@ describe('what the host speaks from', () => {
     const own = said.aimed(before);
     expect(own).toContain('without repeating their numbers');
     l.setAim(48, null);
-    const stepped = said.stepped(l.snapshot(), before);
+    const stepped = said.stepped(l.snapshot(), before, { angle: true, speed: false });
     expect(stepped).toMatch(/^Done: moved the angle from 45 to 48 degrees\./);
     expect(stepped).toContain('Tell them the new angle once');
     for (const cue of [own, stepped]) {

@@ -168,8 +168,8 @@ export class Controls {
     if (!r.applied) return said.aimRefused(r.reason, this.range.snapshot());
     if (thenFire) return said.aimedAndFired(r.snapshot, await this.fire());
     // A value that came from words is new to them, so it is named; their own numbers are not repeated.
-    const fromWords = (given.angle === undefined && angle !== undefined) || (given.speed === undefined && speed !== undefined);
-    return fromWords ? said.stepped(r.snapshot, before) : said.aimed(r.snapshot);
+    const fromWords = { angle: given.angle === undefined && angle !== undefined, speed: given.speed === undefined && speed !== undefined };
+    return fromWords.angle || fromWords.speed ? said.stepped(r.snapshot, before, fromWords) : said.aimed(r.snapshot);
   }
 
   private fire(): Promise<string> {

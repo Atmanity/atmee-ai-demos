@@ -231,6 +231,26 @@ describe('loose arguments: the schemas are lenient, so the range reads what arri
     expect(range.snapshot().aim).toEqual({ angle_deg: 40, speed_ms: 25 });
   });
 
+  test('only what came from words is named back; the student\'s own number is not repeated', async () => {
+    // From review: a mixed call told the host to name the angle the student had just said, and not the speed from words.
+    const { call } = setup();
+    const mixed = call('aim', { angle_deg: 30, speed_ms: 'twenty four' });
+    await mixed.done;
+    expect(mixed.out.text).toContain('Tell them the new speed once');
+    expect(mixed.out.text).toContain('do not repeat the angle');
+    expect(mixed.out.text).not.toContain('new angle');
+
+    const steeper = call('aim', { speed_ms: 25, request: 'a bit steeper' });
+    await steeper.done;
+    expect(steeper.out.text).toContain('Tell them the new angle once');
+    expect(steeper.out.text).toContain('do not repeat the speed');
+
+    const both = call('aim', { request: 'steeper and faster' });
+    await both.done;
+    expect(both.out.text).toContain('Tell them the new angle and speed once');
+    expect(both.out.text).not.toContain('do not repeat');
+  });
+
   test('a number with words that cannot be read is refused whole, never half-applied', async () => {
     const { range, call } = setup();
     const r = call('aim', { angle_deg: 30, speed_ms: 'loads' });
