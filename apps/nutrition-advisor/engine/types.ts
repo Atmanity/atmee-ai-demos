@@ -1,7 +1,7 @@
 // What the server and the page share. Nothing here is secret: the page sees
 // everything the server holds about the session. The server holds it because
-// the model calls (cards, recipes, photos, judging what the user said) run
-// there, and one writer keeps the card, the shelf and the kept recipes in step.
+// the model calls (cards, recipes, photos) run there, and one writer keeps the
+// card, the table and the kept recipes in step.
 import type { Shelf } from './shelf.ts';
 
 export type { Shelf, ShelfRow } from './shelf.ts';
@@ -57,7 +57,7 @@ export interface View {
   nutrition: NutritionData | null;
   /** Every food looked at (oldest first) and the recipes opened. */
   shelf: Shelf;
-  /** Details made ahead for the current card's recipe ideas: staged for the avatar, not shown. */
+  /** Details made ahead for the current card's recipe ideas, so opening one is instant. */
   prepared: RecipeDetails[];
 }
 
@@ -67,54 +67,23 @@ export interface FoodAsk {
   quantity: string;
 }
 
-/** What an utterance asks the app to do (judge.ts). */
-export type Intent =
-  | { kind: 'lookup'; foods: FoodAsk[] }               // put a card up for each food
-  | { kind: 'compare'; foods: FoodAsk[] }              // put up what the table lacks, then a verdict
-  | { kind: 'recipe'; name: string; description: string } // open (or make) a recipe
-  | { kind: 'back' }                                   // close the recipe view
-  | { kind: 'sample' }                                 // read the sample photo
-  | { kind: 'none' };                                  // nothing for the app: the avatar answers it
-
 export interface Image {
   mimeType: string;
   base64: string;
 }
 
-/** What the page asks the server to do. */
-export type Action =
-  | Exclude<Intent, { kind: 'none' } | { kind: 'back' }>
-  | { kind: 'photo'; image: Image }
-  | { kind: 'prepare' };                               // make the current card's recipes ahead
+export type OutcomeKind = 'card' | 'compare' | 'recipe' | 'kept' | 'photo' | 'prepared' | 'cleared' | 'failed';
 
-/** How an action arrived: the avatar heard a spoken one, but never sees a button or a typed line the app kept. */
-export type How = 'button' | 'spoken' | 'typed';
-
-export interface ActRequest {
-  action: Action;
-  how: How;
-  /** The user's words, when the action came from them. */
-  said?: string;
-}
-
-export type OutcomeKind = 'card' | 'compare' | 'recipe' | 'kept' | 'photo' | 'prepared' | 'failed';
-
+/** What an action did: the screen after it, and the words the host speaks from. */
 export interface Outcome {
   view: View;
-  kind?: OutcomeKind;
+  kind: OutcomeKind;
   /** A new card went up (a recipe open on the page now covers it). */
   card?: boolean;
-  /** The recipe this outcome put on screen. */
+  /** The recipe this action put on screen. */
   recipe?: RecipeDetails;
-  /** What the avatar should be told, in its own words. */
-  event?: string;
-  ttl?: number;
-  /** A line for the panel itself (a photo it could not read, a sample that did not load). */
+  /** A tool's result, or for a button the event the host is told. */
+  text: string;
+  /** A line for the board itself (a photo it could not read, a food it could not find). */
   notice?: string;
-}
-
-/** What the page tells the server about its own screen when it asks for a judgement. */
-export interface Screen {
-  /** The recipe open on the page, if any. */
-  recipe: string | null;
 }

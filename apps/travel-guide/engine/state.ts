@@ -64,9 +64,6 @@ export class Mutex {
 }
 
 const ATTRIBUTION = '© OpenStreetMap contributors';
-/** How long, and for how many of its lines, the app reads the guide's words for the country it picks. */
-export const PICK_WINDOW_MS = 45_000;
-export const PICK_WINDOW_LINES = 2;
 
 export class TravelState {
   /** Bumped by every change, so the page never goes back to an older snapshot. */
@@ -89,8 +86,6 @@ export class TravelState {
   spotIndex = 0;
   /** A lookup provider failed, as opposed to genuinely finding nothing: different words, a different board. */
   lookupFailed = false;
-  /** The user asked the guide to choose: its next lines are read for the country. */
-  awaitingPick: { until: number; lines: number } | null = null;
 
   /**
    * Moving through the spots is reachable from a button and from speech at
@@ -213,15 +208,10 @@ export class TravelState {
     return this.spot;
   }
 
-  // ── "you choose" ──
-
-  awaitPick(now = Date.now()) { this.awaitingPick = { until: now + PICK_WINDOW_MS, lines: PICK_WINDOW_LINES }; }
-  isAwaitingPick(now = Date.now()) { return Boolean(this.awaitingPick && now < this.awaitingPick.until && this.awaitingPick.lines > 0); }
-
   // ── the page's view ──
 
   /** Everything the page needs to redraw itself from nothing. */
-  snapshot(now = Date.now()): Snapshot {
+  snapshot(): Snapshot {
     const here = this.here;
     const map: CountryMap | null = here && (here.center || here.bbox || here.outline)
       ? { country: here.country, isoCode: here.isoCode, city: here.city, center: here.center, bbox: here.bbox, outline: here.outline, attribution: ATTRIBUTION }
@@ -231,7 +221,6 @@ export class TravelState {
       stage: this.stage,
       travelerName: this.travelerName,
       continent: this.continent,
-      awaitingPick: this.isAwaitingPick(now),
       pending: this.visited.some((e) => e.headlinesLoading || e.dishesLoading || e.photosLoading),
       newsAvailable: this.newsAvailable,
       map,

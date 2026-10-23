@@ -469,38 +469,3 @@ describe('the drill must not teach the wrong thing', () => {
     }
   });
 });
-
-// ---- staged facts (new in the port) ---------------------------------------
-
-describe('what is staged for the avatar', () => {
-  test('only the live step, and only while it is being asked', () => {
-    const tutor = started();
-    const step = tutor.currentStep()!;
-    expect(tutor.staged()).toEqual({ step: { label: step.label, teach: step.teach, hint: step.hint } });
-    tutor.reveal();
-    // Between steps: where "next" leads (the next question), not the next answer.
-    const next = scenarios.ADULT_CARDIAC_ARREST.steps[1];
-    expect(tutor.staged()).toEqual({ next: { step: 2, prompt: next.prompt } });
-    expect(JSON.stringify(tutor.staged())).not.toContain(next.label);
-    expect(JSON.stringify(tutor.staged())).not.toContain(next.teach);
-  });
-
-  test('the last step leads to the debrief, and the menu stages every scenario', () => {
-    const tutor = started('recovery_position');
-    const steps = scenarios.RECOVERY_POSITION.steps;
-    for (let i = 0; i < steps.length - 1; i++) {
-      tutor.reveal();
-      tutor.nextStep();
-    }
-    tutor.reveal();
-    expect(tutor.staged()).toEqual({ next: 'debrief' });
-    tutor.nextStep();
-    expect(tutor.staged()!.scenarios!.map((s) => s.firstPrompt)).toEqual(SCENARIOS.map((s) => s.steps[0].prompt));
-  });
-
-  test('nothing is staged on the emergency card', () => {
-    const tutor = started();
-    tutor.emergency();
-    expect(tutor.staged()).toBeNull();
-  });
-});

@@ -19,42 +19,42 @@ export function Schedule({
   onSelect: (id: string) => void;
 }) {
   return (
-    <section className="rp-schedule" aria-label="Area schedule">
-      <h2 className="rp-side__title">Areas</h2>
-      <table className="rp-table">
-        <tbody>
-          {schedule.rows.map((row) => (
-            <tr
-              key={row.id}
-              className={row.id === selected ? "rp-table__row--on" : undefined}
-              onClick={() => onSelect(row.id)}
-            >
-              <td>{row.name}</td>
-              <td className="rp-table__num">{areaLabel(row.area_m2, schedule.unit)}</td>
+    <section className="pw-block pw-schedule" aria-label="Area schedule">
+      <h2 className="pw-block-title">Areas</h2>
+      {schedule.rows.length === 0 ? (
+        <p className="pw-none">No rooms yet.</p>
+      ) : (
+        <table className="pw-table">
+          <tbody>
+            {schedule.rows.map((row) => (
+              <tr key={row.id} className={row.id === selected ? "is-on" : undefined}>
+                <td>
+                  <button type="button" className="pw-rowpick" onClick={() => onSelect(row.id)} aria-pressed={row.id === selected}>
+                    {row.name}
+                  </button>
+                </td>
+                <td className="pw-num">{areaLabel(row.area_m2, schedule.unit)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td>Total</td>
+              <td className="pw-num">{areaLabel(schedule.total_m2, schedule.unit)}</td>
             </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td>Total</td>
-            <td className="rp-table__num">
-              {areaLabel(schedule.total_m2, schedule.unit)}
-            </td>
-          </tr>
-          <tr className="rp-table__soft">
-            <td>Circulation</td>
-            <td className="rp-table__num">{schedule.circulation_pct}%</td>
-          </tr>
-          {schedule.unassigned_m2 > 0 && (
-            <tr className="rp-table__warn">
-              <td>Not in any room</td>
-              <td className="rp-table__num">
-                {areaLabel(schedule.unassigned_m2, schedule.unit)}
-              </td>
+            <tr className="is-soft">
+              <td>Circulation</td>
+              <td className="pw-num">{schedule.circulation_pct}%</td>
             </tr>
-          )}
-        </tfoot>
-      </table>
+            {schedule.unassigned_m2 > 0 && (
+              <tr className="is-warn">
+                <td>Not in any room</td>
+                <td className="pw-num">{areaLabel(schedule.unassigned_m2, schedule.unit)}</td>
+              </tr>
+            )}
+          </tfoot>
+        </table>
+      )}
     </section>
   );
 }
@@ -63,10 +63,9 @@ export function Schedule({
  * Two schemes side by side, room by room.
  *
  * Read-only, and that is the design rather than a shortcut: exactly one plan is
- * editable at any moment, so every spoken intent has one unambiguous target.
- * What the comparison is for is the trade — "this one gives bedroom two an
- * extra three metres, taken off the hall" — and for that you only need to see
- * it.
+ * editable at any moment, so every request has one unambiguous target. What
+ * the comparison is for is the trade — "this one gives bedroom two an extra
+ * three metres, taken off the hall" — and for that you only need to see it.
  */
 export function Compare({
   comparing,
@@ -84,29 +83,23 @@ export function Compare({
   const wasCirculation = comparing.circulation_pct ?? 0;
 
   return (
-    <section className="rp-compare" aria-label={`Compared with ${comparing.name}`}>
-      <header className="rp-compare__head">
-        <h2 className="rp-side__title">vs {comparing.name}</h2>
-        <button type="button" className="rp-btn rp-btn--ghost" onClick={onClose}>
+    <section className="pw-block pw-compare" aria-label={`Compared with ${comparing.name}`}>
+      <header className="pw-block-head">
+        <h2 className="pw-block-title">vs {comparing.name}</h2>
+        <button type="button" className="pw-quiet" onClick={onClose}>
           Close
         </button>
       </header>
-      {comparing.thumb && (
-        <MiniPlan thumb={comparing.thumb} label={comparing.name} />
-      )}
+      {comparing.thumb && <MiniPlan thumb={comparing.thumb} label={comparing.name} />}
       {comparing.deltas.length === 0 ? (
-        <p className="rp-side__none">These two are the same on paper.</p>
+        <p className="pw-none">These two are the same on paper.</p>
       ) : (
-        <table className="rp-table">
+        <table className="pw-table">
           <tbody>
             {[...gained, ...lost].map((row) => (
               <tr key={row.name}>
                 <td>{row.name}</td>
-                <td
-                  className={`rp-table__num ${
-                    row.delta_m2 > 0 ? "rp-delta--up" : "rp-delta--down"
-                  }`}
-                >
+                <td className={`pw-num ${row.delta_m2 > 0 ? "is-up" : "is-down"}`}>
                   {row.delta_m2 > 0 ? "+" : "−"}
                   {areaLabel(Math.abs(row.delta_m2), unit)}
                 </td>
@@ -115,25 +108,21 @@ export function Compare({
           </tbody>
         </table>
       )}
-      {/* The totals. Two schemes both reading "7 rooms · 62.9 m²" in the list
-          are indistinguishable, and a room-by-room delta of ±0.5 m² does not
-          tell a designer which plan to argue for. Circulation is the number
-          that actually separates two layouts of the same envelope. */}
-      <div className="rp-compare__totals">
-        <span>Circulation</span>
-        <span>
-          {wasCirculation}% → <strong>{schedule.circulation_pct}%</strong>
-        </span>
-      </div>
-      <div className="rp-compare__totals">
-        <span>Rooms</span>
-        <span>
-          {comparing.rows.length} → <strong>{schedule.rows.length}</strong>
-        </span>
-      </div>
-      <p className="rp-compare__hint">
-        Read-only. Say <em>"go back to {comparing.name}"</em> to work on it.
-      </p>
+      {/* The totals. Two schemes both reading "7 rooms · 62.9 m²" are
+          indistinguishable, and a room-by-room delta of ±0.5 m² does not tell
+          anyone which plan to argue for. Circulation is the number that
+          actually separates two layouts of the same envelope. */}
+      <dl className="pw-compare-totals">
+        <div>
+          <dt>Circulation</dt>
+          <dd>{wasCirculation}% → <strong>{schedule.circulation_pct}%</strong></dd>
+        </div>
+        <div>
+          <dt>Rooms</dt>
+          <dd>{comparing.rows.length} → <strong>{schedule.rows.length}</strong></dd>
+        </div>
+      </dl>
+      <p className="pw-hint">Plan minus scheme. The scheme is read-only: open it to work on it.</p>
     </section>
   );
 }

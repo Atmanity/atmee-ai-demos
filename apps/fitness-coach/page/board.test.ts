@@ -300,22 +300,26 @@ describe('a tap the app has now answered for itself', () => {
   });
 });
 
-describe('the controls the tools used to be (new in this port)', () => {
-  it('offers moves to start with, then to demo, and nothing before a plan or under a hold', () => {
+describe('the move buttons and the video label', () => {
+  it('offers moves to start with, then to see or switch to, and nothing before a plan or under a hold', () => {
     expect(moveAction('move', true, true)).toBe('Start here');
-    expect(moveAction('coach', true, true)).toBe('Demo');
-    expect(moveAction('coach', false, true)).toBe('Coach me');
+    expect(moveAction('coach', true, true)).toBe('Show me');
+    expect(moveAction('coach', false, true)).toBe('Switch to');
     for (const stage of ['goal', 'level', 'planning', 'hold'] as const) expect(moveAction(stage, true, true), stage).toBe('');
     expect(moveAction('move', true, false)).toBe('');
   });
 
   it('always says which world the video stage is in', () => {
-    expect(videoLabel(null, true)).toBe('Choose a starting move');
+    expect(videoLabel(null, true)).toBe('Pick a move to see it');
     // Known up front: with no video key, the stage never pretends a clip may come.
-    expect(videoLabel(null, false)).toBe('Demos are off');
-    expect(videoLabel(video({ status: 'generating' }), true)).toBe('Rendering demo');
-    expect(videoLabel(video({ status: 'ready' }), true)).toBe('Demo ready');
-    expect(videoLabel(video({ status: 'error' }), true)).toBe('Demo failed');
-    expect(videoLabel(video({ status: 'unavailable' }), false)).toBe('Demos are off');
+    expect(videoLabel(null, false)).toBe('Coached in words');
+    expect(videoLabel(video({ status: 'generating' }), true)).toBe('Making your video');
+    expect(videoLabel(video({ status: 'ready' }), true)).toBe('Video ready');
+    expect(videoLabel(video({ status: 'error' }), true)).toBe('Video didn’t come through');
+    expect(videoLabel(video({ status: 'unavailable' }), false)).toBe('Coached in words');
+    // No label says "demo": the word is the team's, not the product's.
+    for (const v of [null, video({ status: 'generating' }), video({ status: 'ready' }), video({ status: 'error' })]) {
+      expect(videoLabel(v, true)).not.toMatch(/demo/i);
+    }
   });
 });

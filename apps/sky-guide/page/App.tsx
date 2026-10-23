@@ -1,25 +1,34 @@
-// Sky Guide: the avatar is the guide standing next to you; the chart (one
-// SkyChart, in this page) decides what is up. The page draws the chart, keeps
-// the avatar's state in step with it, judges every typed and spoken request
-// against the catalogue's own names, and passes on what happened as events.
-import { useEffect, useRef, useState } from "react";
-import { AvatarStage, Composer, Transcript, useAvatar } from "../../../src/kit/index.ts";
-import { SkyChart } from "../engine/chart.ts";
-import { NOTES, say, skyState } from "../engine/director.ts";
-import { act, type Outcome } from "../engine/guide.ts";
-import { parse } from "../engine/judge.ts";
-import { Narrator } from "../engine/narrator.ts";
-import type { Intent, SkyView } from "../engine/types.ts";
-import { SkyGuide } from "./SkyGuide.tsx";
-import "./sky.css";
+// Lodestar: a night-sky chart for anywhere on Earth, with Mira, a stargazing
+// guide. Mira calls the chart's tools (point out a star, draw a figure, move
+// the place or the clock) and speaks from what the chart computed; the page
+// answers those calls (the chart runs here: the sky is public and the maths
+// is pure), keeps Mira's picture of the chart current, and tells her about
+// what the user does with the chart's own controls.
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, type ToolCall } from '../../../src/kit/index.ts';
+import { isToolName, runTool, type Notice } from '../engine/actions.ts';
+import { SkyChart } from '../engine/chart.ts';
+import { figureName, said, skyState, told } from '../engine/director.ts';
+import { apply } from '../engine/guide.ts';
+import { whenUp } from '../engine/later.ts';
+import { Narrator } from '../engine/narrator.ts';
+import { mustDo } from '../engine/net.ts';
+import { remember, seenFigure, seenStar, type NightEntry } from '../engine/night.ts';
+import type { Intent, SkyView } from '../engine/types.ts';
+import { Dome, NightStrip, NoticeBar, Side, SkyHeader } from './Chart.tsx';
+import { Lobby, Logo } from './Lobby.tsx';
+import { NightCard } from './NightCard.tsx';
+import { NIGHT, RED } from './SkyDome.tsx';
+import { browserPlace, useRedLight } from './start.ts';
+import './lodestar.css';
 
-const API = "/api/apps/sky-guide";
+const API = '/api/apps/sky-guide';
+export const HOST = 'Mira';
 
-/** The model's reading of a command the rules could not place, or null when
- *  there is no model (the rules' own fallback then stands). */
+/** A model's reading of words the rules could not place, or null without one. */
 async function interpret(text: string): Promise<Intent[] | null> {
   try {
-    const res = await fetch(`${API}/interpret`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+    const res = await fetch(`${API}/interpret`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
     if (!res.ok) return null;
     const body = (await res.json()) as { model: boolean; intents: Intent[] };
     return body.model ? body.intents : null;
@@ -28,104 +37,179 @@ async function interpret(text: string): Promise<Intent[] | null> {
   }
 }
 
-/** ?place=Lisbon starts the chart there (the original's appParams.place). */
-const startingPlace = () => new URLSearchParams(location.search).get("place") || "Taipei";
+/** What the user did with a control, for the host: "pressed Orion". */
+function didWith(intent: Intent, view: SkyView): string {
+  switch (intent.kind) {
+    case 'select': return `tapped ${view.snapshot.visible.find((v) => v.id === intent.star)?.name ?? 'a star'}`;
+    case 'show_constellation': return `pressed ${figureName(intent.name)}`;
+    case 'set_place': return intent.label ? `picked ${intent.label}` : 'typed in coordinates';
+    case 'set_time': return 'moved the clock';
+    default: return 'used a control';
+  }
+}
+
+const LampIcon = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M7 3h10l-2 6H9z" /><path d="M9 9v10a3 3 0 0 0 6 0V9" /><path d="M12 13v3" />
+  </svg>
+);
 
 export function App() {
   const chart = useRef<SkyChart | null>(null);
-  chart.current ??= new SkyChart({ place: startingPlace() });
+  chart.current ??= new SkyChart({ place: browserPlace() });
   const [view, setView] = useState<SkyView>(() => chart.current!.view());
-  const [message, setMessage] = useState("");
-  const [pending, setPending] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [night, setNight] = useState<NightEntry[]>([]);
+  const [tab, setTab] = useState<'star' | 'night'>('star');
+  const [working, setWorking] = useState(false);
+  const [done, setDone] = useState(false);
+  const [red, setRed] = useRedLight();
   const viewRef = useRef(view);
   viewRef.current = view;
 
-  const avatar = useAvatar("sky-guide", {
-    // The avatar hears the user too and has already started its reply; the
-    // chart's answer follows as an event when the state could not stage it.
-    onUserSaid: (text, how) => { if (how === "spoken") void request(text, "spoken"); },
-    // The opening names the place and hour the chart shows when the guide arrives.
-    onLive: () => avatar.event(say.start(viewRef.current), 60),
-    onEnded: () => narrator.current?.cancel(),
-  });
-  const live = avatar.phase === "live";
-  const liveRef = useRef(live);
-  liveRef.current = live;
-
-  // The guide's line about a change made with the chart's own controls,
-  // coalesced so a drag across the night is one line, not twenty.
+  // The line about a change made with the chart's own controls, coalesced so a
+  // drag across the night is one line, not twenty. Said only while Mira is here.
   const narrator = useRef<Narrator | null>(null);
-  narrator.current ??= new Narrator((line) => { if (liveRef.current) avatar.event(line, 20); });
+  narrator.current ??= new Narrator((line) => { if (avatarRef.current?.phase === 'live') avatarRef.current.event(line, 20); });
+
+  // Mira's tool calls: the chart acts, the screen follows, the result is what she says.
+  const onToolCall = useCallback(async ({ name, arguments: args }: ToolCall) => {
+    if (!isToolName(name)) throw new Error(`there is no tool called ${name}`);
+    narrator.current!.flush();
+    const run = await runTool(chart.current!, name, args ?? {}, {
+      interpret: async (text) => {
+        setWorking(true);
+        try {
+          return await interpret(text);
+        } finally {
+          setWorking(false);
+        }
+      },
+    });
+    setView(run.view);
+    setNotice(run.notice);
+    if (run.seen.length) setNight((list) => run.seen.reduce(remember, list));
+    if (run.seen.some((e) => e.kind === 'star')) setTab('star');
+    return run.result;
+  }, []);
+
+  // If Mira narrates "let's look at midnight" without calling the tool, the chart does it and tells her.
+  const net = useToolNet({
+    match: (text) => { const call = mustDo(text, { lon: chart.current!.lon }); return call ? { id: `net-${Date.now()}`, ...call } : null; },
+    run: async (call) => String(await onToolCall(call)),
+    avatar: () => avatarRef.current!,
+  });
+  const avatar = useAvatar('sky-guide', {
+    onToolCall: net.watch(onToolCall),
+    onUserSaid: (text) => net.heard(text),
+    // The opening names the place and hour the chart shows when Mira arrives.
+    onLive: () => avatarRef.current?.event(said.opening(viewRef.current), 60),
+    onEnded: () => { narrator.current?.cancel(); setDone(true); },
+  });
+  const avatarRef = useRef(avatar);
+  avatarRef.current = avatar;
+  const live = avatar.phase === 'live';
+
   useEffect(() => () => narrator.current?.cancel(), []);
 
-  const show = (outcome: Outcome) => {
-    setView(outcome.view);
-    setMessage(outcome.refusals.join(" "));
-  };
-
-  /** A button, a tap, the picker or the slider. */
-  const control = (intent: Intent) => {
-    const outcome = act(chart.current!, [intent], "control");
-    show(outcome);
-    if (outcome.event && liveRef.current) avatar.event(outcome.event, 20);
-    if (outcome.narrate) narrator.current!.changed(outcome.before, outcome.view);
-  };
-
-  /** A typed or spoken line: judged by rules over the catalogue's names; a
-   *  model only for a command naming something the rules cannot place.
-   *  Returns whether it asked anything of the chart. */
-  async function request(text: string, how: "typed" | "spoken"): Promise<boolean> {
-    const sky = chart.current!;
-    const parsed = parse(text, { lon: sky.lon });
-    if (!parsed) return false;
-    let { intents, exact } = parsed;
-    if (parsed.unresolved) {
-      setPending(true);
-      const model = await interpret(text);
-      setPending(false);
-      // The model saw the whole request, so its reading replaces the rules';
-      // without one, the rules' fallback is refused by name by the chart.
-      if (model) [intents, exact] = [model.length ? model : intents, false];
-      else intents = [...intents, parsed.unresolved.fallback];
-      if (!intents.length) return false;
-    }
-    narrator.current!.flush();
-    const outcome = act(sky, intents, how, { exact });
-    show(outcome);
-    // The state first, so the event is read against the chart it talks about.
-    avatar.state(skyState(outcome.view));
-    if (outcome.event) avatar.event(outcome.event, 30);
-    return true;
-  }
-
-  // Notes once, while the avatar is on its way (the kit delivers them on arrival).
-  useEffect(() => {
-    if (avatar.phase !== "starting") return;
-    for (const note of NOTES) avatar.note(note);
-  }, [avatar.phase]);
-
-  // The avatar's picture of the chart follows the chart; a drag is sent once it settles.
+  // Mira's picture of the chart follows the chart; a drag is sent once it settles.
   useEffect(() => {
     const id = setTimeout(() => avatar.state(skyState(view)), 250);
     return () => clearTimeout(id);
   }, [view]);
 
-  // A typed line is judged first; only what isn't a chart request goes to the avatar.
-  const onTyped = (text: string) => {
-    void request(text, "typed").then((handled) => (handled ? avatar.record(text) : avatar.say(text)));
-  };
+  /** A tap, a button, the picker, the strip: the chart acts at once and Mira is told. */
+  function control(intent: Intent) {
+    const sky = chart.current!;
+    const out = apply(sky, [intent]);
+    setView(out.view);
+    if (out.refusals.length) {
+      const text = out.refusals.join(' ');
+      setNotice({ text, later: whenUp(sky, intent), retry: intent });
+      if (live) avatar.event(told.refused(didWith(intent, out.before), text), 20);
+      return;
+    }
+    setNotice(null);
+    if (intent.kind === 'select') {
+      setNight((list) => remember(list, seenStar(out.view)));
+      setTab('star');
+    }
+    if (intent.kind === 'show_constellation') setNight((list) => remember(list, seenFigure(out.view)));
+    if (out.change) narrator.current!.changed(out.before, out.view);
+  }
+
+  /** "Show the sky at 3:15 am": the clock moves there and the refused thing is shown. */
+  function showLater(found: Notice) {
+    if (found.later === null) return;
+    narrator.current!.flush();
+    const sky = chart.current!;
+    const intents: Intent[] = [{ kind: 'set_time', epoch: found.later }, ...(found.retry ? [found.retry] : [])];
+    const out = apply(sky, intents);
+    setView(out.view);
+    setNotice(out.refusals.length ? { text: out.refusals.join(' '), later: null } : null);
+    const entry = found.retry?.kind === 'select' ? seenStar(out.view) : found.retry?.kind === 'show_constellation' ? seenFigure(out.view) : null;
+    setNight((list) => remember(list, entry));
+    if (live) {
+      const parts = [told.timeMoved(out.before, out.view)];
+      if (found.retry?.kind === 'show_constellation' && out.view.snapshot.figure) parts.push(told.figure(out.view));
+      if (found.retry?.kind === 'select' && out.view.snapshot.fact) parts.push(told.tapped(out.view));
+      avatar.event(`${parts.join(' ')} Keep it all to two short lines.`, 20);
+    }
+  }
+
+  const palette = red ? RED : NIGHT;
+  const callAgain = () => { setDone(false); void avatar.start({ mic: avatar.micOn }); };
+
+  if (avatar.phase === 'idle') {
+    return (
+      <Lobby
+        view={view} host={HOST} palette={palette}
+        onPlace={(label) => control({ kind: 'set_place', label })}
+        onStart={(mic) => void avatar.start({ mic })}
+      />
+    );
+  }
 
   return (
-    <div className="kit-layout">
-      <div className="kit-side">
-        <AvatarStage
-          avatar={avatar} name="Your guide" startLabel="Start the guide"
-          lobby={<><div className="kit-title">Sky Guide</div><div className="kit-detail">Tonight's sky on the right, from anywhere, at any hour. Tap a star or ask about it; ask to see a constellation, another city or another hour.</div></>}
+    <div className="ls-app">
+      <header className="ls-top">
+        <Logo />
+        <button
+          type="button" className={`ls-red ${red ? 'is-on' : ''}`} aria-pressed={red} onClick={() => setRed(!red)}
+          title="Red light keeps your eyes used to the dark"
+        >
+          <LampIcon /><span>Red light</span>
+        </button>
+        <CallControls avatar={avatar} className="ls-controls" />
+      </header>
+
+      {done && <NightCard night={night} host={HOST} onAgain={callAgain} onClose={() => setDone(false)} />}
+
+      <main className="ls-main">
+        <section className="ls-sky" aria-label="The chart">
+          <SkyHeader view={view} working={working} host={HOST} onIntent={control} />
+          <Dome view={view} palette={palette} onIntent={control} />
+          <NoticeBar notice={notice} tz={chart.current.tz} onLater={showLater} onDismiss={() => setNotice(null)} />
+          <NightStrip view={view} onIntent={control} />
+        </section>
+
+        <Side view={view} night={night} tab={tab} host={HOST} onTab={setTab} onIntent={control} />
+
+        <aside className="ls-host" aria-label={`${HOST}, your guide`}>
+          <HostVideo avatar={avatar} name={HOST} className="ls-host-video">
+            <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} onAgain={callAgain} />
+          </HostVideo>
+          <div className="ls-nameplate">
+            <p><b>{HOST}</b> your guide{live && <span className="ls-onair">Live</span>}</p>
+            {live && avatar.caption && <p className="ls-caption-line">{avatar.caption}</p>}
+          </div>
+        </aside>
+
+        <ChatPanel
+          avatar={avatar} name={HOST} className="ls-chat" placeholder={`Ask ${HOST}: "Where's Vega?"`}
+          empty={<>Ask out loud or type here: <em>"What's that bright one?"</em>, <em>"Show me Orion"</em>, <em>"The sky from Lisbon at midnight"</em>.</>}
         />
-        <Composer avatar={avatar} placeholder='Try "show me Orion" or "the sky from Lisbon"…' onSubmit={(t) => { onTyped(t); }} />
-        <Transcript avatar={avatar} names={{ avatar: "Guide" }} />
-      </div>
-      <SkyGuide view={view} message={message} pending={pending} onIntent={control} />
+      </main>
     </div>
   );
 }

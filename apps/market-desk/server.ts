@@ -1,27 +1,28 @@
-// Market Desk's server side. It owns each page's board: the quote feed
-// (Nasdaq first, Yahoo as the fallback; neither answers a browser), the fetch
-// pump, the once-a-minute refresh of the focused card, and the announcer that
-// speaks on a 1% move. The page streams the board (server-sent events) and
-// relays the desk's own lines to the avatar as events: only the page holds
-// the session's user token, so the server cannot speak into the room itself.
+// Outcry's server side. It owns each page's board: the quote feed (Nasdaq
+// first, Yahoo as the fallback; neither answers a browser), the fetch pump,
+// the once-a-minute refresh of the stock on watch, and the announcer that
+// speaks on a 1% move. The host's tool calls and the user's buttons both come
+// here and run the same actions (`engine/actions.ts`); a call that needs a
+// quote waits for it, so the host's first reply carries the real number.
 //
-// Everything the user says or types comes here to be judged (rules first,
-// then the app's own model call, then Nasdaq's symbol search), because the
-// avatar cannot call the app: the original's add_symbol/decline_advice tools
-// are this route.
+// The page streams the board (server-sent events) and relays the desk's own
+// lines (a 1% move, a quote that outlived the host's wait) to the host as
+// events: only the page holds the call's user token.
 import { randomBytes } from 'node:crypto';
 import type { Response } from 'express';
 import type { AppServer } from '../../server/app-server.ts';
 import { llmAvailable, structured } from '../../server/llm.ts';
+import { press, run, TOOL_NAMES } from './engine/actions.ts';
 import { DeskSession } from './engine/desk.ts';
+import { INSTRUCTIONS, TOOLS } from './engine/director.ts';
 import { searchSymbols } from './engine/feed.ts';
-import { judge, JUDGE_SCHEMA, judgePrompt, type ModelCall, type ModelReading } from './engine/judge.ts';
-import type { DeskMessage, Kind, Origin } from './engine/types.ts';
+import { LOOKUP_SCHEMA, lookupPrompt, type TickerLookup } from './engine/judge.ts';
+import type { ActReply, DeskMessage, Kind } from './engine/types.ts';
 
 const ID = 'market-desk';
 const KINDS: Kind[] = ['add', 'remove', 'focus', 'refresh', 'clear'];
 /** A desk nobody has watched for this long is dropped. */
-const IDLE_MS = 15 * 60_000;
+const IDLE_MS = 30 * 60_000;
 const HEARTBEAT_MS = 25_000;
 
 interface Entry { session: DeskSession; subscribers: Set<Response>; idleSince: number }
@@ -35,7 +36,7 @@ function newDesk(): [string, Entry] {
   const entry: Entry = { session: undefined as unknown as DeskSession, subscribers: new Set(), idleSince: Date.now() };
   entry.session = new DeskSession({
     // A line goes out after the board change that caused it, so the page has
-    // updated the avatar's state before it hands the avatar the event.
+    // updated the host's state before it hands the host the event.
     speaker: { say: (text, ttl) => void setImmediate(() => broadcast(entry, { type: 'say', text, ttl })) },
   });
   entry.session.desk.onChange((seq) => broadcast(entry, { type: 'board', seq, board: entry.session.board() }));
@@ -53,21 +54,28 @@ function sweep() {
 }
 setInterval(sweep, 60_000).unref();
 
-/** The app's own model call, when there is a key: what rules cannot read. */
-const model: ModelCall = (utterance, board) => structured<ModelReading>({
-  system: 'You read one request made to a stock-watchlist app and say what it asks for.',
-  user: judgePrompt(utterance, board),
-  schema: JUDGE_SCHEMA,
-  temperature: 0,
-});
+/** The app's own model call, when there is a key: names the rules cannot read ("the search-engine one"). */
+const lookup: TickerLookup = async (names, board) => {
+  const reply = await structured<{ stocks?: { said: string; ticker: string }[] }>({
+    system: 'You map the company names a user said to their stock tickers.',
+    user: lookupPrompt(names, board),
+    schema: LOOKUP_SCHEMA,
+    temperature: 0,
+  });
+  return reply.stocks ?? [];
+};
+const deps = () => ({ lookup: llmAvailable() ? lookup : null, search: (query: string) => searchSymbols(query) });
+
+const reply = (entry: Entry, text: string, refused?: string): ActReply => ({ seq: entry.session.desk.seq, board: entry.session.board(), text, refused });
 
 const app: AppServer = {
   id: ID,
-  title: 'Market Desk',
-  tagline: 'A live stock watchlist you build by talking, read by an analyst who never gives advice.',
+  title: 'Outcry',
+  tagline: 'Call out a ticker. Reese reads the tape, and never gives advice.',
   maxSeconds: 600,
   // No agenda: the desk is driven by the user and by the board.
   conductor: null,
+  appTools: { instructions: INSTRUCTIONS, tools: TOOLS },
   routes(router) {
     router.post('/desks', (_req, res) => {
       sweep();
@@ -75,14 +83,14 @@ const app: AppServer = {
       res.json({ id, seq: entry.session.desk.seq, board: entry.session.board() });
     });
 
-    // The board as a stream: every change, and the desk's own lines for the avatar.
+    // The board as a stream: every change, and the desk's own lines for the host.
     router.get('/desks/:id/stream', (req, res) => {
       const entry = desks.get(req.params.id);
       if (!entry) return void res.status(404).end();
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
       send(res, { type: 'board', seq: entry.session.desk.seq, board: entry.session.board() });
       entry.subscribers.add(res);
-      // The focused card refreshes once a minute while someone is watching.
+      // The stock on watch refreshes once a minute while someone is looking.
       entry.session.timer.start();
       const beat = setInterval(() => res.write(': beat\n\n'), HEARTBEAT_MS);
       res.on('close', () => {
@@ -95,27 +103,28 @@ const app: AppServer = {
       });
     });
 
-    // A control press ({intent}), or a line the user said or typed ({text, from}).
+    // The host's tool calls: the result is what it says next.
+    router.post('/desks/:id/tool', async (req, res) => {
+      const entry = desks.get(req.params.id);
+      if (!entry) return void res.status(404).json({ error: 'no_desk' });
+      const { name, arguments: args } = (req.body ?? {}) as { name?: string; arguments?: Record<string, unknown> };
+      if (!name || !TOOL_NAMES.has(name)) return void res.status(400).json({ error: 'unknown_tool' });
+      const started = Date.now();
+      const done = await run(entry.session, name, args && typeof args === 'object' ? args : {}, 'tool', deps());
+      console.info('[%s] [Tool] %s answered in %dms%s', ID, name, Date.now() - started, done.refused ? ' (refused)' : '');
+      res.json(reply(entry, done.text, done.refused));
+    });
+
+    // The user's buttons: they act at once, and the host is told (it cannot see the screen).
     router.post('/desks/:id/act', async (req, res) => {
       const entry = desks.get(req.params.id);
       if (!entry) return void res.status(404).json({ error: 'no_desk' });
-      const { session } = entry;
-      const { intent, text, from } = (req.body ?? {}) as { intent?: { kind?: string; symbol?: string }; text?: string; from?: string };
-
-      if (intent && KINDS.includes(intent.kind as Kind)) {
-        const symbols = typeof intent.symbol === 'string' && intent.symbol.trim() ? [intent.symbol.trim().slice(0, 16)] : [];
-        return void res.json(session.act({ kind: intent.kind as Kind, symbols }, 'button'));
-      }
-
-      const said = typeof text === 'string' ? text.trim().slice(0, 500) : '';
-      if (!said) return void res.status(400).json({ error: 'nothing_to_do' });
-      const origin: Origin = from === 'typed' ? 'typed' : 'spoken';
-      const judgement = await judge(said, session.board(), {
-        model: llmAvailable() ? model : null,
-        search: (query) => searchSymbols(query),
-      });
-      console.info('[%s] [Judge] %s %s', ID, judgement.kind, 'symbols' in judgement ? judgement.symbols.join(',') : '');
-      res.json(session.handle(judgement, said, origin));
+      const { command, symbol } = (req.body ?? {}) as { command?: string; symbol?: unknown };
+      if (!KINDS.includes(command as Kind)) return void res.status(400).json({ error: 'unknown_command' });
+      const target = typeof symbol === 'string' ? symbol.trim().slice(0, 40) : '';
+      if (!target && command !== 'clear' && command !== 'refresh') return void res.status(400).json({ error: 'no_symbol' });
+      const done = await press(entry.session, command as Kind, target, deps());
+      res.json(reply(entry, done.text, done.refused));
     });
   },
 };

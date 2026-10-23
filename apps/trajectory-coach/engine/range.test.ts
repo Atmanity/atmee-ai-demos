@@ -17,12 +17,12 @@ afterEach(() => { vi.useRealTimers(); });
 
 describe('the reducer', () => {
   test('an impossible speed comes back as a sentence, not an exception', () => {
-    const r = new Range().apply({ kind: 'set_aim', angle_deg: 45, speed_ms: 90 }, 'spoken');
+    const r = new Range().apply({ kind: 'set_aim', angle_deg: 45, speed_ms: 90 }, 'host');
     expect(r).toEqual({ applied: false, reason: "That's past what this launcher does — 5 to 40 metres a second." });
   });
 
   test('an unknown intent is refused by name rather than ignored', () => {
-    const r = new Range().apply({ kind: 'launch_the_moon' } as never, 'typed');
+    const r = new Range().apply({ kind: 'launch_the_moon' } as never, 'host');
     expect(r.applied).toBe(false);
     expect(!r.applied && r.reason).toContain('launch_the_moon');
   });
@@ -33,7 +33,7 @@ describe('the reducer', () => {
     // leave the range in "flying" forever.
     const { range } = watched();
     range.apply({ kind: 'fire' }, 'panel');
-    for (const by of ['panel', 'typed', 'spoken'] as const) {
+    for (const by of ['panel', 'host'] as const) {
       const r = range.apply({ kind: 'land' }, by);
       expect(!r.applied && r.reason).toContain('Only the range');
     }
@@ -52,7 +52,7 @@ describe('the reducer', () => {
 
   test('a refused intent tells nobody anything', () => {
     const { range, changes } = watched();
-    range.apply({ kind: 'set_aim', angle_deg: 45, speed_ms: 90 }, 'spoken');
+    range.apply({ kind: 'set_aim', angle_deg: 45, speed_ms: 90 }, 'host');
     expect(changes).toEqual([]);
     expect(range.seq).toBe(0);
   });
@@ -75,8 +75,8 @@ describe('the lander', () => {
 
   test('one landing per shot, whatever happens while it flies', () => {
     const { range, changes } = watched();
-    range.apply({ kind: 'fire' }, 'spoken');
-    range.apply({ kind: 'fire' }, 'typed');                                 // refused: in the air
+    range.apply({ kind: 'fire' }, 'host');
+    range.apply({ kind: 'fire' }, 'host');                                 // refused: in the air
     range.apply({ kind: 'set_aim', angle_deg: 30, speed_ms: 20 }, 'panel'); // refused: in the air
     vi.advanceTimersByTime(10_000);
     expect(changes.filter((c) => c.intent.kind === 'land')).toHaveLength(1);

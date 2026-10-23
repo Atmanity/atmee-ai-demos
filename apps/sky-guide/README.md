@@ -1,148 +1,84 @@
-# Sky Guide
+# Lodestar
 
-A chart of the sky above the horizon from one place at one held instant, and a
-guide standing next to you naming it: 135 naked-eye stars, 18 joined-up
-figures, and catalogue facts for the notable ones. Tap a star (or ask "where's
-Vega?"), light a constellation ("show me Orion"), move the place ("the sky from
-Lisbon", or the picker) and the clock ("show me midnight", "two hours later",
-the steppers, the scrubber across the night, or a date). Start the chart
-somewhere else with `?place=Lisbon`.
+A night-sky chart for anywhere on Earth, with a stargazing guide. Pick a city
+(or type coordinates) and a night between 1900 and 2100; Mira tells you what is
+up, where to look and what each star is, and moves the chart for you: "where's
+Vega?", "show me Orion", "the sky from Lisbon at midnight", "two hours later".
+Everything she says about the sky is what the chart worked out from its
+catalogue of 135 naked-eye stars and 18 constellation figures; she never
+answers from memory. What you looked at becomes your night's list, to download
+and take outside. Rebuilt from the `sky-guide` mini-app as a standalone product
+on the Avatar API.
 
-Ported from `Atmanity/apps/apps/sky-guide` (a Python LiveKit agent with five
-tools, a narrator and a canvas panel) onto the Avatar API, following
-`apps/guess-the-city` (see `docs/PORTING.md`).
+Open it at `/apps/sky-guide/`. It opens on the city in your browser's time
+zone (else one on the same clock, else Taipei); `?place=Lisbon` opens it
+somewhere else.
 
-## Where things are
+## How it works
 
-| File | What |
+| Part | Where |
 |---|---|
-| `engine/sky.ts` | The astronomy, ported formula for formula: sidereal time, RA/Dec to altitude and azimuth, rising and setting, 41 places with standard-time offsets, clock words |
-| `engine/catalog.ts` | The content, ported row for row: 135 stars, 42 constellation names, 18 figures, 40 stars' facts, the finders |
-| `engine/chart.ts` | `SkyChart`, the original's rules object: validate before mutate, refuse by name with when it rises, drop what sets |
-| `engine/guide.ts` | Intents onto the chart, and who tells the avatar what (the original's reducer, tool cues and narrator claims) |
-| `engine/judge.ts` | Typed and spoken words to intents, by rules over the catalogue's own names; the model's schema for the rest |
-| `engine/director.ts` | The notes, the state builder and the event texts |
-| `engine/narrator.ts` | One line per change made with the chart's controls, coalesced |
-| `page/SkyDome.tsx`, `page/projection.ts` | The original canvas and its drawing arithmetic, unchanged (east on the left: you are looking up) |
-| `page/SkyGuide.tsx` | The original panel, now with a place picker, a time control and constellation buttons |
-| `server.ts` | One route, `POST /interpret`: a model reading of a command the rules could not place |
-
-**The engine runs in the page.** Nothing in it is secret (the sky is public),
-it is pure arithmetic over a static catalogue, and keeping it next to the
-drawing keeps the original's one-sky rule: the chart on screen, the avatar's
-state and every event are projections of the same `SkyChart`, so the guide can
-never describe a sky the user is not looking at. The server holds only the
-optional model call, because that needs the key.
-
-## How it maps to the API
-
-| Feature (original) | Mechanism here |
-|---|---|
-| The guide's persona and the one hard rule (facts only from the catalogue) | Two rule `note`s (`director.ts`); the persona the app assumed is in `avatar.json` (the original gave a job, never a name; the notes still tell the avatar to keep its own) |
-| The catalogue's facts | Three more `note`s, all 40 stars' lines word for word, so "tell me about Vega" is answered from the catalogue at once |
-| `[Live sky]` system note | `state` (at most 3,858 characters, worst case measured at about 3,550): place, hour in words, every star that is up grouped by where to look, the brightest six, which figures are up (with where to look) and which are down (with when they rise), the lit figure, the marked star with its fact verbatim |
-| `look_from` / `look_at_time` / `point_out` / `show_constellation` tools | `judge.ts` rules over the catalogue's names (stars and common names, constellations and aliases, 41 places and coordinates, presets, clock hours, shifts, months, seasons), then `guide.ts`; a model (`server.ts`, Gemini) only for a command naming something the rules cannot place, and the chart validates what it returns |
-| `whats_that` | No app action: the marked star's fact is in the state, so the avatar answers "tell me about it" itself |
-| Tool cues and refusals ("Orion isn't up at this hour — it rises about half past 2") | `event`s: the risen/gone diff for a clock or place move, the fact for a star, the anchor star's direction for a figure, the refusal sentence (also shown on the chart) |
-| Narrator for panel taps, with `claim(seq)` so nothing is said twice | `Narrator`: control changes coalesced into one event 1.2 s after the last; a typed or spoken request flushes it and carries its own event |
-| Panel: tap, ±1h, Tonight, Clear | The same, plus Midnight, Before dawn, a scrubber across the night, a date, a place picker with coordinates, and a button per figure |
-| Greeting naming the place and hour | The avatar greets as itself; the app's opening `event` names the place, the hour and the brightest stars |
-| Deepgram keyterms for star names | Known mishearings mapped app-side ("beetle juice" is Betelgeuse; "serious" is Sirius only inside a command) |
-
-**Spoken requests and staging.** The avatar starts its reply before the app
-hears the words. So the state stages the predictable answers (every star that
-is up and where; every figure, up with where to look or down with when it
-rises), and the notes stage the facts. A spoken request the state could answer
-(a star or figure that was up, said by its name) gets no second telling: the
-chart just marks it. Everything the state could not answer is told as an
-event: another place or hour, a refusal (always, even at the cost of "as I
-said"), a star with only its catalogue row, a name the app mapped from a
-mishearing. Typed lines are judged first: a chart request is recorded and told;
-anything else goes to the avatar as a typed turn.
+| The sky: sidereal time, altitude and azimuth, rising and setting, 41 places | `engine/sky.ts`, `engine/chart.ts` (one `SkyChart`: validate before mutate, refuse by name, drop what sets), `engine/catalog.ts`. All in the page: the sky is public and the maths is pure, so the chart on screen, Mira's picture of it and every tool result come from the same object. |
+| Mira's actions | Four tools (`engine/director.ts`): `point_out(star)`, `show_constellation(name)` and `move_chart(place?, time?)` are `await` (10 to 15 s); `clear_chart(what)` is `notify`. The page answers each `atmee.tool` call with `engine/actions.ts`, which moves the chart and returns what it computed; her first reply carries it ("Vega is marked, high up in the north-east…", "Orion isn't up yet: it rises about half past 2; it's well up by quarter past 3"). |
+| Reading what Mira heard | The tools take her words ("the north star", "beetle juice", "40.7 north 74 west", "December 21st", "two hours later"); `engine/judge.ts` reads them by rules over the catalogue's own names. A model (`server.ts`, Gemini) only for words the rules cannot place; the chart still validates its answer. |
+| Mira's rules | The tool `instructions`: the screen changes only when she calls a tool; never say what is up, where or when before a result; facts about a star only from the catalogue; no Sun, Moon or planets; no degrees out loud; offers acted on only when asked. |
+| What Mira sees | `state` (worst case 3,521 of 3,858 characters, measured over every place, hour and season): the place and hour, every star up grouped by where to look, the figures up (with where) and down (with when they rise), the drawn figure, the marked star and its catalogue lines. She answers "what's up in the south?" from it without a tool. |
+| The chart's controls | Tap a star, the place picker, the night strip (noon to noon), an hour either way, Tonight / Midnight / Before dawn, a date, a button per figure. They act at once; Mira is told by an event, coalesced (`engine/narrator.ts`) so a drag across the night is one line. A refusal is shown on the chart and told at once. |
+| "Show it then" | A refused star or figure that rises gets a one-tap "Show the sky at 3:15 am" (`engine/later.ts`: the first dark quarter hour it is well up), which moves the clock and draws it. Mira offers the same hour out loud and moves the clock only if asked. |
+| A new place keeps the hour | "The sky from Lisbon" while the chart shows Taipei at 9 pm is Lisbon at 9 pm that night (`engine/guide.ts`), not the same instant (Lisbon at 1 pm), unless a time is asked for too. |
+| The safety net | `useToolNet` (kit) with `engine/net.ts`: when the user clearly asks for a move that is safe to make twice (a named place, an absolute time, a constellation with "show" or "draw", a clear) and Mira does not call the tool within 7 s, the page makes the call and tells her. Never a relative move ("two hours later" twice is four hours) and never a star ("where's Vega?" is often answered rightly from `state`). |
+| Your night | `engine/night.ts`: every star marked and figure drawn, with where to look from that place and hour. A tab beside the chart during the call; when the call ends, a card with a download (plain text). |
+| The screens | A front door with tonight's real sky over your city (`page/Lobby.tsx`), the chart with Mira beside it (`page/Chart.tsx`, `page/SkyDome.tsx`), the night card (`page/NightCard.tsx`), styled in `page/lodestar.css`. Red light turns the whole app, the chart and Mira's picture torch-red for dark-adapted eyes. On a phone Mira rides along at the top while you scroll the sky. |
 
 ## Keys
 
-- `GEMINI_API_KEY` (optional): `/interpret` reads commands the rules cannot
-  place ("show me the sky in late March", odd phrasings). Without it the rules
-  still handle every phrasing in `judge.test.ts`, and an unplaceable name is
-  refused by name ("I don't have Zorblax in the catalogue").
+- `GEMINI_API_KEY` (optional): `/interpret` reads words the rules cannot place
+  ("Alpha Orionis", odd phrasings of a date). Without it the rules handle every
+  phrasing in `judge.test.ts`, and an unknown name is refused by name ("I don't
+  have Zorblax in the catalogue").
 - No other keys, and no network: the catalogue and the maths are in the bundle.
 
 ## What the API could not do
 
-Status after the live run of 2026-10-23 (below): **seen** = observed live,
-**expected** = not yet observed.
+Status before this rebuild's live run. **Seen**: observed live (in the first
+port, where noted). **Expected**: not observed yet.
 
-1. **The avatar answers a spoken request before the app can act** — seen,
-   and staging made the first reply right. "Show me Orion" is answered from the avatar's own reply; the
-   app's refusal ("isn't up at this hour — it rises about…") follows as an
-   event. Staging the figures' standing in `state` should make the first reply
-   right; if the model answers from memory anyway ("Orion's in the south"), the
-   refusal event corrects it a beat later, and the chart shows the refusal line.
-   A move to another place or hour cannot be staged: expect a holding line,
-   then the event. The original's tools returned the outcome inside the reply.
-   Live: "Show me Orion" got "Orion isn't up quite yet, but it'll rise low in
-   the east at about quarter past nine" from the staged state, then the
-   refusal event said it again. Every place and hour move got "let's have a
-   look", then the event.
-2. **The facts-only rule is only an instruction** — expected (the facts
-   live were the catalogue's). Nothing
-   gates the avatar's memory, and events are paraphrased: "eight and a half
-   light years" may drift. The fact panel on the chart is the source of truth.
-3. **No speech hints** — seen. "Betelgeuse" arrived as "Beetlejuice"; the
-   mishearing table caught it and the star was marked. Star names are misheard ("beetle
-   juice"). The app maps known mishearings and then tells the avatar (it heard
-   the same garbled words); a mishearing not in the list reaches neither.
-4. **The ~10 s check-in talks over the stargazing** — expected (none in one
-   run with steady questions). The
-   original deliberately had no idle nudge at all; the API's cannot be turned
-   off or lengthened.
-5. **No per-session greeting** — seen ("I'm Emily, a 21-year-old college
-   student…", then the app's "sky over Taipei at about nine in the evening"). The original greeted with
-   the place and hour; here the avatar greets as itself first and the app's
-   opening event follows.
-6. **Staged answers are not checked** — expected (design; live, "Where's
-   Vega?" was answered right from the state: "about halfway up in the
-   north-west"). A spoken "where's
-   Vega?" sends no event; if the avatar ignored the state, only the chart
-   (which marks Vega and prints "high up in the north-west") corrects it.
+1. **Tools are called when the host decides.** *Expected.* Mira may narrate a
+   move ("let's look at midnight!") without calling `move_chart`, or answer
+   "where's Vega?" from the chart in her context without `point_out` (right,
+   but nothing is marked). The safety net makes the safe moves after 7 s; a
+   star asked about is left to her, since she will usually have said where it is.
+2. **The facts-only rule is only an instruction.** *Expected.* Nothing gates the
+   model's memory, and a result is paraphrased: "eight and a half light years"
+   may drift. The catalogue's lines are on screen beside the chart as the source
+   of truth. In the first port the facts said live were the catalogue's.
+3. **No speech hints for star names.** *Seen in the first port*: "Betelgeuse"
+   arrived as "Beetlejuice". The tools take the words the host passes and the
+   app maps known mishearings; one not in the table reaches the model reader
+   (with a key) or is refused by name.
+4. **The ~10 s check-in talks over the stargazing.** *Expected.* The original
+   had no idle nudge at all; the API's cannot be turned off or lengthened.
+5. **The persona and the greeting belong to the avatar.** *Seen in the first
+   port* ("I'm Emily, a 21-year-old college student…" before the chart's
+   opening). `avatar.json` is the host this product was designed for; the
+   opening event names the place and hour once she has greeted.
 
-## Not ported, or changed
-
-- The platform plumbing (StateStore, wire, envelopes, RPCs, `useAppState`):
-  the chart is a local object. The original's 32 KiB envelope test became the
-  state-size test.
-- Two small fixes: the spoken hour says "midnight" and "noon" (it said "about
-  12 in the morning"), and constellation names match without accents
-  ("Bootes").
-- Unchanged on purpose: a new place keeps the instant (Taipei at 8 pm is
-  Lisbon at noon; the chart now says when it is daytime there), the clock does
-  not tick, no refraction, no daylight saving, no Sun, Moon or planets.
+Fixed by tools, compared with the first port: the host no longer answers a
+move before the app has made it ("let's have a look", then the sky a beat
+later), and no answer is said twice (once from the staged state, once from the
+event). Every outcome (marked, drawn, moved, refused, when it rises) is in her
+first reply.
 
 ## Tested
 
-- `npx vitest run apps/sky-guide`: 225 tests. Ported: the closed-form astronomy
-  (`test_sky.py`: IAU sidereal value, transit altitude, Polaris at the
-  latitude, rise round trip), the catalogue's consistency (`test_catalog.py`),
-  the chart's refusals and settling (`test_chart.py`), the cue and narrator
-  rules (`test_table.py`), `projection.test.ts` and the panel test. New: the
-  judge's phrasings, the staging rules, the state's limits (every place, every
-  hour, four seasons), the narrator's coalescing, the new controls.
-- Live: not yet run (the reviewer runs it).
-
-## Live run (staging, avatar `baf61f2c`, 2026-10-23)
-
-Spoken lines through `tools/live-test/harness.js`, Taipei at 9 pm on 23 Oct:
-
-- "Show me Orion." → not up yet, rises about quarter past nine (gap 1).
-- "Where's Vega?" → "halfway up in the north-west", no event.
-- "Show me the sky from Lisbon." → the same instant, 1 pm there, with the
-  daytime hint; the event named Arcturus and Vega.
-- "Back to tonight." → Lisbon 9 pm on 22 Oct (the real evening there at the
-  time of the run). "Show me midnight." → newly up Rigel, Procyon,
-  Betelgeuse.
-- "Where is Betelgeuse?" (heard "Beetlejuice") → marked low in the east, with
-  its fact. "Where is Jupiter?" → "I don't do planets". "Show me the sky from
-  Kyoto." → "doesn't recognise Kyoto, try a city or a latitude and longitude".
-- Typed "the sky from Sydney at midnight" → one event: Sirius, Canopus.
-- Session `completed`, `ended_by_api`, 211 s billed.
+- `npx vitest run apps/sky-guide`: 304 tests. The engine as ported (the
+  closed-form astronomy, the catalogue, the chart's refusals and settling, the
+  judge's phrasings, the narrator, the projection); the tools against the API
+  limits and the instructions naming each; the state's worst case; every tool's
+  outcome and wording (`actions.test.ts`); the safety net's phrases and that its
+  calls are safe to repeat; "when is it up"; the night list and its file; the
+  chart's screen (taps, the keyboard list, the strip, the picker, the figures,
+  refusals); and the app's screens with the call stood in for (front door,
+  tool calls moving the screen, a control told to the host, the night card).
+- `npx tsc --noEmit`: clean for this app.
+- Live: not yet run.

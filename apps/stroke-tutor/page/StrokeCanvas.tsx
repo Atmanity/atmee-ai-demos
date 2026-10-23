@@ -1,37 +1,72 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { StrokeView } from '../engine/types.ts';
-import { decimate, pathLength, squareIn, toBox, toGrid, type GridPoint } from './ink.ts';
+import { decimate, pathLength, squareIn, toGrid, type GridPoint } from './ink.ts';
+import { markKey, type Marks } from './marks.ts';
+import { INK, paintSheet, type Layer } from './paint.ts';
 
 /**
- * The writing square: a faint grid, the strokes already earned, and the ink
- * under the finger right now. (Ported from the original panel.)
+ * The practice sheet: the 田 grid, the strokes already earned (the learner's
+ * own ink for a stroke they drew right, Ren's vermilion for one Ren showed,
+ * numbered as a stroke-order chart numbers them), and the ink under the
+ * finger right now.
  *
  * Canvas rather than SVG because the live trail is redrawn on every pointer
  * sample, and a hundred DOM nodes a second is a different kind of app.
  *
  * The trail is VIEW STATE. It lives in a ref, never crosses the network, and
- * is dropped the moment the pointer lifts, at which point the whole gesture
- * becomes ONE `stroke` intent. Nothing is drawn optimistically: if the server
- * refuses or fails the stroke, the square goes back to what the snapshot
- * says, which is the honest rendering of "that did not count".
+ * becomes ONE stroke the moment the pointer lifts. Nothing is drawn as if it
+ * counted: the stroke waits in grey-blue while the sheet grades it, and only a
+ * stroke the server calls done is drawn in ink.
  */
 
 /** Below this, in grid units, the gesture was a tap and is not sent. */
 export const MIN_TRAIL = 60;
+/** How long Ren's brush takes to draw a stroke it shows. */
+export const SHOW_MS = 1100;
+
+const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** The earned strokes as the sheet paints them. A stroke with no points is one the server withheld: there is nothing to draw. */
+export function earnedLayers(strokes: StrokeView[], character: string | null, marks: Marks, showing?: { index: number; progress: number } | null): Layer[] {
+  const layers: Layer[] = [];
+  for (const stroke of strokes) {
+    if (stroke.status !== 'done' || stroke.points.length < 2) continue;
+    const mark = character ? marks[markKey(character, stroke.index)] : undefined;
+    const number = stroke.index + 1;
+    if (mark?.how === 'drawn' && mark.ink && mark.ink.length >= 2) layers.push({ points: mark.ink, color: INK.sumi, number });
+    else if (mark?.how === 'shown') layers.push({ points: stroke.points, color: INK.shu, number, arrow: true, progress: showing?.index === stroke.index ? showing.progress : 1 });
+    else layers.push({ points: stroke.points, color: INK.sumi, number });
+  }
+  return layers;
+}
 
 export function StrokeCanvas({
   strokes,
+  character,
+  marks,
   grid,
-  disabled,
+  disabled = false,
   onStroke,
-  clearKey,
+  pending,
+  miss,
+  label,
+  resetKey = '',
 }: {
   strokes: StrokeView[];
+  /** The character's id, which the marks are keyed by. */
+  character: string | null;
+  marks: Marks;
   grid: number;
-  disabled: boolean;
-  onStroke: (points: GridPoint[]) => void;
-  /** Changing this wipes the live trail: "clear" and "start over" both do. */
-  clearKey: string;
+  disabled?: boolean;
+  /** Absent: the sheet is for looking at (the finished character). */
+  onStroke?: (points: GridPoint[]) => void;
+  /** A stroke being graded, drawn in wet ink until the verdict. */
+  pending?: GridPoint[] | null;
+  /** The last missed attempt, faint, so the learner sees what they drew. */
+  miss?: GridPoint[] | null;
+  label: string;
+  /** Changing this drops a stroke being drawn (the sheet moved on under the finger). */
+  resetKey?: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const trail = useRef<GridPoint[]>([]);
@@ -40,11 +75,13 @@ export function StrokeCanvas({
   // state update per point would re-render React hundreds of times a stroke.
   const [tick, setTick] = useState(0);
   const [box, setBox] = useState({ width: 0, height: 0 });
+  const seen = useRef<Set<string> | null>(null);
+  const [showing, setShowing] = useState<{ index: number; start: number } | null>(null);
+  const [now, setNow] = useState(0);
 
-  // Size the backing store for the device pixel ratio. Without this the canvas
-  // is stretched from CSS pixels and every stroke renders soft on any modern
-  // screen, which reads as bad handwriting in an app about handwriting.
-  // Re-measured on resize because the layout changes with the window.
+  // Size the backing store for the device pixel ratio: a stretched canvas
+  // renders every stroke soft, which reads as bad handwriting in an app about
+  // handwriting. Re-measured on resize because the layout changes with the window.
   useEffect(() => {
     const parent = canvasRef.current?.parentElement;
     if (!parent) return;
@@ -63,7 +100,35 @@ export function StrokeCanvas({
     trail.current = [];
     drawing.current = false;
     setTick((n) => n + 1);
-  }, [clearKey]);
+  }, [resetKey]);
+
+  // A stroke Ren has just shown is drawn as a brush would draw it, start to
+  // end: its direction is the lesson. Strokes already shown when the sheet
+  // appears are simply there.
+  useEffect(() => {
+    if (!character) return;
+    const shown = strokes.filter((s) => s.status === 'done' && marks[markKey(character, s.index)]?.how === 'shown').map((s) => s.index);
+    const keys = shown.map((i) => markKey(character, i));
+    if (seen.current === null) {
+      seen.current = new Set(keys);
+      return;
+    }
+    const fresh = shown.filter((i) => !seen.current!.has(markKey(character, i)));
+    for (const key of keys) seen.current.add(key);
+    if (fresh.length && !reducedMotion()) setShowing({ index: fresh[fresh.length - 1], start: performance.now() });
+  }, [strokes, marks, character]);
+
+  useEffect(() => {
+    if (!showing || typeof requestAnimationFrame !== 'function') return;
+    let id = 0;
+    const frame = (t: number) => {
+      setNow(t);
+      if (t - showing.start < SHOW_MS) id = requestAnimationFrame(frame);
+      else setShowing(null);
+    };
+    id = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(id);
+  }, [showing]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -84,56 +149,13 @@ export function StrokeCanvas({
     ctx.clearRect(0, 0, width, height);
 
     const square = squareIn({ left: 0, top: 0, width, height });
-    const at = (point: GridPoint) => toBox(point, square, grid);
-
-    // the square and its guides
-    ctx.strokeStyle = 'rgba(120, 132, 160, 0.35)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(square.x, square.y, square.size, square.size);
-    ctx.save();
-    ctx.setLineDash([6, 8]);
-    ctx.strokeStyle = 'rgba(120, 132, 160, 0.28)';
-    ctx.beginPath();
-    ctx.moveTo(square.x + square.size / 2, square.y);
-    ctx.lineTo(square.x + square.size / 2, square.y + square.size);
-    ctx.moveTo(square.x, square.y + square.size / 2);
-    ctx.lineTo(square.x + square.size, square.y + square.size / 2);
-    ctx.stroke();
-    ctx.restore();
-
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    // The strokes already earned. A stroke with no points is one the server
-    // withheld; there is nothing here that could draw it anyway.
-    ctx.strokeStyle = 'rgba(24, 28, 40, 0.92)';
-    ctx.lineWidth = Math.max(4, square.size * 0.045);
-    for (const stroke of strokes) {
-      if (stroke.points.length < 2) continue;
-      ctx.beginPath();
-      const [x0, y0] = at(stroke.points[0]);
-      ctx.moveTo(x0, y0);
-      for (const point of stroke.points.slice(1)) {
-        const [x, y] = at(point);
-        ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-    }
-
-    // the ink under the finger right now
-    if (trail.current.length >= 2) {
-      ctx.strokeStyle = 'rgba(198, 60, 60, 0.9)';
-      ctx.lineWidth = Math.max(4, square.size * 0.04);
-      ctx.beginPath();
-      const [x0, y0] = at(trail.current[0]);
-      ctx.moveTo(x0, y0);
-      for (const point of trail.current.slice(1)) {
-        const [x, y] = at(point);
-        ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-    }
-  }, [strokes, grid, box, tick]);
+    const progress = showing ? Math.max(0, Math.min(1, (now - showing.start) / SHOW_MS)) : 1;
+    const layers = earnedLayers(strokes, character, marks, showing ? { index: showing.index, progress } : null);
+    if (miss && miss.length >= 2) layers.unshift({ points: miss, color: INK.ash, weight: 0.85 });
+    if (pending && pending.length >= 2) layers.push({ points: pending, color: INK.wet, weight: 0.9 });
+    if (trail.current.length >= 2) layers.push({ points: trail.current, color: INK.wet, weight: 0.9 });
+    paintSheet(ctx, square, grid, layers);
+  }, [strokes, character, marks, grid, box, tick, pending, miss, showing, now]);
 
   const pointAt = useCallback((clientX: number, clientY: number): GridPoint | null => {
     const canvas = canvasRef.current;
@@ -141,8 +163,10 @@ export function StrokeCanvas({
     return toGrid(clientX, clientY, canvas.getBoundingClientRect(), grid);
   }, [grid]);
 
+  const writable = Boolean(onStroke) && !disabled;
+
   const onPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (disabled) return;
+    if (!writable) return;
     const point = pointAt(event.clientX, event.clientY);
     if (!point) return;
     event.preventDefault();
@@ -172,24 +196,21 @@ export function StrokeCanvas({
     const drawn = trail.current;
     trail.current = [];
     setTick((n) => n + 1);
-    // A tap is not an attempt. Sending it would earn a refusal the learner did
-    // not ask for.
+    // A tap is not an attempt. Sending it would earn a refusal the learner did not ask for.
     if (drawn.length < 2 || pathLength(drawn) < MIN_TRAIL) return;
-    onStroke(decimate(drawn));
+    onStroke?.(decimate(drawn));
   };
 
   return (
-    <div className="st-board">
-      <canvas
-        ref={canvasRef}
-        className={`st-canvas${disabled ? ' is-disabled' : ''}`}
-        role="img"
-        aria-label="Writing square"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={finish}
-        onPointerCancel={finish}
-      />
-    </div>
+    <canvas
+      ref={canvasRef}
+      className={`hs-canvas${writable ? ' is-writable' : ''}`}
+      role="img"
+      aria-label={label}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={finish}
+      onPointerCancel={finish}
+    />
   );
 }

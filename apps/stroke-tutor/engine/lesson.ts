@@ -1,5 +1,6 @@
-// The tutor wired to the app: one intent in, the new board and what the
-// avatar should be told out. SERVER ONLY (it holds the tutor).
+// The tutor wired to the app: one intent in, the new sheet and what Ren
+// should be told out; and Ren's tools (and the page's buttons), each one
+// intent. SERVER ONLY (it holds the tutor).
 //
 // This replaces three pieces of the original: the reducer (the only writer,
 // validate-before-mutate, a refusal leaves the board exactly where it was),
@@ -8,9 +9,11 @@
 // Here every input (a button, a stroke, a typed or spoken line) takes this one
 // path, so each change produces exactly one event: the original's seq-claiming
 // that stopped a change being narrated twice is not needed.
+import { find } from './characters.ts';
 import { say } from './director.ts';
+import { characterIn } from './judge.ts';
 import { StrokeTutor, TutorRefusal } from './tutor.ts';
-import type { Intent, Outcome } from './types.ts';
+import type { Intent, Outcome, Snapshot } from './types.ts';
 
 /**
  * Drawing is something a hand does. Words (typed or spoken, read by rules or
@@ -47,7 +50,7 @@ export function perform(tutor: StrokeTutor, intent: Intent, by: Source): Outcome
         // resolved, so nothing has to remember that it already happened.
         if (!verdict.ok && tutor.phase === 'writing' && tutor.snapshot().attempts >= 2) tutor.reveal();
         const view = tutor.snapshot();
-        return { view, handled: true, kind, event: say.verdict(view) };
+        return { view, handled: true, kind, event: say.drawn(view) };
       }
       case 'reveal': {
         tutor.reveal();
@@ -75,4 +78,50 @@ export function perform(tutor: StrokeTutor, intent: Intent, by: Source): Outcome
     if (!(err instanceof TutorRefusal)) throw err;
     return { view: tutor.snapshot(), handled: true, kind: kind as Intent['kind'], refused: err.reason, event: say.refused(err.reason) };
   }
+}
+
+/** Ren's tools, by name; the page's buttons call the same ones. */
+export const TOOL_NAMES = ['show_stroke', 'next_stroke', 'choose_character', 'next_character', 'start_over'] as const;
+export type ToolName = (typeof TOOL_NAMES)[number];
+
+export interface ToolOutcome {
+  view: Snapshot;
+  /** What Ren speaks from: the result of a tool, or (after a button) the outcome to tell. */
+  text: string;
+  /** The sheet refused it; this sentence is shown on screen. */
+  refused?: string;
+}
+
+/** A character as Ren or the learner named it ("tree", "木", "the letter A"), as an id, or what was said if none matches. */
+export function resolveCharacter(said: string): string {
+  return find(said)?.id ?? characterIn(said, true) ?? said;
+}
+
+const spoken = (outcome: Outcome): ToolOutcome => ({ view: outcome.view, text: outcome.event ?? 'Done.', refused: outcome.refused });
+
+/**
+ * One of Ren's tools (or the button that does the same), on the sheet. The
+ * result says what happened, in words Ren speaks from. Never a stroke: there
+ * is no tool for drawing, and words go through 'words', which refuses one.
+ */
+export function runTool(tutor: StrokeTutor, name: string, args: Record<string, unknown> = {}): ToolOutcome {
+  switch (name) {
+    case 'show_stroke': return spoken(perform(tutor, { kind: 'reveal' }, 'words'));
+    case 'next_stroke': return spoken(perform(tutor, { kind: 'next_stroke' }, 'words'));
+    case 'next_character': return spoken(perform(tutor, { kind: 'next_character' }, 'words'));
+    case 'start_over': return spoken(perform(tutor, { kind: 'start_character' }, 'words'));
+    case 'choose_character': {
+      const asked = String(args.character ?? '').trim().slice(0, 60);
+      if (!asked) return { view: tutor.snapshot(), text: 'No character was named: ask them which one they would like.' };
+      const id = resolveCharacter(asked);
+      // The one already up is not started again: that would wipe their
+      // progress on a request that only named it. Starting over is its own tool.
+      if (id === tutor.character?.id && tutor.phase !== 'debrief') {
+        const view = tutor.snapshot();
+        return { view, text: say.alreadyUp(view) };
+      }
+      return spoken(perform(tutor, { kind: 'start_character', id }, 'words'));
+    }
+  }
+  throw new Error(`unknown tool ${name}`);
 }

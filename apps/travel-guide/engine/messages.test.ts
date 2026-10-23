@@ -176,7 +176,7 @@ describe('snapshot', () => {
     expect(s?.news?.headlines).toEqual([]);
     expect(s?.spot).toBeNull();
     expect(s?.trip.visited).toHaveLength(1);
-    expect([s?.seq, s?.pending, s?.newsAvailable, s?.awaitingPick]).toEqual([4, true, true, false]);
+    expect([s?.seq, s?.pending, s?.newsAvailable]).toEqual([4, true, true]);
   });
 
   it('reads a session that has only said hello', () => {

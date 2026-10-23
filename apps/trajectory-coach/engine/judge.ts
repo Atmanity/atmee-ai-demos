@@ -1,25 +1,23 @@
 // Turning words into actions on the range: rules first, a model call only for
 // what the rules cannot read.
 //
-// The original let its conversational model call five tools (aim, fire,
-// choose_challenge, start_over, explain_last) and caught a bare "fire" in code
-// before the model ran (FireWatch). The Avatar API has no function calling, so
-// all of it is decided here, on the student's typed line or on the transcript
-// of what they said:
+// The host acts through tools now (director.ts), and an LLM is good at hearing
+// "forty-five at twenty-four" as two numbers. What it should not do is decide
+// how far "a bit steeper" goes, or whether a turn was a request to fire. So the
+// words still come here, in two places:
 //
-// - "fire" is the original's whole-utterance matcher, unchanged in spirit:
-//   the WHOLE turn must be the command. A question about firing is not one.
-// - aims, challenges, "next one" and "start over" are rules: number words,
-//   units, "X at Y", relative words with fixed steps ("a bit steeper" = +3°).
-// - what the rules cannot read but that sounds like an aim or a challenge
-//   ("lob it like a mortar") goes to the app's model on the server
-//   (`INTERPRET_SCHEMA`, `interpretPrompt`), and its answer is validated here.
-// - "why did that miss?" is not an action: the avatar answers it from the
-//   state, which carries every number of the last shot (explain_last).
+// - the aim tool's `request`: a change with no number in it ("a bit steeper",
+//   "more power", "lob it like a mortar") is read by these rules, with fixed
+//   steps ("a bit" = 3°), and what they cannot read goes to the app's model on
+//   the server (`INTERPRET_SCHEMA`, `interpretPrompt`), validated here;
+// - the safety net (`mustDo`): when the student clearly says "fire", "start
+//   over" or names a challenge and the host does not call the tool, the page
+//   does it. "fire" is the original's whole-utterance matcher (FireWatch): the
+//   WHOLE turn must be the command, so a question about firing never fires.
 //
-// A spoken request outside the launcher's limits is passed through, never
-// clamped: the range refuses it with the numbers, and that refusal is the
-// teaching moment.
+// A request outside the launcher's limits is passed through, never clamped:
+// the range refuses it with the numbers, and that refusal is the teaching
+// moment.
 import { CHALLENGES } from './challenges.ts';
 import { pyRound } from './flight.ts';
 import type { Aim, Command, Intent, Limits } from './types.ts';
@@ -35,8 +33,8 @@ import type { Aim, Command, Intent, Limits } from './types.ts';
  * session ("fire", "fire", "send it") each came back with an invented
  * precondition ("you need to aim first") while the launcher sat aimed at 45°
  * with the numbers on screen. An optional tool is something a model can
- * DESCRIBE instead of calling. So the verb never went through the model, and
- * here there is no model to go through: deterministic rules belong in code.
+ * DESCRIBE instead of calling. Here the host does call a tool, and the safety
+ * net (`mustDo`) still fires from these words when it does not.
  */
 export const FIRE_PHRASES: ReadonlySet<string> = new Set([
   'fire', 'fire it', 'fire away', 'fire it now', 'fire now',
@@ -46,9 +44,8 @@ export const FIRE_PHRASES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * "Again": the same shot once more. The original's model handled these by
- * calling its fire tool; with no model in the loop they are rules too, kept
- * apart from the original's list and just as strict (the whole utterance).
+ * "Again": the same shot once more. Kept apart from the original's list and
+ * just as strict (the whole utterance).
  */
 export const AGAIN_PHRASES: ReadonlySet<string> = new Set([
   'again', 'same again', 'fire again', 'shoot again', 'go again', 'try again', 'send it again', 'do it again',
@@ -211,8 +208,8 @@ export interface JudgeContext { aim: Aim; limits: Limits; challengeId: string }
 
 /**
  * The action a line asks for, or null when it is not one (a question, small
- * talk, a request for the challenge already up). Checked on typed lines before
- * they reach the avatar, and on every final transcript.
+ * talk, a request for the challenge already up). Run on the aim tool's words
+ * and, through `mustDo`, on everything the student says or types.
  */
 export function commandIn(text: string, ctx: JudgeContext): Command | null {
   if (isFireRequest(text)) return { kind: 'fire' };
@@ -379,7 +376,7 @@ export function intentsFor(command: Command): Intent[] {
 }
 
 // ---------------------------------------------------------------------------
-// The model fallback (server.ts runs it; it is validated here)
+// The model fallback, for the aim tool's words (server.ts runs it; it is validated here)
 // ---------------------------------------------------------------------------
 
 const AIM_ISH = /\b(?:\d|deg|ms\b|angle|elevation|speed|power|oomph|umph|juice|punch|velocity|steep|flat|high|low|loft|lob|arc|hard|soft|fast|slow|gentl|strong|weak|aim|wind|headwind|tailwind|gravity|planet|space|moon|lunar|roof|ceiling|wall|zone|challenge|furthest|farthest|cap|up\b|down\b|more\b|less\b|bit\b|touch|notch|tad\b|nudge|bump|oomph|welly)/;
@@ -429,4 +426,38 @@ export function commandFromModel(raw: unknown, ctx: JudgeContext): Command | nul
     return { kind: 'challenge', id };
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// The safety net: what the page does when the host does not call the tool
+// ---------------------------------------------------------------------------
+
+/** The range as the judge needs it. */
+export const contextOf = (s: { aim: Aim; limits: Limits; challenge: { id: string } }): JudgeContext => ({ aim: s.aim, limits: s.limits, challengeId: s.challenge.id });
+
+/** The challenge after this one, wrapping (the launcher's "next"). */
+export function nextChallengeId(id: string): string {
+  const index = CHALLENGES.findIndex((c) => c.id === id);
+  return CHALLENGES[(index + 1) % CHALLENGES.length].id;
+}
+
+export interface NetCall { name: 'fire' | 'start_over' | 'choose_challenge'; arguments: Record<string, unknown> }
+
+/**
+ * The tool call the student's words clearly ask for, among the actions safe to
+ * do twice: a shot at the same aim (the physics is exact, so it lands in the
+ * same place; a second one while the first flies is refused), a clean
+ * scoreboard, a challenge by its id (the same id again changes nothing; "next"
+ * is pinned to the one after the challenge up when the words were said).
+ * Aims are left out: "a bit steeper" done twice would move twice.
+ */
+export function mustDo(text: string, ctx: JudgeContext): NetCall | null {
+  const command = commandIn(text, ctx);
+  switch (command?.kind) {
+    case 'fire': return { name: 'fire', arguments: {} };
+    case 'reset': return { name: 'start_over', arguments: {} };
+    case 'challenge': return { name: 'choose_challenge', arguments: { challenge: command.id } };
+    case 'next': return { name: 'choose_challenge', arguments: { challenge: nextChallengeId(ctx.challengeId) } };
+    default: return null;
+  }
 }

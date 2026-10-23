@@ -1,10 +1,11 @@
-// What the avatar is told: the notes (the original prompt's rules, condensed),
-// the state (the original "[Live floor plan]" note, now up to 3,858
-// characters) and the events (the original tool cues and the critic).
+// What the architect is told: the tool instructions (the original prompt's
+// rules, condensed), the tools, the state (the original "[Live floor plan]"
+// note, now up to 3,858 characters), the tool results and the events for a
+// change by hand (the original tool cues and the critic).
 import { describe, expect, test } from 'vitest';
 import { issues } from './compliance.ts';
 import { cardinal } from './describe.ts';
-import { eventsFor, issueCue, NOTE_LIMIT, NOTES, planState, say, STATE_LIMIT, type Step } from './director.ts';
+import { byHand, INSTRUCTIONS, INSTRUCTIONS_LIMIT, issueCue, planState, resultFor, say, STATE_LIMIT, TOOLS, type Step } from './director.ts';
 import { briefFor, generate } from './generate.ts';
 import { MAX_ITEMS_PER_LEVEL, MAX_ROOMS_PER_LEVEL, PlanError } from './home.ts';
 import { Critic, Planner } from './planner.ts';
@@ -17,33 +18,83 @@ const twoBed = (w = 900, h = 700) => {
   return p;
 };
 
-describe('the notes', () => {
-  test('every note fits its limit', () => {
-    for (const note of NOTES) expect(note.length).toBeLessThanOrEqual(NOTE_LIMIT);
+describe('the instructions', () => {
+  test('fit the API and name every tool', () => {
+    expect(INSTRUCTIONS.length).toBeLessThanOrEqual(INSTRUCTIONS_LIMIT);
+    for (const tool of TOOLS) expect(INSTRUCTIONS, tool.name).toContain(tool.name);
   });
 
-  test('the app gives the avatar a job and never a name', () => {
-    // The face and the voice are the avatar's. An invented name had the prompt
-    // saying "You are Nora" while the screen showed someone else.
-    const all = NOTES.join(' ');
-    expect(all).toContain('architect');
-    expect(all).toContain('Keep your own name');
-    expect(all).not.toMatch(/\bNora\b|persona_name/);
+  test('the plan changes only through the tools, and an outcome is never invented', () => {
+    expect(INSTRUCTIONS).toContain('The plan changes only when you call a tool');
+    expect(INSTRUCTIONS).toContain('Never invent or estimate a size or an outcome');
+    expect(INSTRUCTIONS).toContain('never confirm a refused change');
+    expect(INSTRUCTIONS).toContain('Call the tool even when you think you know');
+    expect(INSTRUCTIONS).toContain('answer from the live plan, no tool');
   });
 
-  test('the notes forbid claiming compliance', () => {
+  test('the original "never" rules hold: no compliance claims, no coordinates, no invented sizes', () => {
     // Codes differ by country, building type and new-build versus refurb; a
     // client who hears "that meets Part M" and builds on it has been misled.
-    const all = NOTES.join(' ');
-    expect(all).toContain('Never say a plan is "compliant"');
-    expect(all).toContain('good practice');
+    expect(INSTRUCTIONS).toContain('Never say a plan is compliant');
+    expect(INSTRUCTIONS).toContain('good practice');
+    expect(INSTRUCTIONS).toContain('Never choose or ask for coordinates');
+    expect(INSTRUCTIONS).toContain('never invent a dimension');
+    expect(INSTRUCTIONS).toContain('take_from gets SMALLER, give_to gets BIGGER');
   });
 
-  test('the notes tell the avatar it does not make changes, and never to confirm a refused one', () => {
-    const all = NOTES.join(' ');
-    expect(all).toContain('You cannot change the plan yourself');
-    expect(all).toContain('never confirm a change the app refused');
-    expect(all).toContain('never ask the client for x and y');
+  test('destructive changes and suggestions wait for the client', () => {
+    // Live, a host offered a new game in a result and then started one on its own.
+    expect(INSTRUCTIONS).toContain('Only when the client asks: lay_out_floor over a floor that has rooms, clear_floor, remove_room');
+    expect(INSTRUCTIONS).toContain('make it only if they say yes');
+  });
+
+  test('the app gives the architect a job and never a name', () => {
+    // The face and the voice are the host's own; an invented name contradicts them.
+    expect(INSTRUCTIONS).toContain('You are the architect in Planwright');
+    expect(INSTRUCTIONS).not.toMatch(/\bIris\b|\bNora\b/);
+  });
+});
+
+describe('the tools', () => {
+  test('fit the API: names, descriptions, schemas, all awaited', () => {
+    expect(TOOLS.length).toBeLessThanOrEqual(30);
+    const names = TOOLS.map((t) => t.name);
+    expect(new Set(names).size).toBe(names.length);
+    for (const tool of TOOLS) {
+      expect(tool.name).toMatch(/^[a-z][a-z0-9_]{0,47}$/);
+      expect(['web_search', 'lookup']).not.toContain(tool.name);
+      expect(tool.description.length).toBeGreaterThan(0);
+      expect(tool.description.length, tool.name).toBeLessThanOrEqual(500);
+      expect(tool.parameters.type).toBe('object');
+      expect(JSON.stringify(tool.parameters).length).toBeLessThanOrEqual(4096);
+      expect(tool['x-atmee']?.mode).toBe('await');
+      expect(tool['x-atmee']!.timeoutSeconds!).toBeLessThanOrEqual(28);
+    }
+    expect(JSON.stringify(TOOLS).length).toBeLessThanOrEqual(24576);
+  });
+
+  test('nothing takes a position; only an exact wall move and the floor size are measurements', () => {
+    // The app's central bet: a model asked for x and y guesses, gets refused for
+    // overlapping what it cannot see, and retries out loud.
+    const fields = TOOLS.flatMap((t) => Object.keys((t.parameters.properties ?? {}) as object));
+    for (const coordinate of ['x', 'y', 'x_cm', 'y_cm', 'offset_cm', 'position']) expect(fields).not.toContain(coordinate);
+    const lengths = [...new Set(fields.filter((f) => /cm|centimetres|width|depth/.test(f)))].sort();
+    expect(lengths).toEqual(['centimetres', 'depth_m', 'width_m']);
+  });
+
+  test('the trade fields say which room loses', () => {
+    // The names are the fix for a real reversal.
+    const trade = TOOLS.find((t) => t.name === 'trade_area')!;
+    const p = trade.parameters.properties as Record<string, { description: string }>;
+    expect(p.take_from.description).toContain('gets smaller');
+    expect(p.give_to.description).toContain('gets bigger');
+    expect(trade.description).toContain('take_from gets SMALLER');
+  });
+
+  test('the destructive ones say they wait for the client', () => {
+    for (const name of ['remove_room', 'clear_floor', 'use_scheme']) {
+      expect(TOOLS.find((t) => t.name === name)!.description, name).toMatch(/[Oo]nly when the client asks/);
+    }
   });
 });
 
@@ -64,11 +115,30 @@ describe('the state', () => {
   test('rooms by area and compass, never coordinates', () => {
     const p = twoBed();
     const text = planState(p.snapshot());
+    expect(text).toContain('Planwright, live plan');
     expect(text).toContain('square metres');
     expect(text).toMatch(/north|south|east|west|centre/);
     expect(text).not.toMatch(/x_cm|y_cm|\bx=|\by=/);
     for (const room of p.home.level.rooms.values()) expect(text).toContain(room.name);
     expect(text.length).toBeLessThanOrEqual(STATE_LIMIT);
+  });
+
+  test('areas are given in the unit the client reads, and only that one', () => {
+    // Live, after switching to square feet, the host gave "thirty-nine square
+    // feet, leaving fifty-nine square metres" in one sentence.
+    const p = twoBed();
+    p.apply({ kind: 'set_unit', unit: 'ft2' });
+    const text = planState(p.snapshot());
+    expect(text).toContain('square feet');
+    expect(text.replace('Areas are shown to the client in square feet.', '')).not.toContain('square metres');
+  });
+
+  test("a check's area is said in the client's unit too", () => {
+    const p = new Planner(900, 700);
+    p.home.level.placeRoom('living', [0, 0, 600, 700], 'Living room');
+    p.apply({ kind: 'set_unit', unit: 'ft2' });
+    const text = planState(p.snapshot());
+    expect(text).toContain("226 square feet of the floor isn't in any room");
   });
 
   test('a whole home keeps its size on top and fits', () => {
@@ -86,12 +156,11 @@ describe('the state', () => {
     expect(text.toLowerCase()).not.toContain('typolog');
   });
 
-  test('what undo would take back is staged, so "undo" can be answered at once', () => {
+  test('what undo would take back is staged, so "what would undo do" is answered at once', () => {
     const p = twoBed();
-    const level = p.home.level;
-    const living = [...level.rooms.values()].find((r) => r.kind === 'living')!;
+    const living = [...p.home.level.rooms.values()].find((r) => r.kind === 'living')!;
     p.apply({ kind: 'rename_room', id: living.id, name: 'Snug' });
-    expect(planState(p.snapshot())).toContain('Last change: renamed the living room to Snug');
+    expect(planState(p.snapshot())).toContain('Last change: renamed the living room to Snug (undo_change takes it back)');
   });
 
   test('the checks are said to be good practice, never regulations', () => {
@@ -133,51 +202,68 @@ describe('the state', () => {
   });
 });
 
-describe('the events', () => {
-  test('a spoken change is told with its real numbers', () => {
+describe('the results', () => {
+  test('a change is answered with its real numbers', () => {
     const p = new Planner(800, 600);
     p.home.level.placeRoom('office', [0, 0, 400, 600], 'Study');
     p.home.level.placeRoom('living', [400, 0, 800, 600], 'Living room');
     const s = step(p, { kind: 'trade_area', from: 'study', to: 'living room', m2: 1.2 });
-    const [event] = eventsFor('spoken', [s], [], p.snapshot());
-    expect(event.text).toContain('1.2 square metres moved from the study to the living room');
-    expect(event.text).toContain('the living room 25.2 square metres');
-    expect(event.text).toContain('the study 22.8 square metres');
+    const text = resultFor([s], [], p.snapshot());
+    expect(text).toMatch(/^Done: 1.2 square metres moved from the study to the living room/);
+    expect(text).toContain('the living room 25.2 square metres');
+    expect(text).toContain('the study 22.8 square metres');
   });
 
-  test('a laid-out floor hands the avatar something to say, not a status', () => {
+  test('in square feet when that is what the client reads', () => {
+    const p = new Planner(800, 600);
+    p.home.level.placeRoom('office', [0, 0, 400, 600], 'Study');
+    p.home.level.placeRoom('living', [400, 0, 800, 600], 'Living room');
+    p.apply({ kind: 'set_unit', unit: 'ft2' });
+    const text = resultFor([step(p, { kind: 'trade_area', from: 'study', to: 'living room', m2: 1.2 })], [], p.snapshot());
+    expect(text).toContain('the living room 271 square feet');
+    expect(text).not.toContain('square metres');
+  });
+
+  test('a laid-out floor hands the architect something to say, not a status', () => {
     const p = new Planner();
-    const [event] = eventsFor('spoken', [step(p, { kind: 'generate', bedrooms: 2 })], [], p.snapshot());
-    expect(event.text).toContain('Say one short line');
-    expect(event.text).toContain('Day end, night end');
+    const text = resultFor([step(p, { kind: 'generate', bedrooms: 2 })], [], p.snapshot());
+    expect(text).toContain('Say one short line');
+    expect(text).toContain('Day end, night end');
   });
 
-  test('the floor size is told in the metres it became', () => {
+  test('a layout at a new size says the size it became', () => {
     const p = new Planner();
-    const [event] = eventsFor('typed', [step(p, { kind: 'set_envelope', w: 800, h: 600 })], [], p.snapshot());
-    expect(event.text).toContain('8 by 6 metres');
+    const text = resultFor([step(p, { kind: 'generate', bedrooms: 1, w: 800, h: 600 })], [], p.snapshot());
+    expect(text).toContain('the floor is 8 by 6 metres');
   });
 
-  test('a refusal carries the plan\'s reason and forbids confirming it', () => {
+  test("a refusal carries the plan's reason and forbids confirming it", () => {
     const p = new Planner();
-    const s = step(p, { kind: 'add_item', type: 'chaise longue' });
-    const [event] = eventsFor('spoken', [s], [], p.snapshot());
-    expect(event.text).toContain('the plan refused it');
-    expect(event.text).toContain('chaise longue');
-    expect(event.text).toContain('do NOT describe it as done');
+    const text = resultFor([step(p, { kind: 'add_item', type: 'chaise longue' })], [], p.snapshot());
+    expect(text).toMatch(/^Refused; nothing has changed/);
+    expect(text).toContain('chaise longue');
+    expect(text).toContain('Never describe it as done');
+    expect(text).toContain('make it only if they agree');
   });
 
-  test('when part of a request fails, the event says which part', () => {
+  test('when part of a request fails, the result says which part', () => {
     const p = twoBed();
     const steps = [step(p, { kind: 'save_scheme', name: 'A' }), step(p, { kind: 'add_item', type: 'hovercraft' })];
-    const [event] = eventsFor('spoken', steps, [], p.snapshot());
-    expect(event.text).toContain('First the app did this: the plan is saved as scheme "A"');
-    expect(event.text).toContain('Then the client asked to add a hovercraft');
+    const text = resultFor(steps, [], p.snapshot());
+    expect(text).toContain('Done: the plan is saved as scheme "A"');
+    expect(text).toContain('The rest was refused and has NOT changed: they asked to add a hovercraft');
   });
 
-  test('a spoken change does not get the complaint twice', () => {
-    // The designer once said the same thing about one change twice: in the
-    // line the change asked for, and from the critic a beat later.
+  test('a result never asks for another change on the architect\'s own initiative', () => {
+    // Live, "offer a new game" became a new game the player never asked for.
+    const p = twoBed();
+    const saved = resultFor([step(p, { kind: 'save_scheme', name: 'A' })], [], p.snapshot());
+    expect(saved).toContain('ask whether they want to try a different arrangement');
+    const cue = issueCue({ kind: 'daylight', room: 'r1', note: 'The study has no window at all' });
+    expect(cue).toContain('Change it only if they agree');
+  });
+
+  test('a change gets one voice: the problem it created is folded into its result', () => {
     const p = twoBed();
     const critic = new Critic();
     critic.look(issues(p.home));
@@ -185,31 +271,8 @@ describe('the events', () => {
     const victim = [...level.rooms.values()].find((r) => !r.spec.circulation)!;
     const door = level.openings.find((o) => o.kind === 'door' && (o.a === victim.id || o.b === victim.id))!;
     const s = step(p, { kind: 'remove_opening', id: door.id });
-    const fresh = critic.look(issues(p.home));
-    const events = eventsFor('spoken', [s], fresh, p.snapshot());
-    expect(events).toHaveLength(1);
-    expect(events[0].text).toContain('created a problem');
-  });
-
-  test('a panel change is still critiqued out loud, and small edits are not narrated', () => {
-    // A drag has no request behind it, so the critic is the only voice there is.
-    const p = twoBed();
-    const critic = new Critic();
-    critic.look(issues(p.home));
-    const level = p.home.level;
-    const victim = [...level.rooms.values()].find((r) => !r.spec.circulation)!;
-    const door = level.openings.find((o) => o.kind === 'door' && (o.a === victim.id || o.b === victim.id))!;
-    const s = step(p, { kind: 'remove_opening', id: door.id });
-    const events = eventsFor('panel', [s], critic.look(issues(p.home)), p.snapshot());
-    expect(events).toHaveLength(1);
-    expect(events[0].text).toContain('created a problem');
-    expect(eventsFor('panel', [step(p, { kind: 'set_unit', unit: 'ft2' })], [], p.snapshot())).toEqual([]);
-  });
-
-  test('a milestone from the panel is told, since the avatar cannot see the click', () => {
-    const p = new Planner();
-    const [event] = eventsFor('panel', [step(p, { kind: 'generate', bedrooms: 1 })], [], p.snapshot());
-    expect(event.text).toContain('The client used the panel: the ground floor is laid out');
+    const text = resultFor([s], critic.look(issues(p.home)), p.snapshot());
+    expect(text).toContain('It also created a problem');
   });
 
   test('the critic names one issue, never a list', () => {
@@ -221,15 +284,43 @@ describe('the events', () => {
 
   test('undo is told as going back, not as a new change', () => {
     const p = twoBed();
-    const [event] = eventsFor('spoken', [step(p, { kind: 'undo' })], [], p.snapshot());
-    expect(event.text).toContain('the last change (laid out the ground floor (day end, night end)) is taken back');
-    expect(event.text).toContain('It is not a new change');
+    const text = resultFor([step(p, { kind: 'undo' })], [], p.snapshot());
+    expect(text).toContain('the last change (laid out the ground floor (day end, night end)) is taken back');
+    expect(text).toContain('It is not a new change');
+  });
+});
+
+describe('changes by hand', () => {
+  test('a problem made by hand is told, and small edits are not narrated', () => {
+    // A drag has no request behind it, so the critic is the only voice there is.
+    const p = twoBed();
+    const critic = new Critic();
+    critic.look(issues(p.home));
+    const level = p.home.level;
+    const victim = [...level.rooms.values()].find((r) => !r.spec.circulation)!;
+    const door = level.openings.find((o) => o.kind === 'door' && (o.a === victim.id || o.b === victim.id))!;
+    const events = byHand([step(p, { kind: 'remove_opening', id: door.id })], critic.look(issues(p.home)), p.snapshot());
+    expect(events).toHaveLength(1);
+    expect(events[0].text).toContain("The client's change by hand created a problem");
+    expect(byHand([step(p, { kind: 'set_unit', unit: 'ft2' })], [], p.snapshot())).toEqual([]);
   });
 
+  test('a milestone by hand is told, since the architect cannot see the click', () => {
+    const p = new Planner();
+    const [event] = byHand([step(p, { kind: 'generate', bedrooms: 1 })], [], p.snapshot());
+    expect(event.text).toContain('The client changed the plan by hand: the ground floor is laid out');
+  });
+});
+
+describe('the opening and photos', () => {
   test('the opening asks the two things a sketch needs', () => {
     const text = say.opening(new Planner().snapshot());
     expect(text).toContain('roughly how big the place is');
     expect(text).toContain('how many bedrooms');
+  });
+
+  test('a plan already on screen is welcomed, not interviewed', () => {
+    expect(say.opening(twoBed().snapshot())).toContain('ask what they would change first');
   });
 
   test('a photo is told by what the app added, and never by guessed sizes', () => {

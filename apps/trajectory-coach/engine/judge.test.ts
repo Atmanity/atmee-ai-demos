@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
-  FIRE_PHRASES, commandFromModel, commandIn, intentsFor, interpretPrompt, isFireRequest, normalize, worthAsking, type JudgeContext,
+  FIRE_PHRASES, commandFromModel, commandIn, intentsFor, interpretPrompt, isFireRequest, mustDo, nextChallengeId, normalize, worthAsking, type JudgeContext,
 } from './judge.ts';
 import { Launcher } from './launcher.ts';
 import { Range } from './range.ts';
@@ -19,7 +19,7 @@ describe('fire: the whole utterance and nothing else', () => {
     const range = new Range(new Launcher());
     const command = said('fire');
     expect(command).toEqual({ kind: 'fire' });
-    for (const intent of intentsFor(command!)) range.apply(intent, 'spoken');
+    for (const intent of intentsFor(command!)) range.apply(intent, 'host');
     expect(range.snapshot().phase).toBe('flying');
     expect(range.snapshot().attempts).toBe(1);
     range.dispose();
@@ -43,8 +43,8 @@ describe('fire: the whole utterance and nothing else', () => {
     // The second "fire" still reaches the avatar (it answers from a state that
     // says the shot is in the air); what it must not do is put up a second shot.
     const range = new Range(new Launcher());
-    expect(range.apply({ kind: 'fire' }, 'spoken').applied).toBe(true);
-    const again = range.apply({ kind: 'fire' }, 'spoken');
+    expect(range.apply({ kind: 'fire' }, 'host').applied).toBe(true);
+    const again = range.apply({ kind: 'fire' }, 'host');
     expect(again).toEqual({ applied: false, reason: "It's already in the air." });
     expect(range.snapshot().attempts).toBe(1);
     range.dispose();
@@ -172,5 +172,34 @@ describe('the model, for what the rules cannot read', () => {
     expect(prompt).toContain('45 degrees and 20 metres a second');
     for (const id of ['wall40', 'zone30', 'maxrange', 'headwind', 'ceiling', 'moonshot']) expect(prompt).toContain(id);
     expect(prompt).toContain('never change it to fit a limit');
+  });
+});
+
+// ---- the safety net ---------------------------------------------------------
+
+describe('what the safety net does when the host does not, and only what is safe to repeat', () => {
+  const cases: [string, ReturnType<typeof mustDo>][] = [
+    // the shot: the whole utterance, as the original's FireWatch
+    ['Fire!', { name: 'fire', arguments: {} }], ['send it', { name: 'fire', arguments: {} }], ['OK, fire.', { name: 'fire', arguments: {} }],
+    ['Coach, fire!', { name: 'fire', arguments: {} }], ['Same again.', { name: 'fire', arguments: {} }], ['let it fly', { name: 'fire', arguments: {} }],
+    // a clean scoreboard
+    ['Start over.', { name: 'start_over', arguments: {} }], ['clear the trails', { name: 'start_over', arguments: {} }],
+    // a challenge by its id; "next" pinned to the one after the challenge up now
+    ["Let's do the moon.", { name: 'choose_challenge', arguments: { challenge: 'moonshot' } }],
+    ['the windy one', { name: 'choose_challenge', arguments: { challenge: 'headwind' } }],
+    ['Next challenge, please.', { name: 'choose_challenge', arguments: { challenge: 'zone30' } }],
+    // left to the host: questions, aims (a relative one done twice moves twice), an aim with a shot, talk
+    ['Should I fire flatter?', null], ['Why did that miss?', null], ['a bit steeper', null], ['forty degrees', null],
+    ['Forty-five at twenty-four and fire.', null], ["don't fire", null], ['the wall', null], ['that was close', null], ['next time', null],
+  ];
+  test.each(cases)('%s', (text, expected) => { expect(mustDo(text, onWall)).toEqual(expected); });
+
+  test('the recogniser\'s variants still count ("Fire." with its punctuation, "Let it go!")', () => {
+    for (const text of ['Fire.', 'Let it go!', 'Fire away.', 'Okay, so, fire.']) expect(mustDo(text, onWall)?.name, text).toBe('fire');
+  });
+
+  test('"next" wraps from the last challenge to the first', () => {
+    expect(nextChallengeId('moonshot')).toBe('wall40');
+    expect(mustDo('next one', { ...onWall, challengeId: 'moonshot' })).toEqual({ name: 'choose_challenge', arguments: { challenge: 'wall40' } });
   });
 });

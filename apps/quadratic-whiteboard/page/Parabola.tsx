@@ -3,10 +3,11 @@ import { useEffect } from "react";
 import type { EquationView, FactsView } from "../engine/types.ts";
 import { useCanvas2D } from "./canvas.ts";
 import { PAD, curvePoints, project, tickLabel, ticks } from "./graph.ts";
+import { maths } from "./notes.ts";
 
 /**
  * The parabola, drawn from the three coefficients and the engine's framing.
- * Ported unchanged from the original panel (only the canvas hook is vendored).
+ * Ported from the original panel (the canvas hook is vendored), in chalk.
  *
  * Everything annotated here — the roots, the vertex, the axis of symmetry —
  * arrived in the snapshot as exact values. The panel positions them; it does
@@ -16,18 +17,22 @@ import { PAD, curvePoints, project, tickLabel, ticks } from "./graph.ts";
  * There is no interaction: no drag, no zoom, no sliders. This is a board for a
  * class to look at while somebody talks, and every control here would be a
  * second way to change what they are looking at.
+ *
+ * Drawn in Chalkline's chalk (chalkline.css): blue for the curve, yellow for
+ * the roots, pink for the vertex, on the board's own green.
  */
 
 const COLOURS = {
-  paper: "#0f1729",
-  grid: "#1c2740",
-  axis: "#4a5a78",
-  ink: "#7d8fae",
-  curve: "#5eead4",
-  root: "#fbbf24",
-  vertex: "#f472b6",
-  symmetry: "#334765",
+  paper: "#1b342b",
+  grid: "rgba(244, 241, 230, 0.07)",
+  axis: "rgba(244, 241, 230, 0.55)",
+  ink: "rgba(244, 241, 230, 0.66)",
+  curve: "#93cbe9",
+  root: "#f3d36b",
+  vertex: "#f4a0b5",
+  symmetry: "rgba(244, 241, 230, 0.3)",
 };
+const LABEL_FONT = '600 12px "Atkinson Hyperlegible", system-ui, sans-serif';
 
 export function Parabola({
   equation,
@@ -53,14 +58,21 @@ export function Parabola({
   }, [ctx, box, equation, facts]);
 
   return (
-    <div className="qw-graph">
-      <canvas
-        ref={ref}
-        style={{ width: "100%", height: "100%", display: "block" }}
-        role="img"
-        aria-label={describe(equation, facts)}
-      />
-    </div>
+    <figure className="cl-graph">
+      <div className="cl-graph-canvas">
+        <canvas
+          ref={ref}
+          style={{ width: "100%", height: "100%", display: "block" }}
+          role="img"
+          aria-label={describe(equation, facts)}
+        />
+      </div>
+      <figcaption className="cl-legend" aria-hidden="true">
+        <span className="is-root">{facts.crossings.length ? "roots" : "no real roots"}</span>
+        <span className="is-vertex">vertex {maths(facts.vertex_display)}</span>
+        <span className="is-axis">axis x = {maths(facts.axis_display)}</span>
+      </figcaption>
+    </figure>
   );
 }
 
@@ -86,7 +98,7 @@ type Box = { width: number; height: number };
 type Projection = ReturnType<typeof project>;
 
 function drawGrid(ctx: Ctx, projection: Projection, box: Box) {
-  ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, monospace";
+  ctx.font = LABEL_FONT;
   ctx.lineWidth = 1;
 
   ctx.strokeStyle = COLOURS.grid;
@@ -96,7 +108,7 @@ function drawGrid(ctx: Ctx, projection: Projection, box: Box) {
   for (const x of ticks(projection.xMin, projection.xMax)) {
     const [sx] = projection.toScreen(x, 0);
     line(ctx, sx, PAD.top, sx, box.height - PAD.bottom);
-    ctx.fillText(tickLabel(x), sx, box.height - PAD.bottom + 6);
+    ctx.fillText(maths(tickLabel(x)), sx, box.height - PAD.bottom + 6);
   }
 
   ctx.textAlign = "right";
@@ -104,7 +116,7 @@ function drawGrid(ctx: Ctx, projection: Projection, box: Box) {
   for (const y of ticks(projection.yMin, projection.yMax, 6)) {
     const [, sy] = projection.toScreen(0, y);
     line(ctx, PAD.left, sy, box.width - PAD.right, sy);
-    ctx.fillText(tickLabel(y), PAD.left - 8, sy);
+    ctx.fillText(maths(tickLabel(y)), PAD.left - 8, sy);
   }
 
   // The axes on top of the grid, so they read as axes.
@@ -144,7 +156,8 @@ function drawCurve(ctx: Ctx, equation: EquationView, projection: Projection, box
   ctx.clip();
 
   ctx.strokeStyle = COLOURS.curve;
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = 3.5;
+  ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.beginPath();
   points.forEach(([x, y], index) => {
@@ -158,16 +171,16 @@ function drawCurve(ctx: Ctx, equation: EquationView, projection: Projection, box
 function drawMarks(ctx: Ctx, projection: Projection, facts: FactsView) {
   for (const crossing of facts.crossings) {
     const [x, y] = projection.toScreen(crossing, 0);
-    dot(ctx, x, y, 5, COLOURS.root);
+    dot(ctx, x, y, 6, COLOURS.root);
   }
   const [vx, vy] = projection.toScreen(facts.vertex[0], facts.vertex[1]);
-  dot(ctx, vx, vy, 5, COLOURS.vertex);
+  dot(ctx, vx, vy, 6, COLOURS.vertex);
 
   ctx.fillStyle = COLOURS.vertex;
-  ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, monospace";
+  ctx.font = LABEL_FONT;
   ctx.textAlign = "center";
   ctx.textBaseline = facts.opens === "upward" ? "top" : "bottom";
-  ctx.fillText(facts.vertex_display, vx, vy + (facts.opens === "upward" ? 10 : -10));
+  ctx.fillText(maths(facts.vertex_display), vx, vy + (facts.opens === "upward" ? 10 : -10));
 }
 
 function line(ctx: Ctx, x1: number, y1: number, x2: number, y2: number) {

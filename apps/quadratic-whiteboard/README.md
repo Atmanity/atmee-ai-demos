@@ -1,99 +1,84 @@
-# Quadratic Whiteboard
+# Chalkline
 
-A whiteboard a **teacher** drives by talking, in front of a class. Name a
-quadratic ("put up x squared minus four x plus three"), pick a method
-(factoring, completing the square or the quadratic formula), and say "next"
-for each line of working. The parabola sits beside the derivation with its
-roots, vertex and axis of symmetry. Every number is exact: surds stay surds
-(`2 + √3`, never 3.73). The avatar is the chalk hand: it reads each new line
-out and answers direct questions about the board ("what's the discriminant?").
-It does not teach, quiz, or read ahead.
+A maths board a teacher drives by voice in front of a class. Say a quadratic
+("put up x squared minus five x plus six"), pick a method (factoring,
+completing the square or the quadratic formula), and say "next" for each line
+of working; the parabola sits beside the derivation with its roots, vertex and
+axis. Ada, the board's voice, puts each request on the board through its
+tools and reads every new line out exactly as written: surds stay surds
+(`2 + √3`, never 3.73). She does not teach, quiz or read ahead, and she cannot:
+no line of working leaves the server until the board puts it up. Rebuilt from
+the `quadratic-whiteboard` mini-app as a standalone product on the Avatar API.
 
-Every spoken request has a control too: the method buttons, ‹ Back, Next line ›,
-Show all, Hide/Show graph, Clear, and (new in this port) an equation box that
-takes `x^2 - 4x + 3`, words, or `1, -4, 3`.
+Open it at `/apps/quadratic-whiteboard/`.
 
-Ported from `Atmanity/apps/apps/quadratic-whiteboard` (a Python LiveKit agent
-with eight tools, an exact-arithmetic engine and a React panel).
+## How it works
 
-## How it works on the API
-
-| Feature | Mechanism |
+| Part | Where |
 |---|---|
-| The engine: exact arithmetic, the three methods, the refusals | `engine/fraction.ts` (BigInt rationals, standing in for Python's `Fraction`), `solve.ts`, `methods.ts`, `board.ts`: ported from `solve.py`, `methods.py`, `board.py`. `parity.test.ts` checks every line and fact against the original engine's own output (`engine/fixtures/python-engine.json`) |
-| Unrevealed working never leaves the engine | The board lives on the server (`server.ts`). The page gets the revealed lines, a **count** of the rest, and the one sentence staged for the next "next" (below); nothing else |
-| Putting an equation up | Speech or a typed line: rules first (`engine/spoken.ts` reads "x squared minus five x plus six", "half x squared", "x² − 4x + 3 = 0", "x squared equals five x minus six"), then a Gemini `structured()` call for what the rules cannot read (brackets, "change c to five", mishearings). The equation box does the same |
-| Method, next, back, show all, graph, clear | Buttons; typed and spoken lines through `engine/judge.ts`: the original's bare-"next" detector first (exact phrases), then command rules, then the model. Questions are never board actions |
-| Reading each line out | A spoken "next": the avatar's state already holds the next line's sentence ("only when the teacher asks for the next line"), so its own immediate reply reads the real line, and the app sends no event. A button or a typed "next": an `event` carrying the line's sentence |
-| The operator's rules | Two `note`s (`engine/director.ts`), condensed from `persona.py` (3.3K characters) |
-| Direct questions | Answered by the avatar from `state`: the equation, the exact facts, the lines up, what can and cannot be done next |
-| Refusals ("Pick a method first…") | The board's sentence on the panel; for a typed line, also an `event`; for a spoken one the avatar already has it in its state (an equation's refusal is the exception: an `event`) |
-| The original narrator (`ChangeSpeaker`) | `eventFor(view, source)`: buttons are narrated, except hiding the graph and clearing, which speak for themselves |
-| The opening | An `event` once the board is set up |
-| The graph | `page/Parabola.tsx` and `page/graph.ts`, ported unchanged; the platform's `useCanvas2D` is vendored in `page/canvas.ts` (the kit has no canvas helper) |
+| The engine: exact arithmetic, the three methods, the refusals | `engine/fraction.ts` (BigInt rationals), `solve.ts`, `methods.ts`, `board.ts`, ported from the original `solve.py`, `methods.py`, `board.py`. `parity.test.ts` checks every line and fact against the original engine's own output (`engine/fixtures/python-engine.json`) |
+| The working stays on the server | `server.ts` holds each board (`engine/table.ts`). The page and Ada get the revealed lines and a count of the rest, nothing more. `next_line` reveals a line and hands it to Ada in the same call |
+| Ada's actions | Eight `await` tools (`engine/director.ts`): `put_up_equation(equation, method?)`, `choose_method(method)`, `next_line`, `previous_line`, `show_all_working`, `show_graph`, `hide_graph`, `clear_board`. The page answers each `atmee.tool` call by asking the server, which acts and returns the words Ada speaks from: his first reply to "next" is the line that just went up |
+| Reading an equation | Ada passes what she heard, in words or symbols. The server reads it with rules first (`engine/spoken.ts`: "x squared minus five x plus six", "x² − 4x + 3 = 0", "half x squared", "x^{2}", "1, -4, 3"), then a Gemini call capped at 8 s (`engine/judge.ts`) for brackets, "change c to five" and mishearings |
+| Ada's rules | The session's tool `instructions`: the teacher leads, the screen changes only through the tools, every number is copied exactly, questions about the board are answered from it without a tool |
+| What Ada sees | `state`: the equation, the exact facts, the method, the lines up and how many are to come; never a line that is not up |
+| The keys | The tray under the board (Back, Next line, Show all, Hide/Show graph, Clear, and an equation box), the clean board's three example equations, the method choices and "Also try". They act at once and Ada is told by an event; showing or hiding the graph and clearing are not announced (a voice narrating every tap talks over the lesson), and Ada's live board says what happened |
+| Repeated requests | Putting up the equation already there, or choosing the method already chosen, changes nothing, so saying it twice never wipes the lines the class has seen |
+| The safety net | `useToolNet` (kit) with `mustDo` (`engine/judge.ts`): when the teacher clearly asks to put an equation up, pick a method, show it all, show or hide the graph or clear the board, and Ada makes no such call within 7 s, the page makes it and tells her. Never the next or previous line: a duplicate would move the board twice |
+| Calling back | The board outlives the call (3 h on the server); calling Ada again resumes it as the teacher left it |
+| The lesson notes | `page/notes.ts`: every equation the class saw, the lines shown for each method, and the answers reached. "Save lesson notes" during the call and the recap after it download them as a text file |
+| The screens | The front door (`page/Lobby.tsx`); the board, its tray and the recap (`page/Board.tsx`); the graph (`page/Parabola.tsx`, `graph.ts`, with the canvas hook vendored in `canvas.ts`); styled in `page/chalkline.css` |
 
-Keys: `GEMINI_API_KEY` (optional). Without it the rules still put up every
-plainly said or typed quadratic and run every command; brackets, coefficient
-changes ("change c to five") and garbled maths then get "I couldn't read that
-equation" instead. No other key is used.
+Keys: `GEMINI_API_KEY` (optional). Without it the rules still read every
+plainly said or typed quadratic; brackets, coefficient changes and garbled
+maths get "That didn't read as a quadratic" and Ada asks again.
 
 ## What the API could not do
 
-Status after the live run of 2026-10-23 (below): **seen** = observed live,
-**expected** = not yet observed.
+Status: rebuilt with tools on 2026-10-23, not yet run live. **Expected**: not
+observed with this build.
 
-1. **The avatar answers a spoken request before the board moves.** *Seen, and
-   staging made it right in one run.*
-   The original applied a bare "next" in code before the model spoke
-   (`AdvanceWatch`), so the reply narrated the line just revealed. Here the
-   transcript reaches the app about a second after the avatar has started
-   answering. Staging the next line's sentence in `state` lets that answer be
-   the real line, but two failures remain possible: the avatar reads the staged
-   line for something the app does not take as "next" (a misheard word), so
-   the line is read but the board does not move; or it says something generic
-   ("Sure!") and the line goes up unread, because a spoken "next" sends no
-   event (one would make it read the line twice). The Next line button always
-   works. Live, every spoken "next" and "go on" was answered with the right
-   staged line while the board moved to match; neither failure was seen.
-2. **Staging puts one unrevealed line within reach.** *Expected* (by design;
-   no early read seen).
-   The original's central property was that no unrevealed line crossed the
-   wire. Here exactly one line's sentence does (into the avatar's state, and so
-   into the page's JavaScript); the avatar is told never to say it before it
-   is asked for, but it can. Every line after it stays on the server.
-3. **The read-back can contradict the board.** *Expected* (live: "putting that
-   up", then the app's read-back, twice). The avatar
-   hears "x squared minus four x…" too, and may echo its own reading before
-   the app's parse lands. A note tells it to say only "putting that up"; the
-   app's `event` then reads back what was actually written.
-4. **"Never speak unprompted" cannot be met.** *Seen* ("Whenever you are ready
-   for the next line, just…", three times in one run). The ~10 s
-   check-in cannot be turned off or lengthened per session, so the avatar will
-   talk into the pauses while the teacher explains to the class.
-5. **Exact narration is not guaranteed.** *Expected* (live, "What's that as a
-   decimal?" got "I have the exact roots as two plus root three and two minus
-   root three"). Events are said
-   in the avatar's own words, so "2 + √3" can come out as a decimal despite the
-   notes. The board on screen is the source of truth.
-6. **No per-session persona.** *Seen* ("I'm the lighthouse keeper out here on
-   the rugged Taitung coast…", then the board's opening). The original composed any
-   avatar's identity with the board's rules per session (and took
-   `instructionsExtra` from the workspace). Here the shared test avatar
-   introduces itself first; the operator persona (`avatar.json`, "Chalk")
-   needs a dedicated avatar.
-7. **No speech hints.** *Expected* (every equation was heard right in one run). The original biased Deepgram toward
-   maths words. Through the API, "four x" can arrive as "for x" and "x" as
-   "ex"; the rules accept both after an operator, and the model takes the rest.
+1. **Tools are called when the host decides.** *Expected.* Ada may narrate
+   "next line" without calling `next_line`, or say one filler line ("putting
+   that up") while an `await` call is pending. The safety net covers putting
+   an equation up, the method, show all, the graph and clearing; the next and
+   previous line are left out, so a missed "next" is one tap on Next line.
+2. **"Never speak unprompted" cannot be met.** *Expected* (seen in the first
+   port: "Whenever you are ready for the next line…", three times in one run).
+   The ~10 s check-in cannot be turned off per session, so Ada may talk into
+   the pauses while the teacher explains to the class.
+3. **Exact narration is not guaranteed.** *Expected.* Results are said in
+   Ada's own words, so "2 + √3" could still come out as a decimal despite the
+   rules. The board is the source of truth.
+4. **The persona belongs to the avatar.** *Expected* (seen in the first port:
+   the shared test avatar introduced itself as a lighthouse keeper before the
+   board's opening). `avatar.json` is the host this product was designed for;
+   the instructions deliberately name no character.
+5. **No speech hints.** *Expected.* The original biased the recogniser toward
+   maths words; here "four x" can arrive as "for x" and "x" as "ex". The rules
+   read both after an operator, and the model takes the rest.
+
+Fixed by tools, compared with the first port:
+
+- **The reply raced the board.** A spoken "next" was answered before the app
+  heard it, so the first port staged the next line in the state. Now
+  `next_line` reveals the line and returns it: the first reply reads the line
+  that just went up, and a misheard word cannot make Ada read a line the board
+  did not show.
+- **One unrevealed line crossed the wire.** The staged line sat in the state
+  and so in the page. Nothing beyond the revealed lines leaves the server now.
+- **The read-back could contradict the board.** Ada's read-back of an
+  equation is now `put_up_equation`'s result: what was written, not what she
+  heard.
+- Refusals ("Pick a method first…") are the tool's result, said in the first
+  reply, and shown on the board too.
 
 ## Not ported
 
-- `AdvanceWatch`'s turn-id guard and `ChangeSpeaker`'s `claim(seq)`: both
-  stopped one change being narrated twice by a model and a narrator in the same
-  process. Here there is one source of events (`eventFor`, by input source), and
-  each change carries a version (`seq`) so the page never goes back to an older
-  board.
-- The 600-character model note (`render_summary`): the API's `state` holds
-  3,858, so it carries every revealed line, not only the last.
+- `AdvanceWatch` (a bare "next" applied in code before the model spoke) and
+  `ChangeSpeaker`'s `claim(seq)`: tools make the first and the single event
+  source per key press makes the second unnecessary. Every change still bumps
+  a version (`seq`), so the page never goes back to an older board.
 - Two deliberate changes to the engine, each with a test: y = ax² factors as
   `x·x` (the original wrote "xx = 0"), and a discriminant too large to simplify
   quickly is refused ("Those numbers are too big for this board") instead of
@@ -101,32 +86,16 @@ Status after the live run of 2026-10-23 (below): **seen** = observed live,
 
 ## Tested
 
-- `npx vitest run apps/quadratic-whiteboard`: 304 tests. Ported from the
-  original's suites: `test_solve.py` (exact surds, every method ends on the same
-  answer, never the same line twice, the vertex line's honest reading),
-  `test_board.py` (every refusal's sentence, no unrevealed working anywhere in
-  the snapshot, framing), `test_table.py` (the bare-"next" matrix, method
-  aliases, refusals said out loud, the narrator never reading a hidden line and
-  saying nothing for graph and clear), `graph.test.ts` and
-  `BoardPanel.test.tsx`. New: the parity check against the Python engine,
-  spoken-maths phrasings, the judge's rules, the model fallback (stubbed), the
-  equation box, and the director's limits and leak checks.
-- Live: one run on staging, below.
-
-### Live run (staging, avatar `26cbe079`, 2026-10-23)
-
-Spoken lines through `tools/live-test/harness.js`:
-
-- "Put up x squared minus five x plus six." → "putting that up", then "We have
-  y equals x squared minus five x plus six… factoring, completing the square, or
-  the quadratic formula?"
-- "By factoring." → Factoring, 0/6. "Next." → line 1 read and up (1/6). "Go
-  on." → line 2 (2/6). The Next line button and a typed "next" → lines 3 and 4,
-  each read once by event.
-- "What's the discriminant?" → "1". "Show it all." → "x equals 3 or x
-  equals 2".
-- "Put up x squared minus four x plus one." → offered only completing the
-  square and the formula. "By factoring." → refused ("it doesn't factor over
-  the rationals"). "Use the quadratic formula.", then "Next." twice → lines 1
-  and 2. "What's that as a decimal?" → kept the surds.
-- Session `completed`, `ended_by_api`, 267 s billed.
+- `npx vitest run apps/quadratic-whiteboard`: 377 tests. The engine as ported
+  (exact surds, every method ends on the same answer, never the same line
+  twice, every refusal's sentence, the parity check, spoken maths); the tools
+  against the API limits; the instructions keep the hard-won rules and name
+  every tool; no unrevealed line in the state or the view, by any method at any
+  point; each tool's result and refusal; repeated requests changing nothing;
+  the safety net's phrases and what it never does; the keys' narration; the
+  board, tray and recap rendered; and the page wired end to end with the
+  engine as its server (Ada's calls moving the board, a key telling Ada, the
+  net acting after 7 s, the recap, calling back to the same board).
+- Live: not yet run with this build. The first port's run (staging, avatar
+  `26cbe079`, 2026-10-23) had every spoken "next" answered with the right line
+  while the board moved, and kept the surds for "what's that as a decimal?".

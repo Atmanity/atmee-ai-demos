@@ -1,12 +1,11 @@
-// The page's side of the desk: open one on the server, stream its board, act on it.
-// The server owns the board (the feed, the pump, the timers); the page draws it
-// and relays the desk's own lines to the avatar.
+// The page's side of the desk: open one on the server, stream its board, and
+// send it the host's tool calls and the user's button presses. The server
+// owns the board (the feed, the pump, the timers); the page draws it and
+// relays the desk's own lines to the host.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Board, DeskMessage, Outcome } from '../engine/types.ts';
+import type { ActReply, Board, DeskMessage, Kind } from '../engine/types.ts';
 
 const API = '/api/apps/market-desk';
-
-export type DeskInput = { intent: { kind: string; symbol?: string } } | { text: string; from: 'spoken' | 'typed' };
 
 async function post<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) });
@@ -14,18 +13,18 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
   return res.json();
 }
 
-export function useDesk({ onSay, onBoard }: {
-  /** A line the desk wants the avatar to say (a quote landing, a 1% move, a failed add). */
+export function useDesk({ enabled, onSay }: {
+  /** Open the desk (once the user has come in from the front door). */
+  enabled: boolean;
+  /** A line the desk wants the host to say (a 1% move, a quote that outlived the host's wait). */
   onSay: (text: string, ttlS: number) => void;
-  /** Every newer board, synchronously (before any line about it is passed on). */
-  onBoard?: (board: Board) => void;
 }) {
   const [board, setBoard] = useState<Board | null>(null);
   const [lost, setLost] = useState(false);
   const id = useRef<string | null>(null);
   const seq = useRef(-1);
-  const handlers = useRef({ onSay, onBoard });
-  handlers.current = { onSay, onBoard };
+  const sayRef = useRef(onSay);
+  sayRef.current = onSay;
   const [generation, setGeneration] = useState(0); // bumped to open a fresh desk (the server restarted)
 
   // Boards arrive from the stream and from each action's reply; the newest wins.
@@ -33,10 +32,10 @@ export function useDesk({ onSay, onBoard }: {
     if (s < seq.current) return;
     seq.current = s;
     setBoard(b);
-    handlers.current.onBoard?.(b);
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     let source: EventSource | null = null;
     let cancelled = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
@@ -50,7 +49,7 @@ export function useDesk({ onSay, onBoard }: {
       source.onmessage = (e) => {
         const message = JSON.parse(e.data) as DeskMessage;
         if (message.type === 'board') accept(message.seq, message.board);
-        else handlers.current.onSay(message.text, message.ttl);
+        else sayRef.current(message.text, message.ttl);
       };
       // A dropped stream reconnects by itself; one the server refuses (it no
       // longer knows this desk) is closed for good, so open a new desk.
@@ -69,20 +68,24 @@ export function useDesk({ onSay, onBoard }: {
       clearTimeout(retry);
       source?.close();
     };
-  }, [generation, accept]);
+  }, [enabled, generation, accept]);
 
-  const act = useCallback(async (input: DeskInput): Promise<Outcome | null> => {
-    if (!id.current) return null;
+  const send = useCallback(async (path: string, body: unknown): Promise<ActReply> => {
+    if (!id.current) throw new Error('the board is still opening; try again in a moment');
     try {
-      const outcome = await post<Outcome>(`/desks/${id.current}/act`, input);
-      accept(outcome.seq, outcome.board);
-      return outcome;
+      const reply = await post<ActReply>(`/desks/${id.current}${path}`, body);
+      accept(reply.seq, reply.board);
+      return reply;
     } catch (err) {
-      console.warn('[market-desk]', err);
       if ((err as { status?: number }).status === 404) setGeneration((g) => g + 1);
-      return null;
+      throw err;
     }
   }, [accept]);
 
-  return { board, act, lost };
+  /** The host's tool call: the reply's text is what the host says next. */
+  const tool = useCallback((name: string, args: Record<string, unknown>) => send('/tool', { name, arguments: args }), [send]);
+  /** A button: it acts at once; the reply's text tells the host what happened. */
+  const act = useCallback((command: Kind, symbol = '') => send('/act', { command, symbol }), [send]);
+
+  return { board, lost, tool, act };
 }

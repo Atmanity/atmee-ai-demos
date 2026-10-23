@@ -1,22 +1,30 @@
-// What a typed or spoken line means to the board. SERVER ONLY (it knows the
-// character list). The original agent's model read every line and chose a
-// tool (choose_character, show_me, next_stroke, start_over); here rules do
-// that for the phrasings people actually use, and the app's own model call
-// (server.ts, `structured()`) takes only the lines the rules cannot place,
-// above all a question about the live stroke worded some other way, which
-// must become a reveal rather than the avatar describing the stroke itself.
+// What a learner's words mean to the sheet. Ren reaches the sheet through its
+// tools and decides for itself which one a line asks for; these rules are what
+// the app still needs words for:
+//
+// - the safety net (`mustDo`): when the learner clearly asks for something safe
+//   to do twice (show me, next, start over, a character off the menu) and Ren
+//   does not call the tool, the page does it;
+// - reading the character Ren passes to `choose_character` ("the tree one",
+//   "永", "capital A") as one of the seven (`characterIn`).
+//
+// The page loads this file (the net runs there), so it holds no stroke data:
+// only the characters' ids, glyphs and spoken names. `judge.test.ts` checks
+// those against the server's character set.
 //
 // Words never produce a stroke: drawing is the hand's (lesson.ts refuses one).
-import { CHARACTERS, find } from './characters.ts';
-import type { Intent, Phase, Snapshot } from './types.ts';
+import type { Intent, Phase } from './types.ts';
 
 /** Lower case, accents off, punctuation to spaces; CJK glyphs are matched before this. */
 export const norm = (text: string) => text.toLowerCase().replace(/[’‘`]/g, "'").normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9' ]+/g, ' ').replace(/\s+/g, ' ').trim();
 
 // ------------------------------------------------------------- characters
 
+/** The kanji by glyph (the Latin capitals are matched as words). Must match characters.ts. */
+export const GLYPHS: readonly [string, string][] = [['ichi', '一'], ['juu', '十'], ['kawa', '川'], ['ki', '木'], ['ei', '永']];
+
 /** Spoken names of each character, as people say them (the ids and glyphs are matched too). */
-const SPOKEN: [string, RegExp][] = [
+export const SPOKEN: readonly [string, RegExp][] = [
   ['ichi', /\b(ichi|(character|kanji|sign|symbol|one) for one|single stroke( one)?|one stroke one|number one character)\b/],
   ['juu', /\b(ten|juu|ju|jyu)\b/],
   ['kawa', /\b(river|kawa|rivers)\b/],
@@ -38,7 +46,7 @@ const FILLER = /\b(ok(ay)?|please|the|one|character|kanji|for|let'?s|do|how|abou
  * it is far more likely a number than 一.
  */
 export function characterIn(text: string, menu = true): string | null {
-  for (const c of CHARACTERS) if (c.script === 'kanji' && text.includes(c.glyph)) return c.id;
+  for (const [id, glyph] of GLYPHS) if (text.includes(glyph)) return id;
   const t = norm(text);
   for (const [id, pattern] of SPOKEN) if (pattern.test(t)) return id;
   // A bare "A" or "E" (typed, or as the recogniser writes a letter): only when it is the whole request.
@@ -57,9 +65,9 @@ function onlyAName(text: string): boolean {
 
 // ---------------------------------------------------------------- commands
 
-const RESTART = /\b(start (it |this |this one |the character |the whole thing )?(over|again)|from the (top|beginning|start)|wipe (it|the board|everything|it all)|begin again|redo (it|this|the (whole )?character)|reset( the board)?|start from scratch)\b/;
+const RESTART = /\b(start (it |this |this one |the character |the whole thing )?(over|again)|from the (top|beginning|start)|wipe (it|the board|the sheet|everything|it all)|begin again|redo (it|this|the (whole )?character)|reset( the (board|sheet))?|start from scratch)\b/;
 const AGAIN = /^(ok(ay)? )?((do it|let'?s do it|let'?s go|go) )?(again|once more|one more time)( please)?$|\b(do (it|that one) again|same one again|one more time)\b/;
-const CLEAR = /^(please )?(clear|erase|undo)( it| that| this| the board| my (ink|attempt|stroke|drawing))?( please)?$|\b(clear|erase|rub out) (it|that|this|the board|my (ink|attempt|stroke|drawing))\b/;
+const CLEAR = /^(please )?(clear|erase|undo)( it| that| this| the board| the sheet| my (ink|attempt|stroke|drawing))?( please)?$|\b(clear|erase|rub out) (it|that|this|the board|the sheet|my (ink|attempt|stroke|drawing))\b/;
 const NEXT_CHARACTER = /\b(next|another|different|new|other) (character|letter|kanji|glyph|sign|symbol)\b|\bsomething (else|different)\b|\banother one\b|\ba different one\b/;
 const MENU_NEXT = /^(ok(ay)? )?(next|next one|another|another one|go on|keep going|more|onwards|ready|i'?m ready|let'?s go|let'?s start|let'?s begin)( please)?$/;
 
@@ -93,15 +101,15 @@ const NEXT_EXPLICIT = /^(ok(ay)? )?(next|next one|next stroke|skip|skip it|skip 
 const NEXT_READY = /^(ok(ay)?|yes|yep|yeah|sure|got it|ready|i'?m ready|go on|go ahead|continue|keep going|onwards|carry on|let'?s go|let'?s continue|what'?s next|and now|then what)( please| then| next)?$|\b(what'?s next|i'?m ready|go on|carry on|keep going|the next one|let'?s continue)\b/;
 
 /**
- * The board action a line asks for, or null for one the avatar should simply
- * answer. Phase-aware, because the same words mean different things: "next"
- * is the next stroke mid-character and the next character on the menu; "show
- * me" is a reveal only while a stroke is live (once it is done the avatar
- * already has its teaching line).
+ * The sheet action a line asks for, or null for one Ren simply answers.
+ * Phase-aware, because the same words mean different things: "next" is the
+ * next stroke mid-character and the next character on the menu; "show me" is
+ * a reveal only while a stroke is live (once it is done Ren already has its
+ * teaching line).
  */
 export function intentIn(text: string, phase: Phase, current: string | null): Intent | null {
   const t = norm(text);
-  if (!t && !CHARACTERS.some((c) => text.includes(c.glyph))) return null;
+  if (!t && !GLYPHS.some(([, glyph]) => text.includes(glyph))) return null;
   const named = characterIn(text, phase === 'intro' || phase === 'debrief');
   const chooses = named !== null && named !== current && (phase === 'intro' || phase === 'debrief' || CHOOSE.test(t) || onlyAName(text));
 
@@ -128,58 +136,40 @@ export function intentIn(text: string, phase: Phase, current: string | null): In
   return null;
 }
 
-/** Whether a line the rules could not place is worth the model's time: a word or two of small talk is not. */
-export const worthAsking = (text: string) => norm(text).split(' ').filter(Boolean).length >= 2;
+// --------------------------------------------------------- the safety net
 
-// ---------------------------------------------------------- the model's turn
+/**
+ * The net's stricter reading of "show me": only lines that plainly ask about
+ * the live stroke. "I don't know", "help" or "a hint" are left to Ren, who
+ * hears the whole sentence ("I don't know what eternity means" is not one).
+ */
+const SURELY_SHOW = /\bshow (me|us)\b|\b(which|what) way (does|do|should|is|will)\b|\bwhich direction\b|\bwhere (do|should|shall|can) i (start|begin)\b|\bhow (do|should|can) i (draw|write) (it|this|that|this one|the stroke)\b|\bwhat shape\b|\b(which|what) (stroke|one) (comes |goes )?(first|next)\b|\bi'?m stuck\b|\bi am stuck\b|\bdraw it for me\b/;
+/** The net's "next": the word itself, or plain readiness, never a bare "yes" or "ok" (an answer to some other question). */
+const SURELY_NEXT = /\b(what'?s next|i'?m ready|go on|carry on|keep going|let'?s continue|the next one)\b/;
 
-export type ModelAction = 'show' | 'next_stroke' | 'next_character' | 'start_over' | 'clear' | 'choose' | 'none';
+export type NetCall = { name: 'show_stroke' | 'next_stroke' | 'start_over' | 'choose_character'; arguments: Record<string, unknown> };
 
-export const INTENT_SCHEMA = {
-  type: 'object',
-  properties: {
-    action: { type: 'string', enum: ['show', 'next_stroke', 'next_character', 'start_over', 'clear', 'choose', 'none'] },
-    character: { type: 'string', description: 'For "choose": the id of the character they asked for (or what they called it if it is not on the list); otherwise empty.' },
-  },
-  required: ['action', 'character'],
-};
-
-function boardInWords(v: Snapshot): string {
-  if (!v.character) return 'No character is on the board yet; the menu is showing.';
-  const where = `${v.character.glyph} (${v.character.meaning}) is on the board`;
-  if (v.phase === 'writing') return `${where}; the learner is drawing stroke ${v.stroke_index + 1} of ${v.character.strokes_total} right now.`;
-  if (v.phase === 'coaching') return `${where}; stroke ${v.stroke_index + 1} of ${v.character.strokes_total} is done and drawn, and the next one waits for them to say "next".`;
-  return `${where}; the character is finished and the menu is showing.`;
-}
-
-export const intentPrompt = (v: Snapshot, utterance: string) => `A learner in a stroke-order lesson said: "${utterance}"
-(Speech recognition may have misheard words.) ${boardInWords(v)}
-The characters on offer: ${CHARACTERS.map((c) => `${c.id} (${c.glyph}, ${c.meaning})`).join(', ')}.
-What do they want the board to do?
-- show: they ask how to write the stroke they are drawing now (which way it goes, where it starts, what shape it is, which stroke comes first or next), say they don't know or are stuck, or ask to be shown it.
-- next_stroke: move on to the next stroke ("next", "ready", "go on").
-- next_character: move on to another character without naming it.
-- start_over: start this character again from its first stroke.
-- clear: clear their last attempt.
-- choose: they ask for a particular character; put its id in "character".
-- none: anything else: small talk, thanks, a question about a stroke already done, about the score or about the lesson.`;
-
-/** The model's answer as an intent, held to what the phase allows. */
-export function intentFromModel(answer: { action?: string; character?: string } | null | undefined, phase: Phase, current: string | null): Intent | null {
-  switch (answer?.action) {
-    case 'show': return phase === 'writing' ? { kind: 'reveal' } : null;
-    case 'next_stroke': return phase === 'coaching' || phase === 'writing' ? { kind: 'next_stroke' } : { kind: 'next_character' };
-    case 'next_character': return { kind: 'next_character' };
-    case 'start_over': return { kind: 'start_character' };
-    case 'clear': return phase === 'writing' ? { kind: 'clear_attempt' } : null;
-    case 'choose': {
-      const asked = (answer.character ?? '').trim();
-      if (!asked) return null;
-      const known = find(asked);
-      if (known?.id === current) return null;
-      // An unknown name goes to the tutor anyway: its refusal lists what there is.
-      return { kind: 'start_character', id: known?.id ?? asked };
-    }
-    default: return null;
+/**
+ * The tool the learner's words clearly ask for, among those safe to do
+ * twice: a second show or next is refused by the sheet, a second start over
+ * lands where the first did, and a character off the menu is not chosen
+ * again once it is up. Moving on to the next character is not here: done
+ * twice it would skip one.
+ */
+export function mustDo(text: string, phase: Phase, current: string | null): NetCall | null {
+  const intent = intentIn(text, phase, current);
+  if (!intent) return null;
+  const t = norm(text);
+  switch (intent.kind) {
+    case 'reveal':
+      return phase === 'writing' && SURELY_SHOW.test(t) ? { name: 'show_stroke', arguments: {} } : null;
+    case 'next_stroke':
+      // While a stroke is live "next" is refused; Ren says so from the sheet without a call.
+      return phase === 'coaching' && (NEXT_EXPLICIT.test(t) || SURELY_NEXT.test(t)) ? { name: 'next_stroke', arguments: {} } : null;
+    case 'start_character':
+      if (intent.id) return phase === 'intro' || phase === 'debrief' ? { name: 'choose_character', arguments: { character: intent.id } } : null;
+      return phase === 'intro' ? null : { name: 'start_over', arguments: {} };
+    default:
+      return null;
   }
 }

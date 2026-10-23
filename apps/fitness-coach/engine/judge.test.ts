@@ -1,105 +1,37 @@
-// Turning words into app actions, as people say them at each step. Rules
-// first; the model call (stubbed here) only for a free-form goal or level.
-import { describe, expect, it, vi } from 'vitest';
-import type { JudgeContext } from './coach.ts';
-import { goalIn, judge, moveIn, type Ask } from './judge.ts';
+// Reading the host's tool arguments the way people say them, and the phrases
+// the page's safety net acts on when the host does not.
+import { describe, expect, it } from 'vitest';
+import { goalIn, moveIn, mustDo, mustStop, stepLevel } from './judge.ts';
 import { buildFallbackPlan } from './plan.ts';
-import type { Intent } from './types.ts';
 
 const plan = buildFallbackPlan('Full body', 'Beginner');
 // warm-up: March in place, Arm circles, Bodyweight good mornings
 // workout: Bodyweight squats, Incline push-ups, Glute bridges, Plank hold
-const at = (stage: JudgeContext['stage'], over: Partial<JudgeContext> = {}): JudgeContext => ({
-  stage,
-  plan: stage === 'move' || stage === 'coach' ? plan : null,
-  goal: stage === 'goal' ? '' : 'Full body',
-  level: stage === 'goal' || stage === 'level' ? '' : 'Beginner',
-  ...over,
-});
-const intentOf = async (text: string, ctx: JudgeContext, ask?: Ask) => (await judge(text, ctx, ask)).intent;
 
-describe('step 1, what to train', () => {
+describe('a goal, as the host passes it', () => {
   it.each([
-    ['Full body please', { kind: 'goal', goal: 'Full body' }],
-    ['I want to work on my glutes', { kind: 'goal', goal: 'Glutes' }],
-    ['core and cardio', { kind: 'goal', goal: 'Core + cardio' }],
-    ['Some HIIT today', { kind: 'goal', goal: 'HIIT' }],
-    ['mobility', { kind: 'goal', goal: 'Mobility' }],
-    ['upper body strength', { kind: 'goal', goal: 'Upper body strength' }],
-  ] as [string, Intent][])('hears a goal: %s', async (said, intent) => {
-    expect(await intentOf(said, at('goal'))).toEqual(intent);
+    ['Full body please', 'Full body'],
+    ['I want to work on my glutes', 'Glutes'],
+    ['core and cardio', 'Core + cardio'],
+    ['Some HIIT today', 'HIIT'],
+    ['mobility', 'Mobility'],
+    ['upper body strength', 'Upper body strength'],
+    ["core and cardio, I'm a beginner", 'Core + cardio'],
+  ])('lands on the board’s words where it can: %s', (said, goal) => {
+    expect(goalIn(said)).toBe(goal);
   });
 
-  it('hears a goal and a level in one breath', async () => {
-    expect(await intentOf("core and cardio, I'm a beginner", at('goal'))).toEqual({ kind: 'goal', goal: 'Core + cardio', level: 'Beginner' });
-  });
-
-  it('takes a bare level as a level, not a goal', async () => {
-    expect(await intentOf('beginner', at('goal'))).toEqual({ kind: 'level', level: 'Beginner' });
-    expect(await intentOf("I'd say intermediate", at('goal'))).toEqual({ kind: 'level', level: 'Intermediate' });
-  });
-
-  it('does not take a hurt body part as a goal', async () => {
+  it('does not take a hurt body part as a goal', () => {
     expect(goalIn('my back is sore', ['back'])).toBeNull();
     expect(goalIn('my back is sore but I want core', ['back'])).toBe('Core');
   });
 
-  it('does not take a question weighing options as a choice', async () => {
-    expect(await intentOf('full body or core, what do you think?', at('goal'))).toBeNull();
-    expect(await intentOf('should I do beginner or intermediate?', at('level'))).toBeNull();
-    expect(await intentOf('can we do intermediate?', at('level'))).toEqual({ kind: 'level', level: 'Intermediate' });
-  });
-
-  it('leaves limits, questions and small talk to the avatar', async () => {
-    for (const said of ['I only have 20 minutes', 'hi there', 'what can you do?', 'my knee is bad']) {
-      expect(await intentOf(said, at('goal')), said).toBeNull();
-    }
-  });
-
-  it('asks the model only when the rules cannot tell', async () => {
-    const ask = vi.fn(async () => ({ isGoal: true, goal: 'running endurance' }));
-    expect(await intentOf('I want to get better at running up hills', at('goal'), ask)).toEqual({ kind: 'goal', goal: 'running endurance' });
-    expect(ask).toHaveBeenCalledOnce();
-    // Rules first: a goal the rules know never costs a model call.
-    await intentOf('glutes please', at('goal'), ask);
-    // Nor does a limit, a question or a greeting.
-    await intentOf('I only have twenty minutes', at('goal'), ask);
-    await intentOf('how does this work?', at('goal'), ask);
-    await intentOf('hello', at('goal'), ask);
-    expect(ask).toHaveBeenCalledOnce();
-  });
-
-  it('treats a failed model call as no intent', async () => {
-    const ask: Ask = async () => { throw new Error('quota'); };
-    expect(await intentOf('something to wake me up', at('goal'), ask)).toBeNull();
-  });
-
-  it('never takes a level the model returned as a goal', async () => {
-    // A plan for "beginner beginner" is worse than asking for the goal again.
-    const ask: Ask = async () => ({ isGoal: true, goal: 'beginner' });
-    expect(await intentOf('just the beginner stuff really', at('goal'), ask)).toEqual({ kind: 'level', level: 'Beginner' });
+  it('finds nothing in words that name no goal', () => {
+    for (const said of ['beginner', 'I only have 20 minutes', 'hello']) expect(goalIn(said), said).toBeNull();
   });
 });
 
-describe('step 2, the level', () => {
-  it.each([['intermediate I think', 'Intermediate'], ["let's go advanced", 'Advanced'], ['beginner please', 'Beginner'], ["I'm pretty new to this", 'Beginner']])(
-    'hears a level: %s',
-    async (said, level) => expect(await intentOf(said, at('level'))).toEqual({ kind: 'level', level }),
-  );
-
-  it('hears a change of mind about the goal', async () => {
-    expect(await intentOf('actually, glutes instead', at('level'))).toEqual({ kind: 'goal', goal: 'Glutes' });
-  });
-
-  it('asks the model for a level described rather than named', async () => {
-    const ask: Ask = async () => ({ isLevel: true, level: 'Intermediate' });
-    expect(await intentOf('I run three times a week', at('level'), ask)).toEqual({ kind: 'level', level: 'Intermediate' });
-    const unsure: Ask = async () => ({ isLevel: false, level: '' });
-    expect(await intentOf('not sure to be honest', at('level'), unsure)).toBeNull();
-  });
-});
-
-describe('step 4, the starting move', () => {
+describe('a move, as the host passes it', () => {
   it.each([
     ["Let's start with the squats", 'Bodyweight squats'],
     ['the plank', 'Plank hold'],
@@ -108,75 +40,56 @@ describe('step 4, the starting move', () => {
     ['the last one', 'Plank hold'],
     ["I'll go with arm circles please", 'Arm circles'],
     ['incline push ups', 'Incline push-ups'],
-  ])('hears a move: %s', async (said, move) => {
-    expect(await intentOf(said, at('move'))).toEqual({ kind: 'move', move });
-  });
-
-  it('does not take a question about a move as a choice', async () => {
-    expect(await intentOf("what's the first move?", at('move'))).toBeNull();
-    expect(await intentOf('how many reps of squats should I do?', at('coach'))).toBeNull();
+    ['show me a demo of arm circles', 'Arm circles'],
+  ])('lands on a plan move: %s', (said, move) => {
+    expect(moveIn(plan, said)).toBe(move);
   });
 
   it('does not read "the one with" as move number one', () => {
     expect(moveIn(plan, 'the one with the bridge')).toBe('Glute bridges');
   });
 
-  it('says a move is not on the plan', async () => {
-    expect(await intentOf("let's do burpees", at('move'))).toEqual({ kind: 'unknownMove', heard: 'burpees' });
-  });
-
-  it('leaves vague answers to the avatar', async () => {
-    for (const said of ['ok', 'ready', 'yes', 'sounds good']) expect(await intentOf(said, at('move')), said).toBeNull();
+  it('finds nothing for a move that is not on the plan', () => {
+    for (const said of ['burpees', 'handstand walk', 'ok']) expect(moveIn(plan, said), said).toBeNull();
   });
 });
 
-describe('once a plan is on the screen', () => {
-  it('hears a demo request, with or without a move', async () => {
-    expect(await intentOf('show me a demo of arm circles', at('coach'))).toEqual({ kind: 'demo', move: 'Arm circles' });
-    expect(await intentOf('can you show me the plank', at('coach'))).toEqual({ kind: 'demo', move: 'Plank hold' });
-    expect(await intentOf('make me a video', at('coach'))).toEqual({ kind: 'demo', move: null });
-    expect(await intentOf('show me a demo of handstands', at('coach'))).toEqual({ kind: 'unknownMove', heard: 'handstands' });
-  });
-
-  it('switches moves on a choice or a bare name, not on a remark', async () => {
-    expect(await intentOf("now let's do the plank", at('coach'))).toEqual({ kind: 'move', move: 'Plank hold' });
-    expect(await intentOf('glute bridges', at('coach'))).toEqual({ kind: 'move', move: 'Glute bridges' });
-    expect(await intentOf('I did the plank', at('coach'))).toBeNull();
-    expect(await intentOf('my legs are burning', at('coach'))).toBeNull();
-  });
-
-  it.each([
-    ['make it advanced', 'Advanced'],
-    ['rebuild that as intermediate', 'Intermediate'],
-    ['advanced', 'Advanced'],
-    ['make it harder', 'Intermediate'],
-    ['can you make it harder?', 'Intermediate'],
-    ['this is too easy', 'Intermediate'],
-  ])('hears a change of level: %s', async (said, level) => {
-    expect(await intentOf(said, at('coach'))).toEqual({ kind: 'relevel', level });
-  });
-
-  it('does not take a question about difficulty as a change', async () => {
-    expect(await intentOf('is this too hard for me?', at('coach'))).toBeNull();
-  });
-
-  it('hears starting over', async () => {
-    expect(await intentOf("let's start over", at('coach'))).toEqual({ kind: 'restart' });
-    expect(await intentOf('can we do a new plan', at('move'))).toEqual({ kind: 'restart' });
+describe('easier and harder', () => {
+  it('steps one level from where the plan is, and stays at either end', () => {
+    expect(stepLevel('Beginner', 'harder')).toBe('Intermediate');
+    expect(stepLevel('Advanced', 'easier')).toBe('Intermediate');
+    expect(stepLevel('Advanced', 'harder')).toBe('Advanced');
+    expect(stepLevel('Beginner', 'easier')).toBe('Beginner');
+    expect(stepLevel('', 'harder')).toBeNull();
   });
 });
 
-describe('every line, whatever else it is', () => {
-  it('carries its constraints and any level said in passing', async () => {
-    const j = await judge("glutes, I'm a beginner, I've only got twenty minutes and a bad knee", at('goal'));
-    expect(j.constraints.minutes).toBe(20);
-    expect(j.constraints.injuries).toEqual(['knee']);
-    expect(j.level).toBe('Beginner');
+describe('the safety net', () => {
+  it('does what the words clearly ask for, and only what is safe to do twice', () => {
+    const cases: [string, string | null][] = [
+      ["Let's start over", 'start_over'], ['can we do a new plan', 'start_over'], ['I want a different goal', 'start_over'],
+      ['I only have 20 minutes', 'add_limits'], ['no equipment at all', 'add_limits'], ['my left knee is bad', 'add_limits'],
+      ['I have a torn ACL', 'add_limits'], ['no lunges please', 'add_limits'], ['twenty minutes, tops', 'add_limits'],
+      // Left to the host: a level change ("harder" twice is two levels), a goal, a move, a question, small talk.
+      ['make it harder', null], ['glutes please', null], ['the plank', null], ['how many reps?', null], ['thanks!', null],
+      ["I don't want to start over", null], ['no need to start over', null],
+      // A stop is the safety check's, not this net's.
+      ["I'm pregnant and have 20 minutes", null],
+    ];
+    for (const [said, expected] of cases) expect(mustDo(said)?.name ?? null, said).toBe(expected);
   });
 
-  it('carries a clearance disclosure at any step', async () => {
-    for (const stage of ['goal', 'level', 'move', 'coach'] as const) {
-      expect((await judge("I'm 7 months pregnant", at(stage))).constraints.clearance, stage).toEqual(['pregnancy']);
-    }
+  it('hands the user’s own words to add_limits', () => {
+    expect(mustDo('My left knee is bad')).toEqual({ name: 'add_limits', arguments: { words: 'My left knee is bad' } });
+  });
+
+  it('stops for a condition no exercise swap makes safe, at any point', () => {
+    const cases: [string, boolean][] = [
+      ["I'm 7 months pregnant", true], ['I had a heart attack two years ago', true], ['I had surgery last month', true],
+      ['I get dizzy when I stand up fast', true], ['I fainted at the gym last week', true], ['I broke my wrist, it is a fracture', true],
+      ['my knee is sore', false], ['that was a dizzying number of reps', false], ['thanks for the cooperation', false], ['my treadmill is broken', false],
+    ];
+    for (const [said, stops] of cases) expect(Boolean(mustStop(said)), said).toBe(stops);
+    expect(mustStop("I'm 7 months pregnant")).toEqual({ name: 'stop_for_safety', arguments: { condition: "I'm 7 months pregnant" } });
   });
 });

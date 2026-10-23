@@ -15,11 +15,12 @@
 //   correctly, or revealed on purpose. The key survives throughout, because the
 //   panel needs a stable list identity and a key is not a sentence.
 // - Grading is deterministic. `expected` / `forbidden` from scenarios.ts,
-//   substring matching, no model in the loop. The avatar reads `teach` aloud;
-//   it never decides whether an answer was right, and it never sources a number.
+//   substring matching, no model in the loop. The host reads `teach` aloud from
+//   a tool result; it never decides whether an answer was right, and it never
+//   sources a number.
 import { emergencySnapshot } from './lines.ts';
-import { catalog, DEFAULT_SCENARIO_ID, find, SAFETY_LINE, SCENARIOS, UNKNOWN_SCENARIO_REASON, type Scenario, type Step } from './scenarios.ts';
-import type { Phase, Snapshot, Staged, StepOutcome, StepView, Verdict } from './types.ts';
+import { catalog, DEFAULT_SCENARIO_ID, find, SAFETY_LINE, UNKNOWN_SCENARIO_REASON, type Scenario, type Step } from './scenarios.ts';
+import type { Phase, Snapshot, StepOutcome, StepView, Verdict } from './types.ts';
 
 /** A refusal whose message is said to the learner verbatim. */
 export class TutorRefusal extends Error {
@@ -257,29 +258,6 @@ export class BlsTutor {
     // Only where the learner is choosing.
     if (this._phase === 'intro' || this._phase === 'debrief') snapshot.catalog = catalog();
     return snapshot;
-  }
-
-  /**
-   * What the avatar may need for its very next reply, which it makes before the
-   * app has heard the learner (new in the port; the original's tools returned
-   * these facts inside the reply). Never more than the live step: the steps
-   * ahead stay unknown to the avatar as they are to the panel.
-   */
-  staged(): Staged | null {
-    const scenario = this._scenario;
-    if (this._phase === 'emergency') return null;
-    if (this._phase === 'intro' || this._phase === 'debrief' || !scenario) {
-      return {
-        scenarios: SCENARIOS.map((s) => ({ id: s.id, title: s.title, victim: s.victim, opening: s.opening, firstPrompt: s.steps[0].prompt, steps: s.steps.length })),
-      };
-    }
-    if (this._phase === 'answering') {
-      const step = this.currentStep()!;
-      return { step: { label: step.label, teach: step.teach, hint: step.hint } };
-    }
-    // coaching: where "next" leads.
-    const following = scenario.steps[this.stepIndex + 1];
-    return { next: following ? { step: this.stepIndex + 2, prompt: following.prompt } : 'debrief' };
   }
 
   private score() {

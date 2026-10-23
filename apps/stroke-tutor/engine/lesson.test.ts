@@ -5,10 +5,11 @@
 // that never fires (or fires twice), a view carrying coordinates the learner
 // has not earned, and the avatar saying the same thing twice.
 import { describe, expect, test } from 'vitest';
-import { EI, JUU, type Character } from './characters.ts';
-import { perform, STROKE_IS_THE_USERS, type Source } from './lesson.ts';
+import { CHARACTERS, EI, JUU, type Character } from './characters.ts';
+import { TOOLS } from './director.ts';
+import { perform, resolveCharacter, runTool, STROKE_IS_THE_USERS, TOOL_NAMES, type Source } from './lesson.ts';
 import { resample } from './strokes.ts';
-import { STROKE_UNRESOLVED, StrokeTutor } from './tutor.ts';
+import { ALREADY_RESOLVED, CHARACTER_FINISHED, STROKE_UNRESOLVED, StrokeTutor, UNKNOWN_CHARACTER } from './tutor.ts';
 import type { Intent } from './types.ts';
 
 const drawing = (character: Character, index: number) => resample(character.strokes[index].points, 40).map(([x, y]) => [Math.trunc(x), Math.trunc(y)]);
@@ -58,7 +59,7 @@ describe('the board', () => {
   });
 });
 
-describe('what the avatar is told', () => {
+describe('what Ren is told', () => {
   test('a stroke drawn on the board gets exactly one coaching line', () => {
     const { outcomes } = board({ kind: 'start_character', id: 'juu' }, { kind: 'stroke', points: drawing(JUU, 0) });
     expect(outcomes[1].event).toContain('WITHOUT changing');
@@ -148,7 +149,7 @@ describe('what the avatar is told', () => {
     const { act } = board({ kind: 'start_character', id: 'ichi' });
     const outcome = act({ kind: 'next_character' }, 'words');
     expect(outcome.view.character?.id).toBe('juu');
-    expect(outcome.event).toContain('十 is on the board');
+    expect(outcome.event).toContain('十 is on the sheet');
   });
 
   test('clearing asks for the stroke again', () => {
@@ -161,6 +162,126 @@ describe('what the avatar is told', () => {
 
   test('a Latin capital is introduced as a letter, not with a reading', () => {
     const { outcomes } = board({ kind: 'start_character', id: 'latin_a' });
-    expect(outcomes[0].event).toContain('A, the capital letter, is on the board, in 3 strokes');
+    expect(outcomes[0].event).toContain('A, the capital letter, is on the sheet, in 3 strokes');
+  });
+});
+
+describe("Ren's tools", () => {
+  const tool = (tutor: StrokeTutor, name: string, args: Record<string, unknown> = {}) => runTool(tutor, name, args);
+
+  test('every declared tool is one the sheet answers, and the other way round', () => {
+    expect(TOOLS.map((t) => t.name).sort()).toEqual([...TOOL_NAMES].sort());
+    const tutor = new StrokeTutor();
+    for (const name of TOOL_NAMES) expect(() => tool(tutor, name, { character: 'tree' })).not.toThrow();
+    expect(() => tool(tutor, 'draw_stroke')).toThrow();
+  });
+
+  test('choose_character reads what the learner called it', () => {
+    for (const [said, id] of [['tree', 'ki'], ['the tree one', 'ki'], ['木', 'ki'], ['eternity', 'ei'], ['the letter A', 'latin_a'], ['capital E', 'latin_e'], ['ten', 'juu'], ['juu', 'juu'], ['river', 'kawa'], ['one', 'ichi']] as const) {
+      expect(resolveCharacter(said), said).toBe(id);
+      const tutor = new StrokeTutor();
+      const done = tool(tutor, 'choose_character', { character: said });
+      expect(done.view.character?.id, said).toBe(id);
+      expect(done.text).toContain('is on the sheet');
+      expect(done.text).toContain('Stroke 1 of');
+    }
+  });
+
+  test('choose_character refuses one it does not have, with the list, and changes nothing', () => {
+    const tutor = new StrokeTutor();
+    tool(tutor, 'choose_character', { character: 'ten' });
+    const done = tool(tutor, 'choose_character', { character: 'dragon' });
+    expect(done.refused).toBe(UNKNOWN_CHARACTER);
+    expect(done.text).toContain('永 eternity');
+    expect(done.text).toContain('do not claim anything happened');
+    expect(done.view.character?.id).toBe('juu');
+  });
+
+  test('choose_character for the character already up does not wipe the learner\'s progress', () => {
+    const tutor = new StrokeTutor();
+    tool(tutor, 'choose_character', { character: 'ten' });
+    perform(tutor, { kind: 'stroke', points: drawing(JUU, 0) }, 'panel');
+    const done = tool(tutor, 'choose_character', { character: '十' });
+    expect(done.text).toContain('already on the sheet');
+    expect(done.view.strokes[0].status).toBe('done');
+    expect(done.view.score.correct).toBe(1);
+  });
+
+  test('choose_character with nothing named asks which one', () => {
+    expect(tool(new StrokeTutor(), 'choose_character', { character: '  ' }).text).toContain('ask them which one');
+  });
+
+  test('show_stroke draws the live stroke and hands back its lesson, told as asked for', () => {
+    const tutor = new StrokeTutor();
+    tool(tutor, 'choose_character', { character: 'ten' });
+    const done = tool(tutor, 'show_stroke');
+    expect(done.view.strokes[0].points.length).toBeGreaterThan(1);
+    expect(done.text).toContain(JUU.strokes[0].teach);
+    expect(done.text).toContain('asked to be shown');
+    expect(done.view.strokes[1].points).toEqual([]);
+  });
+
+  test('a second show_stroke, as the safety net might make, is refused and changes nothing', () => {
+    const tutor = new StrokeTutor();
+    tool(tutor, 'choose_character', { character: 'ten' });
+    tool(tutor, 'show_stroke');
+    const before = JSON.stringify(tutor.snapshot());
+    const again = tool(tutor, 'show_stroke');
+    expect(again.refused).toBe(ALREADY_RESOLVED);
+    expect(JSON.stringify(again.view)).toBe(before);
+  });
+
+  test('next_stroke is refused while the stroke is unfinished, then asks for the next by number only', () => {
+    const tutor = new StrokeTutor();
+    tool(tutor, 'choose_character', { character: 'ten' });
+    expect(tool(tutor, 'next_stroke').refused).toBe(STROKE_UNRESOLVED);
+    tool(tutor, 'show_stroke');
+    const next = tool(tutor, 'next_stroke');
+    expect(next.text).toContain('Stroke 2 of 2 of 十 is live');
+    for (const secret of [JUU.strokes[1].teach, JUU.strokes[1].name, JUU.strokes[1].hint]) expect(next.text).not.toContain(secret);
+    // Twice in a row (Ren, then the net): the second is refused, no stroke skipped.
+    expect(tool(tutor, 'next_stroke').refused).toBe(STROKE_UNRESOLVED);
+    expect(tutor.snapshot().stroke_index).toBe(1);
+  });
+
+  test('next_stroke after the last stroke finishes the character with a debrief', () => {
+    const tutor = new StrokeTutor();
+    tool(tutor, 'choose_character', { character: 'one' });
+    tool(tutor, 'show_stroke');
+    const done = tool(tutor, 'next_stroke');
+    expect(done.view.phase).toBe('debrief');
+    expect(done.text).toContain('last stroke of 一');
+    expect(tool(tutor, 'next_stroke').refused).toBe(CHARACTER_FINISHED);
+  });
+
+  test('start_over puts the character back at stroke one; twice lands in the same place', () => {
+    const tutor = new StrokeTutor();
+    tool(tutor, 'choose_character', { character: 'ten' });
+    perform(tutor, { kind: 'stroke', points: drawing(JUU, 0) }, 'panel');
+    const once = tool(tutor, 'start_over');
+    expect(once.text).toContain('back at the beginning of 十');
+    const twice = tool(tutor, 'start_over');
+    expect(JSON.stringify(twice.view)).toBe(JSON.stringify(once.view));
+    expect(twice.view.strokes.every((s) => s.points.length === 0)).toBe(true);
+  });
+
+  test('next_character walks the lesson order', () => {
+    const tutor = new StrokeTutor();
+    expect(tool(tutor, 'next_character').view.character?.id).toBe('ichi');
+    expect(tool(tutor, 'next_character').view.character?.id).toBe('juu');
+  });
+
+  test('no tool result carries a stroke the learner has not earned', () => {
+    for (const character of CHARACTERS) {
+      const tutor = new StrokeTutor();
+      const texts = [tool(tutor, 'choose_character', { character: character.id }).text];
+      for (let i = 0; i < character.strokes.length; i += 1) {
+        const later = character.strokes.slice(i + 1).flatMap((s) => [s.teach, s.hint, s.name]);
+        const earned = new Set(character.strokes.slice(0, i + 1).flatMap((s) => [s.teach, s.name]));
+        texts.push(tool(tutor, 'show_stroke').text);
+        const next = tool(tutor, 'next_stroke').text;
+        for (const secret of later) if (!earned.has(secret)) expect(next, `${character.id} after stroke ${i + 1}`).not.toContain(secret);
+      }
+    }
   });
 });

@@ -1,9 +1,9 @@
 // What the server and the page share. The page only ever sees a View: the
-// public snapshot (every step the learner has not resolved has an empty label)
-// plus `staged`, the few facts the avatar may need for its very next reply.
+// public snapshot, in which every step the learner has not resolved has an
+// empty label (the label is the answer to the question on screen).
 //
 // Keys stay snake_case because they are the original panel's snapshot, field
-// for field: the ported panel and its tests read them unchanged.
+// for field.
 
 export type Phase = 'intro' | 'answering' | 'coaching' | 'debrief' | 'emergency';
 
@@ -41,7 +41,7 @@ export interface CatalogEntry {
   steps: number;
 }
 
-/** The tutor's public projection (`BlsTutor.snapshot()`): what the panel draws. */
+/** The tutor's public projection (`BlsTutor.snapshot()`): what the screen draws and the host is told. */
 export interface Snapshot {
   phase: Phase;
   scenario: ScenarioView | null;
@@ -60,62 +60,38 @@ export interface Snapshot {
   emergency_message?: string;
 }
 
-/** A scenario as the menu offers it out loud: its scene and its first question. */
-export interface StagedScenario {
-  id: string;
-  title: string;
-  victim: string;
-  opening: string;
-  firstPrompt: string;
-  steps: number;
-}
+export type View = Snapshot;
 
-/**
- * What the avatar may need for its next reply before the app can act on the
- * learner's words (it answers a spoken request at once; the app hears it about
- * a second later). Never drawn on the panel.
- */
-export interface Staged {
-  /** answering: the live step's key facts, for "show me", a hint, and so no number comes from memory. */
-  step?: { label: string; teach: string; hint: string };
-  /** coaching: where "next" leads: the next question, or the end of the scenario. */
-  next?: { step: number; prompt: string } | 'debrief';
-  /** intro and debrief: the four scenarios, for a choice made out loud. */
-  scenarios?: StagedScenario[];
-}
+/** The host's tools, one per drill action (engine/director.ts declares them). */
+export type Action =
+  | 'start_scenario'
+  | 'check_answer'
+  | 'show_step'
+  | 'give_hint'
+  | 'next_step'
+  | 'leave_scenario'
+  | 'stop_for_emergency'
+  | 'resume_practice';
 
-export interface View extends Snapshot {
-  staged: Staged | null;
-}
+/** The learner's buttons. Each is one of the actions above, done at once. */
+export type Command = 'start' | 'reveal' | 'hint' | 'next' | 'leave' | 'resume' | 'emergency';
 
-/** The original panel's intents, unchanged. */
-export type Intent =
-  | { kind: 'answer'; step_key?: string; text: string }
-  | { kind: 'reveal' }
-  | { kind: 'next' }
-  | { kind: 'start_scenario'; id: string }
-  | { kind: 'leave_scenario' }
-  | { kind: 'ack_safety' }
-  | { kind: 'emergency_mode' };
-
-/** Where an input came from. A spoken one has already been answered by the avatar. */
-export type Source = 'button' | 'typed' | 'spoken';
-
-export type ActionKind = 'start' | 'answer' | 'rescue' | 'reveal' | 'next' | 'leave' | 'resume' | 'emergency';
-
-export interface Outcome {
-  view: View;
-  /** Which action it was, when it was one (refused or not). */
-  kind?: ActionKind;
-  /** Whether the input was a drill action; a typed line that wasn't goes to the avatar as-is. */
-  handled: boolean;
-  /** Whether the drill accepted it. */
+/** What one action did. */
+export interface Done {
+  /** The drill accepted it (a hint counts: nothing changes, but it was given). */
   applied: boolean;
-  /** The drill's refusal, a sentence for the learner. */
+  /** What the host speaks from: the outcome, and how to say it. */
+  text: string;
+  /** A refusal, as a sentence for the learner. */
   reason?: string;
-  /** What the avatar should be told, in its own words. Absent when its own reply already covered it. */
-  event?: string;
-  ttl?: number;
-  /** A spoken request the avatar answered from the staged facts, so no event follows. */
-  staged?: boolean;
+  /** A hint the learner asked for, to show on screen. */
+  hint?: string;
+  /** The result handed the host the emergency line. */
+  emergency?: boolean;
 }
+
+/** `POST /drills/:id/tool`: the host's call (or the page's safety net). */
+export interface ToolReply { view: View; result: string; hint?: string; emergency?: boolean }
+
+/** `POST /drills/:id/act`: a button. The event is what the host is told. */
+export interface ActReply { view: View; applied: boolean; event?: string; reason?: string; hint?: string }

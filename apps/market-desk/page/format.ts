@@ -1,11 +1,12 @@
-// The panel's formatters, ported from the original panel's market/types.ts.
-// The snapshot types themselves are the engine's (engine/types.ts).
+// The board's formatters, ported from the original panel's market/types.ts,
+// and the closing sheet's CSV. The snapshot types themselves are the
+// engine's (engine/types.ts).
 import { rangePosition } from '../engine/director.ts';
-import type { Quote } from '../engine/types.ts';
+import type { Board, Quote } from '../engine/types.ts';
 
 export { rangePosition };
 
-/** Panel sort orders. View state: the board's own order is the add order. */
+/** Sort orders. View state: the board's own order is the add order. */
 export type SortOrder = 'board' | 'move';
 
 export function sortQuotes(quotes: Quote[], order: SortOrder): Quote[] {
@@ -27,6 +28,9 @@ export function moveDirection(quote: Quote): 'up' | 'down' | 'flat' {
   if (quote.change_pct === null || quote.change_pct === 0) return 'flat';
   return quote.change_pct > 0 ? 'up' : 'down';
 }
+
+/** A tick's arrow: a text glyph, so it reads in any font and in a screen reader as "up" or "down" via its label. */
+export const ARROW = { up: '▲', down: '▼', flat: '■' } as const;
 
 /**
  * What period the sparkline actually covers, in words.
@@ -56,4 +60,27 @@ export function formatAsOf(seconds: number, now: number = Date.now()): string {
   if (age < 3600) return `${Math.floor(age / 60)}m ago`;
   if (age < 86400) return `${Math.floor(age / 3600)}h ago`;
   return `${Math.floor(age / 86400)}d ago`;
+}
+
+/** When a quote printed, as New York time ("4:00 PM ET, Oct 23"): the exchange's clock, not the viewer's. */
+export function formatPrintTime(seconds: number): string {
+  const at = new Date(seconds * 1000);
+  const time = at.toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
+  const day = at.toLocaleDateString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric' });
+  return `${time} ET, ${day}`;
+}
+
+const cell = (value: unknown) => {
+  const text = value === null || value === undefined ? '' : String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+
+/** The board as a CSV: one row per stock, every number as the board has it, the print time in UTC. */
+export function boardCsv(board: Board): string {
+  const head = ['Ticker', 'Company', 'Exchange', 'Last', 'Currency', 'Change', 'Change %', '52-week low', '52-week high', 'Printed (UTC)', 'Stale'];
+  const rows = board.watchlist.map((q) => [
+    q.symbol, q.name, q.exchange, q.price, q.currency, q.change, q.change_pct, q.wk52_low, q.wk52_high,
+    new Date(q.as_of * 1000).toISOString(), q.stale ? 'yes' : 'no',
+  ]);
+  return [head, ...rows].map((row) => row.map(cell).join(',')).join('\r\n') + '\r\n';
 }

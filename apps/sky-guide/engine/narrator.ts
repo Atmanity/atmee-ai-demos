@@ -1,7 +1,7 @@
-// The guide noticing that the chart changed under the user's hands, and saying
-// one line about it. Ported from the original `attach_narrator`: it speaks only
-// for changes nobody else is speaking for (the chart's own controls; a typed or
-// spoken request carries its own event), and only for material ones.
+// The guide being told that the chart changed under the user's hands, in one
+// line. Ported from the original `attach_narrator`: it speaks only for changes
+// nobody else is speaking for (the chart's own controls; a tool's change comes
+// back as the tool's result), and only for material ones.
 //
 // New in this port: changes are COALESCED. The original's panel had three
 // buttons; this one has a slider and steppers, and three quick +1h clicks or a
@@ -25,7 +25,7 @@ export class Narrator {
     this.timer = setTimeout(() => this.flush(), this.quietMs);
   }
 
-  /** Say the pending line now (before a request's own event, so they come in order). */
+  /** Say the pending line now (before a tool's result, so they come in order). */
   flush(): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;

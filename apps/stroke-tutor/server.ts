@@ -1,16 +1,13 @@
-// Stroke Tutor's server side: it owns every lesson (the reference strokes
-// never reach the browser, so a learner cannot read the answer in devtools),
-// grades each drawn stroke with geometry, and turns what the learner types or
-// says into board actions: rules first, then the app's own model call for the
-// lines the rules cannot place.
+// Hanshi's server side: it owns every lesson (the reference strokes never
+// reach the browser, so a learner cannot read the answer in devtools), grades
+// each drawn stroke with geometry, and answers Ren's tool calls and the
+// learner's buttons with one set of actions.
 import { randomBytes } from 'node:crypto';
 import type { AppServer } from '../../server/app-server.ts';
-import { llmAvailable, structured } from '../../server/llm.ts';
-import { say } from './engine/director.ts';
-import { INTENT_SCHEMA, intentFromModel, intentIn, intentPrompt, worthAsking } from './engine/judge.ts';
-import { perform } from './engine/lesson.ts';
+import { INSTRUCTIONS, pressed, say, TOOLS } from './engine/director.ts';
+import { perform, runTool, TOOL_NAMES } from './engine/lesson.ts';
 import { StrokeTutor } from './engine/tutor.ts';
-import type { Intent, Outcome } from './engine/types.ts';
+import type { Command, Snapshot } from './engine/types.ts';
 
 const ID = 'stroke-tutor';
 /** A browser sends at most 40 points a stroke; anything far beyond that is not a drawing. */
@@ -18,64 +15,77 @@ const MAX_POINTS_ACCEPTED = 2000;
 
 interface Lesson { tutor: StrokeTutor; at: number }
 const lessons = new Map<string, Lesson>();
+const TOOLS_BY_NAME = new Set<string>(TOOL_NAMES);
 
-/** A typed or spoken line as a board action, or null for one the avatar simply answers. */
-async function judge(lesson: Lesson, text: string): Promise<Intent | null> {
-  const { tutor } = lesson;
-  const current = tutor.character?.id ?? null;
-  const ruled = intentIn(text, tutor.phase, current);
-  if (ruled || !llmAvailable() || !worthAsking(text)) return ruled;
-  try {
-    const answer = await structured<{ action: string; character: string }>({
-      system: 'You route one utterance of a learner in a stroke-order lesson to the board action they want, if any.',
-      user: intentPrompt(tutor.snapshot(), text),
-      schema: INTENT_SCHEMA,
-      temperature: 0,
-    });
-    // The phase may have moved while the model thought; the intent is checked against it again.
-    return intentFromModel(answer, tutor.phase, tutor.character?.id ?? null);
-  } catch (err) {
-    console.warn('[%s] routing failed (%s); leaving the line to the avatar', ID, (err as Error).message);
-    return null;
-  }
-}
+/** The page's buttons: each runs the tool Ren would call, under the label the learner pressed. */
+const BUTTONS: Record<Command, [string, string]> = {
+  show: ['show_stroke', 'Show me'],
+  next: ['next_stroke', 'Next stroke'],
+  another: ['next_character', 'Next character'],
+  over: ['start_over', 'Start over'],
+  choose: ['choose_character', ''],
+};
 
 const app: AppServer = {
   id: ID,
-  title: 'Stroke Tutor',
-  tagline: 'A calligraphy teacher who grades your stroke order and direction, never your handwriting.',
+  title: 'Hanshi',
+  tagline: 'Learn stroke order with Ren, a calligraphy teacher who watches every stroke.',
+  brand: { color: '#e2462f', ink: '#ffffff' },
   maxSeconds: 900,
+  appTools: { instructions: INSTRUCTIONS, tools: TOOLS },
   routes(router) {
+    const lessonOf = (id: string) => {
+      const lesson = lessons.get(id);
+      if (lesson) lesson.at = Date.now();
+      return lesson;
+    };
+
     router.post('/lessons', (_req, res) => {
       const id = randomBytes(9).toString('hex');
       const tutor = new StrokeTutor();
       lessons.set(id, { tutor, at: Date.now() });
       for (const [key, l] of lessons) if (Date.now() - l.at > 3 * 3600_000) lessons.delete(key);
-      res.json({ id, outcome: { view: tutor.snapshot(), handled: true, event: say.opening() } satisfies Outcome });
+      res.json({ id, view: tutor.snapshot(), opening: say.opening() });
     });
 
     router.get('/lessons/:id', (req, res) => {
-      const lesson = lessons.get(req.params.id);
+      const lesson = lessonOf(req.params.id);
       if (!lesson) return void res.status(404).json({ error: 'no_lesson' });
       res.json(lesson.tutor.snapshot());
     });
 
-    // { intent } from the page's controls and canvas, or { text } the learner typed or said.
-    router.post('/lessons/:id/act', async (req, res) => {
-      const lesson = lessons.get(req.params.id);
+    // Ren's tool calls: the result is what Ren says next.
+    router.post('/lessons/:id/tool', (req, res) => {
+      const lesson = lessonOf(req.params.id);
       if (!lesson) return void res.status(404).json({ error: 'no_lesson' });
-      lesson.at = Date.now();
-      const { intent, text } = (req.body ?? {}) as { intent?: Intent; text?: string };
-      if (intent && typeof intent === 'object') {
-        const points = (intent as { points?: unknown }).points;
-        if (Array.isArray(points) && points.length > MAX_POINTS_ACCEPTED) return void res.status(413).json({ error: 'too_many_points' });
-        return void res.json(perform(lesson.tutor, intent, 'panel'));
-      }
-      const said = typeof text === 'string' ? text.trim() : '';
-      if (!said) return void res.status(400).json({ error: 'nothing_to_do' });
-      const judged = await judge(lesson, said);
-      if (!judged) return void res.json({ view: lesson.tutor.snapshot(), handled: false } satisfies Outcome);
-      res.json(perform(lesson.tutor, judged, 'words'));
+      const { name, arguments: args } = (req.body ?? {}) as { name?: string; arguments?: Record<string, unknown> };
+      if (!name || !TOOLS_BY_NAME.has(name)) return void res.status(400).json({ error: 'unknown_tool' });
+      const done = runTool(lesson.tutor, name, args ?? {});
+      res.json({ view: done.view, result: done.text } satisfies { view: Snapshot; result: string });
+    });
+
+    // The learner's buttons: Ren cannot see them, so Ren is told. A refusal is
+    // shown on the sheet and not spoken: the button was simply not available.
+    router.post('/lessons/:id/act', (req, res) => {
+      const lesson = lessonOf(req.params.id);
+      if (!lesson) return void res.status(404).json({ error: 'no_lesson' });
+      const { command, character } = (req.body ?? {}) as { command?: Command; character?: string };
+      const button = command && Object.hasOwn(BUTTONS, command) ? BUTTONS[command] : null;
+      if (!button) return void res.status(400).json({ error: 'unknown_command' });
+      const done = runTool(lesson.tutor, button[0], { character });
+      const label = command === 'choose' ? `${done.view.character?.glyph ?? character}, on the menu` : button[1];
+      res.json({ view: done.view, refused: done.refused, event: done.refused ? undefined : pressed(label, done.text) });
+    });
+
+    // A stroke drawn on the sheet, in grid units: graded here, never by Ren.
+    router.post('/lessons/:id/stroke', (req, res) => {
+      const lesson = lessonOf(req.params.id);
+      if (!lesson) return void res.status(404).json({ error: 'no_lesson' });
+      const points = (req.body as { points?: unknown } | undefined)?.points;
+      if (!Array.isArray(points)) return void res.status(400).json({ error: 'no_points' });
+      if (points.length > MAX_POINTS_ACCEPTED) return void res.status(413).json({ error: 'too_many_points' });
+      const outcome = perform(lesson.tutor, { kind: 'stroke', points }, 'panel');
+      res.json({ view: outcome.view, refused: outcome.refused, event: outcome.refused ? undefined : outcome.event });
     });
   },
 };

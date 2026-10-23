@@ -1,41 +1,36 @@
-// Intents onto the chart, and what the avatar should hear about them. This is
-// the original's reducer (validate before mutate; refuse by name) plus the
-// decision its tool cues and narrator made: who speaks for a change.
+// Intents onto the chart: the original's reducer (validate before mutate;
+// refuse by name). A tool call, a button, a tap and the safety net all end
+// here, so there is one set of rules for what the chart accepts.
 //
-// - A control (tap, button, picker): the chart moves at once; the line about it
-//   is the narrator's (coalesced in the page, so three quick +1h clicks are one
-//   line). A refusal is told at once.
-// - A typed line: the app acted instead of the avatar, so every outcome is told.
-// - A spoken line: the avatar has ALREADY started its own reply, from the state
-//   it had. What that state staged (a star that is up, a figure that is up) is
-//   not told again; what it could not stage (another place or hour, a rise
-//   time, a refusal, a star with only catalogue-row facts) is.
-import { BRIGHTEST_WORDS, SkyChart } from './chart.ts';
-import { FACTS, findConstellation, findStar } from './catalog.ts';
-import { combine, say } from './director.ts';
+// What anybody is told about a change is decided elsewhere: a tool's result
+// in `actions.ts`, a control's line in the narrator (`narration` below).
+import { SkyChart } from './chart.ts';
+import { told } from './director.ts';
 import { epochForNight, nightOf, SkyError, tonight } from './sky.ts';
-import type { How, Intent, SkyView } from './types.ts';
+import type { Intent, SkyView } from './types.ts';
 import { materialChange, type Change } from './words.ts';
 
-export interface Outcome {
+export interface Applied {
   before: SkyView;
   view: SkyView;
-  /** Each refusal's sentence, for the chart to show (the avatar is told too). */
+  /** Each refusal's sentence, for the chart to show and the host to say. */
   refusals: string[];
+  /** The intents the chart accepted, in order. */
+  accepted: Intent[];
   /** The material change, if any (place > time > star > figure). */
   change: Change | null;
-  /** What to tell the avatar now, or null. */
-  event: string | null;
-  /** A control's change: the narrator says the line, coalesced. */
-  narrate: boolean;
 }
 
-export interface ActOptions {
-  /** Every name in the request was said as the catalogue says it (no alias or
-   *  mishearing): only then can the avatar have answered it from the state. */
-  exact?: boolean;
+export interface ApplyOptions {
   /** The real time now (unix seconds), for "tonight", "midnight" and clock hours. */
   now?: number;
+  /**
+   * A new place keeps the hour of the night rather than the instant: "the sky
+   * from Lisbon" while the chart shows Taipei at 9 pm is Lisbon at 9 pm that
+   * night, which is what someone asking means (the same instant would be
+   * Lisbon at 1 in the afternoon). On unless a time is asked for alongside.
+   */
+  keepHour?: boolean;
 }
 
 const INTENT_KINDS = ['set_place', 'set_time', 'select', 'show_constellation', 'clear_selection', 'clear_figure'];
@@ -96,78 +91,51 @@ function nextDate(from: string, when: { month?: number; day?: number; season?: k
   return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-/** Could the avatar have answered this from the state it had before? */
-function staged(intent: Intent, before: SkyView): boolean {
-  if (intent.kind === 'select') {
-    const asked = intent.star.trim().toLowerCase();
-    const star = BRIGHTEST_WORDS.includes(asked) ? before.snapshot.visible[0] : findStar(intent.star);
-    if (!star) return false;
-    const up = before.snapshot.visible.some((v) => v.id === star.id);
-    // A star with authored lines had them in the notes; one without has only
-    // its catalogue row, which arrives with the marking, so it is told.
-    return up && Boolean(FACTS[star.id]);
-  }
-  if (intent.kind === 'show_constellation') {
-    const con = findConstellation(intent.name);
-    return Boolean(con && before.figures.some((f) => f.con === con && f.up));
-  }
-  return false;
-}
-
 /**
- * Apply a request (one or more intents, in order) and decide what the avatar is
- * told. Each intent is validated on its own: a refused place does not stop the
- * time move asked for in the same breath, and a refused intent leaves the chart
- * exactly as it was.
+ * Apply intents in order. Each is validated on its own: a refused place does
+ * not stop the time move asked for in the same breath, and a refused intent
+ * leaves the chart exactly as it was.
  */
-export function act(chart: SkyChart, intents: Intent[], how: How, { exact = true, now = Date.now() / 1000 }: ActOptions = {}): Outcome {
+export function apply(chart: SkyChart, intents: Intent[], { now = Date.now() / 1000, keepHour = true }: ApplyOptions = {}): Applied {
   const before = chart.view();
   const refusals: string[] = [];
-  const told: Intent[] = [];
-  // A star that was up a moment ago says nothing about where it is after a
-  // move asked for in the same breath ("show me Vega at midnight").
-  const moves = intents.some((i) => i.kind === 'set_place' || i.kind === 'set_time');
+  const accepted: Intent[] = [];
+  const timed = intents.some((i) => i.kind === 'set_time');
   for (const intent of intents) {
     if (!INTENT_KINDS.includes(intent.kind)) {
       refusals.push(`'${intent.kind}' isn't something I can do to the sky.`);
       continue;
     }
     try {
+      const night = nightOf(chart.epoch, chart.tz);
       applyOne(chart, intent, now);
-      if (how === 'typed' || !exact || moves || !staged(intent, before)) told.push(intent);
+      if (intent.kind === 'set_place' && keepHour && !timed) {
+        const epoch = epochForNight(night.date, night.hours, chart.tz);
+        try {
+          if (epoch !== null) chart.setTime({ epoch });
+        } catch (err) {
+          if (!(err instanceof SkyError)) throw err;   // at the edge of 1900 or 2100: the instant stays
+        }
+      }
+      accepted.push(intent);
     } catch (err) {
       if (!(err instanceof SkyError)) throw err;
       refusals.push(err.message);
     }
   }
   const view = chart.view();
-  const change = materialChange(before.snapshot, view.snapshot);
-
-  if (how === 'control') {
-    return { before, view, refusals, change, event: combine(refusals.map(say.refused)), narrate: change !== null };
-  }
-
-  const parts: string[] = [];
-  const moved = before.snapshot.where.label !== view.snapshot.where.label;
-  const turned = before.snapshot.when.epoch !== view.snapshot.when.epoch;
-  if (moved) parts.push(say.placeMoved(before, view));
-  else if (turned) parts.push(say.timeMoved(before, view));
-  else if (how === 'typed' && told.some((i) => i.kind === 'set_place' || i.kind === 'set_time')) parts.push(say.unchanged(view));
-  if (told.some((i) => i.kind === 'show_constellation') && view.snapshot.figure) parts.push(say.figure(view));
-  if (told.some((i) => i.kind === 'select') && view.snapshot.fact) parts.push(say.pointed(view));
-  parts.push(...refusals.map(say.refused));
-  return { before, view, refusals, change, event: combine(parts), narrate: false };
+  return { before, view, refusals, accepted, change: materialChange(before.snapshot, view.snapshot) };
 }
 
-/** The narrator's line for a control's change (the original change cue): place
- *  and time with what rose and set, a tapped star with its fact, a lit figure
- *  with where to look. Null for changes nobody needs narrated. */
+/** The line for a change made with the chart's own controls (the original
+ *  change cue): place and time with what rose and set, a tapped star with its
+ *  fact, a lit figure with where to look. Null for changes nobody needs told. */
 export function narration(before: SkyView, after: SkyView): string | null {
   switch (materialChange(before.snapshot, after.snapshot)) {
-    case 'place': return say.placeMoved(before, after);
-    case 'time': return say.timeMoved(before, after);
-    case 'star': return say.tapped(after);
-    case 'figure': return say.figure(after);
+    case 'place': return told.placeMoved(before, after);
+    case 'time': return told.timeMoved(before, after);
+    case 'star': return told.tapped(after);
+    case 'figure': return told.figure(after);
     default: return null;
   }
 }

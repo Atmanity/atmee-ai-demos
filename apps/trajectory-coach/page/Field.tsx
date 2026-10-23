@@ -3,17 +3,18 @@ import type { Aim, RangeSnapshot } from '../engine/types.ts';
 import { PAD, aimFromPointer, pointAt, project, sizeCanvas, worldView } from './scene.ts';
 
 /**
- * The range itself: a canvas seen from the side, drawn to scale (ported from
- * the panel's flight/Field.tsx; only the data layer changed).
+ * The range itself: a chalkboard seen from the side, drawn to scale (ported
+ * from the panel's flight/Field.tsx; only the data layer and the colours
+ * changed).
  *
  * Two kinds of local state live here and neither is a fact about the world.
  * The **drag** is a gesture (where a finger is right now) and it ends the
- * moment the pointer lifts, as a single `set_aim`; nothing is moved
- * optimistically, so a refused aim snaps back, which is the honest rendering
- * of "the launcher did not move". The **animation clock** is the other: this
- * component draws sixty frames a second along a curve the range computed, for
- * the `play_s` the range chose. It never lands the shot; the range does, on
- * its own clock, just after the animation ends.
+ * moment the pointer lifts, as a single aim; nothing is moved optimistically,
+ * so a refused aim snaps back, which is the honest rendering of "the launcher
+ * did not move". The **animation clock** is the other: this component draws
+ * sixty frames a second along a curve the range computed, for the `play_s`
+ * the range chose. It never lands the shot; the range does, on its own clock,
+ * just after the animation ends.
  *
  * What is deliberately absent is any physics. There is no preview arc while
  * you drag, only an arrow: an arc drawn here would be a second engine, and an
@@ -21,18 +22,20 @@ import { PAD, aimFromPointer, pointAt, project, sizeCanvas, worldView } from './
  * reasoning into a challenge about dragging until the dot sits on the target.
  */
 
+/** Chalk on slate: the page's palette (arcwise.css), as the canvas needs it. */
 const COLOURS = {
-  sky: '#0b1220',
-  ground: '#1f2a3a',
-  grid: '#1b2636',
-  ink: '#8aa0bd',
-  target: '#f0b429',
-  ceiling: '#ef6461',
-  arrow: '#38bdf8',
-  shot: '#e2e8f0',
-  cleared: '#4ade80',
-  missed: '#64748b',
+  board: '#1d3430',
+  grid: 'rgba(243, 240, 228, 0.07)',
+  ink: 'rgba(243, 240, 228, 0.55)',
+  ground: 'rgba(243, 240, 228, 0.8)',
+  target: '#f2c14e',
+  ceiling: '#ff8f6b',
+  arrow: '#5fd3c3',
+  shot: '#ff6a2b',
+  cleared: '#7fdc8f',
+  missed: 'rgba(243, 240, 228, 0.45)',
 };
+const MONO = '"IBM Plex Mono", ui-monospace, Menlo, monospace';
 
 export function Field({ state, seq, onAim, locked: lockedFromOutside }: {
   state: RangeSnapshot;
@@ -157,16 +160,16 @@ export function Field({ state, seq, onAim, locked: lockedFromOutside }: {
 
   const aim = drag ?? state.aim;
   return (
-    <div className="tc-field" ref={wrapRef}>
+    <div className="aw-field-canvas" ref={wrapRef}>
       <canvas
         ref={canvasRef}
-        className={`tc-canvas${locked ? ' tc-canvas--locked' : ''}`}
+        className={`aw-canvas${locked ? ' is-locked' : ''}`}
         style={{ width: '100%', height: '100%' }}
         onPointerDown={startDrag}
         role="img"
         aria-label={`${state.challenge.name}: ${state.challenge.blurb} Aimed at ${aim.angle_deg} degrees, ${aim.speed_ms} metres a second.`}
       />
-      {drag && <div className="tc-drag-readout">{drag.angle_deg}° · {drag.speed_ms} m/s</div>}
+      {drag && <div className="aw-drag-readout" aria-hidden="true">{drag.angle_deg}° · {drag.speed_ms} m/s</div>}
     </div>
   );
 }
@@ -180,7 +183,7 @@ type Box = { width: number; height: number };
 type Projection = ReturnType<typeof project>;
 
 function drawBackdrop(ctx: Ctx, box: Box, projection: Projection, view: { xMax: number }) {
-  ctx.fillStyle = COLOURS.sky;
+  ctx.fillStyle = COLOURS.board;
   ctx.fillRect(0, 0, box.width, box.height);
 
   const stepChoices = [5, 10, 20, 25, 50, 100];
@@ -188,7 +191,7 @@ function drawBackdrop(ctx: Ctx, box: Box, projection: Projection, view: { xMax: 
   ctx.strokeStyle = COLOURS.grid;
   ctx.fillStyle = COLOURS.ink;
   ctx.lineWidth = 1;
-  ctx.font = '11px system-ui, sans-serif';
+  ctx.font = `11px ${MONO}`;
   ctx.textAlign = 'center';
   for (let x = step; x <= view.xMax; x += step) {
     const [sx] = projection.toScreen(x, 0);
@@ -213,10 +216,13 @@ function drawTarget(ctx: Ctx, state: RangeSnapshot, projection: Projection, box:
   ctx.fillStyle = COLOURS.target;
   ctx.lineWidth = 2;
 
+  ctx.font = `600 11px ${MONO}`;
+  ctx.textAlign = 'center';
   if (target.kind === 'wall' && target.x_m !== undefined && target.h_m !== undefined) {
     const [x, top] = projection.toScreen(target.x_m, target.h_m);
     const width = Math.max(4, 0.6 * projection.scale);
     ctx.fillRect(x - width / 2, top, width, projection.originY - top);
+    ctx.fillText(`${target.h_m} m`, x, top - 8);
   } else if (target.kind === 'zone' && target.x_m !== undefined && target.w_m !== undefined) {
     const [x1] = projection.toScreen(target.x_m - target.w_m / 2, 0);
     const [x2] = projection.toScreen(target.x_m + target.w_m / 2, 0);
@@ -225,6 +231,7 @@ function drawTarget(ctx: Ctx, state: RangeSnapshot, projection: Projection, box:
     ctx.moveTo(x1, projection.originY);
     ctx.lineTo(x2, projection.originY);
     ctx.stroke();
+    ctx.fillText('zone', (x1 + x2) / 2, projection.originY - 10);
   } else if (target.min_m !== undefined) {
     const [x] = projection.toScreen(target.min_m, 0);
     ctx.lineWidth = 2;
@@ -234,6 +241,7 @@ function drawTarget(ctx: Ctx, state: RangeSnapshot, projection: Projection, box:
     ctx.lineTo(x + 18, projection.originY - 20);
     ctx.lineTo(x, projection.originY - 14);
     ctx.stroke();
+    ctx.fillText(`${target.min_m} m`, x, projection.originY - 32);
   }
 
   if (ceiling_m !== null && ceiling_m !== undefined) {
@@ -248,6 +256,9 @@ function drawTarget(ctx: Ctx, state: RangeSnapshot, projection: Projection, box:
     ctx.lineTo(box.width - PAD.right, y);
     ctx.stroke();
     ctx.setLineDash([]);
+    ctx.fillStyle = COLOURS.ceiling;
+    ctx.textAlign = 'right';
+    ctx.fillText(`roof ${ceiling_m} m`, box.width - PAD.right, y - 6);
   }
 }
 
@@ -266,7 +277,7 @@ function drawShot(ctx: Ctx, state: RangeSnapshot, projection: Projection, progre
   if (!shot || state.phase === 'aiming') return;
   const done = state.phase !== 'flying';
   ctx.strokeStyle = shot.cleared ? COLOURS.cleared : COLOURS.shot;
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2.5;
   ctx.globalAlpha = done ? 0.9 : 1;
   strokePath(ctx, shot.path, projection, done ? 1 : progress);
   ctx.globalAlpha = 1;
@@ -275,7 +286,7 @@ function drawShot(ctx: Ctx, state: RangeSnapshot, projection: Projection, progre
   const [sx, sy] = projection.toScreen(x, y);
   ctx.fillStyle = shot.cleared ? COLOURS.cleared : COLOURS.shot;
   ctx.beginPath();
-  ctx.arc(sx, sy, 4.5, 0, Math.PI * 2);
+  ctx.arc(sx, sy, 5, 0, Math.PI * 2);
   ctx.fill();
 }
 
@@ -312,7 +323,11 @@ function drawArrow(ctx: Ctx, aim: Aim, projection: Projection, box: Box, limits:
   ctx.arc(x, y, 5, 0, Math.PI * 2);
   ctx.fill();
 
+  ctx.fillStyle = COLOURS.ground;
   ctx.beginPath();
-  ctx.arc(projection.originX, projection.originY, 7, Math.PI, Math.PI * 2);
+  ctx.moveTo(projection.originX - 11, projection.originY);
+  ctx.lineTo(projection.originX, projection.originY - 9);
+  ctx.lineTo(projection.originX + 11, projection.originY);
+  ctx.closePath();
   ctx.fill();
 }

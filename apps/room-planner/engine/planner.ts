@@ -117,13 +117,36 @@ export class Planner {
         // Which floor you are on changes what a brief MEANS: upstairs defaults
         // to sleeping accommodation and inherits the stairs from below.
         const upstairs = home.active > 0;
-        const shape = generate(level, slotsFor(intent, upstairs), {
-          style: str(intent.style) || 'day_night',
-          entryWall: str(intent.entry_wall) || 'south',
-          reserve: upstairs ? home.stairsRect() : null,
-          frontDoor: !upstairs,
-        });
-        return { kind, label: `laid out the ${level.name} floor (${lower(shape.label)})`, typology: { key: shape.key, label: shape.label, note: shape.note } };
+        // A brief can carry the size of the place (w, h in centimetres). The
+        // floor is replaced anyway, so it is emptied before the envelope
+        // changes: resizing first as its own step refused any shrink ("it would
+        // cut into the kitchen") and the layout then went ahead at the old
+        // size. One step, so one undo takes the whole thing back.
+        const sized = intent.w !== undefined && intent.w !== null && intent.h !== undefined && intent.h !== null;
+        const before = sized ? level.capture() : null;
+        try {
+          if (sized) {
+            level.owner.clear();
+            level.rooms.clear();
+            level.openings = [];
+            level.items = [];
+            level.structural.clear();
+            level.setEnvelope(intent.w, intent.h);
+          }
+          const shape = generate(level, slotsFor(intent, upstairs), {
+            style: str(intent.style) || 'day_night',
+            entryWall: str(intent.entry_wall) || 'south',
+            reserve: upstairs ? home.stairsRect() : null,
+            frontDoor: !upstairs,
+          });
+          return {
+            kind, label: `laid out the ${level.name} floor (${lower(shape.label)})`, typology: { key: shape.key, label: shape.label, note: shape.note },
+            ...(sized ? { size: { w_cm: level.w_cm, h_cm: level.h_cm } } : {}),
+          };
+        } catch (err) {
+          if (before) level.restore(before);
+          throw err;
+        }
       }
       case 'set_envelope': {
         level.setEnvelope(intent.w, intent.h);

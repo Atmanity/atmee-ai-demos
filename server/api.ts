@@ -1,6 +1,6 @@
 // /api: the apps (discovered from apps/<id>/server.ts), their sessions, and
 // each app's own routes under /api/apps/<id>/.
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import type { AppServer } from './app-server.ts';
 import { endSession, setConductor, startSession } from './atmee.ts';
@@ -17,8 +17,19 @@ for (const dir of readdirSync('apps').sort()) {
   }
 }
 
+// Each app's host: AVATAR_<APP_ID> in the environment, else the dedicated
+// avatar in the app's avatar.json (`avatarId`), else AVATAR_DEFAULT.
+const ownAvatar = new Map<string, string>();
+for (const dir of readdirSync('apps')) {
+  try {
+    const id = JSON.parse(readFileSync(`apps/${dir}/avatar.json`, 'utf8')).avatarId;
+    if (typeof id === 'string' && id) ownAvatar.set(dir, id);
+  } catch {
+    // no avatar.json, or no dedicated host yet
+  }
+}
 const avatarFor = (id: string) =>
-  process.env[`AVATAR_${id.toUpperCase().replace(/-/g, '_')}`] || process.env.AVATAR_DEFAULT || '';
+  process.env[`AVATAR_${id.toUpperCase().replace(/-/g, '_')}`] || ownAvatar.get(id) || process.env.AVATAR_DEFAULT || '';
 
 // Which app's agenda each avatar carries now, so a shared avatar is switched
 // only when the app changes.

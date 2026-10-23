@@ -1,7 +1,7 @@
 // What the server and the page share. The engine runs on the server (it
 // calls the plan model and the video provider, and it is the one writer of
-// the board); the page draws a View and keeps the avatar's state in step
-// with it.
+// the board); the page draws a View and keeps the host's picture of the
+// screen in step with it.
 //
 // The plan, flow, video and constraint shapes are the original app's wire
 // payloads, field for field, so the ported panel parsers read them unchanged.
@@ -81,25 +81,15 @@ export interface View {
   seed: string;
 }
 
-/** Something for the avatar to say in its own words. */
+/** Something for the host to say in its own words: a tool's result, or an event. */
 export interface AvatarEvent {
   text: string;
   ttl: number;
-  /**
-   * The avatar's state already told it what to say for this (it was
-   * "pre-staged"). When the input was speech, the avatar has already said it
-   * in its own reply, so the page does not send the event again.
-   */
-  staged?: boolean;
 }
 
 export interface Outcome {
   view: View;
-  /**
-   * For a typed line: whether the app acted on it and its events cover it
-   * (the page records the line), or whether the avatar should answer it
-   * itself (the page sends it as a typed turn).
-   */
+  /** Whether the coach acted on the input (false: there was nothing for it to do). */
   handled: boolean;
   events: AvatarEvent[];
   /** A tap the app would not take, in words for the board. */
@@ -109,17 +99,14 @@ export interface Outcome {
 export type Level = 'Beginner' | 'Intermediate' | 'Advanced';
 export const LEVELS: Level[] = ['Beginner', 'Intermediate', 'Advanced'];
 
-/** What a tap, a typed line or an utterance asks the app to do. */
+/** What a tap or one of the host's tool calls asks the coach to do. */
 export type Intent =
   | { kind: 'goal'; goal: string; level?: Level }
   | { kind: 'level'; level: Level }
   | { kind: 'move'; move: string }
-  | { kind: 'demo'; move: string | null }
   | { kind: 'relevel'; level: Level }
   | { kind: 'restart' }
   | { kind: 'unknownMove'; heard: string };
 
 /** The buttons on the board. */
 export type Command = 'goal' | 'level' | 'move' | 'relevel' | 'restart';
-
-export type How = 'tap' | 'typed' | 'spoken';

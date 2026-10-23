@@ -5,9 +5,9 @@
  * real branching (which world the user is looking at) as pure functions, so it
  * is tested without a DOM. The goal deal moved to `engine/goals.ts` (the
  * avatar's state names the same six goals the board shows) and is re-exported
- * here. New in this port: the move and level controls (`moveAction`,
- * `videoLabel`), because the avatar cannot record a choice: the board must
- * offer every one.
+ * here. The move buttons' words (`moveAction`) and the video label
+ * (`videoLabel`) are Spotter's: every choice the coach can be asked for out
+ * loud has a control on the board too.
  */
 
 import { clearanceNotice } from './parsers.ts';
@@ -237,35 +237,34 @@ export function emptySectionNotice(c: FitnessConstraints, section: PlanSection):
 }
 
 /* -------------------------------------------------------------------------
- * New in this port: the controls the avatar's tools used to be
+ * The plan's move buttons, and the move video's caption
  * ---------------------------------------------------------------------- */
 
 /** Which flow step the board is at, as the server's stage names it. */
 export type BoardStage = 'goal' | 'level' | 'planning' | 'move' | 'coach' | 'hold';
 
 /**
- * What tapping a plan move does, or `''` when moves cannot be tapped.
- *
- * In the original, the starting move could only be SAID (there was no move
- * tap), because a tool call recorded it. Here every choice needs a control.
+ * What tapping a plan move does, in the button's words, or `''` when moves
+ * cannot be tapped (no call, no plan yet, or the workout is paused).
  */
 export function moveAction(stage: BoardStage, demos: boolean, live: boolean): string {
   if (!live) return '';
   if (stage === 'move') return 'Start here';
-  if (stage === 'coach') return demos ? 'Demo' : 'Coach me';
+  if (stage === 'coach') return demos ? 'Show me' : 'Switch to';
   return '';
 }
 
 /**
- * The video stage's label. Always says which world it is in, because a
- * prominent empty box reads as broken (the original brief's own rule).
+ * The move video's label. Always says which world it is in, because a
+ * prominent empty box reads as broken (the original brief's own rule); and
+ * without videos the move is simply coached in words.
  */
 export function videoLabel(video: FitnessVideo | null, demos: boolean): string {
   switch (video?.status) {
-    case 'ready': return 'Demo ready';
-    case 'generating': return 'Rendering demo';
-    case 'error': return 'Demo failed';
-    case 'unavailable': return 'Demos are off';
-    default: return demos ? 'Choose a starting move' : 'Demos are off';
+    case 'ready': return 'Video ready';
+    case 'generating': return 'Making your video';
+    case 'error': return 'Video didn’t come through';
+    case 'unavailable': return 'Coached in words';
+    default: return demos ? 'Pick a move to see it' : 'Coached in words';
   }
 }

@@ -1,14 +1,10 @@
-// Turning words into board actions: real phrasings, with the context they are
-// said in. The name filter is ported from test_the_trip_is_kept.py; the rest
-// is new (the original's model called tools; this app reads the words itself).
+// What the app checks itself: a name is a name, a control's action is well
+// formed, and the safety net acts only on words that clearly ask for
+// something safe to do twice. The name filter is ported from
+// test_the_trip_is_kept.py.
 import { describe, expect, test } from 'vitest';
-import { actionFrom, actionIn, avatarPick, isAName, nameIn, placeIn, ruleAction, type JudgeContext } from './judge.ts';
-import type { Action } from './types.ts';
-
-const PLANNING: JudgeContext = { stage: 'planning', current: 'Japan', visited: ['Japan'], hasSpots: false, spoken: true };
-const WELCOME: JudgeContext = { stage: 'welcome', current: '', visited: [], hasSpots: false, spoken: true };
-const AROUND: JudgeContext = { stage: 'around', current: 'Japan', visited: ['Japan', 'Peru'], hasSpots: true, spoken: true };
-const TRIP: JudgeContext = { stage: 'planning', current: 'Peru', visited: ['Japan', 'Peru'], hasSpots: false, spoken: true };
+import { actionIn, isAName, mustDo, netContext, titleCase, type NetCall, type NetContext } from './judge.ts';
+import type { Snapshot } from './types.ts';
 
 describe('names', () => {
   // The board invites "tell me where you are dreaming of"; typed as the first
@@ -21,124 +17,67 @@ describe('names', () => {
     expect(isAName(said)).toBe(true);
   });
 
-  test('said outright, or answered right after being asked', () => {
-    expect(nameIn('My name is Sam.')).toBe('Sam');
-    expect(nameIn('call me mei lin please')).toBe('Mei Lin');
-    expect(nameIn("I'm Sam, and I'm dreaming of Japan", 'What should I call you?')).toBe('Sam');
-    expect(nameIn('Sam!', 'Hi, I am your guide. What would you like me to call you?')).toBe('Sam');
-    expect(nameIn("It's Ana Sofia.", "What's your name?")).toBe('Ana Sofia');
-  });
-
-  test('a bare word is not a name unless the guide just asked for one, and a country is never one by implication', () => {
-    expect(nameIn('Sam')).toBeNull();
-    expect(nameIn("I'm hungry", 'What should I call you?')).toBeNull();
-    expect(nameIn('Japan', 'What should I call you, and where are you dreaming of?')).toBeNull();
-    expect(nameIn('My name is Georgia')).toBe('Georgia');
+  test('written the way people write names', () => {
+    expect(titleCase('mei lin')).toBe('Mei Lin');
+    expect(titleCase('anne-marie')).toBe('Anne-Marie');
   });
 });
 
-describe('places', () => {
-  test.each<[string, string | null]>([
-    ["I'm near Shibuya station", 'shibuya station'],
-    ['We are staying in Lisbon for a week', 'lisbon'],
-    ["I'm at the Louvre right now", 'the louvre'],
-    ["What's worth seeing around the Colosseum?", 'the colosseum'],
-    ['near Union Square', 'union square'],
-    ["What's near me?", ''],
-    ['anything good nearby', ''],
-    ["I'm at home", ''],
-    ["I'm in the mood for Italian food", null],
-    ['I am in love with Japan', null],
-    ['Tell me about Japan', null],
-  ])('%s', (said, place) => {
-    expect(placeIn(said)?.place ?? null).toBe(place);
-  });
-});
-
-describe('the rules', () => {
-  const cases: [string, JudgeContext, Action | null][] = [
-    // planning a trip
-    ["I'm dreaming of Japan", WELCOME, { kind: 'destination', country: 'Japan' }],
-    ["Let's go to Portugal!", PLANNING, { kind: 'destination', country: 'Portugal' }],
-    ['Peru.', PLANNING, { kind: 'destination', country: 'Peru' }],
-    ['How about Peru instead?', PLANNING, { kind: 'destination', country: 'Peru' }],
-    ['Maybe somewhere in Asia, like Vietnam', WELCOME, { kind: 'destination', country: 'Vietnam', continent: 'Asia' }],
-    ['Somewhere in South America', WELCOME, { kind: 'continent', continent: 'South America' }],
-    ['the UK', WELCOME, { kind: 'destination', country: 'United Kingdom' }],
-    ['You choose!', WELCOME, { kind: 'pick' }],
-    ['surprise me', PLANNING, { kind: 'pick' }],
-    ["Let's plan a trip", WELCOME, { kind: 'show', stage: 'planning' }],
-    ['How about Bali?', PLANNING, { kind: 'search', query: 'Bali' }],
-    ["I'm at home dreaming of Japan", WELCOME, { kind: 'destination', country: 'Japan' }],
-    // the trip
-    ['Back to Japan', TRIP, { kind: 'revisit', country: 'Japan' }],
-    ['Can we go back to the first one?', TRIP, { kind: 'revisit', country: 'Japan' }],
-    ['the previous country please', TRIP, { kind: 'revisit', country: 'Japan' }],
-    // headlines and food
-    ["What's in the news there?", PLANNING, { kind: 'news' }],
-    ['show me the headlines', PLANNING, { kind: 'news' }],
-    ['What should I eat?', PLANNING, { kind: 'food' }],
-    ["I'm in the mood for Italian food", PLANNING, { kind: 'food' }],
-    // around them
-    ["I'm near Shibuya station", WELCOME, { kind: 'around', place: 'shibuya station' }],
-    ["What's near me?", PLANNING, { kind: 'show', stage: 'around' }],
-    ['Another one!', AROUND, { kind: 'next' }],
-    ['what else is there?', AROUND, { kind: 'next' }],
-    ['Go back to the one before', AROUND, { kind: 'previous' }],
-    ['go back to Peru', AROUND, { kind: 'revisit', country: 'Peru' }],
+describe('the safety net', () => {
+  const WORLD: NetContext = { stage: 'welcome', current: '', visited: [], newsAvailable: true, foodShown: false, newsShown: false, sight: null };
+  const JAPAN: NetContext = { ...WORLD, stage: 'planning', current: 'Japan', visited: ['Peru', 'Japan'] };
+  const SIGHTS: NetContext = { ...JAPAN, stage: 'around', sight: { index: 1, total: 4 } };
+  const cases: [string, NetContext, NetCall | null][] = [
+    // a country named plainly as where to go
+    ["Let's go to Portugal!", WORLD, { name: 'choose_destination', arguments: { place: 'Portugal' } }],
+    ["I'm dreaming of Japan", WORLD, { name: 'choose_destination', arguments: { place: 'Japan' } }],
+    ['Take me to Peru instead of Japan', WORLD, { name: 'choose_destination', arguments: { place: 'Peru' } }],
+    ['How about Iceland?', JAPAN, { name: 'choose_destination', arguments: { place: 'Iceland' } }],
+    ["Let's go to Niger", WORLD, { name: 'choose_destination', arguments: { place: 'Niger' } }],
+    ["I don't want to go to Peru", WORLD, null],
+    ['I loved Japan when I went', WORLD, null],
+    ['How about Bali?', WORLD, null], // not a country: the host finds where it is
+    ["Let's go to Japan", JAPAN, null], // already there
+    // back to a country on the route
+    ['Back to Peru, please', JAPAN, { name: 'choose_destination', arguments: { place: 'Peru' } }],
+    ['Take me back to Japan', SIGHTS, { name: 'choose_destination', arguments: { place: 'Japan' } }], // from its sights to its page
+    ['back to Japan', JAPAN, null], // it is on screen
+    // food and news for the country on the map
+    ['What should I eat there?', JAPAN, { name: 'show_food', arguments: {} }],
+    ['Any good food?', JAPAN, { name: 'show_food', arguments: {} }],
+    ["What's in the news there?", JAPAN, { name: 'show_news', arguments: {} }],
+    ['What should I eat there?', { ...JAPAN, foodShown: true }, null], // on screen already
+    ['Any headlines?', { ...JAPAN, newsAvailable: false }, null],
+    ['What do they eat in Peru?', JAPAN, null], // another country: the host's call
+    ['What should I eat?', WORLD, null], // no country yet
+    // the sights, one at a time
+    ['Another one, please.', SIGHTS, { name: 'next_sight', arguments: { from: 1 } }],
+    ['next', SIGHTS, { name: 'next_sight', arguments: { from: 1 } }],
+    ['What else is there?', SIGHTS, { name: 'next_sight', arguments: { from: 1 } }],
+    ['Go back to the one before', SIGHTS, { name: 'previous_sight', arguments: { from: 1 } }],
+    ['The previous one', SIGHTS, { name: 'previous_sight', arguments: { from: 1 } }],
+    ['Is it next to the river?', SIGHTS, null],
+    ['another one', { ...SIGHTS, sight: { index: 3, total: 4 } }, null], // the last
+    ['the one before', { ...SIGHTS, sight: { index: 0, total: 4 } }, null], // the first
+    ['another one', JAPAN, null], // no sights on screen
     // not the board's business
-    ['That sounds lovely', PLANNING, null],
-    ["What's the weather like there in May?", PLANNING, null],
-    ['Tell me more about it', AROUND, null],
-    ['Japan is beautiful', PLANNING, null],
-    ['another one', PLANNING, null], // no spots: nothing to move to
+    ['That sounds lovely', JAPAN, null],
+    ["What's the weather like there in May?", JAPAN, null],
+    ["What's worth seeing around Shibuya station?", JAPAN, null], // exploring is the host's: the place is its to read
   ];
   test.each(cases)('%s', (said, ctx, expected) => {
-    expect(ruleAction(said, ctx)).toEqual(expected);
+    expect(mustDo(said, ctx)).toEqual(expected);
   });
 
-  test('"yes please" is whatever the guide just offered, when it offered one thing', () => {
-    expect(ruleAction('Yes please', { ...PLANNING, lastAvatarLine: 'Shall I pull up the latest headlines?' })).toEqual({ kind: 'news' });
-    expect(ruleAction('Sure!', { ...PLANNING, lastAvatarLine: 'Want to hear what to eat there?' })).toEqual({ kind: 'food' });
-    expect(ruleAction('yeah', { ...AROUND, lastAvatarLine: 'Want the next one?' })).toEqual({ kind: 'next' });
-    expect(ruleAction('Yes', { ...WELCOME, lastAvatarLine: 'Shall I pick somewhere for you?' })).toEqual({ kind: 'pick' });
-    expect(ruleAction('Yes please', { ...PLANNING, lastAvatarLine: 'The headlines, or the food?' })).toBeNull();
-    // The guide proposed a country: "yes" puts it on the map (the guide often offers one when asked for a continent).
-    expect(ruleAction('Yes!', { ...WELCOME, lastAvatarLine: 'Asia is wonderful. How about Vietnam?' })).toEqual({ kind: 'destination', country: 'Vietnam' });
-    expect(ruleAction('sounds great', { ...TRIP, lastAvatarLine: 'Shall we go back to Japan?' })).toEqual({ kind: 'revisit', country: 'Japan' });
-    expect(ruleAction('Yes', { ...WELCOME, lastAvatarLine: 'I loved my time in Japan.' })).toBeNull(); // a memory, not an offer
-  });
-
-  test('a place after "how about" must sound like a name when spoken, or "a beach" would geocode to a town called Beach', () => {
-    expect(ruleAction('how about a beach', PLANNING)).toBeNull();
-    expect(ruleAction('how about bali', PLANNING)).toBeNull();
-    expect(ruleAction('how about bali', { ...PLANNING, spoken: false })).toEqual({ kind: 'search', query: 'bali' });
-    expect(ruleAction('how about a beach', { ...PLANNING, spoken: false })).toBeNull();
-  });
-
-  test('a country that contains another is read whole', () => {
-    expect(ruleAction("Let's go to Niger", WELCOME)).toEqual({ kind: 'destination', country: 'Niger' });
-    expect(ruleAction("Let's go to Papua New Guinea", WELCOME)).toEqual({ kind: 'destination', country: 'Papua New Guinea' });
-  });
-});
-
-describe("the model's answer, checked like the rules", () => {
-  test('is turned into an action', () => {
-    expect(actionFrom({ action: 'destination', country: 'Japan', city: 'Kyoto' }, WELCOME)).toEqual({ kind: 'destination', country: 'Japan', city: 'Kyoto' });
-    expect(actionFrom({ action: 'destination', country: '', city: 'Kyoto' }, WELCOME)).toEqual({ kind: 'search', query: 'Kyoto' });
-    expect(actionFrom({ action: 'destination', country: 'Japan' }, TRIP)).toEqual({ kind: 'revisit', country: 'Japan' });
-    expect(actionFrom({ action: 'around', place: 'Gion' }, PLANNING)).toEqual({ kind: 'around', place: 'Gion' });
-    expect(actionFrom({ action: 'nearby' }, PLANNING)).toEqual({ kind: 'show', stage: 'around' });
-    expect(actionFrom({ action: 'news' }, PLANNING)).toEqual({ kind: 'news' });
-  });
-
-  test('and refused where the rules would refuse', () => {
-    expect(actionFrom({ action: 'name', name: 'dreaming of Japan' }, WELCOME)).toBeNull();
-    expect(actionFrom({ action: 'destination', country: 'Japan' }, PLANNING)).toBeNull(); // already there
-    expect(actionFrom({ action: 'next' }, PLANNING)).toBeNull(); // no spots
-    expect(actionFrom({ action: 'none' }, PLANNING)).toBeNull();
-    expect(actionFrom({ action: 'launch rockets' }, PLANNING)).toBeNull();
-    expect(actionFrom(null, PLANNING)).toBeNull();
+  test('reads its context from the board', () => {
+    const s: Snapshot = {
+      seq: 3, stage: 'around', travelerName: '', continent: '', pending: false, newsAvailable: false,
+      map: { country: 'Japan', isoCode: 'JP', city: '', center: [36, 138], bbox: null, outline: null, attribution: '' },
+      news: null, food: { country: 'Japan', dishes: [], shown: true, loading: false },
+      spot: { place: 'Kyoto', origin: null, index: 2, total: 5, lookupFailed: false, spot: { name: 'X', category: 'temple', lat: 35, lon: 135, distance: '', mapsUrl: '', imageUrl: null, summary: '' }, pins: [] },
+      trip: { current: 'Japan', visited: [{ country: 'Japan', city: '', dishes: [], headlineCount: 0, silhouette: null }] },
+    };
+    expect(netContext(s)).toEqual({ stage: 'around', current: 'Japan', visited: ['Japan'], newsAvailable: false, foodShown: true, newsShown: false, sight: { index: 2, total: 5 } });
   });
 });
 
@@ -153,14 +92,5 @@ describe('controls', () => {
 
   test.each([null, 'next', {}, { kind: 'launch' }, { kind: 'search', query: '' }, { kind: 'coords', lat: '1', lon: 2 }, { kind: 'show', stage: 'moon' }, { kind: 'goto', index: Number.NaN }])('anything else is no action: %j', (value) => {
     expect(actionIn(value)).toBeNull();
-  });
-});
-
-describe("the guide's own pick", () => {
-  test('is exactly one country it is not already showing', () => {
-    expect(avatarPick("Let's go to Portugal, you'll love the light.", '')).toBe('Portugal');
-    expect(avatarPick('Instead of Japan, how about Peru?', 'Japan')).toBe('Peru');
-    expect(avatarPick('Portugal, or maybe Greece?', '')).toBeNull();
-    expect(avatarPick('Do you like beaches or mountains?', '')).toBeNull();
   });
 });

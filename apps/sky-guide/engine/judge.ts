@@ -1,14 +1,14 @@
-// What an utterance asks of the chart. The original's model called five tools
-// ("look_from", "look_at_time", "point_out", "show_constellation",
-// "whats_that"); here the app hears the same words and decides by rules over
-// the catalogue's OWN names: its 135 stars, 42 constellations (18 with
-// figures), 41 places, and the time presets. A model is asked only when a
-// command names something the rules cannot place (server.ts, optional), and
-// whatever it says is still validated by the chart.
+// What some words ask of the chart, by rules over the catalogue's OWN names:
+// its 135 stars, 42 constellations (18 with figures), 41 places, and the time
+// presets. Two callers: the host's tools pass the words they heard ("the
+// north star", "two hours later", "40.7 north 74 west") and `actions.ts` turns
+// them into intents here; and the safety net (`net.ts`) reads what the user
+// said to see whether they clearly asked for a move the host then never made.
+// A model is asked only when the words name something the rules cannot place
+// (server.ts, optional), and whatever it says is still validated by the chart.
 //
-// Not an action, so not for the app: questions ("why is it orange?", "what's
-// up?", "tell me about it"), the planets, the Moon and the Sun. The avatar
-// answers those itself from its notes and the state.
+// Not an action, so nothing here: questions ("why is it orange?", "what's
+// up?", "tell me about it"), the planets, the Moon and the Sun.
 import { CONSTELLATION_ALIASES, CONSTELLATION_NAMES, STARS } from './catalog.ts';
 import { PLACES } from './sky.ts';
 import type { Intent } from './types.ts';
@@ -110,7 +110,7 @@ function take(t: string, names: Name[]): { name: Name | null; rest: string } {
   return { name: null, rest: t };
 }
 
-const PLANETS = /\b(mercury|venus|mars|jupiter|saturn|uranus|neptune|pluto|planets?|the moon|moon|the sun|sun)\b/;
+export const PLANETS = /\b(mercury|venus|mars|jupiter|saturn|uranus|neptune|pluto|planets?|the moon|moon|the sun|sun)\b/;
 
 // ─── time ─────────────────────────────────────────────────────────────────
 

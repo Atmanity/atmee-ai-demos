@@ -1,180 +1,372 @@
 // @vitest-environment jsdom
 //
-// The page's half of the safety path, end to end in-process: the avatar kit is
-// a recording fake, and fetch goes straight to the real engine (drill.ts) as
-// the server would. What this pins: an emergency read in speech, in a typed
-// line or in the answer box puts up the card and sends the line ONCE, even
-// before (or without) the server; a typed emergency is never forwarded to the
-// avatar as a turn to answer; and a spoken request the state already staged
-// gets no second event.
+// The page end to end, in-process: the real server routes (server.ts) behind a
+// stubbed fetch, the kit's real safety net, and a recording fake for the call.
+// What this pins: the front door, a drill driven by Alex's tool calls and by
+// buttons, the screen never answering its own question, the red card going up
+// the instant the words arrive (and Alex told exactly once), the card coming
+// down only on the learner's own words or button, and the safety net doing
+// what Alex forgot without ever doubling what he did.
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { act as drillAct } from '../engine/drill.ts';
 import { EMERGENCY_LINE, SAFETY_LINE } from '../engine/lines.ts';
-import { BlsTutor } from '../engine/tutor.ts';
+import { ADULT_CARDIAC_ARREST, CHOKING_ADULT, RECOVERY_POSITION } from '../engine/scenarios.ts';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+type Handlers = { onUserSaid?: (text: string, how: 'spoken' | 'typed') => void; onToolCall?: (call: { id: string; name: string; arguments: Record<string, unknown> }) => Promise<unknown> };
 const fake = vi.hoisted(() => ({
-  phase: 'live' as string,
+  phase: 'idle' as string,
   events: [] as { text: string; ttl?: number }[],
   states: [] as string[],
-  notes: [] as string[],
   says: [] as string[],
   records: [] as string[],
-  handlers: {} as { onUserSaid?: (text: string, how: 'spoken' | 'typed') => void },
+  starts: [] as unknown[],
+  handlers: {} as Handlers,
 }));
 
-vi.mock('../../../src/kit/index.ts', () => ({
-  useAvatar: (_app: string, handlers: typeof fake.handlers) => {
-    fake.handlers = handlers;
-    return {
-      phase: fake.phase,
-      event: (text: string, ttl?: number) => fake.events.push({ text, ttl }),
-      state: (text: string) => fake.states.push(text),
-      note: (text: string) => fake.notes.push(text),
-      say: (text: string) => fake.says.push(text),
-      record: (text: string) => fake.records.push(text),
-    };
-  },
-  AvatarStage: () => <div data-testid="stage" />,
-  Transcript: () => null,
-  Composer: ({ onSubmit }: { onSubmit: (text: string) => void }) => (
-    <form onSubmit={(e) => { e.preventDefault(); onSubmit(((e.currentTarget.elements.namedItem('line') as HTMLInputElement).value)); }}>
-      <input name="line" aria-label="composer" />
-      <button type="submit">Send</button>
-    </form>
-  ),
-}));
+vi.mock('../../../src/kit/index.ts', async () => {
+  const { useToolNet } = await vi.importActual<typeof import('../../../src/kit/useToolNet.ts')>('../../../src/kit/useToolNet.ts');
+  return {
+    useToolNet,
+    useAvatar: (_app: string, handlers: Handlers) => {
+      fake.handlers = handlers;
+      return {
+        phase: fake.phase, caption: '', micOn: false, lines: [], heard: '',
+        start: async (opts: unknown) => { fake.starts.push(opts); },
+        event: (text: string, ttl?: number) => fake.events.push({ text, ttl }),
+        state: (text: string) => fake.states.push(text),
+        say: (text: string) => { fake.says.push(text); handlers.onUserSaid?.(text, 'typed'); },
+        record: (text: string) => fake.records.push(text),
+        note: () => {},
+      };
+    },
+    HostVideo: () => <div data-testid="host" />,
+    CallStatus: () => null,
+    CallControls: () => null,
+    ChatPanel: ({ onSubmit }: { onSubmit: (text: string) => void }) => (
+      <form onSubmit={(e) => { e.preventDefault(); onSubmit((e.currentTarget.elements.namedItem('line') as HTMLInputElement).value); }}>
+        <input name="line" aria-label="Message Alex" />
+        <button type="submit">Send</button>
+      </form>
+    ),
+  };
+});
 
 const { App } = await import('./App.tsx');
+const server = (await import('../server.ts')).default;
 
-let tutor: BlsTutor;
+// The server's routes, reached through fetch without a network.
+type Handler = (req: { params: Record<string, string>; body: unknown }, res: unknown) => void;
+const routes: { method: string; re: RegExp; keys: string[]; handler: Handler }[] = [];
+const add = (method: string) => (path: string, handler: Handler) => {
+  const keys: string[] = [];
+  routes.push({ method, keys, handler, re: new RegExp(`^${path.replace(/:(\w+)/g, (_, k: string) => { keys.push(k); return '([^/]+)'; })}$`) });
+};
+server.routes!({ post: add('POST'), get: add('GET') } as never);
+
 let serverDown = false;
+let drillId: string | null = null;
 
 beforeEach(() => {
-  fake.phase = 'live';
-  for (const list of [fake.events, fake.states, fake.notes, fake.says, fake.records]) list.length = 0;
+  fake.phase = 'idle';
+  for (const list of [fake.events, fake.states, fake.says, fake.records, fake.starts]) list.length = 0;
   serverDown = false;
-  tutor = new BlsTutor();
+  drillId = null;
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    if (serverDown && !url.endsWith('/drills')) throw new TypeError('Failed to fetch');
-    const body = init?.body ? JSON.parse(String(init.body)) : {};
-    const json = url.endsWith('/drills') ? { id: 'd1', view: { ...tutor.snapshot(), staged: tutor.staged() } } : drillAct(tutor, body);
-    return { ok: true, status: 200, json: async () => json } as Response;
+    if (serverDown) throw new TypeError('Failed to fetch');
+    const path = url.replace('/api/apps/bls-tutor', '');
+    const method = init?.method ?? 'GET';
+    const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+    for (const r of routes) {
+      const m = r.method === method ? r.re.exec(path) : null;
+      if (!m) continue;
+      let status = 200;
+      let json: unknown;
+      const res = { status(c: number) { status = c; return res; }, json(b: unknown) { json = b; } };
+      r.handler({ params: Object.fromEntries(r.keys.map((k, i) => [k, m[i + 1]])), body }, res);
+      if (path === '/drills') drillId = (json as { id: string }).id;
+      return { ok: status < 400, status, json: async () => json } as Response;
+    }
+    return { ok: false, status: 404, json: async () => ({}) } as Response;
   }));
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
-async function ready() {
-  render(<App />);
-  await screen.findByText('Choose a scenario');
+/** The front door, a drill picked, "Start by typing", Alex on his way, then live. */
+async function begin(drill: RegExp = /Adult collapse in a café/, firstQuestion = ADULT_CARDIAC_ARREST.steps[0].prompt) {
+  const view = render(<App />);
+  fireEvent.click(screen.getByLabelText(drill));
+  fireEvent.click(screen.getByRole('button', { name: 'Start by typing' }));
+  expect(fake.starts).toEqual([{ mic: false }]);
+  fake.phase = 'starting';
+  view.rerender(<App />);
+  await screen.findByText(firstQuestion);
+  fake.phase = 'live';
+  view.rerender(<App />);
+  return view;
 }
-const spoken = (text: string) => act(async () => { fake.handlers.onUserSaid?.(text, 'spoken'); });
+
+let calls = 0;
+const tool = (name: string, args: Record<string, unknown> = {}) =>
+  act(async () => String(await fake.handlers.onToolCall!({ id: `t${++calls}`, name, arguments: args })));
+const spoken = (text: string) => act(async () => { fake.handlers.onUserSaid!(text, 'spoken'); });
 async function type(text: string) {
-  fireEvent.change(screen.getByLabelText('composer'), { target: { value: text } });
+  fireEvent.change(screen.getByLabelText('Message Alex'), { target: { value: text } });
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send' })); });
 }
-const emergencyEvents = () => fake.events.filter((e) => e.text.includes(EMERGENCY_LINE));
+const press = (name: string | RegExp) => act(async () => { fireEvent.click(screen.getByRole('button', { name })); });
+const lineEvents = () => fake.events.filter((e) => e.text.includes(EMERGENCY_LINE));
+const pageText = () => document.body.textContent ?? '';
+/** Words that never belong on screen in a product. */
+const BACKSTAGE = /\b(session|avatar|api|atmee|demo|sample|mini-app|tool|event|state)\b/i;
 
-describe('the emergency path', () => {
-  test('heard: the card, the exact line, one event, and the state', async () => {
-    await ready();
+describe('the front door', () => {
+  test('what it is, how it works, the drills, the way in, the numbers to call, and that it is practice', () => {
+    render(<App />);
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Be the bystander who knows what to do.');
+    expect(screen.getAllByRole('radio')).toHaveLength(4);
+    expect(screen.getByRole('button', { name: 'Start with your voice' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Start by typing' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Practice, not certification' })).toBeTruthy();
+    expect(pageText()).toContain(SAFETY_LINE);
+    expect(document.querySelector('a[href="tel:911"]')).toBeTruthy();
+    expect(document.querySelector('a[href="tel:112"]')).toBeTruthy();
+    expect(pageText()).not.toMatch(BACKSTAGE);
+  });
+
+  test('the voice button asks for the microphone', () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Start with your voice' }));
+    expect(fake.starts).toEqual([{ mic: true }]);
+  });
+});
+
+describe('a drill', () => {
+  test('the chosen drill is ready while Alex is on his way; he opens with the safety line and its first question', async () => {
+    await begin(/Choking at a dinner table/, CHOKING_ADULT.steps[0].prompt);
+    const opening = fake.events[0];
+    expect(opening.text).toContain(SAFETY_LINE);
+    expect(opening.text).toContain(CHOKING_ADULT.steps[0].prompt);
+    expect(opening.ttl).toBe(60);
+    expect(fake.states.at(-1)).toContain('Step 1 of 6, waiting for their answer');
+    expect(pageText()).toContain(SAFETY_LINE);
+    expect(pageText()).not.toMatch(BACKSTAGE);
+  });
+
+  test('Alex grades a spoken answer with check_answer: the result carries the verdict, the screen follows', async () => {
+    await begin();
+    const result = await tool('check_answer', { answer: 'make sure the scene is safe' });
+    expect(result).toContain('RIGHT');
+    expect(result).toContain(ADULT_CARDIAC_ARREST.steps[0].teach);
+    expect(screen.getByText('You got it')).toBeTruthy();
+    expect(screen.getAllByText(ADULT_CARDIAC_ARREST.steps[0].label).length).toBeGreaterThan(0);
+    expect(fake.states.at(-1)).toContain('Step 1 of 7 is done');
+  });
+
+  test('a wrong answer shows the nudge and the tries left, never the step', async () => {
+    await begin();
+    await tool('check_answer', { answer: 'I would phone his wife' });
+    expect(screen.getByText('Not yet')).toBeTruthy();
+    expect(screen.getByText(ADULT_CARDIAC_ARREST.steps[0].hint)).toBeTruthy();
+    expect(pageText()).toContain('1 of 2 tries');
+    expect(pageText()).not.toContain(ADULT_CARDIAC_ARREST.steps[0].label);
+  });
+
+  test('buttons act at once and Alex is told: a hint, then the next step', async () => {
+    await begin();
+    await press('Give me a hint');
+    expect(screen.getByText(ADULT_CARDIAC_ARREST.steps[0].hint)).toBeTruthy();
+    expect(fake.events.at(-1)!.text).toContain('pressed "Give me a hint"');
+    expect(fake.states.at(-1)).toContain(ADULT_CARDIAC_ARREST.steps[0].hint);
+    await tool('show_step');
+    await press(/Next step/);
+    expect(screen.getByText(ADULT_CARDIAC_ARREST.steps[1].prompt)).toBeTruthy();
+    expect(fake.events.at(-1)!.text).toContain('pressed "Next step"');
+    expect(fake.events.at(-1)!.text).toContain(ADULT_CARDIAC_ARREST.steps[1].prompt);
+  });
+
+  test('the screen never shows the answer to the question it asks, nor anything ahead', async () => {
+    await begin();
+    for (let i = 0; i < ADULT_CARDIAC_ARREST.steps.length - 1; i++) {
+      for (const step of ADULT_CARDIAC_ARREST.steps.slice(i)) {
+        expect(pageText(), step.key).not.toContain(step.label);
+        expect(pageText(), step.key).not.toContain(step.teach);
+      }
+      expect(fake.states.at(-1)).not.toContain(ADULT_CARDIAC_ARREST.steps[i].label);
+      await tool('show_step');
+      await tool('next_step');
+    }
+  });
+
+  test('the beat appears only once the compressions step is taught', async () => {
+    await begin();
+    for (let i = 0; i < 3; i++) { await tool('show_step'); await tool('next_step'); }
+    expect(screen.getByText(ADULT_CARDIAC_ARREST.steps[3].prompt)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Practise to the beat/ })).toBeNull();
+    await tool('show_step');
+    expect(screen.getByRole('button', { name: /Practise to the beat · 110 a minute/ })).toBeTruthy();
+  });
+
+  test('the review names every step and how it went, and offers the next drill', async () => {
+    await begin(/Unresponsive but breathing/, RECOVERY_POSITION.steps[0].prompt);
+    await tool('check_answer', { answer: 'tap and shout and check his breathing' });
+    await tool('next_step');
+    for (let i = 1; i < RECOVERY_POSITION.steps.length; i++) { await tool('show_step'); await tool('next_step'); }
+    expect(screen.getByText('Drill complete · Unresponsive but breathing')).toBeTruthy();
+    for (const step of RECOVERY_POSITION.steps) expect(screen.getByText(step.label)).toBeTruthy();
+    expect(screen.getAllByText('Shown to you')).toHaveLength(4);
+    expect(screen.getAllByText('Got it')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Run this drill again' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Choking at a dinner table/ })).toBeTruthy();
+  });
+
+  test('leaving goes back to the list of drills; picking one there starts it and tells Alex', async () => {
+    await begin();
+    await press('Choose another drill');
+    expect(screen.getByRole('heading', { name: 'Choose a drill' })).toBeTruthy();
+    await press(/Choking at a dinner table/);
+    expect(screen.getByText(CHOKING_ADULT.steps[0].prompt)).toBeTruthy();
+    expect(fake.events.at(-1)!.text).toContain('pressed "Choking at a dinner table"');
+  });
+});
+
+describe('the red card', () => {
+  test('heard: up at once; when Alex calls stop_for_emergency himself, the page adds no second line', async () => {
+    await begin();
+    vi.useFakeTimers();
     await spoken("he's not breathing");
     expect(screen.getByRole('alert').textContent).toContain(EMERGENCY_LINE);
-    await waitFor(() => expect(tutor.phase).toBe('emergency'));
-    expect(emergencyEvents()).toHaveLength(1);
-    expect(emergencyEvents()[0].ttl).toBe(60);
+    expect(document.querySelector('.by-emergency a[href="tel:911"]')).toBeTruthy();
+    expect(await tool('stop_for_emergency')).toContain(EMERGENCY_LINE);
+    await act(async () => { await vi.advanceTimersByTimeAsync(3500); });
+    expect(lineEvents()).toHaveLength(0);
     expect(fake.states.at(-1)).toContain('THE DRILL IS STOPPED');
   });
 
-  test('typed: the card, and the line is recorded, never sent to the avatar as a turn', async () => {
-    await ready();
+  test('heard, and Alex does not act: the page tells him after a moment, once', async () => {
+    await begin();
+    vi.useFakeTimers();
+    await spoken('she stopped breathing');
+    expect(screen.getByRole('alert')).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(3500); });
+    expect(lineEvents()).toHaveLength(1);
+    expect(lineEvents()[0].ttl).toBe(60);
+    await spoken("she's still not breathing");
+    await act(async () => { await vi.advanceTimersByTimeAsync(3500); });
+    expect(lineEvents()).toHaveLength(1);
+  });
+
+  test('typed: the card, the line kept in the conversation but never sent as a turn, Alex told at once', async () => {
+    await begin();
     await type('my kid is not breathing');
     expect(screen.getByRole('alert')).toBeTruthy();
-    await waitFor(() => expect(fake.records).toContain('my kid is not breathing'));
+    expect(fake.records).toEqual(['my kid is not breathing']);
     expect(fake.says).toEqual([]);
-    expect(emergencyEvents()).toHaveLength(1);
+    expect(lineEvents()).toHaveLength(1);
+    expect(lineEvents()[0].text).toContain('typed "my kid is not breathing"');
   });
 
-  test('in the panel\'s answer box, before the grader', async () => {
-    await ready();
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Adult collapse/ })); });
-    fireEvent.change(await screen.findByLabelText('What would you do?'), { target: { value: 'this is real, he collapsed' } });
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Answer' })); });
+  test('Alex\'s own judgement is a second way to the card', async () => {
+    await begin();
+    expect(await tool('stop_for_emergency')).toContain(EMERGENCY_LINE);
     expect(screen.getByRole('alert')).toBeTruthy();
-    expect(tutor.snapshot().phase).toBe('emergency');
-    expect(emergencyEvents()).toHaveLength(1);
+    expect(await tool('show_step')).toContain('call 911 now');
   });
 
-  test('with the server unreachable, the card still goes up and the avatar is still told', async () => {
-    await ready();
+  test('an answer that reads as an emergency puts it up through the drill too', async () => {
+    await begin();
+    expect(await tool('check_answer', { answer: 'this is real, he collapsed' })).toContain(EMERGENCY_LINE);
+    expect(screen.getByRole('alert')).toBeTruthy();
+  });
+
+  test('Alex cannot talk anyone off it: resume_practice needs the learner\'s own plain words', async () => {
+    await begin();
+    await spoken("he's not breathing");
+    expect(await tool('resume_practice')).toContain('The red card stays up');
+    expect(screen.getByRole('alert')).toBeTruthy();
+    await spoken("False alarm, nobody's hurt.");
+    expect(await tool('resume_practice')).toContain('glad everyone is safe');
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByText(ADULT_CARDIAC_ARREST.steps[0].prompt)).toBeTruthy();
+  });
+
+  test('its own button takes it down, even with the server unreachable', async () => {
+    await begin();
+    await spoken('this is happening right now');
     serverDown = true;
-    await spoken('she stopped breathing');
-    expect(screen.getByRole('alert').textContent).toContain(EMERGENCY_LINE);
-    expect(emergencyEvents()).toHaveLength(1);
-    // ...and its button still takes it down.
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nobody is in danger/ })); });
+    await press(/Nobody is in danger/);
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  test('said once: a second report on the card sends nothing new', async () => {
-    await ready();
-    await spoken("he's not breathing");
-    await spoken("he's still not breathing, what do I do");
-    expect(emergencyEvents()).toHaveLength(1);
-  });
-
-  test('the way off: said plainly, the card goes and the avatar is told where practice resumes', async () => {
-    await ready();
-    await spoken("he's not breathing");
-    await spoken("False alarm, nobody's hurt.");
-    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
-    expect(fake.events.at(-1)!.text).toContain('glad everyone is safe');
-    // A second, real report after that raises it again.
-    await spoken('this is happening right now');
-    expect(screen.getByRole('alert')).toBeTruthy();
-    expect(emergencyEvents()).toHaveLength(2);
+  test('typed practice that only sounds clinical goes to Alex as a turn', async () => {
+    await begin();
+    await type("I'd check if he's breathing");
+    expect(fake.says).toEqual(["I'd check if he's breathing"]);
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });
 
-describe('the drill', () => {
-  test('the notes are queued, and each session opens with the safety line', async () => {
-    fake.phase = 'idle';
-    const { rerender } = render(<App />);
-    await screen.findByText('Choose a scenario');
-    expect(fake.notes.length).toBe(3);
-    fake.phase = 'starting';
-    rerender(<App />);
-    await waitFor(() => expect(fake.events.some((e) => e.text.includes(SAFETY_LINE))).toBe(true));
-  });
-
-  test('a spoken "show me" was answered from the staged state: no second event; typed, it is said', async () => {
-    await ready();
-    await spoken("Let's do choking.");
-    await waitFor(() => expect(tutor.phase).toBe('answering'));
-    expect(fake.events).toEqual([]);   // the scene and first question were staged
+describe('the safety net', () => {
+  test('"show me" with no call from Alex: after a moment the page shows the step and tells him', async () => {
+    await begin();
+    vi.useFakeTimers();
     await spoken('Show me.');
-    await waitFor(() => expect(tutor.phase).toBe('coaching'));
-    expect(fake.events).toEqual([]);
-    await spoken('next');
-    await type('show me');
-    await waitFor(() => expect(fake.events.length).toBe(1));
-    expect(fake.records).toContain('show me');
+    await act(async () => { await vi.advanceTimersByTimeAsync(7500); });
+    expect(screen.getByText(ADULT_CARDIAC_ARREST.steps[0].label, { selector: '.by-label' })).toBeTruthy();
+    expect(fake.events.at(-1)!.text).toContain('You did not call show_step');
   });
 
-  test('typed talk goes to the avatar as a typed turn, and is not graded', async () => {
-    await ready();
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Adult collapse/ })); });
-    await type('Can I have a hint?');
-    await waitFor(() => expect(fake.says).toEqual(['Can I have a hint?']));
-    expect(tutor.snapshot().attempts).toBe(0);
+  test('it stands down when Alex made the call', async () => {
+    await begin();
+    vi.useFakeTimers();
+    await spoken('Show me.');
+    await tool('show_step');
+    await act(async () => { await vi.advanceTimersByTimeAsync(7500); });
+    expect(fake.events.some((e) => e.text.includes('You did not call'))).toBe(false);
   });
 
-  test('the avatar\'s state never carries the steps ahead', async () => {
-    await ready();
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Adult collapse/ })); });
-    await waitFor(() => expect(fake.states.at(-1)).toContain('Step 1 of 7 is live'));
-    expect(fake.states.join('\n')).not.toContain('Start chest compressions');
+  test('it stands down when the drill moved some other way since the words', async () => {
+    await begin();
+    vi.useFakeTimers();
+    await spoken("I don't know");
+    await tool('check_answer', { answer: 'look in his wallet' });   // Alex graded it instead: an attempt was used
+    await act(async () => { await vi.advanceTimersByTimeAsync(7500); });
+    expect(fake.events.some((e) => e.text.includes('You did not call'))).toBe(false);
+    expect(screen.getByText('Not yet')).toBeTruthy();
   });
+
+  test('the way off the card, said plainly, works even when Alex forgets resume_practice', async () => {
+    await begin();
+    vi.useFakeTimers();
+    await spoken("he's not breathing");
+    await tool('stop_for_emergency');
+    await spoken("Sorry, false alarm, nobody's hurt.");
+    await act(async () => { await vi.advanceTimersByTimeAsync(7500); });
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(fake.events.at(-1)!.text).toContain('You did not call resume_practice');
+  });
+
+  test('answers are never the net\'s: an unanswered "I\'d check the scene" stays ungraded', async () => {
+    await begin();
+    vi.useFakeTimers();
+    await spoken("I'd check the scene is safe");
+    await act(async () => { await vi.advanceTimersByTimeAsync(7500); });
+    expect(screen.getByText(ADULT_CARDIAC_ARREST.steps[0].prompt)).toBeTruthy();
+    expect(fake.events.some((e) => e.text.includes('You did not call'))).toBe(false);
+  });
+});
+
+test('calling Alex again picks up the same drill where it was', async () => {
+  const view = await begin();
+  await tool('show_step');
+  await tool('next_step');
+  const first = drillId;
+  fake.phase = 'ended';
+  view.rerender(<App />);
+  fake.phase = 'starting';
+  view.rerender(<App />);
+  await waitFor(() => expect(fake.events.at(-1)!.text).toContain(ADULT_CARDIAC_ARREST.steps[1].prompt));
+  expect(drillId).toBe(first);
+  expect(fake.events.at(-1)!.text).toContain(SAFETY_LINE);
 });

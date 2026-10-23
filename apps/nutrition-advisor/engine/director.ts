@@ -1,43 +1,87 @@
-// What the avatar is told, and when. The app decides what goes on screen and
-// every figure on it; the avatar advises. Three kinds of text:
+// What the host is told, and how it acts. The app decides what goes on screen
+// and every figure on it; the host advises. It acts only through the app's
+// tools, and each tool's result carries the real outcome (the card's figures,
+// the side-by-side rows, the recipe's steps), so its first reply is grounded.
 //
-// * NOTES, sent once: the original's 5,921-character instructions, condensed,
-//   with every "never" that came from a real failure kept.
-// * the board (`boardState`), re-sent whenever the screen changes: what is on
-//   the user's screen and every figure the avatar may quote, so it quotes the
-//   card instead of inventing numbers. It replaces the original's per-turn
-//   "[Live nutrition panel]" note, which existed because the avatar once said
-//   "the apple is now displayed alongside the banana" over a panel that had
-//   never heard of the apple.
-// * events (`say`): one per thing that happened, which the avatar puts in its
-//   own words once it has the floor.
+// * INSTRUCTIONS: the host's role and rules (the session's tool instructions).
+// * NOTES: the advice line in full, sent once (too long for the instructions,
+//   and the rule that matters most).
+// * TOOLS: what the host can do.
+// * the board (`boardState`): what is on the user's screen, every figure the
+//   host may quote, re-sent whenever the screen changes.
+// * `said`: what each action did, in words the host speaks from.
+import type { AppTool } from '../../../server/app-server.ts';
+import { stepsLabel, type Cook } from './cook.ts';
 import { DAILY_VALUES, dailyValue } from './nutrition.ts';
-import type { How, Nutrients, NutritionData, RecipeDetails, ShelfRow, View } from './types.ts';
+import type { Nutrients, NutritionData, RecipeDetails, ShelfRow, View } from './types.ts';
 
 /** The board's limit (the API's `state`). */
 export const MAX_STATE = 3858;
 /** Each note's limit. */
 export const MAX_NOTE = 2000;
+/** The instructions' limit. */
+export const MAX_INSTRUCTIONS = 4000;
+
+export const INSTRUCTIONS = `You are the nutritionist in Morsel, a food app, talking with one person. Their screen shows what the app puts there: a nutrition card for one food (serving, calories, macros with % daily value, a 1-10 score, a summary, three recipe ideas), a comparison table of every food looked at, and recipe cards. You cannot see it. The screen changes only when you call a tool, and every figure comes from a tool's result or the live board in your context.
+- When they name a food, drink or product they want to know about ("what's in a banana?", "protein in 200 g of chicken"), call look_up_food before saying anything about it, and answer from its result. Never give a figure of your own, even when you think you know it.
+- "Compare it with an apple", "which has more sugar, a banana or an apple?": call compare_foods, then give a one-line verdict from its figures.
+- "How do I make the smoothie?", "walk me through the first one": call open_recipe with the name as the card lists it. Talk a recipe through one or two steps at a time; when they are ready for more ("done", "what's next?"), call next_steps. "Back to the card": call close_recipe. "Start over", "clear everything": call start_over, and only then.
+- Questions about what is already on screen (a figure on the card, the score, which food in the table has more fiber, the step they are on): answer from the live board, no tool needed.
+- Saying "let me pull that up" or "here it is" without the call changes nothing and misleads them: call the tool every time. Never say something is on screen unless a result or the board says so.
+- Photos: they add a photo of a food or its label with the photo button; the app reads it and tells you what it found. Naming a food is enough: never ask them to hold anything up to a camera, and never say you cannot look at photos.
+- If they press a button, the app tells you what happened; carry on from that.
+Voice: one or two short spoken sentences, friendly and never preachy ("high in sugar for a snack", never "you shouldn't eat this"). Give the takeaway, not the figures read back; say a number when they ask for it. No markdown, lists, asterisks or headings: everything is read aloud, and steps are said as sentences. A walkthrough they asked for may take the words it needs, never all at once. At most one question per turn; ask about quantity only when it would change the numbers a lot. "Label" figures were read from a nutrition label in their photo; everything else is an estimate, and an assumed portion is an assumption: say so when it matters.
+The advice line, in your standing note: you say what is in a food and what a nutrient does in general, never what this person should eat for their health. If they mention a condition, a medicine, a pregnancy or an allergy of their own, or ask whether a food is safe or right for them, decline kindly, say you are not their doctor or dietitian, and offer to read the numbers instead. If they describe an emergency (trouble breathing, a swelling throat or tongue, a severe allergic reaction, choking), tell them to call their local emergency number right now, and nothing else.`;
 
 export const NOTES = [
-  `You are advising one person about food inside a nutrition app. You can see what they show you only through the app. The app, not you, puts things on their screen: a nutrition card for one food (serving, calories, macros with % of daily value, sodium, a 1-10 score, a summary, three recipe ideas), a comparison table of every food looked at, and recipe cards. The board you are sent is the only truth about the screen. Never tell the user something is on screen, displayed, side by side or in the table unless the board lists it: saying a food is displayed does not display it. You cannot put anything up yourself. When the user names a food, asks to compare, shares a photo or asks how to make a recipe, say only a few words like "let me pull that up" and stop: the app puts it up and tells you a moment later. If it already told you, carry on from it. Naming a food is a complete request ("what's in a banana?"). Never ask them to show it to the camera first, and never ask them to hold anything up to a camera: plenty of people are typing, on a phone, or have video off. They can share a photo of a food or its label with the photo button on the panel, or try the sample; never say you cannot look at photos. When you check in after a silence, mention the food on the card, or invite them to name one; never ask for a camera.`,
-  `Numbers come only from the board. Quote a figure only if the board lists it, as listed; never estimate one of your own, even when they ask before the card is up: say you are pulling it up. When a card is up the card holds the numbers, so your answer is the TAKEAWAY, in one or two sentences: what stands out and what it means. Do not read the figures back; say a number only when they ask for that number, or when one figure is the whole point. A comparison is one line saying which wins on what they asked about, and only once the board lists both foods. "Label" figures were read off a nutrition label in their photo; everything else is an estimate, and an assumed portion is an assumption: say so when it matters. Ask at most one question per turn, and ask about quantity only when it would change the numbers a lot (the app has already put a card up for the usual portion, so the screen is never empty while you ask). Voice: default to one sentence under 16 words. Friendly, encouraging, non-judgmental; health-conscious but never preachy ("high in sugar for a snack", never "you shouldn't eat this"). Never use markdown, asterisks, dashes as bullets, numbered lists or headings: everything you write is read aloud. Lists and steps are said as sentences ("first peel it, then drop it in the blender"). Recipes: when a recipe card is open, talk them through it one or two steps at a time, waiting for them between batches. A walkthrough they asked for is the one place the short-sentence rule does not apply: take the words you need, never all at once.`,
-  `Where you stop — read this twice. You say what is IN a food, and what a nutrient does in general. You do not tell THIS person what THEY should eat: no daily targets for them, no meal plans, no "if I were you", no yes or no on whether a food is safe for their condition, no verdict on a food because of a diagnosis they told you. Not even when they insist, plead, ask for one word, or say they will do exactly what you say. You would not advise on their medication; food is the same line. Someone newly diagnosed will change what they eat tonight on your word, and you do not know their bloodwork, their dose or their doctor's plan. The score ranks a food's general nutrition; it is NOT a judgement about anyone's medical condition. Asked whether a 9 out of 10 means a food is good for their diabetes, or any condition, say no and explain what the score ranks. When you decline, name the door in the same breath: you can read them the numbers for any food and explain what a nutrient does; offer that, then do it. Never leave a worried person with only a refusal. Say plainly, the first time this comes up, that you are not a doctor or a dietitian and that a plan for them has to come from one. Allergies: you can read an ingredient list they show you, but never promise a food is free of anything.`,
+  `Where you stop: read this twice. You say what is IN a food, and what a nutrient does in general. You do not tell THIS person what THEY should eat: no daily targets for them, no meal plans, no "if I were you", no yes or no on whether a food is safe for their condition, no verdict on a food because of a diagnosis they told you. Not even when they insist, plead, ask for one word, or say they will do exactly what you say. You would not advise on their medication; food is the same line. Someone newly diagnosed will change what they eat tonight on your word, and you do not know their bloodwork, their dose or their doctor's plan. The score ranks a food's general nutrition; it is NOT a judgement about anyone's medical condition. Asked whether a 9 out of 10 means a food is good for their diabetes, or any condition, say no and explain what the score ranks. When you decline, name the door in the same breath: you can read them the numbers for any food and explain what a nutrient does; offer that, then do it if they want it. Never leave a worried person with only a refusal. Say plainly, the first time this comes up, that you are not their doctor or a dietitian and that a plan for them has to come from one. Allergies: you can read an ingredient list they show you, but never promise a food is free of anything.`,
 ];
 
-// -- the board -----------------------------------------------------------------
+// -- the tools ------------------------------------------------------------------
+
+const foodList = {
+  type: 'array', minItems: 1, maxItems: 3,
+  items: { type: 'string', minLength: 1, maxLength: 80 },
+  description: 'Each food as the user said it, one per item, with the amount if they gave one ("200 g chicken breast", "a large banana").',
+};
+const noArgs = { type: 'object', properties: {}, additionalProperties: false };
+const awaits = (timeoutSeconds: number) => ({ mode: 'await' as const, timeoutSeconds });
+
+export const TOOLS: AppTool[] = [
+  { type: 'function', name: 'look_up_food', description: "Puts a food's nutrition card on the user's screen and returns its real figures. Call it whenever the user names a food, drink or product they want to know about, before saying anything about it, even if you think you know the numbers.",
+    parameters: { type: 'object', properties: { foods: foodList }, required: ['foods'], additionalProperties: false },
+    'x-atmee': awaits(20) },
+  { type: 'function', name: 'compare_foods', description: "Puts foods side by side in the comparison table, looking up any that are not on screen yet, and returns their figures. Call it when the user asks to compare foods, or which of two is better, higher or lower in something. 'It' or 'that' means the food on the card: leave it out.",
+    parameters: { type: 'object', properties: { foods: foodList }, required: ['foods'], additionalProperties: false },
+    'x-atmee': awaits(20) },
+  { type: 'function', name: 'open_recipe', description: "Opens a recipe's ingredients and steps on the user's screen and returns them, with the first two steps lit up. Call it when the user wants to make a dish or hear a recipe. Use the name exactly as the card lists it when they mean one of its ideas.",
+    parameters: { type: 'object', properties: { recipe: { type: 'string', minLength: 1, maxLength: 80, description: 'The recipe: its name as listed on the card ("Banana oat smoothie"), "the first one", or the dish the user named.' } }, required: ['recipe'], additionalProperties: false },
+    'x-atmee': awaits(20) },
+  { type: 'function', name: 'next_steps', description: 'Lights up the next one or two steps of the open recipe and returns them. Call it when the user is ready for more of the recipe.', parameters: noArgs, 'x-atmee': awaits(8) },
+  { type: 'function', name: 'close_recipe', description: 'Closes the open recipe and shows the nutrition card again. Call it when the user asks to go back to the card.', parameters: noArgs, 'x-atmee': awaits(8) },
+  { type: 'function', name: 'start_over', description: 'Clears the card, the comparison table and the opened recipes. Only when the user asks to start over or clear everything; never on your own.', parameters: noArgs, 'x-atmee': awaits(8) },
+];
+
+/** The tools the server answers; the page answers the rest itself. */
+export const SERVER_TOOLS = new Set(['look_up_food', 'compare_foods', 'open_recipe', 'start_over']);
+
+// -- the board ------------------------------------------------------------------
 
 /** What only the page knows about its screen. */
 export interface Screen {
   /** The recipe open on the page, with its ingredients and steps. */
   recipe: RecipeDetails | null;
+  /** Which of its steps are lit up. */
+  cook: Cook | null;
   /** A recipe the page is opening and waiting for. */
   loadingRecipe: string | null;
   /** What the app is doing right now ("looking up apple"), if anything. */
   working: string | null;
+  /** A notice the page put up on its own: an emergency, or a question about the user's health. */
+  concern: 'emergency' | 'medical' | null;
 }
 
-export const NO_SCREEN: Screen = { recipe: null, loadingRecipe: null, working: null };
+export const NO_SCREEN: Screen = { recipe: null, cook: null, loadingRecipe: null, working: null, concern: null };
 
 const NUTRIENTS: [keyof Nutrients, string, string][] = [
   ['protein_g', 'protein', 'g'],
@@ -51,6 +95,9 @@ const NUTRIENTS: [keyof Nutrients, string, string][] = [
 /** A figure as the card prints it: whole numbers plain, otherwise one decimal. */
 export const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 const q = (text: string) => `"${text}"`;
+const list = (names: string[]) =>
+  names.length <= 1 ? names.map(q).join('') : `${names.slice(0, -1).map(q).join(', ')} and ${q(names[names.length - 1])}`;
+const trimEnd = (text: string) => text.replace(/[.!\s]+$/, '');
 
 /** Every figure on the card, with the %DV the bars draw. */
 function figures(card: NutritionData): string {
@@ -68,10 +115,10 @@ function cardText(card: NutritionData, ideas: 'full' | 'names' | 'none'): string
     ? `${card.serving_size}${card.portion_assumed ? ', an assumed portion (they did not say how much)' : ''}`
     : card.portion_assumed ? 'an assumed portion' : 'not given';
   const source = card.source === 'label' ? ' Figures read from the nutrition label in their photo.' : card.source === 'estimate' ? ' Figures estimated, not read from a label.' : '';
-  let text = `the nutrition card for ${q(card.product_name)}. Serving: ${portion}.${source} Per serving: ${figures(card)}. Health score ${card.health_score} of 10 (it ranks the food's general nutrition, not anyone's health). Summary on the card: ${q(card.health_summary.replace(/[.!\s]+$/, ''))}.`;
+  let text = `the nutrition card for ${q(card.product_name)}. Serving: ${portion}.${source} Per serving: ${figures(card)}. Health score ${card.health_score} of 10 (it ranks the food's general nutrition, not anyone's health). Summary on the card: ${q(trimEnd(card.health_summary))}.`;
   if (card.recipes.length && ideas !== 'none') {
-    const list = card.recipes.map((r) => (ideas === 'full' && r.description ? `${r.name} (${r.description})` : r.name));
-    text += ` Recipe ideas on the card, which the user can tap: ${list.join('; ')}.`;
+    const ideasText = card.recipes.map((r) => (ideas === 'full' && r.description ? `${r.name} (${trimEnd(r.description)})` : r.name));
+    text += ` Recipe ideas on the card, which the user can tap: ${ideasText.join('; ')}.`;
   }
   return text;
 }
@@ -81,28 +128,34 @@ function rowText(row: ShelfRow): string {
   return `${row.product_name}${row.serving_size ? `, ${row.serving_size}` : ''}: ${fmt(row.calories)} cal, protein ${fmt(row.protein_g)} g, carbs ${fmt(row.carbs_g)} g, fat ${fmt(row.fat_g)} g, fiber ${fmt(row.fiber_g)} g, sugar ${fmt(row.sugar_g)} g, ${sodium}, score ${fmt(row.health_score)}/10.`;
 }
 
+const stepList = (steps: string[], from = 0) => steps.map((s, i) => `(${from + i + 1}) ${trimEnd(s)}.`).join(' ');
+
 function recipeText(recipe: RecipeDetails, steps = recipe.preparation_steps.length): string {
-  const shown = recipe.preparation_steps.slice(0, steps);
   const more = steps < recipe.preparation_steps.length ? ` (${recipe.preparation_steps.length - steps} more steps are on the card)` : '';
-  return `${q(recipe.recipe_name)}${recipe.description ? ` (${recipe.description.replace(/[.!\s]+$/, '')})` : ''}. Ingredients: ${recipe.ingredients.join('; ') || 'none listed'}. Steps: ${shown.map((s, i) => `(${i + 1}) ${s}`).join(' ')}${more}`;
+  return `${q(recipe.recipe_name)}${recipe.description ? ` (${trimEnd(recipe.description)})` : ''}. Ingredients: ${recipe.ingredients.join('; ') || 'none listed'}. Steps: ${stepList(recipe.preparation_steps.slice(0, steps))}${more}`;
 }
 
-interface Budget { staged: number; rows: number; ideas: 'full' | 'names'; kept: boolean; steps: number }
+interface Budget { rows: number; ideas: 'full' | 'names'; kept: boolean; steps: number }
 
 function compose(view: View, screen: Screen, b: Budget): string {
   const card = view.nutrition;
-  const parts = ['Nutrition app, live board: what is on the user\'s screen right now, the only truth about it.'];
+  const parts = ['Morsel, live board: what is on the user\'s screen right now, the only truth about it.'];
+
+  if (screen.concern === 'emergency') parts.push('At the top of their screen: an emergency notice telling them to call their local emergency number now.');
+  if (screen.concern === 'medical') parts.push('On their screen: a note that questions about their own health belong with their doctor or a registered dietitian.');
 
   if (screen.recipe) {
+    const lit = screen.cook?.shown;
     parts.push(`On screen: the recipe card ${recipeText(screen.recipe, b.steps)}.`);
+    parts.push(lit ? `${stepsLabel(lit)} ${lit[0] === lit[1] ? 'is' : 'are'} lit up: where they are in the walkthrough.` : 'No step is lit up yet: the walkthrough has not started.');
     if (card) parts.push(`It covers the nutrition card, which they can go back to: ${cardText(card, 'names')}`);
   } else if (screen.loadingRecipe) {
-    parts.push(`On screen: the recipe ${q(screen.loadingRecipe)} is opening; the app is still making its card, so its steps are not on screen yet.`);
+    parts.push(`On screen: the recipe ${q(screen.loadingRecipe)} is opening; its steps are not on screen yet.`);
     if (card) parts.push(`Behind it, ${cardText(card, 'names')}`);
   } else if (card) {
     parts.push(`On screen: ${cardText(card, b.ideas)}`);
   } else {
-    parts.push('Nothing is on the user\'s screen yet: no card, no comparison table, no recipe. If they name a food, the app puts its card up in a moment; until the board lists it, it is not on screen and you have no figures for it.');
+    parts.push('Nothing is on the user\'s screen yet: no card, no comparison table, no recipe. If they name a food, call look_up_food; until a result or this board lists it, you have no figures for it.');
   }
 
   if (screen.working) parts.push(`The app is working on this right now: ${screen.working}. It is not on screen yet.`);
@@ -126,29 +179,21 @@ function compose(view: View, screen: Screen, b: Budget): string {
     parts.push(`Recipes the user opened before (chips under the table; tapping one reopens it): ${view.shelf.recipes.map((r) => r.recipe_name).join('; ')}.`);
   }
 
-  // Staged, so a spoken "how do I make the parfait?" gets the real recipe at once.
-  const open = screen.recipe?.recipe_name ?? screen.loadingRecipe ?? '';
-  const staged = view.prepared.filter((r) => r.recipe_name !== open).slice(0, b.staged);
-  if (card && staged.length) {
-    parts.push(`If the user asks how to make one of these recipe ideas, use its recipe below, in your own words, one or two steps at a time; the app opens its card a moment later. Never recite one unasked. ${staged.map((r) => `Recipe ${recipeText(r)}.`).join(' ')}`);
-  }
-
-  parts.push('Quote figures only from this board, as listed; never make one up.');
+  parts.push('Quote figures only from this board or a tool result, as listed; never make one up.');
   return parts.join(' ');
 }
 
 /**
- * The board, as the avatar's state: everything on the user's screen and every
- * figure the avatar may quote. Never over the limit: when it would be, the
- * staged recipes go first, then the oldest table rows, then the ideas'
- * blurbs and the kept chips, then the tail of an open recipe's steps.
+ * The board, as the host's state: everything on the user's screen and every
+ * figure the host may quote. Never over the limit: when it would be, the
+ * oldest table rows go first, then the ideas' blurbs and the kept chips, then
+ * the tail of an open recipe's steps.
  */
 export function boardState(view: View, screen: Screen = NO_SCREEN): string {
-  const b: Budget = { staged: view.prepared.length, rows: view.shelf.items.length, ideas: 'full', kept: true, steps: screen.recipe?.preparation_steps.length ?? 0 };
+  const b: Budget = { rows: view.shelf.items.length, ideas: 'full', kept: true, steps: screen.recipe?.preparation_steps.length ?? 0 };
   let text = compose(view, screen, b);
   while (text.length > MAX_STATE) {
-    if (b.staged > 0) b.staged -= 1;
-    else if (b.rows > 2) b.rows -= 1;
+    if (b.rows > 2) b.rows -= 1;
     else if (b.ideas === 'full') b.ideas = 'names';
     else if (b.kept) b.kept = false;
     else if (b.rows > 1) b.rows -= 1;
@@ -159,83 +204,109 @@ export function boardState(view: View, screen: Screen = NO_SCREEN): string {
   return text;
 }
 
-// -- events ----------------------------------------------------------------------
-
-const list = (names: string[]) =>
-  names.length <= 1 ? names.map(q).join('') : `${names.slice(0, -1).map(q).join(', ')} and ${q(names[names.length - 1])}`;
-
-/** How the request reached the app, which says what the avatar has already done about it. */
-function heard(said: string | undefined, how: How): string {
-  if (!said) return '';
-  const words = q(said.replace(/\s+/g, ' ').trim().slice(0, 200));
-  if (how === 'spoken') return `The user asked out loud: ${words}. You may already have said a few words; do not repeat yourself. `;
-  if (how === 'typed') return `The user typed: ${words}. `;
-  return '';
-}
+// -- what an action did ------------------------------------------------------------
 
 /**
- * Why the sample photo did not load, as the panel prints it after "The sample
- * did not load — ". A fragment, not a sentence: as a sentence pair of its own
- * it composed into the same news twice, with two full stops.
+ * Why the sample photo did not load, as the board prints it after "The sample
+ * did not load: ". A fragment, not a sentence: as a sentence of its own it
+ * composed into the same news twice, with two full stops.
  */
-export const SAMPLE_FAILED = 'name any food out loud and I will pull its numbers up instead';
+export const SAMPLE_FAILED = 'name any food out loud and its card comes up instead';
 
 /** For a photo the app could not read: something is said, never silence. */
-export const PHOTO_FAILED = 'You could not make out that photo. Say so warmly in ONE short line and ask them to send another or just name the food — do not mention an error, a system, or anything the user cannot see.';
+export const PHOTO_FAILED = 'The app could not make out that photo, and nothing new is on screen. Say so warmly in ONE short line and ask them to add another or just name the food; do not mention an error, a system, or anything the user cannot see.';
 
-export const say = {
-  start: () => `The nutrition app is open on the user's screen, still empty. In one or two sentences, invite them to name any food, or share a photo of one with the photo button, to see what is in it. Never ask them to hold anything up to a camera.`,
+const TAKEAWAY = 'Answer what they asked from these figures in one or two short sentences; if they only named the food, give the takeaway: what stands out and what it means. Do not read the figures back.';
+
+const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+export const said = {
+  start: () => `Morsel is open on the user's screen, still empty: no food yet. Welcome them in one or two sentences and invite them to name any food, or to add a photo of one or of its label with the photo button. Never ask them to hold anything up to a camera.`,
 
   /**
-   * New cards: `put` went up now (the last one is on the card); `others` were
-   * already in the table. `again`: the food was looked at before and its card
-   * is back, rather than new.
+   * Cards that went up: `put` (the last is on the card), `others` already in
+   * the table, `again` when every one was looked at before and came back as
+   * it was. `missing`: foods that could not be found.
    */
-  card: (put: string[], others: string[], said: string | undefined, how: How, again = false) => {
-    const what = put.length > 1 ? `put cards up for ${list(put)}; ${q(put[put.length - 1])} is on the card and all of them are in the comparison table` : `put the nutrition card for ${q(put[0])} ${again ? 'back ' : ''}on their screen`;
-    const table = !others.length ? '' : again
-      ? `; it was already in the comparison table, alongside ${list(others)}`
-      : `; it joined the comparison table under the card alongside ${list(others)}, so the user can see all of them at once`;
-    const answer = said ? 'Answer what they asked from the board, within your rules, in one or two sentences' : 'Give the takeaway in one or two sentences: what stands out and what it means';
-    const compare = others.length || put.length > 1 ? '; if they asked to compare, compare them out loud in one short sentence' : '';
-    return `${heard(said, how)}The app ${what}${table}. Its figures are in your board. ${answer}${compare}. Do not read the figures back.`;
+  cards: (put: NutritionData[], others: string[], again: boolean, missing: string[] = []) => {
+    const names = put.map((c) => c.product_name);
+    let text: string;
+    if (put.length === 1) {
+      const table = !others.length ? '' : again
+        ? ` It was already in the comparison table, with ${list(others)}.`
+        : ` It joined the comparison table under the card, alongside ${list(others)}.`;
+      text = `On screen now${again ? ', again' : ''}: ${cardText(put[0], 'full')}${table}`;
+    } else {
+      text = `On screen now: cards for ${list(names)}; ${q(names[names.length - 1])} is on the card and all of them are in the comparison table${others.length ? ` with ${list(others)}` : ''}. ${put.map((c) => capital(cardText(c, 'names'))).join(' ')}`;
+    }
+    const compare = put.length > 1 || others.length ? ' If they asked to compare, give a one-line verdict from the figures.' : '';
+    const lost = missing.length ? ` The app could not find ${list(missing)} just now; say so in a few words.` : '';
+    return `${text} ${TAKEAWAY}${compare}${lost}`;
   },
 
-  /** A comparison: `put` went up for it, `compared` are the foods asked about, `tableSize` is how many rows the table has now. */
-  compare: (put: string[], compared: string[], tableSize: number, said: string | undefined, how: How) => {
-    const extra = tableSize > compared.length ? ` (with ${tableSize - compared.length} other food${tableSize - compared.length === 1 ? '' : 's'} looked at earlier)` : '';
-    return `${heard(said, how)}${put.length ? `The app put ${list(put)} on screen for the comparison` : 'Those foods were already on screen'}: the comparison table under the card now shows ${list(compared)} side by side${extra}, and the user can see them all at once. Give a one-line verdict on what they asked about, using only the board's figures.`;
+  lookupFailed: (missing: string[]) =>
+    `The app could not pull up ${list(missing)} just now: nothing about it is on the user's screen. Say so in one short line, without mentioning an error or a system, and ask whether they would like you to try again; do it only if they say so. If they want a rough idea meanwhile, you may give typical figures from general knowledge, saying clearly that they are rough.`,
+
+  noFood: () => 'No food was named, so nothing changed on screen. Ask which food they mean.',
+
+  /** A comparison: `rows` side by side (the foods asked about), `put` looked up for it, `tableSize` rows in the table now. */
+  compare: (rows: ShelfRow[], put: string[], tableSize: number, missing: string[] = []) => {
+    const extra = tableSize > rows.length ? ` The table also holds ${tableSize - rows.length} other food${tableSize - rows.length === 1 ? '' : 's'} looked at earlier.` : '';
+    const lost = missing.length ? ` The app could not find ${list(missing)} just now; say so in a few words.` : '';
+    return `Side by side in the comparison table on the user's screen now: ${rows.map(rowText).join(' ')}${extra}${put.length ? ` Looked up for this: ${list(put)}.` : ''}${lost} Give a one-line verdict on what they asked about, from these figures only; if they asked nothing specific, name the one difference that matters most.`;
   },
+
+  /** A recipe opened to be talked through, its first steps lit up. */
+  recipe: (recipe: RecipeDetails, food: string, cook: Cook | null) => {
+    const steps = recipe.preparation_steps;
+    const head = `On screen now: the recipe ${q(recipe.recipe_name)}${recipe.description ? ` (${trimEnd(recipe.description)})` : ''}${food ? `, a recipe idea for ${q(food)}` : ''}. Ingredients: ${recipe.ingredients.join('; ') || 'none listed'}.`;
+    if (!steps.length || !cook?.shown) return `${head} It lists no steps. Tell them what goes in it in a sentence or two.`;
+    const [a, b] = cook.shown;
+    const lit = stepsLabel(cook.shown);
+    const these = a === b ? 'that step' : 'those steps';
+    const end = b + 1 >= steps.length ? ' That is the whole recipe.' : ' Ask them to say when they are ready; when they are, call next_steps.';
+    return `${head} It has ${steps.length} steps; ${lit.toLowerCase()} ${a === b ? 'is' : 'are'} lit up: ${stepList(steps.slice(a, b + 1), a)} In a sentence say what it is, then talk them through ${these} only, as spoken sentences.${end}`;
+  },
+
+  /** A recipe the user opened with a tap: on screen, not yet talked through. */
+  recipeTapped: (recipe: RecipeDetails) =>
+    `The recipe ${q(recipe.recipe_name)} is open on their screen with its ingredients and ${recipe.preparation_steps.length} steps (in your board). Say one sentence about it and ask whether they would like you to talk them through it; if they do, call next_steps.`,
+
+  recipeFailed: (name: string) =>
+    `The recipe ${q(name)} could not be made just now, so nothing about it is on the user's screen. Say so in one short line without mentioning an error or a system; if they still want it, give a simple version out loud from what you know, one or two steps at a time.`,
+
+  /** The next batch, lit up. */
+  steps: (recipe: RecipeDetails, cook: Cook) => {
+    const steps = recipe.preparation_steps;
+    const [a, b] = cook.shown!;
+    const last = b + 1 >= steps.length;
+    return `${stepsLabel(cook.shown!)} of ${steps.length} of ${q(recipe.recipe_name)} ${a === b ? 'is' : 'are'} lit up on screen now: ${stepList(steps.slice(a, b + 1), a)} Talk them through ${a === b ? 'that step' : 'those steps'} only, as spoken sentences${last ? '. That is the last step: when they are done, wish them a good meal.' : ', then ask them to say when they are ready for more.'}`;
+  },
+
+  stepsDone: (recipe: RecipeDetails) =>
+    `Every step of ${q(recipe.recipe_name)} has been given; nothing more is lit up. Ask how it is going, or whether they would like anything else.`,
+
+  noRecipe: () => 'No recipe is open, so there are no steps to give. Ask which recipe they would like; open one only if they name it.',
+
+  whichRecipe: () => 'Nothing on screen matches that recipe, so nothing opened. Ask which dish they would like; open one only if they name it.',
+
+  closed: (food: string | null) => `The recipe is closed; ${food ? `the card for ${q(food)} is on screen again` : 'the screen is back to the start'}. Carry on in one short sentence.`,
+
+  notOpen: (food: string | null) => `No recipe was open; ${food ? `the card for ${q(food)} is on screen` : 'nothing is on screen yet'}.`,
+
+  cleared: () => 'Cleared: the card, the comparison table and the opened recipes are gone, and the screen is empty. Say so in one line and invite them to name a food.',
 
   photo: (card: NutritionData, seen: string, sample: boolean, others: string[]) =>
-    `The user ${sample ? 'tried the sample photo' : 'shared a photo'}. The app read it${seen ? ` (${seen})` : ''} and put the card for ${q(card.product_name)} on screen, with figures ${card.source === 'label' ? 'read from its nutrition label' : 'estimated from what the food is, as there is no label to read'}${card.portion_assumed ? ', for an assumed portion' : ''}${others.length ? `; it joined the comparison table alongside ${list(others)}` : ''}. In one or two sentences, say what stands out. Do not read the figures back.`,
+    `The user ${sample ? 'tried the sample plate' : 'added a photo'}. The app read it${seen ? ` (${seen})` : ''} and put its card on screen, with figures ${card.source === 'label' ? 'read from its nutrition label' : 'estimated from what the food is, as there is no label to read'}${card.portion_assumed ? ', for an assumed portion' : ''}${others.length ? `; it joined the comparison table alongside ${list(others)}` : ''}. ${capital(cardText(card, 'names'))} In one or two sentences, say what stands out. Do not read the figures back.`,
 
-  notFood: (seen: string) => `The user shared a photo, but it does not show a food or a food label${seen ? ` (it looks like ${seen})` : ''}. Say so warmly in one short line and ask them to share another, or just name the food.`,
+  notFood: (seen: string) => `The user added a photo, but it does not show a food or a food label${seen ? ` (it looks like ${seen})` : ''}, and nothing new is on screen. Say so warmly in one short line and ask them to add another, or just name the food.`,
 
   photoFailed: () => PHOTO_FAILED,
 
-  noVision: () => `The app cannot read photos right now. Say so in one short line and ask them to name the food instead; do not mention an error or a system.`,
+  noVision: () => 'The app cannot read photos right now, and nothing new is on screen. Say so in one short line and ask them to name the food instead; do not mention an error or a system.',
 
-  /**
-   * A card that could not be made. Prompt material, not a status: an "error"
-   * produces silence or an apology about a system the user cannot see, and the
-   * answer still exists and can be said out loud.
-   */
-  lookupFailed: (foods: string[], said: string | undefined, how: How) =>
-    `${heard(said, how)}The screen did not update, so nothing about ${list(foods)} is visible to the user. Give them the answer OUT LOUD in one or two short sentences, from what you know, saying the figures are rough, and do not mention the screen, the card, or an error.`,
-
-  recipe: (name: string, said: string | undefined, how: How) =>
-    how === 'button'
-      ? `The user tapped the recipe ${q(name)} and its card is now open on their screen with ingredients and steps (in your board). Say one spoken sentence under 16 words about it, then offer to walk them through it.`
-      : `${heard(said, how)}The recipe card ${q(name)} is now open on their screen with its ingredients and steps (in your board). If you have not started yet, walk them through it one or two steps at a time, waiting for them between batches; if you have, carry on from where you are.`,
-
-  /** A recipe opened before, back on screen. Not silent: a card that changed with nobody speaking reads as a dead button. */
-  kept: (name: string, said: string | undefined, how: How) =>
-    how === 'button'
-      ? `The user re-opened the recipe ${q(name)}, which is on their screen again with its ingredients and steps (in your board). Talk them through it briefly, in two or three spoken sentences, no lists.`
-      : say.recipe(name, said, how),
-
-  /** The recipe is the one thing here a user can act on without the panel: it is said out loud rather than lost. */
-  recipeFailed: (name: string) =>
-    `The screen could not show the recipe ${q(name)}, so nothing about it is visible to the user. Give them the recipe OUT LOUD, one or two steps at a time, and do not mention the screen, the card, or an error.`,
+  emergency: () => 'The user may be describing a medical emergency, and an emergency notice is now at the top of their screen. In one or two calm sentences, tell them to call their local emergency number right now (911 in the US, 112 in Europe, 999 in the UK). Say nothing about food.',
 };
+
+/** A button press, told to the host: it cannot see the screen. */
+export const pressed = (button: string, outcome: string) => `The user pressed "${button}" on screen. ${outcome}`;

@@ -25,7 +25,7 @@ export interface Quote {
   error: string | null;
 }
 
-/** The public board: what the page draws and what the avatar's state is built from. */
+/** The public board: what the page draws and what the host's state is built from. */
 export interface Board {
   watchlist: Quote[];
   focus: string | null;
@@ -43,39 +43,59 @@ export interface BoardState extends Board {
 /** What the desk can do to the board. */
 export type Kind = 'add' | 'remove' | 'focus' | 'refresh' | 'clear';
 
-/** Where an action came from: it decides what the avatar is told about it. */
-export type Origin = 'button' | 'spoken' | 'typed' | 'timer';
+/**
+ * Who asked for a pull, which decides who tells the host how it went:
+ * - `tool` or `button`: the caller waits for it and reports it itself;
+ * - `late`: the caller stopped waiting, so the desk tells the host when it lands.
+ * A pull nobody asked for (the once-a-minute timer) is the announcer's.
+ */
+export type Asker = 'tool' | 'button' | 'late';
 
-/** A board action, as a control or the judge produces it. */
-export interface Action {
-  kind: Kind;
-  /** Tickers, already normalised. Empty for clear, and for refresh/focus/remove of "it". */
-  symbols: string[];
-  /** What the user called each symbol ("Nvidia"), when it was not the ticker itself. */
-  said?: Record<string, string>;
+/** How one pull ended. */
+export interface PullOutcome { symbol: string; kind: 'add' | 'refresh'; ok: boolean; reason?: string }
+
+/** What an add did, per stock. */
+export interface AddReport {
+  /** On the board now, with what the user called each one. */
+  landed: { quote: Quote; said?: string }[];
+  /** Already on the board before this add. */
+  already: Quote[];
+  /** Did not go up, and why (in the board's words). */
+  failed: { symbol: string; reason: string; said?: string }[];
+  /** Still in flight when the wait ran out: the desk tells the host when each lands. */
+  pending: string[];
+  /** Names nobody could turn into a ticker. */
+  unresolved: string[];
 }
 
-/** The judge's reading of one utterance. */
-export type Judgement =
-  | { kind: 'none' }
-  | { kind: 'advice' }
-  | { kind: Kind; symbols: string[]; said: Record<string, string>; unresolved: string[] };
+export type RefreshReport =
+  | { kind: 'fresh'; quote: Quote; samePrint: boolean }
+  | { kind: 'failed'; quote: Quote; reason: string }
+  | { kind: 'tooSoon'; quote: Quote }
+  | { kind: 'pending'; symbol: string }
+  | { kind: 'missing'; symbol: string }
+  | { kind: 'empty' };
 
-export interface Outcome {
-  seq: number;
-  board: Board;
-  /** It was a desk action or an advice question: a typed line is recorded, not forwarded. */
-  handled: boolean;
-  kind?: Kind | 'advice';
-  /** The board's refusal, verbatim (the panel prints it; the avatar is told it). */
-  refused?: string;
-  /** The decline path fired: what was asked and the board fact offered instead. */
-  advice?: { asked: string; fact: string };
-  /** What the avatar should be told, in its own words, if anything. */
-  event?: string;
-}
+export type FocusReport =
+  | { kind: 'focused'; quote: Quote }
+  | { kind: 'added'; report: AddReport }
+  | { kind: 'missing'; said: string };
+
+export interface RemoveReport { removed: string[]; refused: string[]; board: Board }
+
+export type ClearReport = { cleared: true } | { cleared: false; reason: string };
 
 /** What the server streams to the page. */
 export type DeskMessage =
   | { type: 'board'; seq: number; board: Board }
   | { type: 'say'; text: string; ttl: number };
+
+/** A tool call's or a button's reply: the board, and the words for the host. */
+export interface ActReply {
+  seq: number;
+  board: Board;
+  /** For a tool call: what the host says next. For a button: the event telling the host. */
+  text: string;
+  /** A refusal or failure in the board's own words, for the panel to print. */
+  refused?: string;
+}

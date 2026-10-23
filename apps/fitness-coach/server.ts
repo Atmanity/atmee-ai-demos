@@ -1,25 +1,27 @@
-// Fitness Coach's server side. It owns the session: the step machine (the
-// original's five AgentTasks), the plan model call and the enforcement of the
-// user's limits on it, the clearance hold, and the demo clip (xAI, if a key is
-// configured, kept and served from this app's own route). The page draws the
-// view it is given and relays outcomes to the avatar.
+// Spotter's server side. It owns each training session: the coach (the step
+// machine, the plan model call and the enforcement of the user's limits on it,
+// the safety hold, the move video), answers Sammy's tool calls and the user's
+// taps with one set of actions (engine/actions.ts), and streams what finishes
+// in the background (a plan landing, a rebuild, a video).
 //
-// Why on the server: the plan and the demo come from paid APIs whose keys stay
-// here; and the board must have ONE writer that can re-check the safety hold
-// after every await. A page-side engine would be a second writer racing it.
+// Why on the server: the plan and the video come from paid APIs whose keys
+// stay here; and the board must have ONE writer that can re-check the safety
+// hold after every await.
 import { randomBytes } from 'node:crypto';
 import type { AppServer } from '../../server/app-server.ts';
 import { llmAvailable, structured } from '../../server/llm.ts';
+import { hold, press, Relay, runTool } from './engine/actions.ts';
 import { Coach } from './engine/coach.ts';
-import { judge, type Ask } from './engine/judge.ts';
+import { INSTRUCTIONS, TOOLS } from './engine/director.ts';
 import { PLAN_SCHEMA, PLAN_SYSTEM_PROMPT, planFromData, planPrompt } from './engine/plan.ts';
-import type { Command, Outcome } from './engine/types.ts';
+import type { Command, View } from './engine/types.ts';
 import { DemoRenderer, referenceImageUrls } from './engine/video.ts';
 
 const ID = 'fitness-coach';
 const COMMANDS: Command[] = ['goal', 'level', 'move', 'relevel', 'restart'];
+const ACTIONS = new Set(TOOLS.map((t) => t.name));
 
-interface Session { coach: Coach; at: number }
+interface Session { coach: Coach; relay: Relay; at: number }
 const sessions = new Map<string, Session>();
 /** Rendered clips, kept in memory and served same-origin (the page never sees the provider's URL). */
 const clips = new Map<string, { type: string; body: Buffer }>();
@@ -32,11 +34,6 @@ function storeClip(bytes: Uint8Array, type: string): string {
   return `/api/apps/${ID}/clips/${token}`;
 }
 
-/** The app's own model call for the judge, when a Gemini key is set. */
-const ask: Ask | undefined = llmAvailable()
-  ? (request) => structured({ ...request, temperature: 0 })
-  : undefined;
-
 function newCoach(seed: string): Coach {
   return new Coach({
     seed,
@@ -47,7 +44,7 @@ function newCoach(seed: string): Coach {
         { goal, level },
       )
       : undefined,
-    // Without XAI_API_KEY the renderer reports demos as off and calls nothing.
+    // Without XAI_API_KEY the renderer reports videos as off and calls nothing.
     renderer: (hooks) => new DemoRenderer({ ...hooks, store: storeClip }),
     hasReference: referenceImageUrls().length > 0,
   });
@@ -56,6 +53,7 @@ function newCoach(seed: string): Coach {
 function prune() {
   for (const [id, s] of sessions) {
     if (Date.now() - s.at > 3 * 3600_000) {
+      s.relay.close();
       s.coach.dispose();
       sessions.delete(id);
     }
@@ -64,51 +62,71 @@ function prune() {
 
 const app: AppServer = {
   id: ID,
-  title: 'Fitness Coach',
-  tagline: 'Tell a coach your goal, level and limits; get a plan that honours them and a walk-through of the first move.',
-  // No conductor: the app's step machine is the source of truth. A conductor
-  // judged per turn would be a second decider that can disagree with it (the
-  // avatar asking "which move first?" over a board with no plan yet).
-  conductor: null,
+  title: 'Spotter',
+  tagline: 'A workout built around you, coached by Sammy.',
   maxSeconds: 900,
+  appTools: { instructions: INSTRUCTIONS, tools: TOOLS },
   routes(router) {
     router.post('/sessions', (req, res) => {
       prune();
       const id = randomBytes(9).toString('hex');
       const seed = String(req.body?.seed ?? '').replace(/[^a-z0-9]/gi, '').slice(0, 16) || id;
       const coach = newCoach(seed);
-      sessions.set(id, { coach, at: Date.now() });
-      res.json({ id, outcome: coach.open() });
+      sessions.set(id, { coach, relay: new Relay(coach), at: Date.now() });
+      const opened = coach.open();
+      res.json({ id, view: opened.view, opening: opened.events[0]?.text ?? '' });
     });
 
-    router.post('/sessions/:id/act', async (req, res) => {
-      const session = sessions.get(req.params.id);
+    const find = (id: string) => {
+      const session = sessions.get(id);
+      if (session) session.at = Date.now();
+      return session;
+    };
+
+    // Sammy's tool calls: the result is what she says next.
+    router.post('/sessions/:id/tool', async (req, res) => {
+      const session = find(req.params.id);
       if (!session) return void res.status(404).json({ error: 'no_session' });
-      session.at = Date.now();
-      const { command, value, text, how } = (req.body ?? {}) as { command?: string; value?: string; text?: string; how?: string };
-      if (command) {
-        if (!COMMANDS.includes(command as Command)) return void res.status(400).json({ error: 'unknown_command' });
-        return void res.json(session.coach.command(command as Command, String(value ?? '')) satisfies Outcome);
-      }
-      const said = typeof text === 'string' ? text.trim().slice(0, 600) : '';
-      if (!said) return void res.status(400).json({ error: 'nothing_to_do' });
+      const { name, arguments: args } = (req.body ?? {}) as { name?: string; arguments?: Record<string, unknown> };
+      if (!name || !ACTIONS.has(name)) return void res.status(400).json({ error: 'unknown_tool' });
       try {
-        // A failed model call inside is judged as "no intent", never an error.
-        const judgement = await judge(said, session.coach.context(), ask);
-        res.json(session.coach.hear(judgement, how === 'spoken' ? 'spoken' : 'typed') satisfies Outcome);
+        const run = await runTool(session.coach, session.relay, name, args ?? {});
+        session.relay.poke();
+        res.json({ view: run.view, result: run.text } satisfies { view: View; result: string });
       } catch (err) {
-        console.warn('[%s] [Act] judging a line failed (%s)', ID, (err as Error).message);
-        res.status(500).json({ error: 'act_failed' });
+        console.warn('[%s] [Tool] %s failed (%s)', ID, name, (err as Error).message);
+        res.status(500).json({ error: 'tool_failed' });
       }
     });
 
-    // Outcomes of background work: a plan landing, a rebuild, a demo status.
+    // The user's taps: they act at once; Sammy cannot see them, so the page tells her.
+    router.post('/sessions/:id/act', (req, res) => {
+      const session = find(req.params.id);
+      if (!session) return void res.status(404).json({ error: 'no_session' });
+      const { command, value } = (req.body ?? {}) as { command?: string; value?: string };
+      if (!command || !COMMANDS.includes(command as Command)) return void res.status(400).json({ error: 'unknown_command' });
+      const done = press(session.coach, command as Command, String(value ?? '').slice(0, 160));
+      session.relay.poke();
+      res.json(done);
+    });
+
+    // The page's own safety check: it heard a condition in the user's words and freezes the plan now.
+    router.post('/sessions/:id/hold', (req, res) => {
+      const session = find(req.params.id);
+      if (!session) return void res.status(404).json({ error: 'no_session' });
+      const view = hold(session.coach, String((req.body as { text?: string })?.text ?? ''));
+      if (!view) return void res.status(400).json({ error: 'no_condition' });
+      session.relay.poke();
+      res.json({ view });
+    });
+
+    // Outcomes of background work: a plan landing, a rebuild, a video.
     router.get('/sessions/:id/stream', (req, res) => {
-      const session = sessions.get(req.params.id);
+      const session = find(req.params.id);
       if (!session) return void res.status(404).end();
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
       res.write(': open\n\n');
-      const off = session.coach.subscribe((outcome) => { res.write(`data: ${JSON.stringify(outcome)}\n\n`); });
+      const off = session.relay.listen((outcome) => { res.write(`data: ${JSON.stringify(outcome)}\n\n`); });
       const ping = setInterval(() => res.write(': ping\n\n'), 25_000);
       req.on('close', () => {
         off();
@@ -116,7 +134,7 @@ const app: AppServer = {
       });
     });
 
-    // The demo clips, with byte ranges (a <video> asks for them to seek and loop).
+    // The move videos, with byte ranges (a <video> asks for them to seek and loop).
     router.get('/clips/:token', (req, res) => {
       const clip = clips.get(req.params.token);
       if (!clip) return void res.status(404).end();

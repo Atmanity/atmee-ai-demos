@@ -49,7 +49,7 @@ export interface FigureStatus {
   rise: string;
 }
 
-/** What the page renders and the director tells: the snapshot plus the
+/** What the page renders and the host is told: the snapshot plus the
  *  figures' standing and the instant in words. All from one SkyChart. */
 export interface SkyView {
   snapshot: SkySnapshot;
@@ -63,8 +63,8 @@ export interface SkyView {
   night: { date: string; hours: number };
 }
 
-/** Everything the chart can be asked to do. A control, a typed line and a
- *  spoken one all become these; the chart validates before it mutates. */
+/** Everything the chart can be asked to do. A control, a tool call and the
+ *  safety net all become these; the chart validates before it mutates. */
 export type Intent =
   | { kind: 'set_place'; label?: string; lat?: number | string; lon?: number | string }
   | {
@@ -83,6 +83,3 @@ export type Intent =
   | { kind: 'show_constellation'; name: string }
   | { kind: 'clear_selection' }
   | { kind: 'clear_figure' };
-
-/** Where an intent came from, which decides what the avatar is told about it. */
-export type How = 'control' | 'typed' | 'spoken';

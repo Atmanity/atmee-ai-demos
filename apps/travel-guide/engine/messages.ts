@@ -143,7 +143,6 @@ export function parseSnapshot(value: unknown): Snapshot | null {
     stage: value.stage as Stage,
     travelerName: str(value.travelerName),
     continent: str(value.continent),
-    awaitingPick: value.awaitingPick === true,
     pending: value.pending === true,
     newsAvailable: value.newsAvailable === true,
     map: parseMap(value.map),

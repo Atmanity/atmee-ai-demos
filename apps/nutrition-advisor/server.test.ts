@@ -1,7 +1,7 @@
 // The server's routes end to end, with the model call replaced by a fake: what
-// goes on the board, what the avatar is told, how many model calls each step
-// costs, and what happens without a model or when it fails. No network beyond
-// this machine.
+// each tool puts on the table and returns for the host to speak from, what a
+// button tells the host, how many model calls each step costs, and what
+// happens without a model or when it fails. No network beyond this machine.
 import { once } from 'node:events';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -33,7 +33,6 @@ vi.mock('../../server/llm.ts', () => ({
 }));
 
 import { CARD_SCHEMA, PHOTO_SCHEMA, RECIPE_SCHEMA } from './engine/card.ts';
-import { JUDGE_SCHEMA } from './engine/judge.ts';
 import type { Outcome } from './engine/types.ts';
 import app from './server.ts';
 
@@ -52,14 +51,12 @@ const cardJson = (name: string, over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-let judged: unknown = { kind: 'none', foods: [], recipe: '' };
 let photoJson: Record<string, unknown> = {};
 
 function model(req: { user: string; schema: unknown }): unknown {
   if (req.schema === CARD_SCHEMA) return cardJson(/asked about: "([^"]+)"/.exec(req.user)![1]);
-  if (req.schema === RECIPE_SCHEMA) return { ingredients: ['1 banana', '200 ml milk'], preparation_steps: ['1. **Peel** it', 'Blend it'] };
+  if (req.schema === RECIPE_SCHEMA) return { ingredients: ['1 banana', '200 ml milk'], preparation_steps: ['1. **Peel** it', 'Blend it', 'Pour it'] };
   if (req.schema === PHOTO_SCHEMA) return photoJson;
-  if (req.schema === JUDGE_SCHEMA) return judged;
   throw new Error('unexpected schema');
 }
 
@@ -84,7 +81,6 @@ afterAll(() => { server.close(); });
 beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => {}); // the failures below are on purpose
   Object.assign(fake, { available: true, calls: [], respond: model, delay: 0, live: 0, maxLive: 0 });
-  judged = { kind: 'none', foods: [], recipe: '' };
   photoJson = { is_food: true, seen: 'a carton of oat milk', source: 'label', portion_assumed: false, ...cardJson('oat milk', { product_name: 'Oat milk', serving_size: '240 ml' }) };
 });
 
@@ -94,132 +90,226 @@ async function post<T = Outcome>(path: string, body?: unknown): Promise<{ status
 }
 
 async function open() {
-  const { body } = await post<{ id: string; outcome: Outcome }>('/sessions');
-  const act = (action: unknown, how = 'button', said?: string) => post(`/sessions/${body.id}/act`, { action, how, said });
-  const judge = (text: string, how = 'spoken', screen = { recipe: null as string | null }, lastAvatarLine = '') =>
-    post<{ intent: unknown; by: string }>(`/sessions/${body.id}/judge`, { text, how, screen, lastAvatarLine });
-  return { id: body.id, start: body.outcome, act, judge };
+  const { body } = await post<{ id: string; view: Outcome['view']; opening: string }>('/visits');
+  const tool = (name: string, args: Record<string, unknown> = {}, openRecipe: string | null = null) => post(`/visits/${body.id}/tool`, { name, arguments: args, open: openRecipe });
+  const act = (command: string, more: Record<string, unknown> = {}) => post(`/visits/${body.id}/act`, { command, ...more });
+  return { id: body.id, first: body, tool, act };
 }
 
-const lookup = (name: string, quantity = '') => ({ kind: 'lookup', foods: [{ name, quantity }] });
-
-describe('a session', () => {
-  it('opens on an empty board, with the opening for the avatar', async () => {
-    const { start } = await open();
-    expect(start.view.nutrition).toBeNull();
-    expect(start.view.shelf.items).toEqual([]);
-    expect(start.event).toMatch(/name any food, or share a photo/);
+describe('a visit', () => {
+  it('opens on an empty table, with the opening for the host', async () => {
+    const { first } = await open();
+    expect(first.view.nutrition).toBeNull();
+    expect(first.view.shelf.items).toEqual([]);
+    expect(first.opening).toMatch(/name any food, or to add a photo/);
   });
 
-  it('an unknown session or an empty request is refused, not guessed at', async () => {
-    const { act } = await open();
-    expect((await post('/sessions/nope/act', { action: lookup('banana') })).status).toBe(404);
-    expect((await act({ kind: 'lookup', foods: [] })).status).toBe(400);
-    expect((await act({ kind: 'photo', image: { mimeType: 'text/html', base64: 'eA==' } })).status).toBe(400);
-    expect((await act({ kind: 'dance' })).status).toBe(400);
+  it('an unknown visit, tool or command is refused, not guessed at', async () => {
+    const { tool, act } = await open();
+    expect((await post('/visits/nope/tool', { name: 'look_up_food', arguments: { foods: ['banana'] } })).status).toBe(404);
+    expect((await tool('next_steps')).status).toBe(400);   // the page answers that one itself
+    expect((await tool('dance')).status).toBe(400);
+    expect((await act('dance')).status).toBe(400);
+    expect((await act('lookup', { food: 'it' })).status).toBe(400);
+    expect((await act('photo', { image: { mimeType: 'text/html', base64: 'eA==' } })).status).toBe(400);
   });
 });
 
-describe('naming foods', () => {
-  it('puts a card up, an estimate for an assumed portion, and tells the avatar what was asked', async () => {
-    const { act } = await open();
-    const { body } = await act(lookup('banana'), 'typed', "what's in a banana?");
+describe('look_up_food', () => {
+  it('puts a card up, an estimate for an assumed portion, and returns its figures', async () => {
+    const { tool } = await open();
+    const { body } = await tool('look_up_food', { foods: ['a banana'] });
     expect(body.kind).toBe('card');
     expect(body.card).toBe(true);
     expect(body.view.nutrition).toMatchObject({ product_name: 'Medium banana', source: 'estimate', portion_assumed: true });
-    expect(body.event).toContain('The user typed: "what\'s in a banana?"');
+    expect(body.text).toContain('On screen now: the nutrition card for "Medium banana"');
+    expect(body.text).toContain('105 calories');
     expect(calls(CARD_SCHEMA)).toBe(1);
   });
 
   it('a stated quantity is not an assumed portion', async () => {
-    const { act } = await open();
-    const { body } = await act(lookup('chicken breast', '200 g'), 'spoken', 'how much protein in 200 g of chicken breast');
+    const { tool } = await open();
+    const { body } = await tool('look_up_food', { foods: ['200 g of chicken breast'] });
     expect(body.view.nutrition?.portion_assumed).toBe(false);
-    expect(fake.calls[0].user).toMatch(/exactly that quantity/);
+    expect(fake.calls[0].user).toMatch(/asked about: "chicken breast", and said how much: "200 g"/);
   });
 
-  it('a food already looked at comes back without a second model call', async () => {
-    const { act } = await open();
-    await act(lookup('banana'));
-    await act(lookup('apple'));
-    const { body } = await act(lookup('banana'));
+  it('a food already looked at comes back without a second model call, back rather than new', async () => {
+    const { tool } = await open();
+    await tool('look_up_food', { foods: ['banana'] });
+    await tool('look_up_food', { foods: ['apple'] });
+    const { body } = await tool('look_up_food', { foods: ['banana'] });
     expect(body.view.nutrition?.product_name).toBe('Medium banana');
     expect(body.view.shelf.items.map((r) => r.product_name)).toEqual(['Medium banana', 'Medium apple']);
     expect(calls(CARD_SCHEMA)).toBe(2);
-    // Back, not new: it does not "join" a table it was already in.
-    expect(body.event).toMatch(/"Medium banana" back on their screen; it was already in the comparison table/);
+    expect(body.text).toMatch(/On screen now, again: [^]*It was already in the comparison table, with "Medium apple"/);
   });
 
-  it('compare: only what the table lacks goes up, and the verdict names both', async () => {
-    const { act } = await open();
-    await act(lookup('banana'));
-    const { body } = await act({ kind: 'compare', foods: [{ name: 'apple', quantity: '' }] }, 'spoken', 'compare it with an apple');
+  it('two foods at once: both up, each with its figures', async () => {
+    const { tool } = await open();
+    const { body } = await tool('look_up_food', { foods: ['a banana and an apple'] });
+    expect(body.view.shelf.items).toHaveLength(2);
+    expect(body.text).toMatch(/cards for "Medium banana" and "Medium apple"/);
+  });
+
+  it('a card the model could not make is said, with a notice, never silence; a common food still has its own', async () => {
+    const { tool } = await open();
+    fake.respond = () => { throw new Error('quota'); };
+    const { body } = await tool('look_up_food', { foods: ['dragon fruit'] });
+    expect(body.kind).toBe('failed');
+    expect(body.text).toMatch(/could not pull up "dragon fruit"/);
+    expect(body.notice).toMatch(/Couldn't find dragon fruit/);
+    const banana = await tool('look_up_food', { foods: ['banana'] });
+    expect(banana.body.view.nutrition?.product_name).toBe('Medium banana');
+  });
+
+  it('only a pointer is no food: nothing changes, and the host asks', async () => {
+    const { tool } = await open();
+    const { body } = await tool('look_up_food', { foods: ['it'] });
+    expect(body.kind).toBe('failed');
+    expect(body.text).toMatch(/Ask which food they mean/);
+    expect(fake.calls).toEqual([]);
+  });
+});
+
+describe('compare_foods', () => {
+  it('only what the table lacks goes up, and the rows come back side by side', async () => {
+    const { tool } = await open();
+    await tool('look_up_food', { foods: ['banana'] });
+    const { body } = await tool('compare_foods', { foods: ['an apple'] });
     expect(body.kind).toBe('compare');
     expect(body.view.shelf.items.map((r) => r.product_name)).toEqual(['Medium banana', 'Medium apple']);
     expect(body.view.shelf.current).toBe('Medium apple');
-    expect(body.event).toMatch(/"Medium banana" and "Medium apple" side by side/);
+    expect(body.text).toContain('Medium banana, 1 medium: 105 cal');
+    expect(body.text).toContain('Medium apple, 1 medium: 95 cal');
+    expect(body.text).toContain('Looked up for this: "Medium apple"');
     expect(calls(CARD_SCHEMA)).toBe(2);
-    const again = await act({ kind: 'compare', foods: [{ name: 'banana', quantity: '' }, { name: 'apple', quantity: '' }] });
-    expect(again.body.event).toMatch(/Those foods were already on screen/);
+    const again = await tool('compare_foods', { foods: ['banana', 'apple'] });
+    expect(again.body.text).not.toContain('Looked up for this');
     expect(calls(CARD_SCHEMA)).toBe(2);
   });
 
-  it('a card the model could not make is said out loud, with a notice, never silence', async () => {
-    const { act } = await open();
+  it('with nothing to compare against yet, it is a card', async () => {
+    const { tool } = await open();
+    const { body } = await tool('compare_foods', { foods: ['an apple'] });
+    expect(body.kind).toBe('card');
+    expect(body.text).toContain('the nutrition card for "Medium apple"');
+  });
+
+  it('a food that could not be found is said, never a verdict on something else', async () => {
+    const { tool } = await open();
+    await tool('look_up_food', { foods: ['banana', 'apple'] });
     fake.respond = () => { throw new Error('quota'); };
-    const { body } = await act(lookup('dragon fruit'));
+    const { body } = await tool('compare_foods', { foods: ['dragon fruit'] });
     expect(body.kind).toBe('failed');
-    expect(body.event).toMatch(/OUT LOUD/);
-    expect(body.notice).toMatch(/Couldn't pull up dragon fruit/);
-    // A common food still gets the app's own card.
-    const banana = await act(lookup('banana'));
-    expect(banana.body.view.nutrition?.product_name).toBe('Medium banana');
+    expect(body.text).toMatch(/could not pull up "dragon fruit"/);
+    expect(body.text).not.toMatch(/verdict/);
+  });
+
+  it('"compare them" with the table full compares the table', async () => {
+    const { tool } = await open();
+    await tool('look_up_food', { foods: ['banana', 'apple'] });
+    const { body } = await tool('compare_foods', { foods: ['them'] });
+    expect(body.kind).toBe('compare');
+    expect(body.text).toMatch(/Medium banana[^]*Medium apple/);
   });
 });
 
 describe('recipes', () => {
-  it('are made ahead for the card, then open at once under the name tapped', async () => {
-    const { act } = await open();
-    await act(lookup('banana'));
-    const prepared = await act({ kind: 'prepare' });
+  it('are made ahead for the card, then open at once under the name the card gives, first steps lit', async () => {
+    const { tool, act } = await open();
+    await tool('look_up_food', { foods: ['banana'] });
+    const prepared = await act('prepare');
     expect(prepared.body.view.prepared.map((r) => r.recipe_name)).toEqual(['banana smoothie', 'banana bread', 'banana oats']);
     expect(calls(RECIPE_SCHEMA)).toBe(3);
-    const { body } = await act({ kind: 'recipe', name: 'banana smoothie', description: 'Blend it.' });
+    const { body } = await tool('open_recipe', { recipe: 'the first one' });
     expect(body.kind).toBe('recipe');
-    expect(body.recipe).toMatchObject({ recipe_name: 'banana smoothie', description: 'Blend it.', preparation_steps: ['Peel it', 'Blend it'] });
-    expect(body.event).toMatch(/tapped the recipe "banana smoothie"/);
+    expect(body.recipe).toMatchObject({ recipe_name: 'banana smoothie', description: 'Blend it.', preparation_steps: ['Peel it', 'Blend it', 'Pour it'] });
+    expect(body.text).toContain('steps 1 and 2 are lit up: (1) Peel it. (2) Blend it.');
+    expect(body.text).not.toContain('Pour it');
     expect(calls(RECIPE_SCHEMA)).toBe(3);
     expect(body.view.shelf.recipes).toEqual([{ recipe_name: 'banana smoothie' }]);
   });
 
-  it('a recipe opened again is the kept copy, said out loud', async () => {
-    const { act } = await open();
-    await act(lookup('banana'));
-    await act({ kind: 'recipe', name: 'banana bread', description: '' });
-    await act(lookup('apple'));
-    const { body } = await act({ kind: 'recipe', name: 'banana bread', description: '' });
+  it('a tap opens it for the user, and the host is told to offer the walkthrough', async () => {
+    const { tool, act } = await open();
+    await tool('look_up_food', { foods: ['banana'] });
+    const { body } = await act('recipe', { name: 'banana bread', description: 'Bake it.' });
+    expect(body.kind).toBe('recipe');
+    expect(body.text).toMatch(/^The user pressed "Open recipe: banana bread" on screen\./);
+    expect(body.text).toMatch(/ask whether they would like you to talk them through it/);
+  });
+
+  it('"walk me through it" means the recipe open on the page', async () => {
+    const { tool, act } = await open();
+    await tool('look_up_food', { foods: ['banana'] });
+    await act('recipe', { name: 'banana oats', description: '' });
+    const { body } = await tool('open_recipe', { recipe: 'it' }, 'banana oats');
+    expect(body.kind).toBe('kept');
+    expect(body.recipe?.recipe_name).toBe('banana oats');
+    expect(calls(RECIPE_SCHEMA)).toBe(1);
+  });
+
+  it('a recipe opened again is the kept copy, even after the card moved on', async () => {
+    const { tool } = await open();
+    await tool('look_up_food', { foods: ['banana'] });
+    await tool('open_recipe', { recipe: 'banana bread' });
+    await tool('look_up_food', { foods: ['apple'] });
+    const { body } = await tool('open_recipe', { recipe: 'banana bread' });
     expect(body.kind).toBe('kept');
     expect(body.recipe?.description).toBe('Bake it.');
-    expect(body.event).toMatch(/re-opened the recipe "banana bread"/);
     expect(calls(RECIPE_SCHEMA)).toBe(1);
   });
 
   it('a tap while the recipe is being made ahead waits for it instead of paying twice', async () => {
-    const { act } = await open();
-    await act(lookup('banana'));
+    const { tool, act } = await open();
+    await tool('look_up_food', { foods: ['banana'] });
     fake.delay = 40;
-    const [, tapped] = await Promise.all([act({ kind: 'prepare' }), act({ kind: 'recipe', name: 'banana oats', description: '' })]);
+    const [, tapped] = await Promise.all([act('prepare'), act('recipe', { name: 'banana oats', description: '' })]);
     expect(tapped.body.kind).toBe('recipe');
     expect(calls(RECIPE_SCHEMA)).toBe(3);
   });
 
-  it('a recipe that could not be made is said out loud instead', async () => {
-    const { act } = await open();
-    await act(lookup('banana'));
-    fake.respond = (req) => { if (req.schema === RECIPE_SCHEMA) throw new Error('quota'); return model(req); };
-    const { body } = await act({ kind: 'recipe', name: 'banana bread', description: '' }, 'spoken', 'walk me through the banana bread');
+  it('"the first one" with no card opens nothing, and the host asks which dish', async () => {
+    const { tool } = await open();
+    const { body } = await tool('open_recipe', { recipe: 'the first one' });
     expect(body.kind).toBe('failed');
-    expect(body.event).toMatch(/Give them the recipe OUT LOUD/);
+    expect(body.text).toMatch(/Ask which dish they would like/);
+    expect(fake.calls).toEqual([]);
+  });
+
+  it('a recipe that could not be made is said out loud instead', async () => {
+    const { tool } = await open();
+    await tool('look_up_food', { foods: ['banana'] });
+    fake.respond = (req) => { if (req.schema === RECIPE_SCHEMA) throw new Error('quota'); return model(req); };
+    const { body } = await tool('open_recipe', { recipe: 'banana bread' });
+    expect(body.kind).toBe('failed');
+    expect(body.text).toMatch(/out loud from what you know/);
+  });
+});
+
+describe('start_over', () => {
+  it('clears the table and the recipes, and the view still moves on', async () => {
+    const { tool, act } = await open();
+    await tool('look_up_food', { foods: ['banana', 'apple'] });
+    await tool('open_recipe', { recipe: 'apple bread' });
+    const before = (await tool('look_up_food', { foods: ['banana'] })).body.view.seq;
+    const { body } = await tool('start_over');
+    expect(body.kind).toBe('cleared');
+    expect(body.view.seq).toBeGreaterThan(before);
+    expect(body.view.nutrition).toBeNull();
+    expect(body.view.shelf).toEqual({ current: '', items: [], recipes: [] });
+    expect(body.text).toMatch(/the screen is empty/);
+    expect((await act('start_over')).body.text).toMatch(/^The user pressed "Start over" on screen\./);
+  });
+});
+
+describe('buttons', () => {
+  it('a quick pick looks the food up and tells the host what was pressed, with the figures', async () => {
+    const { act } = await open();
+    const { body } = await act('lookup', { food: 'Greek yogurt' });
+    expect(body.kind).toBe('card');
+    expect(body.text).toMatch(/^The user pressed "greek yogurt" on screen\. On screen now: the nutrition card/);
   });
 });
 
@@ -228,19 +318,19 @@ describe('photos', () => {
 
   it('a label is read as a label, for the label’s own serving', async () => {
     const { act } = await open();
-    const { body } = await act({ kind: 'photo', image });
+    const { body } = await act('photo', { image });
     expect(body.kind).toBe('photo');
     expect(body.view.nutrition).toMatchObject({ product_name: 'Oat milk', source: 'label', portion_assumed: false });
-    expect(body.event).toMatch(/read from its nutrition label/);
+    expect(body.text).toMatch(/read from its nutrition label/);
     expect(fake.calls[0].images).toEqual([image]);
   });
 
   it('a photo that is not food is said kindly, with a notice', async () => {
     const { act } = await open();
     photoJson = { ...photoJson, is_food: false, seen: 'a cat on a sofa' };
-    const { body } = await act({ kind: 'photo', image });
+    const { body } = await act('photo', { image });
     expect(body.kind).toBe('failed');
-    expect(body.event).toMatch(/it looks like a cat on a sofa/);
+    expect(body.text).toMatch(/it looks like a cat on a sofa/);
     expect(body.notice).toMatch(/doesn't look like a food/);
     expect(body.view.nutrition).toBeNull();
   });
@@ -248,49 +338,24 @@ describe('photos', () => {
   it('two photos at once are read one at a time, and both are read', async () => {
     const { act } = await open();
     fake.delay = 30;
-    const [a, b] = await Promise.all([act({ kind: 'photo', image }), act({ kind: 'photo', image })]);
+    const [a, b] = await Promise.all([act('photo', { image }), act('photo', { image })]);
     expect(fake.maxLive).toBe(1);
     expect([a.body.kind, b.body.kind]).toEqual(['photo', 'photo']);
   });
 
-  it('the sample is the app’s own photo, read like any other', async () => {
+  it('the salmon plate is the app’s own photo, read like any other', async () => {
     const { act } = await open();
     photoJson = { ...cardJson('plate', { product_name: 'Salmon plate' }), is_food: true, seen: 'salmon and rice', source: 'estimate', portion_assumed: true };
-    const { body } = await act({ kind: 'sample' });
+    const { body } = await act('sample');
     expect(body.view.nutrition?.product_name).toBe('Salmon plate');
-    expect(body.event).toMatch(/tried the sample photo/);
+    expect(body.text).toMatch(/tried the sample plate/);
     expect((fake.calls[0].images as { base64: string }[])[0].base64.length).toBeGreaterThan(1000);
   });
 
-  it('serves the sample so the board can show what is being read', async () => {
+  it('serves the plate photo so the table can show what is being read', async () => {
     const res = await fetch(`${base}/sample.jpg`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('image/jpeg');
-  });
-});
-
-describe('judging what the user said', () => {
-  it('the rules answer the phrasings they know, without a model call', async () => {
-    const { act, judge } = await open();
-    await act(lookup('banana'));
-    const { body } = await judge('Compare it with an apple');
-    expect(body).toEqual({ intent: { kind: 'compare', foods: [{ name: 'apple', quantity: '' }] }, by: 'rules' });
-    expect(calls(JUDGE_SCHEMA)).toBe(0);
-  });
-
-  it('the model reads the rest, with the screen in front of it', async () => {
-    const { judge } = await open();
-    judged = { kind: 'lookup', foods: [{ name: 'Big Mac', quantity: '' }], recipe: '' };
-    const { body } = await judge("I'm eating a Big Mac right now");
-    expect(body).toEqual({ intent: { kind: 'lookup', foods: [{ name: 'big mac', quantity: '' }] }, by: 'model' });
-    expect(fake.calls[0].user).toContain('no card yet');
-  });
-
-  it('knows which recipe is open on the page', async () => {
-    const { act, judge } = await open();
-    await act(lookup('banana'));
-    expect((await judge('go back', 'spoken', { recipe: 'banana bread' })).body.intent).toEqual({ kind: 'back' });
-    expect((await judge('walk me through it', 'spoken', { recipe: 'banana bread' })).body.intent).toEqual({ kind: 'none' });
   });
 });
 
@@ -298,25 +363,22 @@ describe('without a model', () => {
   beforeEach(() => { fake.available = false; });
 
   it('common foods still get a card, and nothing calls a model', async () => {
-    const { act } = await open();
-    const { body } = await act(lookup('banana'));
-    expect(body.view.nutrition?.product_name).toBe('Medium banana');
-    expect((await act(lookup('dragon fruit'))).body.kind).toBe('failed');
+    const { tool } = await open();
+    expect((await tool('look_up_food', { foods: ['banana'] })).body.view.nutrition?.product_name).toBe('Medium banana');
+    expect((await tool('look_up_food', { foods: ['dragon fruit'] })).body.kind).toBe('failed');
     expect(fake.calls).toEqual([]);
   });
 
-  it('the sample still works; a photo of the user’s own says the app cannot read it', async () => {
+  it('the plate photo still works; a photo of the user’s own says photos cannot be read now', async () => {
     const { act } = await open();
-    expect((await act({ kind: 'sample' })).body.view.nutrition?.product_name).toBe('Grilled salmon with rice and greens');
-    const photo = await act({ kind: 'photo', image: { mimeType: 'image/png', base64: 'aGVsbG8=' } });
-    expect(photo.body.notice).toMatch(/GEMINI_API_KEY/);
+    expect((await act('sample')).body.view.nutrition?.product_name).toBe('Grilled salmon with rice and greens');
+    const photo = await act('photo', { image: { mimeType: 'image/png', base64: 'aGVsbG8=' } });
+    expect(photo.body.notice).toMatch(/Photo reading isn't available right now/);
   });
 
-  it('a recipe is said out loud, and a typed food name is still a lookup', async () => {
-    const { act, judge } = await open();
-    await act(lookup('banana'));
-    expect((await act({ kind: 'recipe', name: 'Banana oat smoothie', description: '' })).body.event).toMatch(/OUT LOUD/);
-    expect((await judge('greek yogurt', 'typed')).body).toEqual({ intent: { kind: 'lookup', foods: [{ name: 'greek yogurt', quantity: '' }] }, by: 'fallback' });
-    expect((await judge('greek yogurt', 'spoken')).body.intent).toEqual({ kind: 'none' });
+  it('a recipe is said out loud instead', async () => {
+    const { tool } = await open();
+    await tool('look_up_food', { foods: ['banana'] });
+    expect((await tool('open_recipe', { recipe: 'the first one' })).body.text).toMatch(/out loud from what you know/);
   });
 });

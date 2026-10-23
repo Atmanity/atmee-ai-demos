@@ -1,19 +1,20 @@
-// The things the guide can actually do, once. A button, a typed line and a
-// spoken sentence all end up here, so they take exactly the same path.
+// The things the board can actually do, once. A button and the host's tool
+// call both end up here (through engine/tools.ts), so they take exactly the
+// same path.
 //
-// Every operation changes the state first and returns the line the guide
-// should base its next words on (the original's tool "cue"); the server sends
-// that line as an event, or not, depending on who asked (director.eventFor).
+// Every operation changes the state first and returns the line the host
+// should base its next words on: an `await` tool's result, or the outcome of
+// a button press told to the host as an event.
 //
 // The lookups are injected (server.ts passes the real ones from geo.ts), which
 // is what keeps all of this testable with no network.
 import { canonicalCountry, countriesIn, isCountryName, norm, pickCountry } from './countries.ts';
 import { say } from './director.ts';
 import { cleanText, distancePhrase, haversineM, mapsUrl, type GeoCountry, type GeoPlace, type RawSpot, type WikiSummary } from './geo.ts';
-import { avatarPick, isAName } from './judge.ts';
+import { isAName } from './judge.ts';
 import { countryOutline, MAX_SILHOUETTE_BYTES, primaryBbox } from './rings.ts';
 import type { TravelState, TripEntry } from './state.ts';
-import type { Action, Headline, Source } from './types.ts';
+import type { Action, Headline } from './types.ts';
 
 /** A dish the app may suggest; `wiki` names the Wikipedia article when the name alone would miss it. */
 export interface DishIdea { name: string; description: string; wiki?: string }
@@ -53,7 +54,7 @@ export function rememberTraveler(state: TravelState, name: string): string {
  */
 export async function chooseDestination(
   state: TravelState, lookups: Lookups, country: string,
-  { city = '', continent = '', how = 'user' }: { city?: string; continent?: string; how?: 'user' | 'picked' | 'avatar' } = {},
+  { city = '', continent = '', how = 'user' }: { city?: string; continent?: string; how?: 'user' | 'picked' } = {},
 ): Promise<string> {
   country = clean(country, 80);
   city = clean(city, 80);
@@ -109,7 +110,7 @@ export async function destinationAt(state: TravelState, lookups: Lookups, lat: n
   return chooseDestination(state, lookups, located.country, { city: norm(located.place) === norm(located.country) ? '' : located.place });
 }
 
-/** "You choose", from a button or a typed line: the app picks within their continent, somewhere not yet on the trip. */
+/** "Surprise me": the app picks within their continent, somewhere not yet on the trip. */
 export async function pickForThem(state: TravelState, lookups: Lookups, random: () => number = Math.random): Promise<string> {
   const country = pickCountry(state.continent, state.visited.map((e) => e.country), random);
   return chooseDestination(state, lookups, country, { how: 'picked' });
@@ -179,7 +180,7 @@ export async function showDishes(state: TravelState): Promise<string> {
   entry.dishesShown = true;
   state.bump();
   if (!entry.dishes.length) return say.noFood(entry.country);
-  return say.food(entry.country, entry.dishes.map((d) => d.name));
+  return say.food(entry.country, entry.dishes);
 }
 
 /**
@@ -285,26 +286,19 @@ async function presentSpot(state: TravelState, lookups: Lookups, first: boolean)
   state.bump();
   console.info('[Travel] spot %d/%d near %s photo=%s', state.spotIndex + 1, state.spots.length, state.aroundPlace, Boolean(spot.imageUrl));
   const view = state.spotView()!.spot!;
-  return first ? say.firstSpot(state.aroundPlace, view) : say.anotherSpot(view);
+  return first ? say.firstSpot(state.aroundPlace, view, state.spots.length) : say.anotherSpot(view, state.spotIndex + 1, state.spots.length);
 }
 
 // ─── one entry point ──────────────────────────────────────────────────────
 
 /** Do one action and return what the guide should hear about it ('' for nothing). */
-export async function apply(state: TravelState, lookups: Lookups, action: Action, from: Source): Promise<string> {
+export async function apply(state: TravelState, lookups: Lookups, action: Action): Promise<string> {
   switch (action.kind) {
     case 'name': return rememberTraveler(state, action.name);
     case 'destination': return chooseDestination(state, lookups, action.country, { city: action.city, continent: action.continent });
     case 'search': return searchDestination(state, lookups, action.query);
     case 'continent': return chooseDestination(state, lookups, '', { continent: action.continent });
-    case 'pick':
-      // Asked out loud, the guide is already choosing: read its pick from its own words (fromAvatar).
-      if (from === 'spoken') {
-        state.awaitPick();
-        state.bump();
-        return '';
-      }
-      return pickForThem(state, lookups);
+    case 'pick': return pickForThem(state, lookups);
     case 'news': return showHeadlines(state);
     case 'food': return showDishes(state);
     case 'around': return explorePlace(state, lookups, action.place);
@@ -320,26 +314,4 @@ export async function apply(state: TravelState, lookups: Lookups, action: Action
       return action.stage === 'planning' ? say.showPlanning(state.country) : say.showAround(state.aroundPlace, state.spotView()?.spot ?? null);
     }
   }
-}
-
-/**
- * One of the guide's own lines, while the user is waiting for it to choose a
- * country: the first line naming exactly one country puts it on the map.
- * Returns the cue, or null when the line chose nothing.
- */
-export async function fromAvatar(state: TravelState, lookups: Lookups, line: string): Promise<string | null> {
-  if (!state.isAwaitingPick() || !state.awaitingPick) return null;
-  const country = avatarPick(line, state.country);
-  state.awaitingPick.lines -= 1;
-  if (!country) {
-    if (state.awaitingPick.lines <= 0) state.awaitingPick = null;
-    state.bump();
-    return null;
-  }
-  state.awaitingPick = null;
-  if (state.revisit(country)) {
-    state.bump();
-    return say.destination(state.country, { newsAvailable: state.newsAvailable, how: 'avatar' });
-  }
-  return chooseDestination(state, lookups, country, { how: 'avatar' });
 }

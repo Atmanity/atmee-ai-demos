@@ -1,17 +1,18 @@
-// Turning words into plan operations.
+// Words and names, read the way a client says them.
 //
-// The original avatar had 27 tools and called them itself. The Avatar API has
-// no function calling: the avatar talks, and the app hears the client's words
-// a second later. So the app decides what was asked, here:
+// The architect acts through tools (director.ts, tools.ts): the host hears the
+// client and calls `trade_area`, `add_furniture` and the rest with what it
+// heard. This file is what turns those words into the planner's operations:
 //
-// 1. Rules first, for the phrasings that have one meaning ("undo", "nine by
-//    seven", "give the living room two metres off the study", "a queen bed in
-//    the main bedroom"). Instant, free, and the trade direction is exact.
-// 2. A model second, server-side (server.ts), for everything else: it maps the
-//    utterance to one or more of the planner's operations, by room and piece
-//    ids taken from the plan, and NEVER to coordinates. Its answer is checked
-//    and converted here (stepsToIntents), so the planner sees the same intents
-//    a button sends.
+// - Names: a room or a piece as the client calls it ("the second bedroom",
+//   "the couch") resolved against the plan by whole words, so a guess never
+//   lands on the wrong room.
+// - Operations (`stepsToIntents`): one step per tool call, named as the
+//   original voice tools were, checked and converted into the same intents a
+//   button sends. Nothing here takes a coordinate.
+// - Rules (`rulesFor`): the phrasings that have one meaning ("undo", "nine by
+//   seven", "show me upstairs"). The safety net (`mustDo`) uses them to make
+//   a call the host forgot, for the few actions that are safe to do twice.
 //
 // Either way the planner is the judge of whether the change is possible; this
 // file only decides what was asked.
@@ -154,7 +155,7 @@ export function findRoomIn(ctx: Ctx, phrase: string): string | null {
   for (const r of ctx.rooms) if (r.id.toLowerCase() === key.replaceAll(' ', '')) return r.id;
   for (const r of ctx.rooms) if (r.name.toLowerCase() === key) return r.id;
   // Containment by whole words, unlike the planner's: "bed" must not find the
-  // bedroom here, because a rule that guesses is worse than asking the model.
+  // bedroom here, because a name that guesses is worse than asking the client.
   const named = ctx.rooms
     .filter((r) => hasWords(r.name.toLowerCase(), key) || hasWords(key, r.name.toLowerCase()))
     .sort((p, q) => Math.abs(p.name.length - key.length) - Math.abs(q.name.length - key.length));
@@ -502,12 +503,12 @@ const CLAUSE_SPLIT = / (?:and then|and also|then|and|after that|also) /;
 
 /**
  * The operations an utterance asks for when the rules can tell, in order; null
- * when they cannot (a question, chat, or wording only a model can read). Every
+ * when they cannot (a question, chat, or wording only the host can read). Every
  * clause must be understood, or none is acted on: half an instruction applied
- * is worse than the whole one judged by the model.
+ * is worse than none.
  */
 export function rulesFor(text: string, ctx: Ctx): Intent[] | null {
-  // A question, or a "don't", is for the avatar or the model, never a rule.
+  // A question, or a "don't", is for the host, never a rule.
   if (QUESTION.test(text.trim().toLowerCase())) return null;
   const t = normalizeUtterance(text);
   if (!t || NEGATION.test(t)) return null;
@@ -535,9 +536,9 @@ function ruleFor(t: string, ctx: Ctx): Intent[] | null {
 const QUESTION = /^(?:what|what's|whats|how|where|why|which|who|whose|when|is|are|isn't|aren't|does|do|did|doesn't|should|shall i|would it|would that|could it|will it|was|were|have we|has it)\b.*\?\s*$|^(?:what|how|where|why|which|who)\b/;
 const NEGATION = /\b(?:don'?t|do not|never|not yet|no need|shouldn'?t|wouldn'?t|not now|leave it)\b/;
 
-// ------------------------------------------------------------------ the model
+// ------------------------------------------------------------- operations
 
-/** The operations the model may pick, named as the original tools were. */
+/** The planner operations a tool call is turned into, named as the original voice tools were. */
 export const OPS = [
   'lay_out_floor', 'set_floor_size', 'add_upper_floor', 'go_to_floor',
   'add_room', 'remove_room', 'rename_room', 'resize_room', 'trade_area', 'move_wall', 'swap_rooms', 'knock_together',
@@ -548,7 +549,7 @@ export const OPS = [
 ] as const;
 export type Op = typeof OPS[number];
 
-/** One operation as the model returns it. Every field but `op` is optional. */
+/** One operation with what the host heard. Every field but `op` is optional. */
 export interface Step {
   op: Op;
   room?: string; other_room?: string; take_from?: string; give_to?: string;
@@ -556,90 +557,6 @@ export interface Step {
   near?: string; beside?: string; piece?: string; item?: string; wall?: string; opening?: string;
   bedrooms?: number; style?: string; office?: boolean; dining?: boolean; ensuite?: boolean; wc?: boolean; utility?: boolean;
   width_m?: number; depth_m?: number; area_m2?: number; quarter_turns?: number; unit?: string; floor?: string; scheme?: string;
-}
-
-const s = (description: string) => ({ type: 'string', description });
-const n = (description: string) => ({ type: 'number', description });
-const b = (description: string) => ({ type: 'boolean', description });
-
-/**
- * The answer's shape. No field takes a position: only `cm` (an exact wall
- * movement the client said out loud) and the floor size are measurements, the
- * same bet the original tools made.
- */
-export const JUDGE_SCHEMA = {
-  type: 'object',
-  properties: {
-    steps: {
-      type: 'array',
-      description: 'The plan changes the client is asking for right now, in order. Empty for a question, small talk, an answer, thinking aloud, or a change you are unsure they want.',
-      items: {
-        type: 'object',
-        properties: {
-          op: { type: 'string', enum: [...OPS] },
-          room: s('The room acted on, by its id from the plan (r3). For move_wall, mark_wall_structural, swap_rooms, knock_together and add_door, the first of the two rooms.'),
-          other_room: s('The second room, by id: move_wall, mark_wall_structural, swap_rooms, knock_together, add_door.'),
-          take_from: s('trade_area only: the room that gets SMALLER (gives the floor up), by id.'),
-          give_to: s('trade_area only: the room that gets BIGGER (receives the floor), by id.'),
-          m2: n('Square metres: trade_area, resize_room, or the size of a new room if they gave one.'),
-          cm: n('move_wall only: exact centimetres the client said; positive gives the floor to `room`.'),
-          room_kind: s('add_room, divide_room (what the new half is for) and rename_room (a change of use): living, kitchen, dining, bedroom, bedroom_single, nursery, office, bathroom, shower_room, wc, utility, hall, corridor, stairs, storage, closet, balcony, or the client\'s own word.'),
-          name: s('rename_room: the new name; add_room: a name if they gave one.'),
-          near: { type: 'string', enum: ['center', 'north_wall', 'south_wall', 'east_wall', 'west_wall', 'window', 'door', 'beside'], description: 'Roughly where, never a position: add_room (not window or door), add_furniture, move_furniture.' },
-          beside: s('With near=beside: the room id (add_room) or the piece id (furniture) to be next to.'),
-          piece: s('add_furniture: the kit type (bed_single, bed_double, bed_queen, bed_king, bedside_table, sofa_2, sofa_3, sofa_corner, armchair, chair, stool, desk, dining_table, coffee_table, side_table, wardrobe, dresser, bookshelf, tv_unit, rug, rug_small, plant, floor_lamp), or the client\'s own word if it is not in the kit.'),
-          item: s('A piece already on the plan, by id (i4): move_furniture, turn_furniture, remove_furniture, select.'),
-          wall: { type: 'string', enum: ['north', 'south', 'east', 'west'], description: 'add_window, add_front_door: the outside wall; resize_room: which way to grow.' },
-          opening: s('remove_door_or_window: the opening id (o3).'),
-          bedrooms: n('lay_out_floor: how many bedrooms (a couple is 1, a couple with a baby 2, a family with two kids 3).'),
-          style: { type: 'string', enum: TYPOLOGIES.map((t) => t.key), description: 'lay_out_floor: day_night (living at the entry end, bedrooms at the far end), open_plan (kitchen, dining and living as one room), dual_aspect (hall down the middle, every room gets a window), compact (no hall at all).' },
-          office: b('lay_out_floor: include a study.'), dining: b('lay_out_floor: a separate dining room.'), ensuite: b('lay_out_floor: an en suite.'),
-          wc: b('lay_out_floor: a separate WC.'), utility: b('lay_out_floor: a utility room.'),
-          width_m: n('set_floor_size: east-west, the number the client said (metres or centimetres).'),
-          depth_m: n('set_floor_size: north-south, the number the client said.'),
-          area_m2: n('set_floor_size: the total floor area, when they gave an area instead of two sides.'),
-          quarter_turns: n('turn_furniture: 1, 2 or 3.'),
-          unit: { type: 'string', enum: ['m2', 'ft2'], description: 'switch_units.' },
-          floor: { type: 'string', enum: ['ground', 'upper'], description: 'go_to_floor.' },
-          scheme: s('save_scheme (a name, or empty), show_scheme, compare_scheme, drop_scheme: the scheme name.'),
-        },
-        required: ['op'],
-      },
-    },
-    ask: s('Only when the client clearly asked for a change that cannot be pinned down (which bedroom? how much?): one short question to ask them. Otherwise empty.'),
-  },
-  required: ['steps'],
-} as const;
-
-export const JUDGE_SYSTEM = 'You turn what a client says to their architect into operations on a floor-plan app. You never invent rooms or pieces, and you never give coordinates.';
-
-export interface Line { who: 'client' | 'architect'; text: string }
-
-/** The model's prompt: the utterance, the conversation so far, and the plan by id. */
-export function judgePrompt(text: string, ctx: Ctx, recent: Line[] = []): string {
-  const nameOf = new Map(ctx.rooms.map((r) => [r.id, r.name]));
-  const rooms = ctx.rooms.map((r) => `${r.id} ${r.name} (${r.kind}, ${r.area_m2} m², ${r.where}; shares a wall with ${r.next_to.map((id) => `${id} ${nameOf.get(id)}`).join(', ') || 'nothing'}; outside walls: ${r.outside.join(', ') || 'none'})`);
-  const items = ctx.items.map((i) => `${i.id} ${i.label} in ${i.room ? `${i.room} ${nameOf.get(i.room)}` : 'no room'}`);
-  const openings = ctx.openings.map((o) => `${o.id} ${o.front ? 'front door' : o.kind} (${o.rooms.join(' / ')})`);
-  const said = recent.slice(-8).map((l) => `${l.who === 'client' ? 'Client' : 'Architect'}: ${l.text}`).join('\n');
-  return `The client is planning their home with an architect. The client just said: "${text}"
-${said ? `\nThe conversation so far (oldest first):\n${said}\n` : ''}
-The plan, ${ctx.floor} floor of ${ctx.floors.length} (${ctx.size.w_cm / 100} x ${ctx.size.h_cm / 100} m), areas shown in ${ctx.unit}:
-Rooms: ${rooms.join('; ') || 'none yet (an empty floor)'}
-Furniture: ${items.join('; ') || 'none'}
-Doors and windows: ${openings.join('; ') || 'none'}
-Saved schemes: ${ctx.schemes.join(', ') || 'none'}${ctx.comparing ? ` (comparing with ${ctx.comparing})` : ''}
-Selected on screen: ${ctx.selected ?? 'nothing'}
-
-Which plan operations is the client asking for right now?
-- Only what they ask for now. A question about the plan, an answer to a question, or thinking aloud is no operation.
-- If they agree ("yes", "do it", "go on") to a change the architect just proposed, that change is the operation.
-- Use the ids above. Never name a room, piece or opening that is not listed.
-- trade_area: take_from is the room that gets SMALLER, give_to the room that gets BIGGER. In "give the study two metres off the kitchen", give_to is the study and take_from the kitchen. Read who ends up with the space, not which room was said first.
-- "metres" about a room means square metres. To make a room bigger at a named neighbour's expense use trade_area; resize_room only uses free floor.
-- Describing the household or asking for a layout is lay_out_floor (it replaces the floor); if they also gave the size of the place, set_floor_size comes first.
-- To move a piece that is already on the plan use move_furniture, never remove and add.
-- Several requests in one sentence ("save this and try it open plan") are several steps, in order.`;
 }
 
 const IDS = (ctx: Ctx) => new Set([...ctx.rooms.map((r) => r.id), ...ctx.items.map((i) => i.id), ...ctx.openings.map((o) => o.id)]);
@@ -650,7 +567,7 @@ const num = (value: unknown) => {
 };
 
 /**
- * The model's steps as planner intents, or a question when a required part is
+ * The steps as planner intents, or a question when a required part is
  * missing. Names the planner can resolve pass through (it refuses the rest in
  * its own words); nothing here takes a coordinate.
  */
@@ -757,3 +674,37 @@ export function stepsToIntents(steps: Step[] | undefined, ctx: Ctx): { intents: 
 
 /** Every room id in a context, sorted, for tests and logs. */
 export const roomIds = (ctx: Ctx) => ctx.rooms.map((r) => r.id).sort(cmpStr);
+
+// ------------------------------------------------------------ the safety net
+
+/** A tool call, as the host would have made it. */
+export interface NetCall { name: string; arguments: Record<string, unknown> }
+
+/**
+ * The tool call the client's words clearly ask for, among the few that are
+ * safe to make twice: showing a floor, switching units, closing a comparison,
+ * drawing the sheet, adding the upper floor (the plan refuses a third). The
+ * app's safety net makes it when the host does not. Never a change with a
+ * cost: a second undo, trade, scheme or layout would be a second change, and
+ * clearing the floor after the host asked "are you sure?" would lose work.
+ */
+export function mustDo(text: string, ctx: Ctx): NetCall | null {
+  const intents = rulesFor(text, ctx);
+  if (!intents || intents.length !== 1) return null;
+  const [intent] = intents;
+  switch (intent.kind) {
+    case 'set_unit':
+      return { name: 'switch_units', arguments: { unit: intent.unit } };
+    case 'go_to_level':
+      return { name: 'go_to_floor', arguments: { floor: intent.id } };
+    case 'add_level':
+      // "It's a house…" describes the place; only an outright "add" is a command.
+      return ctx.floors.length < 2 && /\b(?:add|build|put in|give (?:me|us))\b/.test(normalizeUtterance(text)) ? { name: 'add_upper_floor', arguments: {} } : null;
+    case 'compare_scheme':
+      return intent.name === 'off' && ctx.comparing ? { name: 'use_scheme', arguments: { action: 'stop_comparing' } } : null;
+    case 'draw_sheet':
+      return ctx.rooms.length ? { name: 'draw_sheet', arguments: {} } : null;
+    default:
+      return null;
+  }
+}

@@ -248,7 +248,7 @@ describe('the transport half, against scripted responses', () => {
 });
 
 describe('spoken helpers', () => {
-  test.each([[50, 'right next to you'], [400, 'about a 5 minute walk away'], [2500, 'about 2.5 kilometres away']])('%d m is said as "%s"', (meters, expected) => {
+  test.each([[50, 'a few steps away'], [400, 'about a 5 minute walk away'], [2500, 'about 2.5 kilometres away']])('%d m is said as "%s"', (meters, expected) => {
     expect(geo.distancePhrase(meters)).toBe(expected);
   });
 

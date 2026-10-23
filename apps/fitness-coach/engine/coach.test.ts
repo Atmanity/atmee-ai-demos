@@ -4,20 +4,22 @@
 // `test_the_note_tells_the_truth.py` and `test_board.py`; their LiveKit
 // plumbing (llm_node seams, speech scheduling, latches, RPC registration) is
 // gone with the platform. New: the step machine that replaces the five
-// AgentTasks, and the stream of background outcomes.
+// AgentTasks, and the stream of background outcomes. Inputs arrive as the
+// host's tools hand them over (engine/actions.ts): limits in the user's words,
+// read by the constraint engine, and intents already resolved.
 import { describe, expect, it } from 'vitest';
 import { Coach, type CoachOptions, type Renderer } from './coach.ts';
-import { clearanceLine, parseConstraints } from './constraints.ts';
+import { clearanceLine, EMPTY, parseConstraints } from './constraints.ts';
+import { moveIn, stepLevel } from './judge.ts';
 import { buildFallbackPlan } from './plan.ts';
-import { judge } from './judge.ts';
-import type { FitnessPlan, Outcome, VideoPayload } from './types.ts';
+import type { FitnessPlan, Intent, Outcome, VideoPayload } from './types.ts';
 
 const flush = async () => { for (let i = 0; i < 6; i++) await new Promise((r) => setTimeout(r, 0)); };
 
-/** A typed or spoken line, through the real judge (rules only, as without a model key). */
-async function line(coach: Coach, text: string, how: 'typed' | 'spoken' = 'typed') {
-  return coach.hear(await judge(text, coach.context()), how);
-}
+/** Limits (or a disclosure) in the user's words, as add_limits, stop_for_safety and the page's own check hand them over. */
+const limits = (coach: Coach, words: string) => coach.hear({ constraints: parseConstraints(words), intent: null });
+/** An intent, as set_goal, set_level, start_move and start_over hand it over. */
+const intent = (coach: Coach, wanted: Intent) => coach.hear({ constraints: EMPTY, intent: wanted });
 
 const lungePlan = (goal = 'Full body', level = 'Beginner'): FitnessPlan => ({
   plan_title: 'Beginner Full Body Blast', goal, level, duration_minutes: 25,
@@ -66,7 +68,6 @@ describe('the guided flow (the five AgentTasks, now the app’s own steps)', () 
     expect(open.view.stage).toBe('goal');
     expect(open.view.goalOptions).toHaveLength(6);
     expect(open.events).toHaveLength(1);
-    expect(open.events[0].staged).toBeFalsy();
     expect(open.events[0].text).toContain('what they want to train');
   });
 
@@ -88,9 +89,9 @@ describe('the guided flow (the five AgentTasks, now the app’s own steps)', () 
     const move = coach.command('move', level.view.plan!.workout_steps[0]);
     expect(move.view.stage).toBe('coach');
     expect(move.view.flow.start_move).toBe('Bodyweight squats');
-    // No key: said plainly, and the board says demos are off rather than spinning.
+    // No key: coached in words, and the board never spins for a clip that cannot come.
     expect(move.view.video?.status).toBe('unavailable');
-    expect(move.events[0].text).toContain('Demo videos are off');
+    expect(move.events[0].text).toContain('no video');
   });
 
   it('builds the plan in the background and streams it when it lands', async () => {
@@ -117,22 +118,22 @@ describe('the guided flow (the five AgentTasks, now the app’s own steps)', () 
     expect(outcomes.at(-1)?.view.plan?.workout_steps).toEqual(buildFallbackPlan('Mobility', 'Beginner').workout_steps);
   });
 
-  it('records a compound spoken answer at once, and its limits bind the plan', async () => {
+  it('records a goal and a level given together, and the limits said with them bind the plan', () => {
     const coach = new Coach();
-    const out = await line(coach, "I want to train core and cardio, I'm a beginner, and I've only got twenty minutes", 'spoken');
+    const out = coach.hear({
+      constraints: parseConstraints("I want to train core and cardio, I'm a beginner, and I've only got twenty minutes"),
+      intent: { kind: 'goal', goal: 'Core + cardio', level: 'Beginner' },
+    });
     expect(out.view.flow.goal).toBe('Core + cardio');
     expect(out.view.flow.level).toBe('Beginner');
     expect(out.view.plan?.duration_minutes).toBe(20);
-    // The avatar was told in advance what to say for this (its state), so
-    // after speech the page skips the staged event; the plan's is new news.
-    expect(out.events.map((e) => Boolean(e.staged))).toEqual([true, false]);
   });
 
   it('does not broadcast a level heard in passing as chosen', () => {
     // The original drew "Beginner, setting up your plan…" while the flow was
     // still waiting to be told, and the spinner never resolved.
     const coach = new Coach();
-    const out = coach.hear({ constraints: parseConstraints(''), intent: null, level: 'Beginner' }, 'typed');
+    const out = coach.hear({ constraints: parseConstraints(''), intent: null, level: 'Beginner' });
     expect(out.view.flow.level).toBe('');
     expect(out.view.overheardLevel).toBe('Beginner');
     expect(out.handled).toBe(false);
@@ -142,32 +143,30 @@ describe('the guided flow (the five AgentTasks, now the app’s own steps)', () 
     expect(goal.view.plan).not.toBeNull();
   });
 
-  it('asks for the goal again when only a level was given', async () => {
+  it('asks for the goal again when only a level was given', () => {
     const coach = new Coach();
-    const out = await line(coach, 'beginner', 'spoken');
+    const out = intent(coach, { kind: 'level', level: 'Beginner' });
     expect(out.view.stage).toBe('goal');
     expect(out.view.overheardLevel).toBe('Beginner');
-    expect(out.events[0]).toMatchObject({ staged: true });
     expect(out.events[0].text).toContain('got it on the level');
   });
 
-  it('takes a spoken starting move, by name or by position', async () => {
-    const coach = new Coach();
-    coach.command('goal', 'Full body');
-    coach.command('level', 'Beginner');
-    expect((await line(coach, "Let's start with the squats", 'spoken')).view.flow.start_move).toBe('Bodyweight squats');
-    const coach2 = new Coach();
-    coach2.command('goal', 'Full body');
-    coach2.command('level', 'Beginner');
-    expect((await line(coach2, 'the first warm-up move', 'spoken')).view.flow.start_move).toBe('March in place');
+  it('takes a starting move the host heard, by name or by position', () => {
+    for (const [said, move] of [["Let's start with the squats", 'Bodyweight squats'], ['the first warm-up move', 'March in place']]) {
+      const coach = new Coach();
+      coach.command('goal', 'Full body');
+      const plan = coach.command('level', 'Beginner').view.plan!;
+      expect(intent(coach, { kind: 'move', move: moveIn(plan, said)! }).view.flow.start_move, said).toBe(move);
+    }
   });
 
-  it('says a move is not on the plan, and asks which move for a bare demo request', async () => {
+  it('says a move is not on the plan', () => {
     const coach = new Coach();
     coach.command('goal', 'Full body');
     coach.command('level', 'Beginner');
-    expect((await line(coach, "let's do burpees")).events[0].text).toContain('not on today');
-    expect((await line(coach, 'show me a demo')).events[0].text).toContain('Ask which move');
+    const out = intent(coach, { kind: 'unknownMove', heard: 'burpees' });
+    expect(out.events[0].text).toContain('not on today');
+    expect(out.view.flow.start_move).toBe('');
   });
 
   it('renders a demo when a key is configured, and says when it is ready', () => {
@@ -203,9 +202,9 @@ describe('a clearance disclosure stops the session', () => {
     ['I had a heart attack two years ago', 'a cardiac history'],
     ['I had surgery on my abdomen last month', 'recent surgery'],
     ['sometimes I get chest pain when I push hard', 'chest pain'],
-  ])('gives the avatar the exact words for a typed disclosure: %s', async (typed, condition) => {
+  ])('gives the host the exact words for a disclosure: %s', (said, condition) => {
     const coach = new Coach();
-    const out = await line(coach, typed);
+    const out = limits(coach, said);
     expect(out.handled).toBe(true);
     expect(out.view.stage).toBe('hold');
     expect(out.events).toHaveLength(1);
@@ -213,17 +212,11 @@ describe('a clearance disclosure stops the session', () => {
     expect(out.events[0].ttl).toBe(60);
   });
 
-  it('sends the words after speech too: the avatar’s own reply may already have gone wrong', async () => {
-    // Live in the original: "Thank you for sharing. Please name a warm-up move."
-    const out = await line(new Coach(), "I'm 7 months pregnant", 'spoken');
-    expect(out.events[0].staged).toBeFalsy();
-  });
-
-  it('says it once per condition, not once per turn', async () => {
+  it('says it once per condition, not once per turn', () => {
     const coach = new Coach();
-    await line(coach, "I'm 7 months pregnant");
-    expect((await line(coach, 'so what should I do')).events).toEqual([]);
-    const again = await line(coach, 'also I had surgery last month');
+    limits(coach, "I'm 7 months pregnant");
+    expect(limits(coach, 'so what should I do').events).toEqual([]);
+    const again = limits(coach, 'also I had surgery last month');
     expect(again.events[0].text).toContain('recent surgery');
     expect(again.events[0].text).not.toContain('pregnancy and');
   });
@@ -231,25 +224,25 @@ describe('a clearance disclosure stops the session', () => {
   it('refuses every tap that would advance the plan', () => {
     const coach = new Coach();
     coach.command('goal', 'Full body');
-    coach.hear({ constraints: parseConstraints("I'm 7 months pregnant"), intent: null }, 'typed');
+    coach.hear({ constraints: parseConstraints("I'm 7 months pregnant"), intent: null });
     for (const [command, value] of [['level', 'Beginner'], ['goal', 'Mobility'], ['move', 'Squats'], ['restart', ''], ['relevel', 'Advanced']] as const) {
       const out = coach.command(command, value);
-      expect(out.refused, command).toContain('on hold');
+      expect(out.refused, command).toContain('paused');
       expect(out.view.plan, command).toBeNull();
       expect(out.view.flow.level, command).toBe('');
     }
   });
 
-  it('answers a spoken or typed request on hold by repeating the hold, and lets a plain question through', async () => {
+  it('answers a request on hold by repeating the hold, and does nothing for words that ask for nothing', () => {
     const coach = new Coach();
     coach.command('goal', 'Full body');
     coach.command('level', 'Beginner');
-    await line(coach, "I'm 7 months pregnant");
-    const ask = await line(coach, "let's start with the squats");
+    limits(coach, "I'm 7 months pregnant");
+    const ask = intent(coach, { kind: 'move', move: 'Bodyweight squats' });
     expect(ask.handled).toBe(true);
     expect(ask.events[0].text).toContain('on hold');
     expect(ask.view.flow.start_move).toBe('');
-    expect((await line(coach, 'how are you today?')).handled).toBe(false);
+    expect(limits(coach, 'how are you today?').handled).toBe(false);
   });
 
   it('does not restart plan building behind the hold for a later limit', async () => {
@@ -258,8 +251,8 @@ describe('a clearance disclosure stops the session', () => {
     coach.command('goal', 'Full body');
     coach.command('level', 'Beginner');
     await model.release(0);
-    await line(coach, "I'm 7 months pregnant");
-    const later = await line(coach, 'actually make it 20 minutes');
+    limits(coach, "I'm 7 months pregnant");
+    const later = limits(coach, 'actually make it 20 minutes');
     expect(model.calls).toHaveLength(1);
     expect(later.view.rebuilding).toBe(false);
     expect(later.view.plan?.duration_minutes).toBe(25);
@@ -271,7 +264,7 @@ describe('a clearance disclosure stops the session', () => {
     const outcomes = watch(coach);
     coach.command('goal', 'Full body');
     coach.command('level', 'Beginner');
-    await line(coach, "I'm 7 months pregnant");
+    limits(coach, "I'm 7 months pregnant");
     await model.release(0);
     expect(coach.view().plan).toBeNull();
     expect(outcomes.flatMap((o) => o.events)).toEqual([]);
@@ -290,9 +283,9 @@ describe('a clearance disclosure stops the session', () => {
     coach.command('level', 'Beginner');
     await flush();
     const before = coach.view().plan;
-    await line(coach, 'my left knee is bad');
+    limits(coach, 'my left knee is bad');
     expect(coach.view().rebuilding).toBe(true);
-    await line(coach, "also I'm 7 months pregnant");
+    limits(coach, "also I'm 7 months pregnant");
     outcomes.length = 0;
     await model.release();
     expect(coach.view().plan).toEqual(before);
@@ -306,7 +299,7 @@ describe('a clearance disclosure stops the session', () => {
     const outcomes = watch(coach);
     coach.command('goal', 'Full body');
     coach.command('move', coach.command('level', 'Beginner').view.plan!.workout_steps[0]);
-    await line(coach, "I'm 7 months pregnant");
+    limits(coach, "I'm 7 months pregnant");
     expect(fake.state.stops).toBeGreaterThan(0);
     expect(fake.state.hooks!.suppressed()).toBe(true);
     outcomes.length = 0;
@@ -323,7 +316,7 @@ describe('a limit reshapes the plan, and is acknowledged once', () => {
     coach.command('level', 'Beginner');
     await flush();
     const outcomes = watch(coach);
-    const out = await line(coach, 'my left knee is bad, what should I start with?');
+    const out = limits(coach, 'my left knee is bad, what should I start with?');
     expect(out.handled).toBe(false);
     expect(out.view.acknowledged).toEqual(['your knee']);
     expect(out.view.rebuilding).toBe(true);
@@ -339,23 +332,16 @@ describe('a limit reshapes the plan, and is acknowledged once', () => {
     const coach = new Coach();
     coach.command('goal', 'Full body');
     coach.command('level', 'Beginner');
-    const out = await line(coach, 'I have a bad knee');
+    const out = limits(coach, 'I have a bad knee');
     expect(out.view.plan!.workout_steps.join(' ')).not.toMatch(/squat/i);
     expect(texts(out)).toContain('That takes bodyweight squats out of your workout');
   });
 
   it('acknowledges each thing once, and a new thing again', async () => {
     const coach = new Coach();
-    expect((await line(coach, "I've got a bad knee")).view.acknowledged).toEqual(['your knee']);
-    expect((await line(coach, 'so what do we do about my bad knee')).view.acknowledged).toEqual(['your knee']);
-    expect((await line(coach, "and I've only got 20 minutes")).view.acknowledged).toEqual(['your knee', '20 minutes']);
-  });
-
-  it('carries the acknowledgement in the event of a typed action, not after speech', async () => {
-    const typed = await line(new Coach(), 'glutes, and I only have 20 minutes');
-    expect(typed.events[0].text).toContain('Noted on 20 minutes');
-    const spoken = await line(new Coach(), 'glutes, and I only have 20 minutes', 'spoken');
-    expect(spoken.events[0].text).not.toContain('Noted on');
+    expect(limits(coach, "I've got a bad knee").view.acknowledged).toEqual(['your knee']);
+    expect(limits(coach, 'so what do we do about my bad knee').view.acknowledged).toEqual(['your knee']);
+    expect(limits(coach, "and I've only got 20 minutes").view.acknowledged).toEqual(['your knee', '20 minutes']);
   });
 
   it('gives a limit banked mid-rebuild its own pass', async () => {
@@ -364,8 +350,8 @@ describe('a limit reshapes the plan, and is acknowledged once', () => {
     coach.command('goal', 'Full body');
     coach.command('level', 'Beginner');
     await model.release(0);
-    await line(coach, 'my knee is bad');
-    await line(coach, 'and only 20 minutes');
+    limits(coach, 'my knee is bad');
+    limits(coach, 'and only 20 minutes');
     expect(model.calls).toHaveLength(2);
     await model.release(1);
     expect(model.calls).toHaveLength(3);
@@ -382,7 +368,7 @@ describe('a limit reshapes the plan, and is acknowledged once', () => {
     coach.command('level', 'Beginner');
     await flush();
     const outcomes = watch(coach);
-    await line(coach, 'my knee is bad');
+    limits(coach, 'my knee is bad');
     await flush();
     expect(texts(outcomes.at(-1)!)).toContain('walking lunges');
     expect(coach.view().plan!.workout_steps).not.toContain('Walking lunges, 10 each leg');
@@ -393,7 +379,7 @@ describe('a limit reshapes the plan, and is acknowledged once', () => {
     const coach = new Coach({ generatePlan: model.generatePlan });
     coach.command('goal', 'Full body');
     coach.command('level', 'Beginner');
-    await line(coach, 'oh and my knee is bad');
+    limits(coach, 'oh and my knee is bad');
     await model.release(0);
     expect(coach.view().plan!.workout_steps.join(' ')).not.toMatch(/lunge/i);
   });
@@ -406,7 +392,7 @@ describe('a limit reshapes the plan, and is acknowledged once', () => {
     await flush();
     coach.command('move', 'Walking lunges, 10 each leg');
     const outcomes = watch(coach);
-    await line(coach, 'my knee is bad');
+    limits(coach, 'my knee is bad');
     await flush();
     const landed = outcomes.at(-1)!;
     expect(landed.view.flow.start_move).toBe('');
@@ -422,7 +408,7 @@ describe('changing the level of a plan (the original re-level fix)', () => {
     const coach = new Coach();
     coach.command('goal', 'Core + cardio');
     coach.command('level', 'Beginner');
-    const out = await line(coach, 'rebuild that as advanced');
+    const out = intent(coach, { kind: 'relevel', level: 'Advanced' });
     expect(out.view.plan!.level).toBe('Advanced');
     expect(out.view.flow.level).toBe('Advanced');
   });
@@ -431,8 +417,10 @@ describe('changing the level of a plan (the original re-level fix)', () => {
     const coach = new Coach();
     coach.command('goal', 'Mobility');
     coach.command('level', 'Beginner');
-    expect((await line(coach, 'make it harder')).view.flow.level).toBe('Intermediate');
-    expect((await line(coach, 'this is too hard, make it easier')).view.flow.level).toBe('Beginner');
+    const step = (way: 'easier' | 'harder') => intent(coach, { kind: 'relevel', level: stepLevel(coach.view().flow.level, way)! });
+    expect(step('harder').view.flow.level).toBe('Intermediate');
+    expect(step('harder').view.flow.level).toBe('Advanced');
+    expect(step('easier').view.flow.level).toBe('Intermediate');
   });
 
   it('says so when the plan already is that level', async () => {
@@ -455,8 +443,8 @@ describe('starting over', () => {
     const coach = new Coach();
     coach.command('goal', 'Mobility');
     coach.command('level', 'Beginner');
-    await line(coach, 'only 20 minutes');
-    const out = await line(coach, "let's start over");
+    limits(coach, 'only 20 minutes');
+    const out = intent(coach, { kind: 'restart' });
     expect(out.view.stage).toBe('goal');
     expect(out.view.plan).toBeNull();
     expect(out.view.constraints.minutes).toBe(20);

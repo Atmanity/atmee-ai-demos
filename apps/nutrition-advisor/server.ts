@@ -1,7 +1,9 @@
-// Nutrition Advisor's server side: the app's own model calls (a card for a
-// named food, a card from a photo, a recipe's steps, and what an utterance asks
-// for) and each session's one writer (engine/advisor.ts). Nothing here is
-// secret from the page; it runs on the server because the model key does.
+// Morsel's server side: the app's own model calls (a card for a named food, a
+// card from a photo, a recipe's steps) and each visit's one writer
+// (engine/advisor.ts). The host's tool calls and the user's buttons run the
+// same actions here; a tool gets back the words the host speaks from, a
+// button the event the host is told. Nothing here is secret from the page; it
+// runs on the server because the model key does.
 import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type { AppServer } from '../../server/app-server.ts';
@@ -9,25 +11,27 @@ import { llmAvailable, structured } from '../../server/llm.ts';
 import { Advisor, recipeKey, sameFood } from './engine/advisor.ts';
 import { bounded, serial } from './engine/bounded.ts';
 import { CARD_SCHEMA, CARD_SYSTEM, cardFrom, cardPrompt, PHOTO_PROMPT, PHOTO_SCHEMA, RECIPE_SCHEMA, RECIPE_SYSTEM, recipeFrom, recipePrompt } from './engine/card.ts';
-import { SAMPLE_FAILED, say } from './engine/director.ts';
+import { started } from './engine/cook.ts';
+import { INSTRUCTIONS, pressed, said, SAMPLE_FAILED, SERVER_TOOLS, TOOLS } from './engine/director.ts';
 import { builtInCard, SAMPLE_CARD } from './engine/fallback.ts';
-import { bareFood, contextFor, intentFrom, JUDGE_SCHEMA, JUDGE_SYSTEM, judgePrompt, ruleIntent, type JudgeContext } from './engine/judge.ts';
-import type { ActRequest, FoodAsk, How, Image, Intent, NutritionData, Outcome, RecipeDetails, RecipeIdea, Screen } from './engine/types.ts';
+import { asked, foodsFrom, resolveRecipe } from './engine/judge.ts';
+import type { FoodAsk, Image, NutritionData, Outcome, RecipeDetails, RecipeIdea } from './engine/types.ts';
 
 const ID = 'nutrition-advisor';
 
-// Every model call has a deadline (engine/bounded.ts says why).
-const JUDGE_MS = 8_000;
-const CARD_MS = 25_000;
+// Every model call has a deadline (engine/bounded.ts says why). A card or a
+// recipe answers a tool the host waits on for at most 20 s, so it must land
+// (or give up for the built-in card) well inside that.
+const CARD_MS = 14_000;
+const RECIPE_MS = 14_000;
 const PHOTO_MS = 40_000;
-const RECIPE_MS = 25_000;
 
 const SAMPLE = new URL('./samples/meal.jpg', import.meta.url);
 const SAMPLE_SEEN = 'grilled salmon with rice, broccoli and green beans';
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 const MAX_IMAGE_BASE64 = 6 * 1024 * 1024;
 
-interface Session {
+interface Visit {
   advisor: Advisor;
   /** Photos are read one at a time. */
   photos: ReturnType<typeof serial>;
@@ -35,7 +39,7 @@ interface Session {
   recipes: Map<string, Promise<RecipeDetails | null>>;
   at: number;
 }
-const sessions = new Map<string, Session>();
+const visits = new Map<string, Visit>();
 
 const warn = (what: string, err: unknown) => console.warn('[%s] %s failed: %s', ID, what, (err as Error)?.message ?? err);
 
@@ -87,62 +91,43 @@ async function makeRecipe(idea: RecipeIdea, food: string): Promise<RecipeDetails
   }
 }
 
-function recipeJob(s: Session, idea: RecipeIdea, food: string): Promise<RecipeDetails | null> {
+function recipeJob(v: Visit, idea: RecipeIdea, food: string): Promise<RecipeDetails | null> {
   const key = `${food.toLowerCase()}\u0000${recipeKey(idea.name)}`;
-  let job = s.recipes.get(key);
+  let job = v.recipes.get(key);
   if (!job) {
     job = makeRecipe(idea, food);
-    s.recipes.set(key, job);
+    v.recipes.set(key, job);
     // A recipe that could not be made can be asked for again.
-    void job.then((made) => { if (!made) s.recipes.delete(key); });
+    void job.then((made) => { if (!made) v.recipes.delete(key); });
   }
   return job;
 }
 
-// -- what the user asked for ---------------------------------------------------------
+// -- the actions ------------------------------------------------------------------------
 
-function contextOf(advisor: Advisor, screen: Screen | undefined, lastAvatarLine: unknown): JudgeContext {
-  const open = typeof screen?.recipe === 'string' ? screen.recipe.slice(0, 60) : null;
-  return contextFor(advisor.view(), open, typeof lastAvatarLine === 'string' ? lastAvatarLine : '');
-}
-
-async function judge(text: string, how: How, ctx: JudgeContext): Promise<{ intent: Intent; by: string }> {
-  const rule = ruleIntent(text, ctx);
-  if (rule) return { intent: rule, by: 'rules' };
-  if (llmAvailable()) {
-    try {
-      const raw = await bounded(structured({ system: JUDGE_SYSTEM, user: judgePrompt(text, ctx), schema: JUDGE_SCHEMA, temperature: 0 }), JUDGE_MS, 'the judge');
-      return { intent: intentFrom(raw, ctx), by: 'model' };
-    } catch (err) {
-      warn('judging', err);
-    }
-  }
-  return { intent: (how === 'typed' && bareFood(text)) || { kind: 'none' }, by: 'fallback' };
-}
-
-// -- acting on it ---------------------------------------------------------------------
-
-async function lookup(s: Session, foods: FoodAsk[], said: string | undefined, how: How): Promise<Outcome> {
-  const { advisor } = s;
+async function lookUp(v: Visit, foods: FoodAsk[]): Promise<Outcome> {
+  const { advisor } = v;
+  if (!foods.length) return { view: advisor.view(), kind: 'failed', text: said.noFood() };
   const before = new Set(advisor.shelf.map((r) => r.product_name.toLowerCase()));
   // A food already looked at comes back as it was (same figures, no second call), unless they said how much this time.
   const cards = await Promise.all(foods.map(async (f) => (f.quantity ? null : advisor.cardFor(f.name)) ?? cardForFood(f)));
-  const put: string[] = [];
+  const put: NutritionData[] = [];
   const missing: string[] = [];
   cards.forEach((card, i) => {
-    if (!card) return void missing.push(foods[i].name);
+    if (!card) return void missing.push(asked(foods[i]));
     advisor.show(card);
-    put.push(card.product_name);
+    put.push(card);
   });
-  const notice = missing.length ? `Couldn't pull up ${missing.join(', ')} just now. Try again in a moment.` : undefined;
-  if (!put.length) return { view: advisor.view(), kind: 'failed', event: say.lookupFailed(missing, said, how), ttl: 20, notice };
-  const others = advisor.shelf.map((r) => r.product_name).filter((name) => !put.includes(name));
-  const again = put.every((name) => before.has(name.toLowerCase()));
-  return { view: advisor.view(), kind: 'card', card: true, event: say.card(put, others, said, how, again), ttl: 30, notice };
+  const notice = missing.length ? `Couldn't find ${missing.join(' or ')} just now. Try again in a moment, or ask about another food.` : undefined;
+  if (!put.length) return { view: advisor.view(), kind: 'failed', text: said.lookupFailed(missing), notice };
+  const names = put.map((c) => c.product_name);
+  const others = advisor.shelf.map((r) => r.product_name).filter((name) => !names.includes(name));
+  const again = names.every((name) => before.has(name.toLowerCase()));
+  return { view: advisor.view(), kind: 'card', card: true, text: said.cards(put, others, again, missing), notice };
 }
 
-async function compare(s: Session, foods: FoodAsk[], said: string | undefined, how: How): Promise<Outcome> {
-  const { advisor } = s;
+async function compare(v: Visit, foods: FoodAsk[]): Promise<Outcome> {
+  const { advisor } = v;
   const before = advisor.nutrition?.product_name ?? '';
   // Only what the table lacks goes up: "compare it with an apple" is a request to display the apple.
   const needed = foods.filter((f) => f.quantity || !advisor.onShelf(f.name));
@@ -150,87 +135,108 @@ async function compare(s: Session, foods: FoodAsk[], said: string | undefined, h
   const put: string[] = [];
   const missing: string[] = [];
   cards.forEach((card, i) => {
-    if (!card) return void missing.push(needed[i].name);
+    if (!card) return void missing.push(asked(needed[i]));
     advisor.show(card);
     put.push(card.product_name);
   });
-  const notice = missing.length ? `Couldn't pull up ${missing.join(', ')} just now. Try again in a moment.` : undefined;
-  if (missing.length && !put.length) return { view: advisor.view(), kind: 'failed', event: say.lookupFailed(missing, said, how), ttl: 20, notice };
-  // "It" is the card that was up; the foods named are the rest.
+  const notice = missing.length ? `Couldn't find ${missing.join(' or ')} just now. Try again in a moment, or ask about another food.` : undefined;
+  // "It" is the card that was up; the foods named are the rest. No foods named ("compare them"): the whole table.
   const named = foods
     .map((f) => advisor.shelf.find((r) => sameFood(r.product_name, f.name))?.product_name ?? put.find((p) => sameFood(p, f.name)))
     .filter((name): name is string => Boolean(name));
-  const compared = [...new Set([...(foods.length < 2 && before ? [before] : []), ...named, ...put])];
-  if (advisor.shelf.length < 2) {
+  const wanted = new Set(foods.length ? [...(foods.length < 2 && before ? [before] : []), ...named, ...put] : advisor.shelf.map((r) => r.product_name));
+  let rows = advisor.shelf.filter((r) => wanted.has(r.product_name));
+  if (rows.length < 2) {
+    // A food that could not be found leaves nothing to compare it with: say so, never a verdict on something else.
+    if (missing.length) return { view: advisor.view(), kind: 'failed', text: said.lookupFailed(missing), notice };
+    const card = advisor.nutrition;
+    if (!card) return { view: advisor.view(), kind: 'failed', text: said.noFood() };
     // Nothing to compare against yet: it is a card like any other.
-    return { view: advisor.view(), kind: 'card', card: put.length > 0, event: say.card(put, [], said, how), ttl: 30, notice };
+    if (advisor.shelf.length < 2) return { view: advisor.view(), kind: 'card', card: put.length > 0, text: said.cards([card], [], put.length === 0), notice };
+    rows = advisor.shelf;
   }
-  return { view: advisor.view(), kind: 'compare', card: put.length > 0, event: say.compare(put, compared, advisor.shelf.length, said, how), ttl: 30, notice };
+  return { view: advisor.view(), kind: 'compare', card: put.length > 0, text: said.compare(rows, put, advisor.shelf.length, missing), notice };
 }
 
-async function openRecipe(s: Session, name: string, description: string, said: string | undefined, how: How): Promise<Outcome> {
-  const { advisor } = s;
-  const kept = advisor.reopen(name, description);
-  if (kept) return { view: advisor.view(), kind: 'kept', recipe: kept, event: say.kept(kept.recipe_name, said, how), ttl: 25 };
+/** Open a recipe: the kept copy, the one made ahead, or a new one. `talk`: the host will walk it through (a tool), not a tap. */
+async function openRecipe(v: Visit, idea: RecipeIdea, talk: boolean): Promise<Outcome> {
+  const { advisor } = v;
   const food = advisor.nutrition?.product_name ?? '';
-  const idea = { name, description: description || advisor.suggestedDescription(name) };
-  const made = advisor.preparedFor(name) ?? (await recipeJob(s, idea, food));
-  if (!made) return { view: advisor.view(), kind: 'failed', event: say.recipeFailed(name), ttl: 25 };
-  // Titled with the name the user chose, whatever the model called it.
-  const opened = advisor.open({ ...made, recipe_name: name, description: idea.description });
-  return { view: advisor.view(), kind: 'recipe', recipe: opened, event: say.recipe(name, said, how), ttl: 30 };
+  const kept = advisor.reopen(idea.name, idea.description);
+  let recipe = kept;
+  if (!recipe) {
+    const full = { name: idea.name, description: idea.description || advisor.suggestedDescription(idea.name) };
+    const made = advisor.preparedFor(idea.name) ?? (await recipeJob(v, full, food));
+    if (!made) return { view: advisor.view(), kind: 'failed', text: said.recipeFailed(idea.name), notice: `Couldn't open the recipe “${idea.name}” just now. Try again in a moment.` };
+    // Titled with the name the user chose, whatever the model called it.
+    recipe = advisor.open({ ...made, recipe_name: idea.name, description: full.description });
+  }
+  const text = talk ? said.recipe(recipe, food, started(recipe.preparation_steps.length)) : said.recipeTapped(recipe);
+  return { view: advisor.view(), kind: kept ? 'kept' : 'recipe', recipe, text };
 }
 
-/** Make the card's recipe ideas ahead, so a spoken "how do I make the parfait?" gets the real recipe at once. */
-async function prepare(s: Session): Promise<Outcome> {
-  const { advisor } = s;
+/** Make the card's recipe ideas ahead, so opening one is instant. */
+async function prepare(v: Visit): Promise<Outcome> {
+  const { advisor } = v;
   const food = advisor.nutrition?.product_name ?? '';
   if (llmAvailable() && food) {
     await Promise.all(advisor.ideasToPrepare().map(async (idea) => {
-      const made = await recipeJob(s, idea, food);
+      const made = await recipeJob(v, idea, food);
       if (made) advisor.prepare(food, made);
     }));
   }
-  return { view: advisor.view(), kind: 'prepared' };
+  return { view: advisor.view(), kind: 'prepared', text: '' };
 }
 
-function photo(s: Session, image: Image, sample: boolean): Promise<Outcome> {
-  return s.photos(async () => {
+function photo(v: Visit, image: Image, sample: boolean): Promise<Outcome> {
+  return v.photos(async () => {
     const reading = await readPhoto(image, sample);
-    const { advisor } = s;
+    const { advisor } = v;
     if ('card' in reading) {
       const others = advisor.show(reading.card);
-      return { view: advisor.view(), kind: 'photo', card: true, event: say.photo(reading.card, reading.seen, sample, others), ttl: 45 };
+      return { view: advisor.view(), kind: 'photo', card: true, text: said.photo(reading.card, reading.seen, sample, others) };
     }
-    if ('notFood' in reading) return { view: advisor.view(), kind: 'failed', event: say.notFood(reading.notFood), ttl: 20, notice: "That photo doesn't look like a food or a food label. Try another, or just name the food." };
-    if ('noVision' in reading) return { view: advisor.view(), kind: 'failed', event: say.noVision(), ttl: 20, notice: 'Reading photos needs the app’s model (GEMINI_API_KEY is not set). Name the food instead.' };
-    return { view: advisor.view(), kind: 'failed', event: say.photoFailed(), ttl: 20, notice: 'That photo could not be read. Try another, or just name the food.' };
+    if ('notFood' in reading) return { view: advisor.view(), kind: 'failed', text: said.notFood(reading.notFood), notice: "That photo doesn't look like a food or a food label. Try another, or just name the food." };
+    if ('noVision' in reading) return { view: advisor.view(), kind: 'failed', text: said.noVision(), notice: "Photo reading isn't available right now. Name the food instead and its card comes up." };
+    return { view: advisor.view(), kind: 'failed', text: said.photoFailed(), notice: "That photo couldn't be read. Try a sharper one, or just name the food." };
   });
 }
 
-async function sample(s: Session): Promise<Outcome> {
+async function sample(v: Visit): Promise<Outcome> {
   let bytes: Buffer;
   try {
     bytes = await readFile(SAMPLE);
   } catch (err) {
     warn('reading the sample photo', err);
-    return { view: s.advisor.view(), kind: 'failed', notice: `The sample did not load — ${SAMPLE_FAILED}.` };
+    return { view: v.advisor.view(), kind: 'failed', text: '', notice: `Our salmon plate photo didn't load: ${SAMPLE_FAILED}.` };
   }
-  return photo(s, { mimeType: 'image/jpeg', base64: bytes.toString('base64') }, true);
+  return photo(v, { mimeType: 'image/jpeg', base64: bytes.toString('base64') }, true);
+}
+
+function startOver(v: Visit): Outcome {
+  v.advisor.reset();
+  return { view: v.advisor.view(), kind: 'cleared', text: said.cleared() };
+}
+
+/** The host's tools the server answers: what each did, as the words the host speaks from. */
+async function run(v: Visit, name: string, args: Record<string, unknown>, open: string | null): Promise<Outcome> {
+  switch (name) {
+    case 'look_up_food': return lookUp(v, foodsFrom(args.foods));
+    case 'compare_foods': return compare(v, foodsFrom(args.foods));
+    case 'open_recipe': {
+      const ctx = { ideas: v.advisor.nutrition?.recipes ?? [], kept: v.advisor.recipes.map((r) => r.recipe_name), openRecipe: open };
+      const idea = resolveRecipe(text(args.recipe, 80), ctx);
+      if (!idea) return { view: v.advisor.view(), kind: 'failed', text: said.whichRecipe() };
+      return openRecipe(v, idea, true);
+    }
+    case 'start_over': return startOver(v);
+  }
+  throw new Error(`unknown tool ${name}`);
 }
 
 // -- the request bodies, checked ------------------------------------------------------
 
-const howOf = (value: unknown): How => (value === 'spoken' || value === 'typed' ? value : 'button');
 const text = (value: unknown, max: number) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
-
-function foodsOf(value: unknown): FoodAsk[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((f) => ({ name: text(f?.name, 60), quantity: text(f?.quantity, 40) }))
-    .filter((f) => f.name)
-    .slice(0, 3);
-}
 
 function imageOf(value: unknown): Image | null {
   const v = value as Partial<Image> | null;
@@ -241,65 +247,68 @@ function imageOf(value: unknown): Image | null {
 
 const app: AppServer = {
   id: ID,
-  title: 'Nutrition Advisor',
-  tagline: 'Name a food or share a photo of one: its card, a side-by-side table, and recipes talked through.',
+  title: 'Morsel',
+  tagline: 'Ask about any food: Rachel, a friendly nutritionist, shows you what is in it.',
   maxSeconds: 900,
+  appTools: { instructions: INSTRUCTIONS, tools: TOOLS },
   routes(router) {
-    router.post('/sessions', (_req, res) => {
+    router.post('/visits', (_req, res) => {
       const id = randomBytes(9).toString('hex');
-      const s: Session = { advisor: new Advisor(), photos: serial(), recipes: new Map(), at: Date.now() };
-      sessions.set(id, s);
-      for (const [key, old] of sessions) if (Date.now() - old.at > 3 * 3600_000) sessions.delete(key);
-      res.json({ id, outcome: { view: s.advisor.view(), event: say.start(), ttl: 60 } satisfies Outcome });
+      const v: Visit = { advisor: new Advisor(), photos: serial(), recipes: new Map(), at: Date.now() };
+      visits.set(id, v);
+      for (const [key, old] of visits) if (Date.now() - old.at > 3 * 3600_000) visits.delete(key);
+      res.json({ id, view: v.advisor.view(), opening: said.start() });
     });
 
-    // What an utterance asks for. Separate from acting on it, so the page can
-    // show the user's line and what the app is doing while a card is made.
-    router.post('/sessions/:id/judge', async (req, res) => {
-      const s = sessions.get(req.params.id);
-      if (!s) return void res.status(404).json({ error: 'no_session' });
-      s.at = Date.now();
-      const said = text(req.body?.text, 500);
-      if (!said) return void res.json({ intent: { kind: 'none' }, by: 'rules' });
-      const ctx = contextOf(s.advisor, req.body?.screen, req.body?.lastAvatarLine);
-      res.json(await judge(said, howOf(req.body?.how), ctx));
+    // The host's tool calls: the result is what it says next.
+    router.post('/visits/:id/tool', async (req, res) => {
+      const v = visits.get(req.params.id);
+      if (!v) return void res.status(404).json({ error: 'no_visit' });
+      v.at = Date.now();
+      // `open`: the recipe open on the page, which "walk me through it" means.
+      const { name, arguments: args, open } = (req.body ?? {}) as { name?: string; arguments?: Record<string, unknown>; open?: unknown };
+      if (!name || !SERVER_TOOLS.has(name)) return void res.status(400).json({ error: 'unknown_tool' });
+      res.json(await run(v, name, args && typeof args === 'object' ? args : {}, text(open, 60) || null));
     });
 
-    router.post('/sessions/:id/act', async (req, res) => {
-      const s = sessions.get(req.params.id);
-      if (!s) return void res.status(404).json({ error: 'no_session' });
-      s.at = Date.now();
-      const body = req.body as Partial<ActRequest>;
-      const action = body.action;
-      const how = howOf(body.how);
-      const said = text(body.said, 500) || undefined;
-      switch (action?.kind) {
-        case 'lookup':
-        case 'compare': {
-          const foods = foodsOf(action.foods);
+    // The user's buttons: they act at once, and the host is told (it cannot see the screen).
+    router.post('/visits/:id/act', async (req, res) => {
+      const v = visits.get(req.params.id);
+      if (!v) return void res.status(404).json({ error: 'no_visit' });
+      v.at = Date.now();
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      switch (body.command) {
+        case 'lookup': {
+          const foods = foodsFrom(body.food);
           if (!foods.length) return void res.status(400).json({ error: 'no_food' });
-          return void res.json(action.kind === 'lookup' ? await lookup(s, foods, said, how) : await compare(s, foods, said, how));
+          const done = await lookUp(v, foods);
+          return void res.json({ ...done, text: pressed(asked(foods[0]), done.text) });
         }
         case 'recipe': {
-          const name = text(action.name, 60);
+          const name = text(body.name, 60);
           if (!name) return void res.status(400).json({ error: 'no_recipe' });
-          return void res.json(await openRecipe(s, name, text(action.description, 200), said, how));
+          const done = await openRecipe(v, { name, description: text(body.description, 200) }, false);
+          return void res.json({ ...done, text: pressed(`Open recipe: ${name}`, done.text) });
         }
         case 'photo': {
-          const image = imageOf(action.image);
+          const image = imageOf(body.image);
           if (!image) return void res.status(400).json({ error: 'bad_image' });
-          return void res.json(await photo(s, image, false));
+          return void res.json(await photo(v, image, false));
         }
         case 'sample':
-          return void res.json(await sample(s));
+          return void res.json(await sample(v));
         case 'prepare':
-          return void res.json(await prepare(s));
+          return void res.json(await prepare(v));
+        case 'start_over': {
+          const done = startOver(v);
+          return void res.json({ ...done, text: pressed('Start over', done.text) });
+        }
         default:
-          return void res.status(400).json({ error: 'nothing_to_do' });
+          return void res.status(400).json({ error: 'unknown_command' });
       }
     });
 
-    // The sample photo, so the panel can show what is being read.
+    // The sample photo, so the board can show what is being read.
     router.get('/sample.jpg', async (_req, res) => {
       try {
         const bytes = await readFile(SAMPLE);

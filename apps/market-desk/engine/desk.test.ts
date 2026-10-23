@@ -339,160 +339,225 @@ test('a failed add says nothing when there is no voice yet', async () => {
 // (the 52-week range in the state and the age of a row the timer left behind
 // are in director.test.ts, next to the state builder)
 
-// ─── the session: what the old tools did, and what the avatar is told ────
+// ─── the session: what the tools and buttons do, and who tells the host ──
 
 function session(fetch: FetchQuote = async (symbol) => quote({ symbol }), clock = new Clock()) {
   const speaker = new FakeSpeaker();
   return { s: new DeskSession({ fetch, clock: clock.fn, speaker }), speaker, clock };
 }
 
-describe('the session (the old tool bodies)', () => {
-  test('a phrase that is not a ticker is refused before the round trip, and a ticker is claimed', () => {
-    const { s } = session();
-    const refused = s.act({ kind: 'add', symbols: ["nvidia's ticker is nvda"] }, 'spoken');
-    expect(refused.refused).toContain("couldn't find a listing");
-    const ok = s.act({ kind: 'add', symbols: [' nvda '] }, 'spoken');
-    expect(ok.refused).toBeUndefined();
-    expect(ok.event).toBeUndefined(); // the avatar already answered; the landing will follow
-    expect(s.board().fetching).toEqual(['NVDA']);
+/** A feed whose answers wait until released. */
+function gated(answer: (symbol: string) => Quote | Error = (symbol) => quote({ symbol })) {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const fetch: FetchQuote = async (symbol) => {
+    await gate;
+    const a = answer(symbol);
+    if (a instanceof Error) throw a;
+    return a;
+  };
+  return { fetch, release: () => release() };
+}
+
+describe('adding: the reply carries the real quote', () => {
+  test('an add waits for the quote and reports it; the caller tells the host, not the pump', async () => {
+    const { s, speaker } = session(async (symbol) => quote({ symbol, pct: 2.5, asOf: 500 }));
+    const report = await s.add(['NVDA'], { by: 'tool', said: { NVDA: 'nvidia' } });
+    expect(report.landed.map((l) => [l.quote.symbol, l.quote.change_pct, l.said])).toEqual([['NVDA', 2.5, 'nvidia']]);
+    expect(s.board().watchlist.map((q) => q.symbol)).toEqual(['NVDA']);
+    // Moved 2.5%, but the reply reads it: the announcer stays quiet.
+    expect(speaker.said).toEqual([]);
   });
 
-  test('a refused add tells the avatar to say so and claim nothing', () => {
+  test('a phrase that is not a ticker is refused before the round trip', async () => {
+    const pulled: string[] = [];
+    const { s } = session(async (symbol) => { pulled.push(symbol); return quote({ symbol }); });
+    const report = await s.add(["nvidia's ticker is nvda!"], { by: 'tool' });
+    expect(report.failed[0].reason).toContain("couldn't find a listing");
+    expect(pulled).toEqual([]);
+  });
+
+  test('the board says what it refuses: full, and already there', async () => {
     const { s } = session();
     fill(s.desk);
-    const outcome = s.act({ kind: 'add', symbols: ['META'] }, 'spoken');
-    expect(outcome.event).toContain('The board only holds six — drop one first.');
-    expect(outcome.event).toContain('do not claim anything was added');
+    const full = await s.add(['META'], { by: 'tool' });
+    expect(full.failed).toEqual([{ symbol: 'META', reason: 'The board only holds six — drop one first.', said: undefined }]);
+    const again = await s.add(['AAPL'], { by: 'tool' });
+    expect(again.already.map((q) => q.symbol)).toEqual(['AAPL']);
   });
 
-  test.each([
-    ['remove', ['MSFT'], "That isn't on the board."],
-    ['clear', [], "The board's already clear."],
-  ] as const)('every refusal reaches the avatar verbatim: %s', (kind, symbols, expected) => {
-    const { s } = session();
-    expect(s.act({ kind, symbols: [...symbols] }, 'spoken').event).toContain(expected);
+  test('a listing the feed does not know comes back as the reason, said once (by the caller)', async () => {
+    const { s, speaker } = session(async (symbol) => { throw new board.UnknownSymbol(board.unknownMessage(symbol)); });
+    const report = await s.add(['ZQXWQ'], { by: 'tool' });
+    expect(report.failed).toEqual([{ symbol: 'ZQXWQ', reason: "I couldn't find a listing for ZQXWQ — check the ticker.", said: undefined }]);
+    expect(speaker.said).toEqual([]);
+    expect(s.board().fetching).toEqual([]);
   });
 
-  test('pulling up something not on the board puts it there', () => {
+  test('several stocks in one call: what landed and what did not, together', async () => {
+    const { s } = session(async (symbol) => {
+      if (symbol === 'ZZZZ') throw new board.UnknownSymbol(board.unknownMessage(symbol));
+      return quote({ symbol });
+    });
+    const report = await s.add(['AAPL', 'ZZZZ', 'TSLA'], { by: 'tool' });
+    expect(report.landed.map((l) => l.quote.symbol)).toEqual(['AAPL', 'TSLA']);
+    expect(report.failed.map((f) => f.symbol)).toEqual(['ZZZZ']);
+  });
+
+  test('a quote slower than the wait is reported on its way, then told when it lands, in one line', async () => {
+    const feed = gated();
+    const { s, speaker } = session(feed.fetch);
+    const report = await s.add(['AAPL', 'NVDA'], { by: 'tool', said: { NVDA: 'nvidia' }, waitMs: 5 });
+    expect(report.pending).toEqual(['AAPL', 'NVDA']);
+    expect(speaker.said).toEqual([]);
+    feed.release();
+    await settle();
+    await settle();
+    expect(speaker.said).toHaveLength(1);
+    expect(speaker.said[0]).toMatch(/AAPL .*NVDA /);
+    expect(speaker.said[0]).toContain('you said were coming');
+  });
+
+  test('a late add that fails takes the promise back, with what the user called it', async () => {
+    const feed = gated((symbol) => new board.UnknownSymbol(board.unknownMessage(symbol)));
+    const { s, speaker } = session(feed.fetch);
+    await s.add(['NTDOY'], { by: 'tool', said: { NTDOY: 'Nintendo' }, waitMs: 5 });
+    feed.release();
+    await settle();
+    // The recorded bug: "NTDOY" in the error when the user had said "Nintendo".
+    expect(speaker.said[0]).toContain('the user asked for "Nintendo"; the desk looked for NTDOY');
+  });
+
+  test('a button add of a stock the host then asks for waits on the same pull', async () => {
+    const feed = gated();
+    const pulls: string[] = [];
+    const { s } = session(async (symbol) => { pulls.push(symbol); return feed.fetch(symbol, { now: 0 }); });
+    const button = s.add(['AAPL'], { by: 'button' });
+    const tool = s.add(['AAPL'], { by: 'tool' });
+    feed.release();
+    const [a, b] = await Promise.all([button, tool]);
+    expect(pulls).toEqual(['AAPL']);
+    expect(a.landed[0].quote.symbol).toBe('AAPL');
+    expect(b.landed[0].quote.symbol).toBe('AAPL');
+  });
+
+  test('a board cleared while a quote was in flight does not get the row back', async () => {
+    const feed = gated();
+    const { s } = session(feed.fetch);
+    const add = s.add(['AAPL'], { by: 'tool' });
+    s.clear();
+    feed.release();
+    const report = await add;
+    expect(s.board().watchlist).toEqual([]);
+    expect(report.landed).toEqual([]);
+  });
+});
+
+describe('focus, refresh, remove, clear', () => {
+  test('pulling up something not on the board puts it there and looks at it', async () => {
     // Found by playing it. "Pull up Apple" when Apple is not up means PUT it up;
     // refusing it was a dead end, and it sits one letter from "put up".
     const { s } = session();
-    const outcome = s.act({ kind: 'focus', symbols: ['MSFT'] }, 'spoken');
-    expect(outcome.refused).toBeUndefined();
-    expect(s.board().fetching).toEqual(['MSFT']);
-  });
-
-  test('pulling up something already there still just focuses it', () => {
-    const { s } = session();
-    fill(s.desk, ['MSFT', 'AAPL']);
-    const outcome = s.act({ kind: 'focus', symbols: ['MSFT'] }, 'typed');
-    expect(outcome.event).toContain('front and centre');
+    fill(s.desk, ['AAPL']);
+    const report = await s.focus('MSFT', { by: 'tool' });
+    expect(report.kind).toBe('added');
     expect(s.board().focus).toBe('MSFT');
   });
 
-  test('the advice question has somewhere to go', () => {
+  test('pulling up something already there focuses it, and the reply (not the announcer) reads it', async () => {
+    const { s, speaker } = session();
+    s.desk.apply({ kind: 'add', symbol: 'AAPL' });
+    s.desk.apply({ kind: 'add', symbol: 'AAPL', entry: quote({ pct: 0.2 }) }, 'agent');
+    s.desk.apply({ kind: 'add', symbol: 'NVDA' });
+    s.desk.apply({ kind: 'add', symbol: 'NVDA', entry: quote({ symbol: 'NVDA', pct: -3.1 }) }, 'agent');
+    const report = await s.focus('NVDA', { by: 'button' });
+    expect(report).toMatchObject({ kind: 'focused', quote: { symbol: 'NVDA' } });
+    expect(s.board().focus).toBe('NVDA');
+    expect(speaker.said).toEqual([]);
+  });
+
+  test('a refresh waits for the fresh print, and says when nothing has traded since', async () => {
+    let n = 0;
+    const clock = new Clock();
+    const { s } = session(async (symbol) => { n += 1; return quote({ symbol, asOf: n < 3 ? 100 : 200 }); }, clock);
+    await s.add(['AAPL'], { by: 'tool' });
+    clock.now += 30;
+    expect(await s.refresh(null, { by: 'tool' })).toMatchObject({ kind: 'fresh', samePrint: true });
+    clock.now += 30;
+    expect(await s.refresh('AAPL', { by: 'tool' })).toMatchObject({ kind: 'fresh', samePrint: false });
+  });
+
+  test('a refresh inside the 15 s floor reads the number the board has', async () => {
     const { s } = session();
-    fill(s.desk, ['NVDA']);
-    const typed = s.advice('should I buy it?', 'typed');
-    expect(typed.handled).toBe(true);
-    expect(typed.event).toContain("I read the tape, I don't give advice.");
-    expect(typed.event).toContain('NVDA is at 306.83');
-    // Spoken, the avatar answered from the refusal staged in its state; it is not made to refuse twice.
-    const spoken = s.advice('should I buy it?', 'spoken');
-    expect(spoken.event).toBeUndefined();
-    expect(spoken.advice?.fact).toBeTruthy();
+    await s.add(['AAPL'], { by: 'tool' });
+    expect(await s.refresh(null, { by: 'tool' })).toMatchObject({ kind: 'tooSoon', quote: { symbol: 'AAPL' } });
   });
 
-  test('a button press tells the avatar nothing, refused or not', () => {
-    const { s } = session();
-    expect(s.act({ kind: 'clear', symbols: [] }, 'button')).toMatchObject({ refused: "The board's already clear.", event: undefined });
-    expect(s.act({ kind: 'add', symbols: ['AAPL'] }, 'button').event).toBeUndefined();
-  });
-
-  test('a quote the user asked for is read when it lands, once, and not again by the announcer', async () => {
-    const { s, speaker } = session(async (symbol) => quote({ symbol, pct: 2.5, asOf: 500 }));
-    s.act({ kind: 'add', symbols: ['NVDA'], said: { NVDA: 'nvidia' } }, 'spoken');
-    await settle();
-    expect(speaker.said).toHaveLength(1);
-    expect(speaker.said[0]).toContain('NVDA (NVDA Inc., for "nvidia") at 306.83, up 2.50% on the day');
-  });
-
-  test('a panel add lands silently unless it moved a point (the announcer, as in the original)', async () => {
-    const quiet = session(async (symbol) => quote({ symbol, pct: 0.4 }));
-    quiet.s.act({ kind: 'add', symbols: ['AAPL'] }, 'button');
-    await settle();
-    expect(quiet.speaker.said).toEqual([]);
-    const loud = session(async (symbol) => quote({ symbol, pct: -1.6 }));
-    loud.s.act({ kind: 'add', symbols: ['AAPL'] }, 'button');
-    await settle();
-    expect(loud.speaker.said).toHaveLength(1);
-    expect(loud.speaker.said[0]).toContain('down 1.60%');
-  });
-
-  test('several quotes asked for in one breath are read in one line', async () => {
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
-    const { s, speaker } = session(async (symbol) => {
-      if (symbol === 'TSLA') await gate;
-      return quote({ symbol });
-    });
-    s.act({ kind: 'add', symbols: ['AAPL', 'NVDA', 'TSLA'] }, 'spoken');
-    await settle();
-    expect(speaker.said).toEqual([]); // TSLA is still on its way
-    release();
-    await settle();
-    expect(speaker.said).toHaveLength(1);
-    expect(speaker.said[0]).toMatch(/AAPL .*NVDA .*TSLA /);
-  });
-
-  test('a name the desk looked up and could not find is said with what the user called it', async () => {
-    const { s, speaker } = session(async (symbol) => { throw new board.UnknownSymbol(board.unknownMessage(symbol)); });
-    s.act({ kind: 'add', symbols: ['NTDOY'], said: { NTDOY: 'nintendo' } }, 'spoken');
-    await settle();
-    // The recorded bug: "NTDOY" in the error when the user had said "Nintendo".
-    expect(speaker.said[0]).toContain('the user asked for "nintendo"; the desk looked for NTDOY');
-  });
-
-  test('a refresh the user asked for is read when it lands, and a failed one is owned up to', async () => {
+  test('a failed refresh keeps the last number, greyed, and says why', async () => {
     let n = 0;
     const clock = new Clock();
     const { s, speaker } = session(async (symbol) => {
       n += 1;
-      if (n === 3) throw new board.FeedUnavailable(board.FEED_DOWN_MESSAGE);
-      return quote({ symbol, asOf: n === 1 ? 100 : 200, pct: 0.2 });
+      if (n > 1) throw new board.RateLimited(board.RATE_LIMITED_MESSAGE);
+      return quote({ symbol });
     }, clock);
-    s.act({ kind: 'add', symbols: ['AAPL'] }, 'button');
-    await settle();
+    await s.add(['AAPL'], { by: 'tool' });
     clock.now += 30;
-    s.act({ kind: 'refresh', symbols: [] }, 'spoken');
+    const report = await s.refresh(null, { by: 'tool' });
+    expect(report).toMatchObject({ kind: 'failed', reason: board.RATE_LIMITED_MESSAGE, quote: { price: 306.83, stale: true } });
+    expect(speaker.said).toEqual([]);
+  });
+
+  test('a refresh of nothing, or of a stock not on the board, says so', async () => {
+    const { s } = session();
+    expect(await s.refresh(null, { by: 'tool' })).toEqual({ kind: 'empty' });
+    fill(s.desk, ['AAPL']);
+    expect(await s.refresh('TSLA', { by: 'tool' })).toEqual({ kind: 'missing', symbol: 'TSLA' });
+  });
+
+  test('a refresh slower than the wait is told when it lands', async () => {
+    let n = 0;
+    const clock = new Clock();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const { s, speaker } = session(async (symbol) => {
+      n += 1;
+      if (n > 1) await gate;
+      return quote({ symbol, asOf: 100 + n });
+    }, clock);
+    await s.add(['AAPL'], { by: 'tool' });
+    clock.now += 30;
+    expect(await s.refresh(null, { by: 'tool', waitMs: 5 })).toEqual({ kind: 'pending', symbol: 'AAPL' });
+    release();
     await settle();
     expect(speaker.said.at(-1)).toContain('Fresh quote on AAPL');
-    clock.now += 30;
-    s.act({ kind: 'refresh', symbols: ['AAPL'] }, 'typed');
-    await settle();
-    expect(speaker.said.at(-1)).toContain('failed');
   });
 
-  test('typed commands are told back; spoken ones were already answered', () => {
-    const { s } = session();
-    fill(s.desk, ['AAPL', 'MSFT']);
-    expect(s.act({ kind: 'remove', symbols: ['MSFT'] }, 'spoken').event).toBeUndefined();
-    expect(s.act({ kind: 'remove', symbols: ['AAPL'] }, 'typed').event).toContain('AAPL is off the board');
+  test('a refresh that joins the timer\'s pull is read once, by the reply', async () => {
+    const feed = gated((symbol) => quote({ symbol, pct: -2.2, asOf: 900 }));
+    const clock = new Clock();
+    const { s, speaker } = session(async (symbol) => (s.board().watchlist.length ? feed.fetch(symbol, { now: 0 }) : quote({ symbol, pct: 0.1, asOf: 100 })), clock);
+    await s.add(['AAPL'], { by: 'tool' });
+    clock.now += 60;
+    s.timer.tick();
+    const refresh = s.refresh(null, { by: 'tool' });
+    feed.release();
+    expect(await refresh).toMatchObject({ kind: 'fresh', quote: { change_pct: -2.2 } });
+    expect(speaker.said).toEqual([]);
   });
 
-  test('"drop it" drops the focused one', () => {
+  test('"drop it" drops the one on watch; a stock not on the board is refused in the board\'s words', () => {
     const { s } = session();
     fill(s.desk, ['AAPL', 'MSFT']);
-    s.act({ kind: 'remove', symbols: [] }, 'spoken');
+    expect(s.remove([])).toMatchObject({ removed: ['AAPL'], refused: [] });
     expect(s.board().watchlist.map((q: Quote) => q.symbol)).toEqual(['MSFT']);
+    expect(s.remove(['TSLA'])).toMatchObject({ removed: [], refused: ["That isn't on the board."] });
   });
 
-  test('a judgement is routed: nothing, advice, a name nobody could map, an action', () => {
+  test('clearing, and clearing again', () => {
     const { s } = session();
-    expect(s.handle({ kind: 'none' }, 'hello', 'typed').handled).toBe(false);
-    expect(s.handle({ kind: 'advice' }, 'buy?', 'typed').kind).toBe('advice');
-    expect(s.handle({ kind: 'add', symbols: [], said: {}, unresolved: ['the other one'] }, 'add the other one', 'spoken').event).toContain('could not tell which listing');
-    s.handle({ kind: 'add', symbols: ['AAPL'], said: {}, unresolved: [] }, 'add apple', 'spoken');
-    expect(s.board().fetching).toEqual(['AAPL']);
+    fill(s.desk, ['AAPL']);
+    expect(s.clear()).toEqual({ cleared: true });
+    expect(s.clear()).toEqual({ cleared: false, reason: "The board's already clear." });
   });
 });

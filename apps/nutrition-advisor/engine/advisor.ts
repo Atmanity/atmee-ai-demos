@@ -278,6 +278,23 @@ export class Advisor {
     return this.prepared.get(prepKey(this.nutrition?.product_name ?? '', name)) ?? null;
   }
 
+  // -- start over -------------------------------------------------------------
+
+  /**
+   * Clear the card, the table and the kept recipes. The sequence keeps
+   * counting: a fresh advisor would restart at 0, and the page would take
+   * the empty screen for a stale reply and keep the old one.
+   */
+  reset() {
+    this.seq += 1;
+    this.nutrition = null;
+    this.recipe = null;
+    this.shelf = [];
+    this.recipes = [];
+    this.cards.clear();
+    this.prepared.clear();
+  }
+
   view(): View {
     const food = this.nutrition?.product_name ?? '';
     const prepared = (this.nutrition?.recipes ?? [])

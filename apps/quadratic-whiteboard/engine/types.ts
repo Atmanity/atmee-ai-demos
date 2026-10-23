@@ -1,8 +1,8 @@
 // What the server and the page share. The board's truth (every line of every
 // method) lives in the engine on the server; the page only ever sees a `View`:
-// the lines already revealed, a COUNT of the ones that are not, and the one
-// sentence the avatar will read when the next line goes up (staged, never
-// drawn). Nothing else of the unrevealed working leaves the engine.
+// the lines already revealed and a COUNT of the ones that are not. Nothing of
+// the unrevealed working leaves the engine: the host learns each line from
+// `next_line`'s result, at the moment it goes up.
 
 export type Phase = 'empty' | 'posed' | 'working';
 
@@ -43,7 +43,7 @@ export interface StepView {
   n: number;
   /** The line on the board. */
   working: string;
-  /** The avatar's script for this line. The panel deliberately ignores it. */
+  /** The host's sentence for this line (already revealed). The board deliberately ignores it. */
   say: string;
 }
 
@@ -67,32 +67,27 @@ export interface Snapshot {
   last_action: LastAction | null;
 }
 
-/**
- * The line about to be revealed, staged for the avatar: its spoken sentence
- * only (not the board's `working`), so that the avatar's own immediate answer
- * to a spoken "next" reads the real line. The panel never draws it.
- */
-export interface StagedLine { n: number; say: string }
-
 export interface View extends Snapshot {
   /** Bumped on every accepted change, so a late reply cannot overwrite a newer board. */
   seq: number;
-  next: StagedLine | null;
 }
 
-/** Where an input came from: the user's voice, a typed line, or a control on the page. */
-export type Source = 'spoken' | 'typed' | 'button';
-
+/** What a control on the page (a button, the equation box) did. */
 export interface Outcome {
   view: View;
-  /** Whether the input was a board action; a typed line that wasn't goes to the avatar as-is. */
-  handled: boolean;
-  /** The action it was, when it was one. */
-  kind?: string;
-  /** What the avatar should be told about it, in its own words. */
+  /** A refusal or a misreading, shown on the board. */
+  message?: string;
+  /** What the host should be told about it: it cannot see the screen. */
   event?: string;
   /** How long that event stays worth saying (seconds). */
   ttl?: number;
-  /** A refusal or a misreading, shown on the panel. */
+}
+
+/** What one of the host's tool calls did. */
+export interface ToolOutcome {
+  view: View;
+  /** The words the host speaks from. */
+  result: string;
+  /** A refusal or a misreading, also shown on the board. */
   message?: string;
 }

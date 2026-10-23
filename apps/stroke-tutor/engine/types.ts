@@ -75,6 +75,9 @@ export type Intent =
 
 export type IntentKind = Intent['kind'];
 
+/** The page's buttons; each runs the tool Ren would call for the same request. */
+export type Command = 'show' | 'next' | 'another' | 'over' | 'choose';
+
 export interface Outcome {
   view: Snapshot;
   /** Whether the input was a board action; a typed line that wasn't goes to the avatar as-is. */

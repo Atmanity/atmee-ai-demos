@@ -1,10 +1,11 @@
-// The narrator: the guide's line about a change made with the chart's own
-// controls. Ported from the narrator tests of the original `test_table.py`
-// (speaks for a tap, never twice for a change someone else speaks for, quiet
-// for a clear), plus this port's coalescing.
+// The narrator: the line the guide is told about a change made with the
+// chart's own controls. Ported from the narrator tests of the original
+// `test_table.py` (speaks for a tap, never twice for a change someone else
+// speaks for, quiet for a clear), plus the port's coalescing.
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { runTool } from './actions.ts';
 import { SkyChart } from './chart.ts';
-import { act } from './guide.ts';
+import { apply } from './guide.ts';
 import { Narrator } from './narrator.ts';
 import type { Intent } from './types.ts';
 
@@ -13,10 +14,10 @@ let lines: string[];
 let sky: SkyChart;
 let narrator: Narrator;
 
-/** What the page does for a control: act, then hand the change to the narrator. */
+/** What the page does for a control: apply, then hand the change to the narrator. */
 function press(intent: Intent) {
-  const outcome = act(sky, [intent], 'control', { now: EPOCH });
-  if (outcome.narrate) narrator.changed(outcome.before, outcome.view);
+  const outcome = apply(sky, [intent], { now: EPOCH });
+  if (outcome.change) narrator.changed(outcome.before, outcome.view);
   return outcome;
 }
 
@@ -33,7 +34,7 @@ test('a tap is spoken for, once, after a moment', () => {
   expect(lines).toEqual([]);
   vi.advanceTimersByTime(1200);
   expect(lines).toHaveLength(1);
-  expect(lines[0]).toContain('They just tapped Vega');
+  expect(lines[0]).toContain('The user tapped Vega');
 });
 
 test('three quick +1h clicks are one line, about the sky three hours on', () => {
@@ -57,15 +58,14 @@ test('a drag that comes back to where it started says nothing', () => {
   expect(lines).toEqual([]);
 });
 
-test('a request flushes the pending line first, so the two arrive in order and the change is not spoken twice', () => {
-  // The original's claim(seq): a change the model is already narrating must not
-  // be narrated again. Here a typed or spoken request carries its own event;
-  // the narrator says what was pending and then has nothing left to say.
+test('a tool call flushes the pending line first, so the two arrive in order and the change is not spoken twice', async () => {
+  // The original's claim(seq): a change the model is already speaking about
+  // must not be narrated again. A tool's change comes back as its result; the
+  // narrator says what was pending and then has nothing left to say.
   press({ kind: 'set_time', shiftHours: 1 });
   narrator.flush();
   expect(lines).toHaveLength(1);
-  const outcome = act(sky, [{ kind: 'select', star: 'vega' }], 'typed', { now: EPOCH });
-  expect(outcome.narrate).toBe(false);
+  await runTool(sky, 'point_out', { star: 'Vega' }, { now: EPOCH });
   vi.advanceTimersByTime(5000);
   expect(lines).toHaveLength(1);
 });
@@ -84,7 +84,7 @@ test('a place picked then a time stepped is one line about the place, at the new
   press({ kind: 'set_time', shiftHours: 1 });
   vi.advanceTimersByTime(1200);
   expect(lines).toHaveLength(1);
-  expect(lines[0]).toContain('The chart is now over Sydney, at');
+  expect(lines[0]).toContain('The user moved the chart to the sky from Sydney at about 9 in the evening');
 });
 
 test('cancel drops the pending line (the session ended)', () => {

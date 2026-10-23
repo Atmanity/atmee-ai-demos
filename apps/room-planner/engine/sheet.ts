@@ -15,23 +15,25 @@ const MARGIN = 48;
 const PLAN_W = 1080;
 const TITLE_H = 96;
 
-// Blueprint-ish but readable in print: ink for line work, a warm paper, one
-// accent for what is wrong.
-const INK = '#1c3d5a';
-const PAPER = '#fbfaf6';
-const RULE = '#c8d4de';
-const ACCENT = '#b4462f';
-const FURNITURE = '#c9a06b';
-const FURNITURE_EDGE = '#8a6239';
+// Planwright's drafting look, readable in print: graphite line work on white
+// paper, a non-photo-blue rule, redline for what is wrong, rooms as pale tints
+// by use (the same as on screen, so the sheet and the plan agree).
+const INK = '#22262a';
+const PAPER = '#fbfbf8';
+const RULE = '#cfd6d0';
+const ACCENT = '#c23d24';
+const FURNITURE = '#d9c4a3';
+const FURNITURE_EDGE = '#8c7350';
+const GLASS = '#7cc0e8';
 
 export const ROOM_FILL: Record<string, string> = {
-  living: '#eaf2f8', dining: '#f9f3e6', kitchen: '#eef6f0',
-  bedroom: '#f6efe4', bedroom_single: '#f6efe4', nursery: '#fcf0f1',
-  office: '#f1eef7', bathroom: '#e9f2f5', shower_room: '#e9f2f5',
-  wc: '#e9f2f5', utility: '#edf1f1', entry: '#f3f3f0',
-  hall: '#f3f3f0', corridor: '#f3f3f0', stairs: '#e8eef3',
-  storage: '#efeeec', closet: '#efeeec', balcony: '#eaf7f1',
-  other: '#f1f1ee',
+  living: '#e4eee8', dining: '#ebefe0', kitchen: '#e0edee',
+  bedroom: '#e6ebf5', bedroom_single: '#e6ebf5', nursery: '#eee8f4',
+  office: '#ebe8f3', bathroom: '#dceff2', shower_room: '#dceff2',
+  wc: '#dceff2', utility: '#e4ecec', entry: '#f0f1ee',
+  hall: '#f0f1ee', corridor: '#f0f1ee', stairs: '#e3e7e9',
+  storage: '#ecece8', closet: '#ecece8', balcony: '#e2f0e7',
+  other: '#efefeb',
 };
 
 /** XML text escaping, as xml.sax.saxutils.escape does it. */
@@ -40,7 +42,7 @@ export const escape = (text: string) => text.replaceAll('&', '&amp;').replaceAll
 const titleCase = (text: string) => text.replace(/\b\w/g, (c) => c.toUpperCase());
 
 /** The whole sheet: title block, plan, schedule, and what is wrong with it. */
-export function render(home: Home, { title = 'Home planner', unit = 'm2' as 'm2' | 'ft2' } = {}): string {
+export function render(home: Home, { title = 'Planwright', unit = 'm2' as 'm2' | 'ft2' } = {}): string {
   const level = home.level;
   const table = schedule(home, unit);
   const parts = [
@@ -93,7 +95,7 @@ function plan(level: Level): string[] {
   // coloured line. Without the swing the drawing hides what doors cost: floor.
   for (const opening of level.openings) {
     const [x0, y0, x1, y1] = opening.rect;
-    const colour = opening.kind === 'door' ? '#ffffff' : '#7fb2d9';
+    const colour = opening.kind === 'door' ? PAPER : GLASS;
     out.push(`<line x1="${sx(x0)}" y1="${sy(y0)}" x2="${sx(x1)}" y2="${sy(y1)}" stroke="${colour}" stroke-width="5"/>`);
   }
   for (const [, [zx0, zy0, zx1, zy1]] of level.doorSwings()) {

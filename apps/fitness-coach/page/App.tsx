@@ -1,29 +1,35 @@
-// Fitness Coach: the avatar coaches; the app's server owns the session (the
-// step machine, the plan, the limits, the safety hold, the demo render). The
-// page draws the server's view, keeps the avatar's state in step with it, and
-// passes on what happened as events.
+// Spotter: a personal training call with Sammy. Sammy acts through the
+// coach's tools (set a goal, a level, a limit; start a move; start over; stop
+// for safety) and speaks from what each returns; the page answers those calls
+// by asking the server, shows the plan, keeps Sammy's picture of the screen
+// current, and tells her about taps.
 //
-// Three inputs, one route (`act`), one rule each:
-// - a tap: the server acts; every event goes to the avatar (it cannot see taps);
-// - a typed line: the server judges it first. If the app handled it, the line
-//   is recorded and the events speak for it; otherwise it goes to the avatar
-//   as a typed turn, after the state, so the answer is grounded;
-// - speech: the avatar has already started answering, from the state's staged
-//   lines, so only the events it could not have known are sent.
-// Background work (a plan landing, a rebuild, a demo finishing) arrives on the
-// server's event stream as the same kind of outcome.
+// Two things the page does on its own, from the user's words:
+// - the safety stop. A condition no exercise swap makes safe (pregnancy, a
+//   cardiac history, recent surgery…) freezes the plan the moment the page
+//   hears it, whatever Sammy does; if she has not called stop_for_safety a few
+//   seconds later, the page does, and gives her the words.
+// - the safety net. "Start over", or a limit ("only 20 minutes", "bad knee"),
+//   that Sammy narrates without calling the tool is done by the page.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AvatarStage, Composer, Transcript, useAvatar, type Avatar } from '../../../src/kit/index.ts';
-import { boardState, NOTES, say } from '../engine/director.ts';
+import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
+import { parseConstraints } from '../engine/constraints.ts';
+import { boardState, say } from '../engine/director.ts';
+import { mustDo, mustStop, type NetCall } from '../engine/judge.ts';
 import type { Command, Outcome, View } from '../engine/types.ts';
-import type { BoardStage } from './board.ts';
-import { refusalReason } from './board.ts';
-import { FitnessPanel } from './FitnessPanel.tsx';
-import { INITIAL_FLOW, parseSnapshot } from './parsers.ts';
-import './fitness.css';
+import { Workout, type Pending } from './Workout.tsx';
+import { Lobby, Logo } from './Lobby.tsx';
+import { parseSnapshot } from './parsers.ts';
+import { planFileName, planText } from './plan-text.ts';
+import './spotter.css';
 
 const ID = 'fitness-coach';
 const API = `/api/apps/${ID}`;
+const HOST = 'Sammy';
+/** How long Sammy has to call stop_for_safety herself before the page does it and gives her the words. */
+const STOP_WAIT_MS = 4000;
+/** Seeds the six goals on offer: fixed for this page, so they never reshuffle under the user. */
+const SEED = Math.random().toString(36).slice(2, 10);
 
 async function post<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) });
@@ -31,128 +37,187 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
   return res.json();
 }
 
-type From = 'tap' | 'typed' | 'spoken' | 'background';
-
-/** Seeds the six goals on offer: fixed for this page, so they never reshuffle under the user. */
-const SEED = Math.random().toString(36).slice(2, 10);
+const asCall = (call: NetCall | null): ToolCall | null => (call ? { id: `net-${Date.now()}`, name: call.name, arguments: call.arguments } : null);
 
 export function App() {
   const [view, setView] = useState<View | null>(null);
   const shown = useRef<View | null>(null);
   const session = useRef<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [held, setHeld] = useState<string[]>([]);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [refusal, setRefusal] = useState('');
   const avatarRef = useRef<Avatar | null>(null);
 
-  const show = useCallback((outcome: Outcome, from: From) => {
-    const avatar = avatarRef.current!;
-    // The newest view wins: a reply and a streamed outcome can cross.
-    if (!shown.current || outcome.view.seq >= shown.current.seq) {
-      shown.current = outcome.view;
-      setView(outcome.view);
-      // Sent here rather than from an effect, so it reaches the avatar before
-      // any typed turn this outcome leads to.
-      avatar.state(boardState(outcome.view));
-    }
-    for (const event of outcome.events) {
-      // After speech the avatar has already said what its state staged.
-      if (from === 'spoken' && event.staged) continue;
-      avatar.event(event.text, event.ttl);
-    }
+  // The newest screen wins: a tool's reply and a streamed outcome can cross.
+  const show = useCallback((next: View) => {
+    if (shown.current && next.seq < shown.current.seq) return;
+    shown.current = next;
+    setView(next);
   }, []);
 
-  const act = useCallback(async (body: { command?: Command; value?: string; text?: string; how?: 'typed' | 'spoken' }, from: From): Promise<Outcome | null> => {
-    if (!session.current) return null;
-    try {
-      const outcome = await post<Outcome>(`/sessions/${session.current}/act`, body);
-      show(outcome, from);
-      return outcome;
-    } catch (err) {
-      console.warn('[fitness-coach]', err);
-      return null;
-    }
+  // Sammy's tool calls: the server acts, the screen follows, the result is what she says.
+  const onToolCall = useCallback(async ({ name, arguments: args }: ToolCall) => {
+    if (!session.current) throw new Error('Spotter is still opening; try again in a moment');
+    const { view: next, result } = await post<{ view: View; result: string }>(`/sessions/${session.current}/tool`, { name, arguments: args });
+    show(next);
+    return result;
   }, [show]);
 
-  const avatar = useAvatar(ID, {
-    // The avatar hears the user too and answers at once; the app acts on the
-    // same words and tells it the outcome.
-    onUserSaid: (text, how) => { if (how === 'spoken') void act({ text, how: 'spoken' }, 'spoken'); },
-  });
-  avatarRef.current = avatar;
+  const run = async (call: ToolCall) => String(await onToolCall(call));
+  const net = useToolNet({ match: (text) => asCall(mustDo(text)), run, avatar: () => avatarRef.current! });
+  const safety = useToolNet({ match: (text) => asCall(mustStop(text)), run, avatar: () => avatarRef.current!, waitMs: STOP_WAIT_MS });
 
-  // The session is set up while the avatar is on its way (both take a while).
+  // Everything the user says or types passes here once it is final.
+  const heard = (text: string) => {
+    const conditions = parseConstraints(text).clearance;
+    if (conditions.length) {
+      // Frozen now, by the page: the screen stops before anyone has spoken.
+      setHeld((current) => [...new Set([...current, ...conditions])]);
+      if (session.current) {
+        void post<{ view: View }>(`/sessions/${session.current}/hold`, { text }).then(({ view: next }) => show(next))
+          .catch((err) => console.warn('[spotter] the pause did not reach the server', err));
+      }
+      safety.heard(text);
+      return;
+    }
+    net.heard(text);
+  };
+
+  const avatar = useAvatar(ID, { onToolCall: safety.watch(net.watch(onToolCall)), onUserSaid: (text) => heard(text) });
+  avatarRef.current = avatar;
+  const live = avatar.phase === 'live';
+
+  // Set up while Sammy is on her way; a second call on this page carries on where the first left off.
   useEffect(() => {
     if (avatar.phase !== 'starting') return;
-    for (const note of NOTES) avatar.note(note);
     if (session.current) {
-      // A second call on the same page: the board (and any hold) carries on.
       if (shown.current) {
         avatar.state(boardState(shown.current));
         avatar.event(say.resume(shown.current), 60);
       }
       return;
     }
-    void post<{ id: string; outcome: Outcome }>('/sessions', { seed: SEED }).then(({ id, outcome }) => {
+    void post<{ id: string; view: View; opening: string }>('/sessions', { seed: SEED }).then(({ id, view: first, opening }) => {
       session.current = id;
       setSessionId(id);
-      show(outcome, 'tap');
-    }).catch((err) => console.warn('[fitness-coach] could not open a session', err));
+      show(first);
+      setRefusal('');
+      avatar.event(opening, 60);
+    }).catch((err) => {
+      console.warn('[spotter] could not open a session', err);
+      setRefusal(`We couldn’t get your plan sheet ready. Hang up and call ${HOST} again.`);
+    });
   }, [avatar.phase]);
 
-  // Plans, rebuilds and demos finish in the background, on the server.
+  // Sammy's picture of the screen follows the screen.
+  useEffect(() => { if (view) avatar.state(boardState(view)); }, [view]);
+
+  // Plans, rebuilds and videos finish in the background, on the server.
   useEffect(() => {
     if (!sessionId) return;
     const stream = new EventSource(`${API}/sessions/${sessionId}/stream`);
     stream.onmessage = (message) => {
       try {
-        show(JSON.parse(message.data) as Outcome, 'background');
+        const outcome = JSON.parse(message.data) as Outcome;
+        show(outcome.view);
+        if (avatarRef.current?.phase === 'live') for (const e of outcome.events) avatarRef.current.event(e.text, e.ttl);
       } catch (err) {
-        console.warn('[fitness-coach] a streamed outcome was unreadable', err);
+        console.warn('[spotter] a streamed update was unreadable', err);
       }
     };
     return () => stream.close();
   }, [sessionId, show]);
 
-  // A typed line is judged first; only what the app did not handle goes to the avatar.
-  const onTyped = (text: string) => {
-    void act({ text, how: 'typed' }, 'typed').then((outcome) => {
-      if (outcome?.handled) avatar.record(text);
-      else avatar.say(text);
-    });
-  };
+  // A tap acts at once; Sammy cannot see the screen, so she is told.
+  async function tap(command: Command, value = '') {
+    if (!session.current || pending) return;
+    setPending({ command, value });
+    setRefusal('');
+    try {
+      const out = await post<{ view: View; event?: string; refused?: string }>(`/sessions/${session.current}/act`, { command, value });
+      show(out.view);
+      if (out.refused) setRefusal(out.refused);
+      if (out.event) avatar.event(out.event, 30);
+    } catch (err) {
+      console.warn('[spotter]', err);
+      setRefusal('That didn’t go through. Try again.');
+    } finally {
+      setPending(null);
+    }
+  }
 
-  const tap = (command: Command, value = '') =>
-    act({ command, value }, 'tap').then((outcome) => (outcome ? refusalReason(outcome) : 'That did not reach the app. Try again.'));
+  function save() {
+    const snap = view ? parseSnapshot(view) : null;
+    if (!snap?.plan) return;
+    const blob = new Blob([planText(snap.plan, snap.flow.constraints, HOST)], { type: 'text/plain;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = planFileName(snap.plan);
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  }
 
-  const board = view ? parseSnapshot(view) : null;
-  const live = avatar.phase === 'live';
+  if (avatar.phase === 'idle') return <Lobby host={HOST} onStart={(mic) => void avatar.start({ mic })} />;
 
+  const stopped = held.length > 0 || view?.stage === 'hold';
   return (
-    <div className="kit-layout fitness-app">
-      <div className="kit-side">
-        <AvatarStage
-          avatar={avatar} name="Your coach" startLabel="Start the session"
-          lobby={<><div className="kit-title">Fitness Coach</div><div className="kit-detail">Tell your coach what you want to train and your level, or tap them on the right. You get a plan built around your limits, and a walk-through of the first move.</div></>}
+    <div className={`sp-app${stopped ? ' is-stopped' : ''}`}>
+      <header className="sp-top">
+        <Logo />
+        <Steps stage={stopped ? 'hold' : view?.stage ?? 'goal'} />
+        {live && avatar.secondsLeft !== null && <p className="sp-clock" aria-label="Call time left">{clock(avatar.secondsLeft)}</p>}
+        <CallControls avatar={avatar} className="sp-controls" />
+      </header>
+
+      <main className="sp-main">
+        <aside className={`sp-coach${live ? ' is-live' : ''}`} aria-label={`${HOST}, your coach`}>
+          <HostVideo avatar={avatar} name={HOST} className="sp-coach-video">
+            <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} />
+          </HostVideo>
+          <div className="sp-nameplate">
+            <p><b>{HOST}</b> <span>your coach</span>{live && <span className="sp-live">On the floor</span>}</p>
+            {live && avatar.caption && <p className="sp-coach-says" aria-hidden="true">{lastLine(avatar.caption)}</p>}
+          </div>
+        </aside>
+
+        <section className="sp-board" aria-label="Your workout">
+          <Workout
+            view={view} seed={SEED} held={held} live={live && Boolean(view)} ended={avatar.phase === 'ended'} host={HOST}
+            pending={pending} refusal={refusal} onTap={(command, value) => void tap(command, value)} onSave={save}
+          />
+        </section>
+
+        <ChatPanel
+          avatar={avatar} name={HOST} className="sp-chat" placeholder="A goal, a limit, a question…"
+          empty={<>Talk to {HOST}, or type here: what you want to train, your level, anything to work around.</>}
         />
-        <Composer avatar={avatar} placeholder="Say what you want to train, or a limit like “only 20 minutes”…" onSubmit={(t) => { onTyped(t); }} />
-        <Transcript avatar={avatar} names={{ avatar: 'Coach' }} />
-      </div>
-      <div className="fitness-board" aria-label="Fitness Coach">
-        <FitnessPanel
-          flow={board?.flow ?? INITIAL_FLOW}
-          plan={board?.plan ?? null}
-          video={board?.video ?? null}
-          stage={(view?.stage ?? 'goal') as BoardStage}
-          demos={view?.demos ?? false}
-          live={live && Boolean(view)}
-          planning={view?.planning ?? false}
-          rebuilding={view?.rebuilding ?? false}
-          seed={view?.seed ?? SEED}
-          onSelectGoal={(goal) => tap('goal', goal)}
-          onSelectLevel={(level) => tap('level', level)}
-          onChooseMove={(step) => tap('move', step)}
-          onRestart={() => tap('restart')}
-        />
-      </div>
+      </main>
     </div>
   );
 }
+
+const STEPS: [string, string[]][] = [['Goal', ['goal']], ['Level', ['level']], ['Plan', ['planning']], ['First move', ['move']]];
+
+function Steps({ stage }: { stage: string }) {
+  if (stage === 'hold') return <p className="sp-steps-paused" role="status">Paused for your safety</p>;
+  const at = stage === 'coach' ? STEPS.length : STEPS.findIndex(([, stages]) => stages.includes(stage));
+  return (
+    <ol className="sp-track" aria-label="Your progress">
+      {STEPS.map(([label], i) => (
+        <li key={label} className={i < at ? 'is-done' : i === at ? 'is-now' : ''} aria-current={i === at ? 'step' : undefined}>
+          <span>{label}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** The sentence being spoken, for the pinned coach bar on a phone (the video there is too small for captions). */
+const lastLine = (text: string) => {
+  const sentences = text.trim().split(/(?<=[.!?…])\s+/);
+  const line = sentences.pop() ?? '';
+  return line.length > 110 ? `…${line.slice(-110)}` : line;
+};
+
+const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} left`;

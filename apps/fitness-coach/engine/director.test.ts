@@ -1,11 +1,11 @@
-// What the avatar is told. The API's limits hold, the screen and the state
-// never disagree (the original's `test_the_note_tells_the_truth.py`), the
-// predictable next answer is staged, and under a hold nothing invites coaching.
+// What the host is told. The tools and the rules fit the API's limits, the
+// screen and the state never disagree (the original's
+// `test_the_note_tells_the_truth.py`), nothing secret reaches the state, and
+// under a hold nothing invites coaching.
 import { describe, expect, it } from 'vitest';
 import { Coach } from './coach.ts';
 import { clearanceLine, parseConstraints } from './constraints.ts';
-import { boardState, NOTE_MAX, NOTES, say, spokenGoal, STATE_MAX, videoLine } from './director.ts';
-import { judge } from './judge.ts';
+import { boardState, INSTRUCTIONS, INSTRUCTIONS_MAX, PLAN_WAIT_MS, say, spokenGoal, STATE_MAX, TOOLS, videoLine } from './director.ts';
 import type { FitnessPlan, View } from './types.ts';
 
 const toPlan = () => {
@@ -18,12 +18,44 @@ const toPlan = () => {
 const long = (n: number) => 'Ｑ'.repeat(n);
 
 describe('the limits of the API', () => {
-  it('keeps every standing note within 2,000 characters', () => {
-    expect(NOTES.length).toBeGreaterThan(0);
-    for (const note of NOTES) expect(note.length).toBeLessThanOrEqual(NOTE_MAX);
+  it('keeps the instructions within 4,000 characters, naming every tool', () => {
+    expect(INSTRUCTIONS.length).toBeLessThanOrEqual(INSTRUCTIONS_MAX);
+    for (const tool of TOOLS) expect(INSTRUCTIONS, tool.name).toContain(tool.name);
   });
 
-  it('keeps the worst board within the state limit, and never loses the step', () => {
+  it('declares tools the API accepts: names, descriptions, schemas, all awaited in time', () => {
+    expect(TOOLS.length).toBeLessThanOrEqual(30);
+    const names = TOOLS.map((t) => t.name);
+    expect(new Set(names).size).toBe(names.length);
+    for (const tool of TOOLS) {
+      expect(tool.name).toMatch(/^[a-z][a-z0-9_]{0,47}$/);
+      expect(['web_search', 'lookup']).not.toContain(tool.name);
+      expect(tool.description.length).toBeGreaterThan(0);
+      expect(tool.description.length).toBeLessThanOrEqual(500);
+      expect(tool.parameters.type).toBe('object');
+      expect(JSON.stringify(tool.parameters).length).toBeLessThanOrEqual(4096);
+      expect(tool['x-atmee']?.mode).toBe('await');
+      expect(tool['x-atmee']!.timeoutSeconds!).toBeLessThanOrEqual(28);
+    }
+    expect(JSON.stringify(TOOLS).length).toBeLessThanOrEqual(24576);
+  });
+
+  it('waits for a plan for less time than the tools that build one wait for the answer', () => {
+    for (const name of ['set_goal', 'set_level', 'add_limits']) {
+      const tool = TOOLS.find((t) => t.name === name)!;
+      expect(PLAN_WAIT_MS / 1000, name).toBeLessThan(tool['x-atmee']!.timeoutSeconds! - 4);
+    }
+  });
+
+  it('lets the host start over only when asked', () => {
+    const startOver = TOOLS.find((t) => t.name === 'start_over')!;
+    expect(startOver.description).toMatch(/only when the user asks/i);
+    expect(startOver.description).toMatch(/never on your own/i);
+    // A result that mentions starting over leaves the decision to the user.
+    expect(say.goalLocked(toPlan().view())).toContain('only if they say yes');
+  });
+
+  it('keeps the worst screen within the state limit, and never loses the step', () => {
     const coach = toPlan();
     const view = coach.view();
     const huge: FitnessPlan = {
@@ -53,12 +85,12 @@ describe('the screen and the state tell the same story', () => {
     expect(text).toContain('Step 1 of 4');
   });
 
-  it('lists only the moves on the board after a rebuild removed some', async () => {
+  it('lists only the moves on the screen after a rebuild removed some', () => {
     // After a torn ACL rebuilt the plan in code, the original's coach read the
     // PRE-injury move list aloud: the panel was safe and the voice was not.
     const coach = toPlan();
     expect(boardState(coach.view())).toContain('Bodyweight squats');
-    coach.hear(await judge('I have a torn ACL', coach.context()), 'typed');
+    coach.hear({ constraints: parseConstraints('I have a torn ACL'), intent: null });
     const text = boardState(coach.view());
     expect(text).not.toContain('squats');
     for (const step of coach.view().plan!.workout_steps) expect(text).toContain(step);
@@ -75,34 +107,27 @@ describe('the screen and the state tell the same story', () => {
     expect(boardState({ ...view, rebuilding: false })).toContain('already obeys these');
   });
 
-  it('says a demo is ready only when it is', () => {
+  it('says a move video is ready only when it is, and never promises one when there are none', () => {
     expect(videoLine({ status: 'generating', request_id: 'r', prompt: 'p' }, true, 'Plank hold')).toContain('NOT on the screen yet');
     expect(videoLine({ status: 'ready', request_id: 'r', prompt: 'p', video_url: '/x' }, true, 'Plank hold')).toContain('READY');
-    expect(videoLine(null, false, '')).toContain('never promise one');
+    expect(videoLine(null, false, '')).toContain('never promise');
+    expect(videoLine({ status: 'unavailable', request_id: '', prompt: '' }, false, 'Plank hold')).toContain('never promise');
     for (const status of ['generating', 'error', 'unavailable'] as const) {
       expect(videoLine({ status, request_id: 'r', prompt: 'p' }, true, 'Plank hold')).not.toContain('READY');
     }
   });
 
-  it('never repeats the demo prompt or the clip address', () => {
-    // A superseded render's prompt names a stale move.
+  it('never carries the render prompt or the clip address', () => {
+    // A superseded render's prompt names a stale move; the clip address is the server's.
     const coach = toPlan();
-    const view: View = { ...coach.view(), stage: 'coach', flow: { ...coach.view().flow, start_move: 'Plank hold' }, video: { status: 'ready', request_id: 'r', prompt: 'A fitness trainer demonstrates walking lunges', video_url: '/api/apps/fitness-coach/clips/abc' } };
+    const view: View = { ...coach.view(), stage: 'coach', demos: true, flow: { ...coach.view().flow, start_move: 'Plank hold' }, video: { status: 'ready', request_id: 'r', prompt: 'A fitness trainer demonstrates walking lunges', video_url: '/api/apps/fitness-coach/clips/abc' } };
     const text = boardState(view);
     expect(text).not.toContain('walking lunges');
     expect(text).not.toContain('/api/apps');
-  });
-});
-
-describe('the next answer, staged', () => {
-  it('stages the level question at the goal step, and a known level', () => {
-    expect(boardState(new Coach().view())).toContain('ask their level');
-    const coach = new Coach();
-    coach.hear({ constraints: parseConstraints(''), intent: null, level: 'Beginner' }, 'spoken');
-    expect(boardState(coach.view())).toContain('They already said their level is beginner');
+    expect(text).not.toContain('clips/');
   });
 
-  it('names the goals the screen actually shows', () => {
+  it('names the goals the screen actually shows, and a level already given', () => {
     for (const seed of ['xyz', 'abc', 'fitness']) {
       const view = new Coach({ seed }).view();
       const text = boardState(view);
@@ -111,44 +136,38 @@ describe('the next answer, staged', () => {
     }
     expect(spokenGoal('Fat-loss HIIT')).toBe('fat-loss HIIT');
     expect(spokenGoal('Glutes + legs')).toBe('glutes and legs');
-  });
-
-  it('stages an honest answer to a move pick, with demos off and on', () => {
-    const off = toPlan().view();
-    expect(boardState(off)).toContain('demo videos are off');
-    const on = { ...off, demos: true };
-    expect(boardState(on)).toContain('making a short demo');
-    expect(boardState(on)).toContain('never say it is ready');
-  });
-
-  it('marks the events the state already covered as staged, and only those', () => {
     const coach = new Coach();
-    const goal = coach.command('goal', 'Full body');
-    expect(goal.events[0].staged).toBe(true);
-    const level = coach.command('level', 'Beginner');
-    expect(level.events.map((e) => Boolean(e.staged))).toEqual([true, false]);
+    coach.hear({ constraints: parseConstraints(''), intent: null, level: 'Beginner' });
+    expect(boardState(coach.view())).toContain('They already said their level is beginner');
+  });
+
+  it('forbids inventing moves before there is a plan', () => {
+    const coach = new Coach();
+    expect(boardState(coach.view())).toContain('do not list or invent moves');
+    coach.command('goal', 'Mobility');
+    expect(boardState(coach.view())).toContain('do not list or invent moves');
   });
 });
 
 describe('under a hold', () => {
-  const held = async () => {
+  const held = () => {
     const coach = toPlan();
     coach.command('move', coach.view().plan!.workout_steps[0]);
-    coach.hear(await judge("I'm 7 months pregnant", coach.context()), 'spoken');
+    coach.hear({ constraints: parseConstraints("I'm 7 months pregnant"), intent: null });
     return coach.view();
   };
 
-  it('names no move and stages no coaching', async () => {
-    const view = await held();
+  it('names no move and stages no coaching', () => {
+    const view = held();
     const text = boardState(view);
-    expect(text).toContain('SESSION ON HOLD');
+    expect(text).toContain('WORKOUT STOPPED FOR SAFETY');
     expect(text).toContain('doctor');
     expect(text).toContain('NOT adapted');
     for (const step of [...view.plan!.warmup_steps, ...view.plan!.workout_steps]) expect(text).not.toContain(step.split(',')[0]);
-    expect(text).not.toMatch(/READY|rendering|Step \d of 4|making a short demo/);
+    expect(text).not.toMatch(/READY|being made|Step \d of 4|Now coaching/);
   });
 
-  it('gives the avatar the exact sentence, and the board the same words', () => {
+  it('gives the host the exact sentence, and the screen the same words', () => {
     const text = say.clearance(['pregnancy']);
     expect(text).toContain(clearanceLine(['pregnancy']));
     expect(text).toContain('Do not suggest any exercise');

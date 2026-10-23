@@ -1,17 +1,26 @@
-// What an utterance means to the desk. The original let its model call
-// add_symbol/remove_symbol/... and decline_advice; the Avatar API has no
-// function calling, so the app decides, on the server: rules first (the verbs,
-// the tickers, the companies on the board and a table of well-known names),
-// then the app's own model call for what rules cannot read ("put the
-// search-engine one up", an advice question in a new phrasing), then Nasdaq's
-// symbol search for a name nobody could map.
+// Words to the desk. Two jobs, both on the app's side of the host:
 //
-// Advice is checked FIRST and by rules as well as by the model: the no-advice
-// rule is the one safety property this app has, so the app holds it itself
-// rather than trusting the avatar's persona to.
+// - **Names to tickers** (`resolveStocks`). The host calls add_symbols with
+//   the stocks as the user named them ("Nvidia", "the search-engine one",
+//   "TSLA"); the app decides which listing each is: rules first (the board's
+//   own rows, ~90 well-known names, written tickers, spelled-out letters), then
+//   the app's own model call, then Nasdaq's symbol search. The feed has the
+//   last word on any ticker.
+// - **The safety net's reading** (`mustDo`). When the user's words clearly ask
+//   for something safe to repeat (clear the board, refresh, drop a stock on
+//   the board) and the host does not call the tool, the page does it. The
+//   rules read commands as people say them, and an advice question first:
+//   "should I dump Tesla?" is a question for the host to decline, never a
+//   removal.
 import { normalizeSymbol } from './board.ts';
 import type { Listing } from './feed.ts';
-import type { Board, Judgement, Kind } from './types.ts';
+import type { Board, Kind } from './types.ts';
+
+/** The rules' reading of one utterance. */
+export type Judgement =
+  | { kind: 'none' }
+  | { kind: 'advice' }
+  | { kind: Kind; symbols: string[]; said: Record<string, string>; unresolved: string[] };
 
 /** Text as the command rules read it: lower case, plain quotes, no accents. */
 export const norm = (text: string) => text
@@ -212,43 +221,57 @@ export function rules(text: string, board: Board): Judgement {
   return { kind: 'none' };
 }
 
-// ─── the model, for what rules cannot read ───────────────────────────────
 
-export const ACTIONS = ['none', 'add', 'remove', 'focus', 'refresh', 'clear', 'advice'] as const;
-export interface ModelReading { action: (typeof ACTIONS)[number]; companies: { said: string; ticker: string }[] }
+// ─── the safety net ──────────────────────────────────────────────────────
 
-export const JUDGE_SCHEMA = {
+export type NetCall = { name: 'clear_board' | 'refresh_quote' | 'remove_symbols'; arguments: Record<string, unknown> };
+
+/**
+ * The tool call the user's words clearly ask for, among those safe to do
+ * twice: a second clear finds the board clear, a second refresh hits the 15 s
+ * floor, a second removal finds the stock gone. Never an add (a duplicate
+ * could take a slot) and never a focus (it adds what is not there).
+ */
+export function mustDo(text: string, board: Board): NetCall | null {
+  const j = rules(text, board);
+  if (j.kind === 'clear') return { name: 'clear_board', arguments: {} };
+  if (j.kind === 'refresh') return { name: 'refresh_quote', arguments: j.symbols[0] ? { stock: j.symbols[0] } : {} };
+  if (j.kind === 'remove') {
+    if (j.symbols.length) return { name: 'remove_symbols', arguments: { stocks: j.symbols } };
+    // "Drop it": the one on watch. "Drop the other thing" names nothing the net can be sure of.
+    if (!j.unresolved.length && board.focus && /\b(it|that|this)( one)?\b/.test(norm(text))) return { name: 'remove_symbols', arguments: { stocks: [board.focus] } };
+  }
+  return null;
+}
+
+// ─── names to tickers ────────────────────────────────────────────────────
+
+/** The app's own model call: names to tickers, for what the rules cannot read. */
+export type TickerLookup = (names: string[], board: Board) => Promise<{ said: string; ticker: string }[]>;
+export type SymbolSearch = (query: string) => Promise<Listing[]>;
+
+export const LOOKUP_SCHEMA = {
   type: 'object',
   properties: {
-    action: { type: 'string', enum: [...ACTIONS], description: 'What the user wants done to the watchlist, or advice if they ask what to do with a stock, or none.' },
-    companies: {
+    stocks: {
       type: 'array',
-      description: 'Each company or ticker the user names (or refers to), in order.',
+      description: 'One entry per name, in order.',
       items: {
         type: 'object',
         properties: {
-          said: { type: 'string', description: 'The company or ticker as the user said it.' },
+          said: { type: 'string', description: 'The name, exactly as given.' },
           ticker: { type: 'string', description: 'Its primary US ticker (an ADR or OTC ticker for a foreign company), or empty if unsure.' },
         },
         required: ['said', 'ticker'],
       },
     },
   },
-  required: ['action', 'companies'],
+  required: ['stocks'],
 };
 
-export const judgePrompt = (utterance: string, board: Board) => `A user of a live stock-watchlist app said: "${utterance}"
-The board holds: ${board.watchlist.length ? board.watchlist.map((q) => `${q.symbol} (${q.name})`).join(', ') : 'nothing'}${board.fetching.length ? `; arriving: ${board.fetching.join(', ')}` : ''}. The focused one is ${board.focus ?? 'none'}. Speech recognition may have misheard company names.
-Classify the request:
-- advice: they ask what to DO with a stock or the market: buy, sell, hold, a price target, a prediction, cheap or expensive, "what would you do", even hypothetically or in jest. A question that mixes advice with facts is advice.
-- add: they want a stock put on the board ("add Nvidia", "put Apple up", "let's watch Tesla", "what's Tesla doing" when Tesla is NOT on the board).
-- focus: they want to look at one ("pull up Apple", "what about Tesla", "what's Apple at").
-- remove ("drop Tesla", "take it off"), refresh ("check it again", "any change"), clear ("clear the board", "start over").
-- none: anything else, including questions about facts (what a company does, which moved more, what a number means) and small talk.
-In companies, list each company or ticker named; "it" or "that one" means the focused one. Give the ticker only if you are sure; never invent one.`;
-
-export type ModelCall = (utterance: string, board: Board) => Promise<ModelReading>;
-export type SymbolSearch = (query: string) => Promise<Listing[]>;
+export const lookupPrompt = (names: string[], board: Board) => `A user of a live stock-watchlist app asked for these stocks, as speech recognition heard them: ${names.map((n) => `"${n}"`).join(', ')}.
+The board holds: ${board.watchlist.length ? board.watchlist.map((q) => `${q.symbol} (${q.name})`).join(', ') : 'nothing'}. Company names may be misheard; a description ("the search-engine one") means the company it describes.
+For each name give its primary US-listed ticker. Give a ticker only if you are sure which listing is meant; never invent one.`;
 
 /** The listing a name most plausibly means: a stock or fund whose ticker or name starts with what was said. */
 export function pickListing(query: string, listings: Listing[]): Listing | null {
@@ -260,58 +283,97 @@ export function pickListing(query: string, listings: Listing[]): Listing | null 
     ?? null;
 }
 
-/**
- * Rules first; the model when they cannot read the request or name its
- * stock; the symbol search when there is no model or it was not sure. Never
- * throws: a failing model or search leaves what the rules found.
- */
-export async function judge(text: string, board: Board, { model, search }: { model?: ModelCall | null; search?: SymbolSearch | null } = {}): Promise<Judgement> {
-  const ruled = rules(text, board);
-  if (ruled.kind === 'advice' || ruled.kind === 'clear') return ruled;
-  if (ruled.kind !== 'none' && !ruled.unresolved.length) return ruled;
+export interface Resolved {
+  /** Tickers, in the order they were named. */
+  symbols: string[];
+  /** What the user called each ticker, when that was not the ticker itself. */
+  said: Record<string, string>;
+  /** Names nobody could turn into a ticker. */
+  unresolved: string[];
+}
 
-  let reading: Judgement = ruled;
-  if (model) {
+/** A ticker as the host writes one: "TSLA", "F", "BRK.B", "$pltr". */
+const WRITTEN_TICKER = /^\$[A-Za-z]{1,5}(?:[.-][A-Za-z]{1,2})?$|^[A-Z]{1,5}(?:[.-][A-Z]{1,2})?$/;
+
+/**
+ * Each name the host passed, as a ticker: "it" and "the last one" by the
+ * board; then the rules (the board's rows by name or ticker, the well-known
+ * names, a written ticker); then the model, once for all that are left; then
+ * Nasdaq's symbol search. Never throws: a failing model or search leaves the
+ * name unresolved, and the host asks the user for the ticker.
+ */
+export async function resolveStocks(names: string[], board: Board, { lookup, search }: { lookup?: TickerLookup | null; search?: SymbolSearch | null } = {}): Promise<Resolved> {
+  // One entry per name, filled by the first step that can read it; the order is kept.
+  // `guess` is the rules' reading of a name they only partly read ("Apple
+  // Hospitality REIT" is not Apple): the model decides those, the guess stands if it cannot.
+  const entries: { name: string; found: [string, string | undefined][]; guess?: Found }[] = [];
+  for (const raw of names) {
+    const name = String(raw ?? '').trim().slice(0, 80);
+    if (!name) continue;
+    const entry: (typeof entries)[number] = { name, found: [] };
+    entries.push(entry);
+    if (PRONOUN.test(norm(name).replace(/[.?!,]+$/, ''))) {
+      if (board.focus) entry.found.push([board.focus, undefined]);
+      continue;
+    }
+    const at = positional(name, board);
+    if (at) {
+      entry.found.push([at, undefined]);
+      continue;
+    }
+    const found = symbolsIn(name, board);
+    if (found.symbols.length) {
+      if (lookup && unread(name, found, board)) entry.guess = found;
+      else for (const symbol of found.symbols) entry.found.push([symbol, found.said[symbol] ?? (found.symbols.length === 1 ? name : undefined)]);
+      continue;
+    }
+    // A ticker as written that is also a word ("ON", "AI") or one letter ("F"): the rules skip those.
+    if (WRITTEN_TICKER.test(name)) entry.found.push([normalizeSymbol(name), undefined]);
+  }
+
+  const open = () => entries.filter((e) => !e.found.length);
+  if (open().length && lookup) {
     try {
-      const m = await model(text, board);
-      if (m.action === 'advice') return { kind: 'advice' };
-      // Rules matched a verb but could not name the stock ("what's the board
-      // look like at the moment"), and the model says it is not a request: it isn't.
-      if (m.action === 'none') return { kind: 'none' };
-      const symbols: string[] = [];
-      const said: Record<string, string> = {};
-      const unresolved: string[] = [];
-      for (const company of m.companies ?? []) {
-        // A name the rules know beats the model's ticker for it; the feed has the last word on either.
-        const symbol = symbolsIn(company.said ?? '', board).symbols[0] || normalizeSymbol(company.ticker);
-        if (symbol) {
-          if (!symbols.includes(symbol)) symbols.push(symbol);
-          if (company.said && company.said.toUpperCase() !== symbol) said[symbol] = company.said;
-        } else if (company.said) unresolved.push(company.said);
+      const answers = await lookup(open().map((e) => e.name), board);
+      for (const entry of open()) {
+        const answer = answers.find((a) => nameNorm(a.said ?? '') === nameNorm(entry.name));
+        const symbol = normalizeSymbol(answer?.ticker);
+        if (symbol) entry.found.push([symbol, entry.name]);
       }
-      reading = { kind: m.action, symbols, said, unresolved };
     } catch (err) {
-      console.warn('[market-desk] [Judge] the model failed (%s); keeping the rules\' reading', (err as Error).message);
+      console.warn('[market-desk] [Resolve] the model failed (%s); trying the symbol search', (err as Error).message);
     }
   }
-  if (reading.kind === 'none' || reading.kind === 'clear') return reading;
-  if (reading.kind === 'add' && !reading.symbols.length && !reading.unresolved.length) return { kind: 'none' };
-  if (!reading.unresolved.length) return reading;
-
-  // Names left over: ask the symbol search.
-  const symbols = [...reading.symbols];
-  const said = { ...reading.said };
-  const unresolved: string[] = [];
-  for (const name of reading.unresolved) {
-    const hit = search ? pickListing(name, await search(name).catch(() => [])) : null;
-    if (hit && !symbols.includes(hit.symbol)) {
-      symbols.push(hit.symbol);
-      said[hit.symbol] = name;
-    } else if (!hit) unresolved.push(name);
+  for (const entry of open()) {
+    if (entry.guess) {
+      for (const symbol of entry.guess.symbols) entry.found.push([symbol, entry.guess.said[symbol] ?? entry.name]);
+      continue;
+    }
+    const hit = search ? pickListing(entry.name, await search(entry.name).catch(() => [])) : null;
+    if (hit) entry.found.push([hit.symbol, entry.name]);
   }
-  // Only an explicit add is worth a "which listing?" back. Anything else that
-  // named nothing the desk knows ("what's the board look like at the moment",
-  // "drop the other thing") is left to the avatar.
-  if (!symbols.length && reading.kind !== 'add') return { kind: 'none' };
-  return { ...reading, symbols, said, unresolved };
+
+  const symbols: string[] = [];
+  const said: Record<string, string> = {};
+  const unresolved: string[] = [];
+  for (const entry of entries) {
+    if (!entry.found.length) unresolved.push(entry.name);
+    for (const [symbol, name] of entry.found) {
+      if (symbols.includes(symbol)) continue;
+      symbols.push(symbol);
+      if (name && name.toUpperCase().replace(/^\$/, '') !== symbol) said[symbol] = name;
+    }
+  }
+  return { symbols, said, unresolved };
+}
+
+/** Words that do not change which company a name means. */
+const CORPORATE = /\b(inc|incorporated|corp|corporation|company|co|companies|holdings?|group|plc|ltd|limited|class|shares?|stock|stocks|common|ordinary|adr|the|and|please|ticker)\b/g;
+
+/** The name has words the rules did not account for (beyond the board row's own name): their match may be a different company. */
+function unread(name: string, found: Found, board: Board): boolean {
+  let rest = ` ${nameNorm(name)} `;
+  for (const [a, b] of [...found.spans].sort((x, y) => y[0] - x[0])) rest = rest.slice(0, a) + ' ' + rest.slice(b);
+  const known = new Set(board.watchlist.filter((q) => found.symbols.includes(q.symbol)).flatMap((q) => nameNorm(q.name).split(' ')));
+  return rest.replace(CORPORATE, ' ').split(/\s+/).filter((w) => w && w.length > 1 && !known.has(w)).length > 0;
 }

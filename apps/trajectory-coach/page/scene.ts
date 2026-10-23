@@ -14,7 +14,7 @@
  * machine can do is a lie about the control; a *spoken* request outside the
  * limits is never clamped, and comes back refused with the numbers.
  */
-import type { Attempt, Point, RangeSnapshot, Shot } from '../engine/types.ts';
+import type { Attempt, Point, RangeSnapshot } from '../engine/types.ts';
 
 export interface Pad { left: number; right: number; top: number; bottom: number }
 
@@ -141,13 +141,6 @@ export function sizeCanvas(canvas: { width: number; height: number }, cssWidth: 
 /** Whether the target has been passed, for the ghost trail's colour. */
 export function trailTone(attempt: Attempt): string {
   return attempt.cleared ? 'cleared' : 'missed';
-}
-
-/** The one-line readout under the drawing. Derived, never stored. */
-export function readout(shot: Shot | null, phase: string): string {
-  if (!shot) return 'No shot yet.';
-  if (phase === 'flying' || shot.cleared === undefined) return 'In the air…';
-  return `${shot.range_m} m · apex ${shot.apex_m} m · ${shot.flight_s} s`;
 }
 
 export function clamp(value: number, low: number, high: number): number {

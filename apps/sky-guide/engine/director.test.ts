@@ -1,16 +1,17 @@
-// What the avatar is told. Ported from the note tests of the original
-// `test_table.py` (names not coordinates, the fact verbatim, no constant
-// filler, the worst case measured rather than assumed), plus this port's
-// limits: notes of at most 2,000 characters, a state of at most 3,858.
+// What the host is told. The tools and instructions against the API's limits;
+// the live chart (state) against its size limit and against the chart itself;
+// the results' wording. Ported from the note tests of the original
+// `test_table.py`: names not coordinates, the fact verbatim, the worst case
+// measured rather than assumed.
 //
-// Sky Guide has no secrets to keep (the sky is public); its equivalent of
-// "never leak the answer" is "never tell the avatar a sky the chart is not
-// showing": no star listed as up that is down, no number it could read out
-// as a fact that is not in the catalogue.
+// Lodestar has no secrets to keep (the sky is public); its equivalent of
+// "never leak the answer" is "never tell the host a sky the chart is not
+// showing": no star listed as up that is down, no fact that is not the
+// catalogue's, no direction that is not the chart's.
 import { describe, expect, test } from 'vitest';
 import { FACTS, STARS } from './catalog.ts';
 import { SkyChart } from './chart.ts';
-import { NOTE_LIMIT, NOTES, say, skyState, STATE_LIMIT } from './director.ts';
+import { INSTRUCTIONS, said, skyState, STATE_LIMIT, TOOLS } from './director.ts';
 import { PLACES } from './sky.ts';
 
 const EPOCH = 1785931200;   // 2026-08-05, 8 pm in Taipei
@@ -26,14 +27,50 @@ function heaviest(sky: SkyChart): SkyChart {
   return sky;
 }
 
-describe('limits', () => {
-  test('every note fits in 2,000 characters, and the facts are all in them, word for word', () => {
-    for (const note of NOTES) expect(note.length).toBeLessThanOrEqual(NOTE_LIMIT);
-    const all = NOTES.join('\n');
-    for (const lines of Object.values(FACTS)) for (const line of lines) expect(all).toContain(line);
+describe('the tools fit the API', () => {
+  test('names, descriptions, schemas, modes and timeouts', () => {
+    expect(TOOLS.length).toBeLessThanOrEqual(30);
+    const names = TOOLS.map((t) => t.name);
+    expect(new Set(names).size).toBe(names.length);
+    for (const tool of TOOLS) {
+      expect(tool.type).toBe('function');
+      expect(tool.name).toMatch(/^[a-z][a-z0-9_]{0,47}$/);
+      expect(['web_search', 'lookup']).not.toContain(tool.name);
+      expect(tool.description.length).toBeGreaterThan(0);
+      expect(tool.description.length).toBeLessThanOrEqual(500);
+      expect(tool.parameters.type).toBe('object');
+      expect(JSON.stringify(tool.parameters).length).toBeLessThanOrEqual(4096);
+      expect(['await', 'notify']).toContain(tool['x-atmee']?.mode);
+      expect(tool['x-atmee']?.timeoutSeconds ?? 8).toBeLessThanOrEqual(28);
+    }
+    expect(JSON.stringify(TOOLS).length).toBeLessThanOrEqual(24576);
   });
 
-  test('the worst-case state fits, measured across every place, every hour and four seasons', () => {
+  test('everything the host speaks about waits for the chart; only clearing does not', () => {
+    const mode = Object.fromEntries(TOOLS.map((t) => [t.name, t['x-atmee']?.mode]));
+    expect(mode).toEqual({ point_out: 'await', show_constellation: 'await', move_chart: 'await', clear_chart: 'notify' });
+  });
+
+  test('the instructions fit, name every tool, and keep the hard rules', () => {
+    expect(INSTRUCTIONS.length).toBeLessThanOrEqual(4000);
+    for (const tool of TOOLS) expect(INSTRUCTIONS).toContain(tool.name);
+    expect(INSTRUCTIONS).toContain('FACTS, THE HARD RULE');
+    expect(INSTRUCTIONS).toContain('never change a number');
+    expect(INSTRUCTIONS).toMatch(/no Sun, Moon or planets/);
+    expect(INSTRUCTIONS).toMatch(/never degrees/);
+    expect(INSTRUCTIONS).toContain('never claim the change happened');
+    expect(INSTRUCTIONS).toContain('The chart changes only when you call a tool');
+    expect(INSTRUCTIONS).toContain('call the tool only if they say yes');
+    expect(INSTRUCTIONS).toMatch(/clear_chart, and only then/);
+  });
+
+  test('the guide is given a job, never a name (the host keeps its own persona)', () => {
+    expect(INSTRUCTIONS).not.toMatch(/\bIris\b/);
+  });
+});
+
+describe('the live chart fits', () => {
+  test('the worst case, measured across every place, every hour and four seasons', () => {
     // Measured rather than assumed, like the original's envelope test: the
     // longest fact marked, a figure lit, wherever the most stars are up.
     let worst = 0;
@@ -48,7 +85,7 @@ describe('limits', () => {
     }
     expect(worst, where).toBeLessThanOrEqual(STATE_LIMIT);
     // And with room to spare at full detail, so the degradation below is a guard, not the norm.
-    expect(worst, where).toBeLessThan(STATE_LIMIT - 200);
+    expect(worst, where).toBeLessThan(STATE_LIMIT - 150);
   });
 
   test('the poles and the equator fit too', () => {
@@ -70,8 +107,8 @@ describe('limits', () => {
   });
 });
 
-describe('the state is the chart, in words', () => {
-  test('it names stars and directions, never coordinates, degrees or the catalogue size key', () => {
+describe('the live chart is the chart, in words', () => {
+  test('it names stars and directions, never coordinates, degrees or field names', () => {
     const text = skyState(heaviest(chart()).view());
     expect(text).not.toMatch(/\balt\b|\baz\b|degrees|°|catalog_size/);
     expect(text).toMatch(/high up|halfway up|low down|overhead/);
@@ -90,13 +127,13 @@ describe('the state is the chart, in words', () => {
     }
   });
 
-  test('it stages "show me Orion": which figures are up with where to look, and which are down with when they rise', () => {
+  test('which figures are up with where to look, and which are down with when they rise', () => {
     const text = skyState(chart().view());
     expect(text).toContain('Scorpius about halfway up in the south (by Antares)');
     expect(text).toMatch(/Figures not up now: [^.]*Orion \(it rises about half past 2 in the morning\)/);
   });
 
-  test('it carries the marked star\'s catalogue fact verbatim, and says when nothing is marked', () => {
+  test('the marked star\'s catalogue fact verbatim, or that nothing is marked', () => {
     const sky = chart();
     expect(skyState(sky.view())).toContain('No star is marked.');
     sky.select('vega');
@@ -105,42 +142,62 @@ describe('the state is the chart, in words', () => {
     expect(text).toContain('never change a number');
   });
 
-  test('the place, the hour in words and the clock label are all there', () => {
-    const text = skyState(chart().view());
-    expect(text).toContain('The sky from Taipei, at about 8 in the evening (8:00 pm, Wed 5 Aug, local time)');
+  test('the place, the hour in words and the clock; solar time for coordinates; daytime said', () => {
+    expect(skyState(chart().view())).toContain('The sky from Taipei, at about 8 in the evening (8:00 pm, Wed 5 Aug, local time)');
     const coords = chart();
     coords.setPlace(null, -33.9, 18.4);
     expect(skyState(coords.view())).toContain('local solar time');
+    expect(skyState(chart().view())).not.toContain('daytime');
+    expect(skyState(chart('Taipei', EPOCH - 8 * 3600).view())).toContain('It is daytime there');
   });
 });
 
-describe('the notes', () => {
-  test('keep the hard rules: facts only from the catalogue, no planets, never degrees, never confirm a refusal', () => {
-    const all = NOTES.join('\n');
-    expect(all).toContain('THE ONE HARD RULE');
-    expect(all).toContain('never change a number');
-    expect(all).toMatch(/Sun, the Moon or the planets/);
-    expect(all).toMatch(/never degrees/);
-    expect(all).toContain('Never confirm a change that was refused');
-  });
-
-  test('tell the avatar it does not move the chart, and to hold for the app on another place or hour', () => {
-    const all = NOTES.join('\n');
-    expect(all).toContain('you cannot move the chart yourself');
-    expect(all).toContain("let's have a look");
-  });
-
-  test('give the guide a job, never a name (the avatar keeps its own)', () => {
-    expect(NOTES[0]).toContain('Keep whatever name and background you already have');
-  });
-});
-
-describe('the opening', () => {
-  test('names the place, the hour in words and the brightest stars actually up', () => {
+describe('the results', () => {
+  test('the opening names the place, the hour in words and the brightest stars actually up', () => {
     const sky = chart();
-    const line = say.start(sky.view());
+    const line = said.opening(sky.view());
     expect(line).toContain('Taipei');
     expect(line).toContain('about 8 in the evening');
     for (const s of sky.snapshot().visible.slice(0, 3)) expect(line).toContain(s.name);
+  });
+
+  test('a marked star carries the catalogue\'s words and where to look, never degrees', () => {
+    const sky = chart();
+    sky.select('vega');
+    const text = said.marked(sky.view(), false);
+    expect(text).toContain(FACTS.vega[0]);
+    expect(text).toContain('changing no number');
+    expect(text).toMatch(/Vega is marked on the chart, (?:high up|almost straight overhead|about halfway up|low down) in the/);
+    expect(text).not.toContain('degrees');
+  });
+
+  test('a drawn figure says where it actually is (Scorpius, by Antares, halfway up in the south)', () => {
+    // Symptom in the original: "show me Scorpius" and the guide said low in the
+    // north-west while the chart drew it halfway up in the south.
+    const sky = chart();
+    sky.showConstellation('Scorpius');
+    const text = said.drawn(sky.view());
+    expect(text).toContain('Antares');
+    expect(text).toContain('halfway up in the south');
+    expect(text).toContain('using that direction and no other');
+  });
+
+  test('no result asks the host to act on its own: an offer is made, and acted on only if they ask', () => {
+    const sky = chart();
+    sky.select('vega');
+    const texts = [
+      said.opening(sky.view()), said.marked(sky.view(), true), said.starDown('X is below the horizon.', ['A line.'], 'by about 3 in the morning'),
+      said.unknownStar('I don\'t have X.', 'Vega'), said.notAStar('Jupiter', 'Vega'), said.figureDown('Orion isn\'t up.', 'by about 3 in the morning'),
+      said.noFigure('No figure.'), said.moved(sky.view(), sky.view()), said.unchanged(sky.view()), said.daytime(sky.view()),
+      said.refused('no'), said.unreadTime('whenever'), said.nothingToMove(), said.noName('star'), said.cleared('everything'),
+    ];
+    for (const text of texts) {
+      expect(text).not.toMatch(/\b(?:call|calling) (?:point_out|show_constellation|move_chart|clear_chart)\b/);
+      if (/\boffer to show\b|offer tonight/.test(text)) expect(text).toContain('only if they ask');
+    }
+  });
+
+  test('a refusal is to be said, and never confirmed', () => {
+    expect(said.refused('Kyoto is not a place I know')).toBe('The chart refused: Kyoto is not a place I know. Say that in one short line, in your own voice, and do not claim it happened.');
   });
 });

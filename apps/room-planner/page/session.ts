@@ -1,39 +1,40 @@
 // One client at the drawing board: the planner, the critic, and the three ways
-// in (a hand on the plan, typed words, spoken words), wired to the avatar.
+// a change arrives (the architect's tool calls, a hand on the plan, a photo),
+// wired to the architect.
 //
 // Framework-free so the order of things can be tested without a browser:
-// every change is applied, then the avatar's state is replaced, then the event
-// for it is sent, in that order, so the avatar's next words are grounded.
+// every change is applied, then the architect's state is replaced, then she
+// hears about it (a tool's result, or an event for a change by hand), so what
+// she says next is grounded in the plan as it now is.
 import { issues } from '../engine/compliance.ts';
-import { eventsFor, issueCue, planState, say, type Source, type Step } from '../engine/director.ts';
-import { contextOf, rulesFor, type JudgeContext, type Line } from '../engine/judge.ts';
+import { byHand, issueCue, planState, say, type Step } from '../engine/director.ts';
+import { contextOf, type JudgeContext } from '../engine/judge.ts';
 import { Critic, isDrawn, Planner } from '../engine/planner.ts';
+import { runTool } from '../engine/tools.ts';
 import type { Intent, PlanSnapshot } from '../engine/types.ts';
 
-/** What the session needs from the avatar (useAvatar provides it). */
+/** What the session needs from the architect (useAvatar provides it). */
 export interface AvatarPort {
   state(text: string): void;
   event(text: string, ttlS?: number): void;
-  /** Whether the avatar is in the room. Outcomes from before it arrived are not news. */
+  /** Whether she is in the room. What happened before she arrived is not news. */
   live(): boolean;
 }
 
-/** What the session needs from the app's server (the model calls). */
+/** What the session needs from the app's server (reading photos). */
 export interface ServerPort {
-  judge(text: string, plan: JudgeContext, recent: Line[]): Promise<{ intents: Intent[]; ask: string | null } | null>;
   photo(purpose: 'room' | 'piece', input: { image: { mimeType: string; base64: string } } | { sample: 'room' }, plan: JudgeContext): Promise<{ intents: Intent[]; seen: string } | { error: string }>;
 }
 
-export interface Change { snapshot: PlanSnapshot; refusal: string | null }
+/** What the page shows after a change: the plan, a refusal to point at, whether the sheet was just drawn. */
+export interface Change { snapshot: PlanSnapshot; refusal: string | null; drew: boolean }
 
-/** Whether words were an app action, and what the planner said to it. */
-export interface Heard { handled: boolean; refusal: string | null }
+export type SendResult = { applied: true } | { applied: false; reason: string };
 
 export class HomeSession {
   readonly planner: Planner;
   private critic = new Critic();
   private lastState = '';
-  private queue: Promise<unknown> = Promise.resolve();
 
   constructor(private avatar: AvatarPort, private server: ServerPort, private onChange: (change: Change) => void, size = { w_cm: 900, h_cm: 700 }) {
     this.planner = new Planner(size.w_cm, size.h_cm);
@@ -42,59 +43,37 @@ export class HomeSession {
 
   snapshot(): PlanSnapshot { return this.planner.snapshot(); }
 
-  /** Re-send the state (a new avatar session starts with it). */
+  /** Re-send the state (a new call starts with it). */
   restate(): void {
     this.lastState = '';
-    this.publish(this.snapshot(), null);
+    this.publish({ snapshot: this.snapshot(), refusal: null, drew: false });
   }
 
-  /** The app's opening, as an event, once per avatar session. */
-  open(): void {
-    this.avatar.event(say.opening(this.snapshot()), 60);
-  }
-
-  /** A click or a drag: applied at once; a refusal is shown, not spoken. */
-  panel(intent: Intent): { applied: true } | { applied: false; reason: string } {
-    const result = this.planner.apply(intent);
-    if (!result.applied) return result;
-    this.after('panel', [{ intent, result }]);
-    return { applied: true };
+  /** The opening, told once the architect is on her way. */
+  opening(): string {
+    return say.opening(this.snapshot());
   }
 
   /**
-   * Words, spoken or typed: judged by the rules, then by the server's model,
-   * then applied in order (stopping at the first refusal), and told to the
-   * avatar as one event. Utterances are handled one at a time, in order.
+   * One of the architect's tool calls: applied, shown, and answered with the
+   * words she speaks from. A refusal is shown on the plan as well.
    */
-  words(text: string, how: 'spoken' | 'typed', recent: Line[] = []): Promise<Heard> {
-    const run = this.queue.then(() => this.judgeAndApply(text, how, recent));
-    this.queue = run.catch(() => undefined);
-    return run;
+  tool(name: string, args: Record<string, unknown> = {}): string {
+    const outcome = runTool(this.planner, this.critic, name, args);
+    const last = [...outcome.steps].reverse().find((s) => s.result.applied)?.result;
+    this.publish({ snapshot: last?.applied ? last.snapshot : this.snapshot(), refusal: outcome.refusal, drew: outcome.drew });
+    return outcome.text;
   }
 
-  private async judgeAndApply(text: string, how: 'spoken' | 'typed', recent: Line[]): Promise<Heard> {
-    const plan = contextOf(this.snapshot());
-    let intents = rulesFor(text, plan);
-    let ask: string | null = null;
-    if (!intents) {
-      const answer = await this.server.judge(text, plan, recent).catch(() => null);
-      intents = answer?.intents ?? null;
-      ask = answer?.ask ?? null;
-    }
-    if (!intents?.length) {
-      if (!ask) return { handled: false, refusal: null };
-      this.tell(say.ask(ask), 20);
-      return { handled: true, refusal: null };
-    }
-    const steps: Step[] = [];
-    for (const intent of intents) {
-      const result = this.planner.apply(intent);
-      steps.push({ intent, result });
-      if (!result.applied) break;
-    }
-    this.after(how, steps);
-    const refused = steps.find((s) => !s.result.applied);
-    return { handled: true, refusal: refused && !refused.result.applied ? refused.result.reason : null };
+  /** A click or a drag: applied at once; a refusal is shown, not spoken. */
+  panel(intent: Intent): SendResult {
+    const result = this.planner.apply(intent);
+    if (!result.applied) return result;
+    const steps: Step[] = [{ intent, result }];
+    const fresh = this.critic.look(result.snapshot.issues, { hasRooms: isDrawn(result.snapshot) });
+    this.publish({ snapshot: result.snapshot, refusal: null, drew: result.done.kind === 'draw_sheet' });
+    for (const event of byHand(steps, fresh, result.snapshot)) this.tell(event.text, event.ttl);
+    return { applied: true };
   }
 
   /**
@@ -114,38 +93,27 @@ export class HomeSession {
     }
     const snap = this.snapshot();
     const fresh = this.critic.look(snap.issues, { hasRooms: isDrawn(snap) });
-    this.publish(snap, null);
+    this.publish({ snapshot: snap, refusal: null, drew: false });
     let text = say.photo(purpose, added, refused, answer.seen);
     if (fresh.length) text += ` ${issueCue(fresh[0], fresh.length)}`;
     this.tell(text, 40);
     return { added, refused, seen: answer.seen };
   }
 
-  private after(source: Source, steps: Step[]): void {
-    // The last accepted step already carries the plan as it is now (a refused
-    // step changes nothing), so the snapshot is not computed twice per click.
-    const last = [...steps].reverse().find((s) => s.result.applied)?.result;
-    const snap = last?.applied ? last.snapshot : this.snapshot();
-    const fresh = this.critic.look(snap.issues, { hasRooms: isDrawn(snap) });
-    const refused = steps.find((s) => !s.result.applied);
-    this.publish(snap, refused && !refused.result.applied ? refused.result.reason : null);
-    for (const event of eventsFor(source, steps, fresh, snap)) this.tell(event.text, event.ttl);
-  }
-
   /**
-   * An event, only while the avatar is there: a plan worked on by hand before
-   * the session starts would otherwise greet the avatar with stale news.
+   * An event, only while the architect is there: a plan worked on by hand
+   * before the call would otherwise greet her with stale news.
    */
   private tell(text: string, ttl: number): void {
     if (this.avatar.live()) this.avatar.event(text, ttl);
   }
 
-  private publish(snapshot: PlanSnapshot, refusal: string | null): void {
-    const text = planState(snapshot);
+  private publish(change: Change): void {
+    const text = planState(change.snapshot);
     if (text !== this.lastState) {
       this.lastState = text;
       this.avatar.state(text);
     }
-    this.onChange({ snapshot, refusal });
+    this.onChange(change);
   }
 }

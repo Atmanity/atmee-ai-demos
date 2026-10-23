@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { bestInColumn, SHELF_COLUMNS } from './ComparisonShelf.tsx';
+import { bestInColumn, SHELF_COLUMNS } from './SideBySide.tsx';
 import { EMPTY_SHELF, parseShelf, type ShelfRow } from '../engine/shelf.ts';
 
 /**

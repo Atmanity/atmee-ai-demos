@@ -1,11 +1,11 @@
-// The judge with real phrasings: advice is caught first (by rules, and by the
-// model where rules cannot), commands by rules, names by the board, the table,
-// the model and the symbol search, in that order.
+// Words to the desk, with real phrasings: advice is caught first (so the
+// safety net never acts on "should I dump Tesla?"), commands by rules, and
+// names by the board, the table, a written ticker, the model and the symbol
+// search, in that order.
 import { describe, expect, test, vi } from 'vitest';
-import { judge, pickListing, rules, type ModelCall } from './judge.ts';
+import { mustDo, pickListing, resolveStocks, rules, type TickerLookup } from './judge.ts';
 import { entry } from './test-helpers.ts';
 import type { Board } from './types.ts';
-
 const empty: Board = { watchlist: [], focus: null, fetching: [], last_error: null, max_symbols: 6 };
 const withRows = (...rows: [string, string][]): Board => ({
   ...empty,
@@ -83,45 +83,51 @@ describe('commands, as people say them', () => {
   });
 });
 
-describe('the model and the search, for what rules cannot read', () => {
+describe('names to tickers, for the host\'s tools', () => {
   vi.spyOn(console, 'warn').mockImplementation(() => {});
-  const model = (reading: Awaited<ReturnType<ModelCall>>): ModelCall => vi.fn(async () => reading);
+  const lookup = (answers: Record<string, string>): TickerLookup => vi.fn(async (names: string[]) => names.map((said) => ({ said, ticker: answers[said] ?? '' })));
+
+  test('the rules read well-known names, the board\'s rows and written tickers, with no lookups', async () => {
+    const l = lookup({});
+    const r = await resolveStocks(['Nvidia', 'TSLA', 'Rocket Lab', 'F', 'ON', '$pltr', 'Coca-Cola'], desk, { lookup: l });
+    expect(r.symbols).toEqual(['NVDA', 'TSLA', 'RKLB', 'F', 'ON', 'PLTR', 'KO']);
+    expect(r.said).toMatchObject({ NVDA: 'nvidia', RKLB: 'rocket', KO: 'coca cola' });
+    expect(l).not.toHaveBeenCalled();
+  });
+
+  test('"it" is the one on watch, "the last one" the last row', async () => {
+    expect((await resolveStocks(['it'], desk)).symbols).toEqual(['AAPL']);
+    expect((await resolveStocks(['the last one'], desk)).symbols).toEqual(['GM']);
+  });
+
+  test('several stocks packed into one name all count', async () => {
+    expect((await resolveStocks(['Apple, Nvidia and Tesla'], empty)).symbols).toEqual(['AAPL', 'NVDA', 'TSLA']);
+  });
 
   test('a description becomes a ticker through the model', async () => {
-    const j = await judge('put the search-engine one up', empty, { model: model({ action: 'add', companies: [{ said: 'the search-engine one', ticker: 'GOOGL' }] }) });
-    expect(j).toMatchObject({ kind: 'add', symbols: ['GOOGL'], said: { GOOGL: 'the search-engine one' } });
+    const r = await resolveStocks(['the search-engine one'], empty, { lookup: lookup({ 'the search-engine one': 'GOOGL' }) });
+    expect(r).toMatchObject({ symbols: ['GOOGL'], said: { GOOGL: 'the search-engine one' }, unresolved: [] });
   });
 
-  test('a new phrasing of an advice question is caught by the model', async () => {
-    expect(await judge('would it be smart to pile into Nvidia', desk, { model: model({ action: 'advice', companies: [] }) })).toEqual({ kind: 'advice' });
+  test('a name the rules only partly read goes to the model, and keeps the rules\' guess if the model is unsure', async () => {
+    const reit = await resolveStocks(['Apple Hospitality REIT'], empty, { lookup: lookup({ 'Apple Hospitality REIT': 'APLE' }) });
+    expect(reit.symbols).toEqual(['APLE']);
+    const unsure = await resolveStocks(['Ford Motor'], empty, { lookup: lookup({}) });
+    expect(unsure.symbols).toEqual(['F']);
+    // Corporate words are not "unread": no lookup for them.
+    const l = lookup({});
+    expect((await resolveStocks(['Berkshire Hathaway Class B'], empty, { lookup: l })).symbols).toEqual(['BRK-B']);
+    expect(l).not.toHaveBeenCalled();
   });
 
-  test('rules that matched a verb but named nothing defer to a model that says it is not a request', async () => {
-    expect(await judge("what's the board look like at the moment", desk, { model: model({ action: 'none', companies: [] }) })).toEqual({ kind: 'none' });
-  });
-
-  test('a name the rules know beats the model\'s ticker for it', async () => {
-    const j = await judge('throw up the fruit company, Apple', empty, { model: model({ action: 'add', companies: [{ said: 'Apple', ticker: 'APPL' }] }) });
-    expect(j).toMatchObject({ symbols: ['AAPL'] });
-  });
-
-  test('rules that are sure never wait for the model', async () => {
-    const m = model({ action: 'none', companies: [] });
-    expect(await judge('add nvidia', empty, { model: m })).toMatchObject({ kind: 'add', symbols: ['NVDA'] });
-    expect(await judge('should I buy it', desk, { model: m })).toEqual({ kind: 'advice' });
-    expect(m).not.toHaveBeenCalled();
-  });
-
-  test('a failing model leaves the rules\' reading, and the search maps the name', async () => {
+  test('a failing model leaves the symbol search, which maps the name', async () => {
     const search = vi.fn(async () => [{ symbol: 'ACHR', name: 'Archer Aviation Inc. Class A Common Stock', asset: 'STOCKS', exchange: 'NYSE' }]);
-    const j = await judge('add archer aviation', empty, { model: async () => { throw new Error('quota'); }, search });
-    expect(j).toMatchObject({ kind: 'add', symbols: ['ACHR'], said: { ACHR: 'archer aviation' } });
+    const r = await resolveStocks(['archer aviation'], empty, { lookup: async () => { throw new Error('quota'); }, search });
+    expect(r).toMatchObject({ symbols: ['ACHR'], said: { ACHR: 'archer aviation' } });
   });
 
-  test('a name nobody can map stays unresolved for an add, and goes to the avatar otherwise', async () => {
-    const search = async () => [];
-    expect(await judge('add the other one', empty, { search })).toMatchObject({ kind: 'add', symbols: [], unresolved: ['other one'] });
-    expect(await judge("what's the board look like at the moment", desk, { search })).toEqual({ kind: 'none' });
+  test('a name nobody can map stays unresolved, never guessed', async () => {
+    expect(await resolveStocks(['the other one'], empty, { search: async () => [] })).toEqual({ symbols: [], said: {}, unresolved: ['the other one'] });
   });
 
   test('the search picks a tradable listing whose name starts with what was said', () => {
@@ -132,5 +138,32 @@ describe('the model and the search, for what rules cannot read', () => {
     expect(pickListing('palantir', listings)?.symbol).toBe('PLTR');
     expect(pickListing('pltr', listings)?.symbol).toBe('PLTR');
     expect(pickListing('the search engine one', listings)).toBeNull();
+  });
+});
+
+describe('the safety net: what it does when the host does not, and only what is safe to repeat', () => {
+  const cases: [string, ReturnType<typeof mustDo>][] = [
+    ['Clear the board.', { name: 'clear_board', arguments: {} }],
+    ["Let's start over", { name: 'clear_board', arguments: {} }],
+    ['Check it again', { name: 'refresh_quote', arguments: {} }],
+    ['any change?', { name: 'refresh_quote', arguments: {} }],
+    ['Refresh Tesla', { name: 'refresh_quote', arguments: { stock: 'TSLA' } }],
+    ['Drop Tesla', { name: 'remove_symbols', arguments: { stocks: ['TSLA'] } }],
+    ['Okay, take Apple off the board.', { name: 'remove_symbols', arguments: { stocks: ['AAPL'] } }],
+    ['Lose the last one', { name: 'remove_symbols', arguments: { stocks: ['GM'] } }],
+    ['drop it', { name: 'remove_symbols', arguments: { stocks: ['AAPL'] } }],
+    // Never an add or a focus: a duplicate could take a slot.
+    ['Add Nvidia', null], ['Put Apple, Nvidia and Tesla up.', null], ['Pull up Microsoft', null], ["What's Netflix doing?", null],
+    // An advice question is the host's to decline, whatever its verb.
+    ['Should I dump Tesla?', null], ['Should I drop Apple and buy Nvidia?', null], ['Is it time to sell?', null],
+    // Questions, and removals the net cannot be sure of.
+    ['Why did Apple drop today?', null], ['What is the 52-week range on Apple?', null], ['drop the other thing', null], ['How are you?', null],
+  ];
+  test.each(cases)('%s', (said, expected) => {
+    expect(mustDo(said, desk)).toEqual(expected);
+  });
+
+  test('"drop it" on an empty board does nothing', () => {
+    expect(mustDo('drop it', empty)).toBeNull();
   });
 });

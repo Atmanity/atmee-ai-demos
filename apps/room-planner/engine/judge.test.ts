@@ -1,9 +1,9 @@
-// What an utterance means to the plan. The rules are tested with phrasings
-// people actually use (the original tool tests became these: the trade
-// direction, the metres a client speaks, the words for undo), and the model's
-// side is tested on its schema and on how its answer becomes intents.
+// What words mean to the plan. The rules are tested with phrasings people
+// actually use (the original tool tests became these: the trade direction, the
+// metres a client speaks, the words for undo); the operations on how a step
+// becomes intents; the safety net on what it may do for the host.
 import { beforeAll, describe, expect, test } from 'vitest';
-import { contextOf, digitize, findRoomIn, JUDGE_SCHEMA, judgePrompt, normalizeUtterance, roomSideCm, rulesFor, sizeForArea, stepsToIntents, type JudgeContext, type Step } from './judge.ts';
+import { contextOf, digitize, findRoomIn, mustDo, normalizeUtterance, roomSideCm, rulesFor, sizeForArea, stepsToIntents, type JudgeContext, type Step } from './judge.ts';
 import { Planner } from './planner.ts';
 
 let planner: Planner;
@@ -151,31 +151,7 @@ describe('the rules', () => {
   });
 });
 
-describe('the model', () => {
-  test('only an exact wall move and the floor size take a measurement; nothing takes a position', () => {
-    // The app's central bet, held to the schema: a model asked for x and y
-    // guesses, gets refused for overlapping what it cannot see, and retries out loud.
-    const fields = Object.keys(JUDGE_SCHEMA.properties.steps.items.properties);
-    for (const coordinate of ['x', 'y', 'x_cm', 'y_cm', 'offset_cm', 'position']) expect(fields).not.toContain(coordinate);
-    const measured = fields.filter((f) => /cm|width|depth/.test(f));
-    expect(measured.sort()).toEqual(['cm', 'depth_m', 'width_m']);
-  });
-
-  test('the trade fields say which room loses', () => {
-    // The names are the fix for a real reversal.
-    const p = JUDGE_SCHEMA.properties.steps.items.properties;
-    expect(p.take_from.description).toContain('gets SMALLER');
-    expect(p.give_to.description).toContain('gets BIGGER');
-  });
-
-  test('the prompt carries the plan by id and the conversation so far', () => {
-    const prompt = judgePrompt('yes, do that', ctx, [{ who: 'architect', text: 'Shall I give the study a metre off the hall?' }, { who: 'client', text: 'yes, do that' }]);
-    expect(prompt).toContain(`${id('Study')} Study (office`);
-    expect(prompt).toContain('Architect: Shall I give the study a metre off the hall?');
-    expect(prompt).toContain('take_from is the room that gets SMALLER');
-    expect(prompt).not.toMatch(/x_cm|y_cm/);
-  });
-
+describe('the operations', () => {
   test('its steps become the same intents a button sends', () => {
     const steps: Step[] = [
       { op: 'set_floor_size', width_m: 8, depth_m: 6 },
@@ -201,6 +177,36 @@ describe('the model', () => {
     expect(stepsToIntents([{ op: 'trade_area', give_to: 'r3' }], ctx)).toEqual({ intents: [], ask: 'Which room should give the space up, and which one gets it?' });
     expect(stepsToIntents([{ op: 'select', room: 'r99' }], ctx).intents).toEqual([]);
     expect(stepsToIntents(undefined, ctx)).toEqual({ intents: [], ask: null });
+  });
+});
+
+describe('the safety net', () => {
+  test('what it does when the host does not, and only the actions safe to repeat', () => {
+    const two = new Planner();
+    two.apply({ kind: 'generate', bedrooms: 2 });
+    const one = contextOf(two.snapshot());
+    two.apply({ kind: 'add_level' });
+    two.apply({ kind: 'go_to_level', id: 'ground' });
+    two.apply({ kind: 'save_scheme', name: 'A' });
+    two.apply({ kind: 'compare_scheme', name: 'A' });
+    const both = contextOf(two.snapshot());
+    const cases: [string, JudgeContext, ReturnType<typeof mustDo>][] = [
+      ['Can I see that in square feet?', one, { name: 'switch_units', arguments: { unit: 'ft2' } }],
+      ['back to metric please', one, { name: 'switch_units', arguments: { unit: 'm2' } }],
+      ['Show me upstairs.', both, { name: 'go_to_floor', arguments: { floor: 'upper' } }],
+      ['go back downstairs', both, { name: 'go_to_floor', arguments: { floor: 'ground' } }],
+      ['Add an upstairs.', one, { name: 'add_upper_floor', arguments: {} }],
+      ['Stop comparing.', both, { name: 'use_scheme', arguments: { action: 'stop_comparing' } }],
+      ['Can I download the plan?', one, { name: 'draw_sheet', arguments: {} }],
+      // a cost if doubled, a question, a description, or nothing to do
+      ['Undo that.', one, null], ['Save this one.', one, null], ['Clear the floor.', one, null],
+      ['Give the living room two square metres off the hall.', one, null],
+      ["It's a house with two bedrooms upstairs.", one, null], ['Add an upstairs.', both, null],
+      ['Stop comparing.', one, null], ['Show me upstairs.', one, null],
+      ['What is on the drawing sheet?', one, null], ["Don't show it in square feet.", one, null],
+      ['Can I download the plan?', empty(), null],
+    ];
+    for (const [said, plan, expected] of cases) expect(mustDo(said, plan), said).toEqual(expected);
   });
 });
 

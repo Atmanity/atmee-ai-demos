@@ -2,8 +2,8 @@
 // RangePanel.test.tsx): metres to pixels, pointer to aim, and the ball's walk
 // along the range's polyline. None of it is physics.
 import { describe, expect, it } from 'vitest';
-import { IN_FLIGHT, LANDED, PATH, snapshot } from './fixtures.ts';
-import { aimFromPointer, pointAt, project, readout, sizeCanvas, worldView } from './scene.ts';
+import { LANDED, PATH, snapshot } from './fixtures.ts';
+import { aimFromPointer, pointAt, project, sizeCanvas, worldView } from './scene.ts';
 
 describe('scene arithmetic', () => {
   const view = worldView(snapshot());
@@ -64,11 +64,4 @@ describe('scene arithmetic', () => {
     expect(canvas.width).toBe(900);
   });
 
-  it('the readout never claims a result the snapshot does not carry', () => {
-    expect(readout(null, 'aiming')).toBe('No shot yet.');
-    expect(readout(IN_FLIGHT, 'flying')).toBe('In the air…');
-    // Even asked for a landed phase, a shot with no verdict reports none.
-    expect(readout(IN_FLIGHT, 'scored')).toBe('In the air…');
-    expect(readout(LANDED, 'scored')).toBe('40.77 m · apex 10.19 m · 2.88 s');
-  });
 });

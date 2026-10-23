@@ -1,54 +1,67 @@
-// What the avatar is told (the note, coach and persona tests from
-// test_table.py, rewritten for state + events): the numbers and never the
-// polyline, nothing about a shot still in the air, one line per change and
-// none for a change the student's own words caused.
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+// What the host is told: the tools and instructions against the API's limits
+// and the rules the original paid for; the live range (the numbers and never
+// the polyline, nothing about a shot still in the air, a lesson only once
+// earned); and the texts it speaks from.
+import { describe, expect, test } from 'vitest';
 import { CHALLENGES } from './challenges.ts';
-import { NOTES, lineFor, rangeState, refusalFor, say, type Line } from './director.ts';
+import { INSTRUCTIONS, TOOLS, pressed, rangeState, said } from './director.ts';
 import { Launcher, MAX_HISTORY } from './launcher.ts';
-import { Range } from './range.ts';
-import type { Intent, Source } from './types.ts';
 
-beforeEach(() => { vi.useFakeTimers(); });
-afterEach(() => { vi.useRealTimers(); });
-
-/** A range whose every change and refusal is turned into the lines the page would send. */
-function coached(challenge?: string) {
-  const range = new Range(new Launcher(challenge));
-  const lines: Line[] = [];
-  range.subscribe((change) => { const line = lineFor(change); if (line) lines.push(line); });
-  const act = (intent: Intent, by: Source) => {
-    const r = range.apply(intent, by);
-    if (!r.applied) { const line = refusalFor(intent, r.reason, by); if (line) lines.push(line); }
-    return r;
-  };
-  const land = () => vi.advanceTimersByTime(3_000);
-  return { range, lines, act, land };
-}
-
-describe('the notes', () => {
-  test('three standing notes, each within the 2,000-character limit', () => {
-    expect(NOTES).toHaveLength(3);
-    for (const note of NOTES) expect(note.length).toBeLessThanOrEqual(2000);
+describe('the tools and the instructions fit the API', () => {
+  test('names, count, descriptions, schemas, all await within 28 s', () => {
+    expect(TOOLS.length).toBeLessThanOrEqual(30);
+    const names = TOOLS.map((t) => t.name);
+    expect(names).toEqual(['aim', 'fire', 'choose_challenge', 'start_over']);
+    expect(new Set(names).size).toBe(names.length);
+    for (const tool of TOOLS) {
+      expect(tool.name).toMatch(/^[a-z][a-z0-9_]{0,47}$/);
+      expect(['web_search', 'lookup']).not.toContain(tool.name);
+      expect(tool.description.length).toBeGreaterThan(0);
+      expect(tool.description.length).toBeLessThanOrEqual(500);
+      expect(tool.parameters.type).toBe('object');
+      expect(JSON.stringify(tool.parameters).length).toBeLessThanOrEqual(4096);
+      expect(tool['x-atmee']?.mode).toBe('await');
+      expect(tool['x-atmee']!.timeoutSeconds!).toBeLessThanOrEqual(28);
+    }
+    expect(JSON.stringify(TOOLS).length).toBeLessThanOrEqual(24576);
   });
 
-  test('they keep the rules the original paid for', () => {
-    const all = NOTES.join(' ').toLowerCase();
+  test('fire waits long enough for the longest flight the page plays, and the aim words for the model', () => {
+    const timeout = (name: string) => TOOLS.find((t) => t.name === name)!['x-atmee']!.timeoutSeconds!;
+    expect(timeout('fire')).toBeGreaterThanOrEqual(10);   // 2.5 s of play + slack, with room to spare
+    expect(timeout('aim')).toBeGreaterThanOrEqual(12);    // a 6 s model call, then perhaps a shot
+  });
+
+  test('choose_challenge offers exactly the six ids and "next"', () => {
+    const challenge = (TOOLS.find((t) => t.name === 'choose_challenge')!.parameters as { properties: { challenge: { enum: string[] } } }).properties.challenge;
+    expect(challenge.enum).toEqual([...CHALLENGES.map((c) => c.id), 'next']);
+  });
+
+  test('what resets the range is called only when the student asks', () => {
+    for (const name of ['choose_challenge', 'start_over']) expect(TOOLS.find((t) => t.name === name)!.description).toContain('never on your own');
+  });
+
+  test('the instructions fit, name every tool and keep the rules the original paid for', () => {
+    expect(INSTRUCTIONS.length).toBeLessThanOrEqual(4000);
+    for (const tool of TOOLS) expect(INSTRUCTIONS).toContain(tool.name);
+    const rules = INSTRUCTIONS.toLowerCase();
     // "you need to aim first" while the launcher sat aimed (four times in one session)
-    expect(all).toContain('never say they need to aim first');
+    expect(rules).toContain('never say they must aim first');
     // "the angle is now thirty degrees" with the arrow showing exactly that
-    expect(all).toContain('never read the numbers back');
+    expect(rules).toContain('never read the numbers back');
     // "do you want to send it?" after nearly every turn
-    expect(all).toContain('do not end your turns by asking whether to fire');
+    expect(rules).toContain('never end a turn by asking whether to fire');
     // numbers quoted, not recomputed; a shot in the air is not guessed
-    expect(all).toContain('exactly as written');
-    expect(all).toContain('do not guess it');
-    // the avatar does not decide: the range does, a moment later
-    expect(all).toContain('you do not decide whether it worked');
+    expect(rules).toContain('exactly as written');
+    expect(rules).toContain('never guess where a shot will land');
+    // never clamped: "try ninety" is refused by the range, with the numbers
+    expect(rules).toContain('even outside the limits');
+    // the screen changes only through a call
+    expect(rules).toContain('call the tool every time');
   });
 });
 
-describe('the state', () => {
+describe('the live range', () => {
   test('a shot in the air is described without its result', () => {
     const l = new Launcher();
     l.fire();
@@ -57,7 +70,7 @@ describe('the state', () => {
     for (const spoiler of ['40.77', '10.19', 'below the top', 'CLEARED', 'missed by']) expect(state, spoiler).not.toContain(spoiler);
   });
 
-  test('a landed shot carries its numbers and the range\'s sentence verbatim, never the polyline', () => {
+  test("a landed shot carries its numbers and the range's sentence verbatim, never the polyline", () => {
     const l = new Launcher();
     l.fire();
     const shot = l.land();
@@ -75,19 +88,19 @@ describe('the state', () => {
     expect(rangeState(new Launcher('ceiling').snapshot())).toContain('without going above 6 m');
   });
 
-  test('the limits are staged, so "try ninety degrees" can be refused on the spot', () => {
+  test('the limits are on the board, so "what can it do?" needs no tool', () => {
     expect(rangeState(new Launcher().snapshot())).toContain('5 to 85 degrees, 5 to 40 metres a second');
     expect(rangeState(new Launcher('maxrange').snapshot())).toContain('5 to 18 metres a second');
   });
 
-  test('the six challenges are staged, with the next one along, so "let\'s do the Moon" is set up right', () => {
+  test('the six challenges are listed, with how to put one up', () => {
     const state = rangeState(new Launcher().snapshot());
     for (const c of CHALLENGES) expect(state).toContain(`${c.name}: ${c.blurb}`);
-    expect(state).toContain('The next one along is Land in the zone.');
-    expect(rangeState(new Launcher('moonshot').snapshot())).toContain('The next one along is Clear the wall.');
+    expect(state).toContain('call choose_challenge');
+    expect(state).toContain('Challenge 1 of 6: Clear the wall');
   });
 
-  test('the teaching point appears once it is earned', () => {
+  test('a teaching point appears only once it is earned', () => {
     const l = new Launcher();
     expect(rangeState(l.snapshot())).not.toContain(CHALLENGES[0].teach);
     l.setAim(45, 24);
@@ -95,6 +108,7 @@ describe('the state', () => {
     expect(rangeState(l.snapshot())).not.toContain(CHALLENGES[0].teach);   // cleared, but still in the air
     l.land();
     expect(rangeState(l.snapshot())).toContain(CHALLENGES[0].teach);
+    for (const other of CHALLENGES.slice(1)) expect(rangeState(l.snapshot())).not.toContain(other.teach);
   });
 
   test('the busiest range, on every challenge, stays under 3,858 characters', () => {
@@ -111,135 +125,79 @@ describe('the state', () => {
   });
 });
 
-describe('the events', () => {
+describe('what the host speaks from', () => {
   test('the opening describes the challenge that is actually up', () => {
     // The original's hand-typed greeting described the wall to a student
     // looking at the Moon. Every figure comes from the snapshot the page draws.
-    const wall = say.start(new Launcher('wall40').snapshot());
+    const wall = said.opening(new Launcher('wall40').snapshot());
     expect(wall).toContain('Clear the wall');
     expect(wall).toContain('forty metres out');
-    const moon = say.start(new Launcher('moonshot').snapshot());
+    const moon = said.opening(new Launcher('moonshot').snapshot());
     expect(moon).toContain('On the Moon');
     expect(moon.toLowerCase()).not.toContain('wall');
-    expect(moon.toLowerCase()).toContain('drag');
+    expect(moon.toLowerCase()).toContain('drag the arrow');
   });
 
-  test('a miss is said with the range\'s own words, then one change; later misses ask why', () => {
+  test("a miss is said in the range's own words, then one change; later misses ask why", () => {
     const l = new Launcher();
     l.fire();
     const shot = l.land();
-    const first = say.landing(l.snapshot());
+    const first = said.landed(l.snapshot());
     expect(first).toContain(`"${shot.note}"`);
     expect(first).toContain('without changing a single number');
     expect(first).toContain('one specific change');
     l.fire(); l.land(); l.fire(); l.land();
-    expect(say.landing(l.snapshot())).toContain('Explain WHY');
+    expect(said.landed(l.snapshot())).toContain('explain WHY');
   });
 
-  test('clearing a challenge gets the result and the teaching point', () => {
+  test('a clear gets the result and the teaching point, and the next challenge only if they want it', () => {
     const l = new Launcher();
     l.setAim(45, 24);
     l.fire();
     l.land();
-    const line = say.landing(l.snapshot());
-    expect(line).toContain('they cleared it');
+    const line = said.landed(l.snapshot());
+    expect(line).toContain('cleared the challenge');
+    expect(line).toContain('Over with 9.75 m to spare');
     expect(line).toContain('Forty-five degrees maximises range');
+    // A result never has the host act on its own: Postmark's host once started a new game unasked.
+    expect(line).toContain('put it up only if they say so');
   });
 
-  test('the aim line neither reads the numbers back nor asks whether to fire', () => {
+  test('clearing the sixth points to the logbook instead of a next challenge', () => {
+    const l = new Launcher();
+    const winning: Record<string, [number, number]> = { wall40: [45, 24], zone30: [45, 17.2], maxrange: [45, 18], headwind: [20, 34], ceiling: [20, 30], moonshot: [45, 9.9] };
+    for (const c of CHALLENGES) { l.startChallenge(c.id); l.setAim(...winning[c.id]); l.fire(); l.land(); }
+    expect(l.snapshot().catalog.every((e) => e.cleared)).toBe(true);
+    const line = said.landed(l.snapshot());
+    expect(line).toContain('all six');
+    expect(line).toContain('logbook');
+    expect(line).not.toContain('next challenge');
+  });
+
+  test('the aim result neither reads the numbers back nor asks whether to fire', () => {
     // The original's aim cue once ended "and ask if they want to send it",
     // which is why the coach asked that after almost every turn.
-    const cue = say.aimed();
-    expect(cue.toLowerCase()).toContain('do not ask whether they want to fire');
-    expect(cue.toLowerCase()).toContain('do not say the angle or the speed back');
-    expect(cue).not.toMatch(/\d/);
-  });
-});
-
-describe('one line per change', () => {
-  test('every landing gets exactly one line, whoever fired', () => {
-    for (const by of ['panel', 'typed', 'spoken'] as const) {
-      const { act, land, lines } = coached();
-      act({ kind: 'fire' }, by);
-      expect(lines, by).toEqual([]);   // the launch has no line of its own: the landing is its line
-      land();
-      expect(lines, by).toHaveLength(1);
-      expect(lines[0].text).toContain('below the top');
-    }
+    const cue = said.aimed(new Launcher().snapshot()).toLowerCase();
+    expect(cue).toContain('without reading the numbers back');
+    expect(cue).toContain('do not ask whether to fire');
   });
 
-  test('a change the student\'s own speech caused gets no line: the avatar is already answering it', () => {
-    const { act, land, lines } = coached();
-    act({ kind: 'set_aim', angle_deg: 40 }, 'spoken');
-    act({ kind: 'start_challenge', id: 'moonshot' }, 'spoken');
-    act({ kind: 'next_challenge' }, 'spoken');
-    act({ kind: 'reset' }, 'spoken');
-    act({ kind: 'fire' }, 'spoken');
-    expect(lines).toEqual([]);
-    land();
-    expect(lines).toHaveLength(1);   // only the landing
+  test('a refused aim keeps the numbers and says the launcher did not move', () => {
+    const l = new Launcher();
+    const text = said.aimRefused('The launcher only elevates between 5 and 85 degrees — 90 is off the rail.', l.snapshot());
+    expect(text).toContain('90 is off the rail');
+    expect(text).toContain('did not move');
+    expect(text).toContain('45 degrees and 20 metres a second');
   });
 
-  test('dragging the arrow does not make the coach say anything, or re-announce the challenge', () => {
-    const { act, lines } = coached();
-    for (const angle of [30, 35, 40]) act({ kind: 'set_aim', angle_deg: angle, speed_ms: 20 }, 'panel');
-    expect(lines).toEqual([]);
+  test('a challenge is set up with its conditions, and never with an angle', () => {
+    const text = said.challenge(new Launcher('headwind').snapshot());
+    expect(text).toContain('Into the headwind is up');
+    expect(text).toContain('6 m/s headwind');
+    expect(text).toContain('Never suggest an angle');
   });
 
-  test('a challenge chosen on the panel or typed is introduced; the same one re-armed is not', () => {
-    const { act, lines } = coached();
-    act({ kind: 'start_challenge', id: 'moonshot' }, 'panel');
-    expect(lines).toHaveLength(1);
-    expect(lines[0].text).toContain('On the Moon');
-    act({ kind: 'start_challenge', id: 'moonshot' }, 'panel');
-    act({ kind: 'next_challenge' }, 'typed');
-    expect(lines).toHaveLength(2);
-    expect(lines[1].text).toContain('Clear the wall');
-  });
-
-  test('a challenge switched by voice is not announced on the next change either', () => {
-    const { act, lines } = coached();
-    act({ kind: 'start_challenge', id: 'moonshot' }, 'spoken');
-    act({ kind: 'set_aim', angle_deg: 40, speed_ms: 12 }, 'panel');
-    expect(lines).toEqual([]);
-  });
-
-  test('a typed aim or "start over" gets its line; the avatar never saw the typed words', () => {
-    const { act, lines } = coached();
-    act({ kind: 'set_aim', angle_deg: 30 }, 'typed');
-    act({ kind: 'reset' }, 'typed');
-    expect(lines.map((l) => l.text)).toEqual([say.aimed(), say.reset()]);
-  });
-});
-
-describe('refusals', () => {
-  test('a refused aim reaches the avatar as a sentence to say, with the numbers', () => {
-    const { act, lines } = coached();
-    act({ kind: 'set_aim', angle_deg: 45, speed_ms: 90 }, 'typed');
-    expect(lines[0].text).toContain('5 to 40 metres a second');
-    expect(lines[0].text).toContain('do NOT describe anything as done');
-  });
-
-  test('a spoken one too, but the avatar may have refused it already from the staged limits', () => {
-    const { act, lines, range } = coached();
-    act({ kind: 'set_aim', angle_deg: 90 }, 'spoken');
-    expect(lines[0].text).toContain('If you have not already told them');
-    expect(lines[0].text).toContain('90 is off the rail');
-    // An out-of-range request is never quietly clamped.
-    expect(range.snapshot().aim).toEqual({ angle_deg: 45, speed_ms: 20 });
-  });
-
-  test('a typed "fire" while one is up is refused honestly; a spoken one needs nothing (the state says so)', () => {
-    const { act, lines } = coached();
-    act({ kind: 'fire' }, 'panel');
-    act({ kind: 'fire' }, 'spoken');
-    expect(lines).toEqual([]);
-    act({ kind: 'fire' }, 'typed');
-    expect(lines).toHaveLength(1);
-    expect(lines[0].text).toContain("It's already in the air.");
-  });
-
-  test('the panel shows its own refusals; the avatar is not told', () => {
-    expect(refusalFor({ kind: 'fire' }, "It's already in the air.", 'panel')).toBeNull();
+  test('what the student did on screen is told as what they did, then the outcome', () => {
+    expect(pressed('pressed Fire', 'The shot landed.')).toBe('The student pressed Fire on screen. The shot landed.');
   });
 });

@@ -1,16 +1,14 @@
-// Home planner's server side: the two model calls the avatar cannot make for
-// the app (the Avatar API has no function calling), and the sample photo.
-//
-// The plan itself lives in the page: nothing about it is secret, every drag is
-// a local, instant change, and undo is the page's own history. The server only
-// does what needs a key:
-//   POST /judge   an utterance + the plan by id  ->  planner intents (or a question)
-//   POST /photo   a photo of a room or a piece   ->  add_item intents (kit types, never sizes)
-//   GET  /samples/room.jpg                          the "Try a sample" photo
+// Planwright's server side. The plan lives in the page: nothing about it is
+// secret, every drag is an instant local change, and the architect's tool
+// calls are answered there by the planner. The server declares those tools
+// for the session and does the one thing that needs a key:
+//   POST /photo   a photo of a room or a piece  ->  add_item intents (kit types, never sizes)
+//   GET  /samples/room.jpg                         the "Try a sample room" photo
 import { readFile } from 'node:fs/promises';
 import type { AppServer } from '../../server/app-server.ts';
 import { llmAvailable, structured } from '../../server/llm.ts';
-import { JUDGE_SCHEMA, JUDGE_SYSTEM, judgePrompt, stepsToIntents, type JudgeContext, type Line, type Step } from './engine/judge.ts';
+import { INSTRUCTIONS, TOOLS } from './engine/director.ts';
+import type { JudgeContext } from './engine/judge.ts';
 import { PHOTO_SCHEMA, PHOTO_SYSTEM, photoIntents, photoPrompt, type PhotoReading, type Purpose } from './engine/photo.ts';
 
 const ID = 'room-planner';
@@ -21,27 +19,11 @@ const isContext = (value: unknown): value is JudgeContext =>
 
 const app: AppServer = {
   id: ID,
-  title: 'Home planner',
-  tagline: 'Plan a whole home by talking: rooms, walls, doors and furniture at real sizes, with an architect who never picks coordinates.',
+  title: 'Planwright',
+  tagline: 'Talk your home into shape with Iris, an architect who draws while you talk.',
   maxSeconds: 900,
+  appTools: { instructions: INSTRUCTIONS, tools: TOOLS },
   routes(router) {
-    router.post('/judge', async (req, res) => {
-      const { text, plan, recent } = req.body as { text?: unknown; plan?: unknown; recent?: unknown };
-      if (typeof text !== 'string' || !text.trim() || text.length > 600 || !isContext(plan)) return void res.status(400).json({ error: 'bad_request' });
-      if (!llmAvailable()) return void res.status(503).json({ error: 'no_model' });
-      const lines = (Array.isArray(recent) ? recent : []).filter((l): l is Line => l && typeof l.text === 'string' && (l.who === 'client' || l.who === 'architect')).slice(-8);
-      try {
-        const answer = await structured<{ steps?: Step[]; ask?: string }>({
-          system: JUDGE_SYSTEM, user: judgePrompt(text.trim(), plan, lines), schema: JUDGE_SCHEMA as unknown as Record<string, unknown>, temperature: 0,
-        });
-        const { intents, ask } = stepsToIntents(answer.steps, plan);
-        res.json({ intents, ask: ask ?? (answer.ask?.trim() || null) });
-      } catch (err) {
-        console.warn('[%s] judging failed: %s', ID, (err as Error).message);
-        res.status(502).json({ error: 'judge_failed' });
-      }
-    });
-
     router.post('/photo', async (req, res) => {
       const { purpose: asked, image, sample, plan } = req.body as { purpose?: unknown; image?: { mimeType?: unknown; base64?: unknown }; sample?: unknown; plan?: unknown };
       const purpose: Purpose = asked === 'piece' ? 'piece' : 'room';

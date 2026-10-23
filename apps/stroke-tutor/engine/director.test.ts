@@ -1,8 +1,9 @@
-// What the avatar is told: never an unearned stroke, the live stroke's
-// lesson staged only once it is earned, and every text within the API's limits.
+// What Ren is told: never an unearned stroke, the live stroke's lesson in the
+// state only once it is earned, tools that fit the API, and every text within
+// the API's limits.
 import { describe, expect, test } from 'vitest';
 import { CHARACTERS, JUU, type Character } from './characters.ts';
-import { boardState, NOTES, say } from './director.ts';
+import { boardState, INSTRUCTIONS, say, TOOLS } from './director.ts';
 import { perform } from './lesson.ts';
 import { resample } from './strokes.ts';
 import { StrokeTutor } from './tutor.ts';
@@ -96,7 +97,7 @@ describe('staging', () => {
     tutor.startCharacter('ei');
     const state = boardState(tutor.snapshot());
     expect(state).toContain('never describe it or guess it');
-    expect(state).toContain('Let me show you');
+    expect(state).toContain('call show_stroke');
   });
 
   test('the last verdict is on the board, so "what did I do wrong?" has an answer', () => {
@@ -118,8 +119,38 @@ describe('staging', () => {
 });
 
 describe('limits', () => {
-  test('every standing note fits the 2,000-character limit', () => {
-    for (const note of NOTES) expect(note.length).toBeLessThanOrEqual(2000);
+  test('the instructions fit the API and name every tool', () => {
+    expect(INSTRUCTIONS.length).toBeLessThanOrEqual(4000);
+    for (const tool of TOOLS) expect(INSTRUCTIONS).toContain(tool.name);
+  });
+
+  test('the tools fit the API: names, descriptions, schemas, all await', () => {
+    expect(TOOLS.length).toBeLessThanOrEqual(30);
+    const names = TOOLS.map((t) => t.name);
+    expect(new Set(names).size).toBe(names.length);
+    for (const tool of TOOLS) {
+      expect(tool.name).toMatch(/^[a-z][a-z0-9_]{0,47}$/);
+      expect(['web_search', 'lookup']).not.toContain(tool.name);
+      expect(tool.description.length).toBeGreaterThan(0);
+      expect(tool.description.length).toBeLessThanOrEqual(500);
+      expect(tool.parameters.type).toBe('object');
+      expect(JSON.stringify(tool.parameters).length).toBeLessThanOrEqual(4096);
+      expect(tool['x-atmee']?.mode).toBe('await');
+      expect(tool['x-atmee']!.timeoutSeconds!).toBeGreaterThanOrEqual(1);
+      expect(tool['x-atmee']!.timeoutSeconds!).toBeLessThanOrEqual(28);
+    }
+    expect(JSON.stringify(TOOLS).length).toBeLessThanOrEqual(24576);
+  });
+
+  test('there is no tool for drawing: strokes are the hand\'s', () => {
+    for (const tool of TOOLS) {
+      expect(tool.name).not.toMatch(/draw|stroke_points|submit/);
+      expect(JSON.stringify(tool.parameters)).not.toMatch(/points/);
+    }
+  });
+
+  test('a starting-over tool says it is only for when the learner asks', () => {
+    expect(TOOLS.find((t) => t.name === 'start_over')!.description).toContain('Only when the learner asks');
   });
 
   test('the state stays under 3,858 characters on the longest board', () => {
@@ -139,13 +170,15 @@ describe('limits', () => {
     expect(longest).toBeLessThan(3858);
   });
 
-  test('the notes keep the hard-won rules', () => {
-    const notes = NOTES.join(' ');
-    expect(notes).toContain('NEVER describe the stroke you are asking for');
-    expect(notes).toContain('is a request to be SHOWN');
-    expect(notes).toContain("I can't describe it");
-    expect(notes).toContain('WITHOUT changing what it claims');
-    expect(notes).toContain('never comment on how neat');
+  test('the instructions keep the hard-won rules', () => {
+    expect(INSTRUCTIONS).toContain('NEVER describe a stroke the learner has not earned');
+    expect(INSTRUCTIONS).toContain('never guess them from your own knowledge');
+    expect(INSTRUCTIONS).toContain("never say \"I can't describe it\"");
+    expect(INSTRUCTIONS).toContain('WITHOUT changing what it claims');
+    expect(INSTRUCTIONS).toContain('Never comment on neatness');
+    expect(INSTRUCTIONS).toContain('The sheet changes only when you call a tool');
+    expect(INSTRUCTIONS).toContain('Never invent an outcome');
+    expect(INSTRUCTIONS).toContain('You cannot draw for them');
   });
 });
 
@@ -177,13 +210,24 @@ describe('cues', () => {
     expect(say.verdict(view(shown, 2))).toContain('missed it twice');
   });
 
-  test('every event text is a short instruction, not a speech', () => {
+  test('every result and event text is a short instruction, not a speech', () => {
     const tutor = new StrokeTutor();
     const texts = [say.opening(), say.refused('Finish this stroke first.')];
     tutor.startCharacter('ei');
-    texts.push(say.started(tutor.snapshot()), say.next(tutor.snapshot()), say.resume(tutor.snapshot()));
+    texts.push(say.started(tutor.snapshot()), say.next(tutor.snapshot()), say.resume(tutor.snapshot()), say.alreadyUp(tutor.snapshot()), say.restarted(tutor.snapshot()));
     tutor.reveal();
-    texts.push(say.verdict(tutor.snapshot()));
+    texts.push(say.verdict(tutor.snapshot()), say.drawn(tutor.snapshot()));
     for (const text of texts) expect(text.length).toBeLessThan(600);
+  });
+
+  test('no result asks Ren to act on its own: the debrief asks, and acts only on a choice', () => {
+    const tutor = new StrokeTutor();
+    tutor.startCharacter('ichi');
+    tutor.reveal();
+    tutor.nextStroke();
+    const debrief = say.debrief(tutor.snapshot());
+    expect(debrief).toContain('ask which character they would like next');
+    expect(debrief).toContain('only when they choose');
+    expect(say.opening()).toContain('only when they choose');
   });
 });

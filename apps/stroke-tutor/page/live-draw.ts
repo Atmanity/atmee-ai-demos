@@ -1,5 +1,5 @@
 // Drawing without a hand, for live tests: the reviewer's devtools (or a
-// browser driver) can draw a stroke on the writing square by grid
+// browser driver) can draw a stroke on the practice sheet by grid
 // coordinates, through the same pointer events a finger makes. Never imported
 // by the app itself, and it knows no stroke: you pass the points.
 //
@@ -27,7 +27,7 @@ function fire(canvas: HTMLCanvasElement, type: string, point: GridPoint, grid: n
  * spread along it by length, as a hand would make them.
  */
 export function draw(points: GridPoint[], { samples = 60, grid = 1000, canvas }: { samples?: number; grid?: number; canvas?: HTMLCanvasElement } = {}): boolean {
-  const target = canvas ?? document.querySelector<HTMLCanvasElement>('.st-canvas');
+  const target = canvas ?? document.querySelector<HTMLCanvasElement>('.hs-canvas');
   if (!target || points.length < 2) return false;
   const lengths = points.slice(1).map((p, i) => Math.hypot(p[0] - points[i][0], p[1] - points[i][1]));
   const total = lengths.reduce((a, b) => a + b, 0);

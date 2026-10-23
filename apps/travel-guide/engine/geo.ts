@@ -98,7 +98,8 @@ export function haversineM(lat1: number, lon1: number, lat2: number, lon2: numbe
 
 /** A distance the guide can say out loud. No digits-with-units, no colons. */
 export function distancePhrase(meters: number): string {
-  if (meters < 120) return 'right next to you';
+  // From the place they named, which is not always where they are: "a few steps away", never "next to you".
+  if (meters < 120) return 'a few steps away';
   // Walking pace, roughly 80 m/min.
   if (meters < 1000) return `about a ${Math.max(1, Math.round(meters / 80))} minute walk away`;
   return `about ${(meters / 1000).toFixed(1)} kilometres away`;

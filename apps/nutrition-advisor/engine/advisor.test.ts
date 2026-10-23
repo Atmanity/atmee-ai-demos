@@ -233,6 +233,22 @@ describe('the order of things', () => {
     expect(seqs).toEqual([...seqs].sort((x, y) => x - y));
     expect(new Set(seqs).size).toBe(seqs.length);
   });
+
+  it('starting over empties everything and still moves the view on', () => {
+    const a = new Advisor();
+    a.show(food('Medium banana', { recipes: [{ name: 'Smoothie', description: '' }] }));
+    a.prepare('Medium banana', recipe('Smoothie'));
+    a.open(recipe('Smoothie'));
+    const before = a.view().seq;
+    a.reset();
+    const after = a.view();
+    expect(after.seq).toBeGreaterThan(before);
+    expect(after.nutrition).toBeNull();
+    expect(after.shelf).toEqual({ current: '', items: [], recipes: [] });
+    expect(after.prepared).toEqual([]);
+    expect(a.cardFor('banana')).toBeNull();
+    expect(a.recipeNamed('Smoothie')).toBeNull();
+  });
 });
 
 describe('two spellings of one recipe', () => {

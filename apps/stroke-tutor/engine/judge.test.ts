@@ -1,11 +1,12 @@
-// Words to board actions, as people actually phrase them. The original's
-// model chose a tool for every line; these rules must route the common lines
-// the same way, and leave the rest (small talk, questions about a stroke
-// already done) to the avatar.
+// Words to sheet actions, as people actually phrase them. Ren chooses the tool
+// for a line; these rules are what the safety net acts on when Ren does not,
+// and how a character Ren passes on is read. They must route the common
+// lines the way the original's model did, and leave the rest (small talk,
+// questions about a stroke already done) to Ren.
 import { describe, expect, test } from 'vitest';
-import { characterIn, intentFromModel, intentIn, intentPrompt, worthAsking } from './judge.ts';
-import { StrokeTutor } from './tutor.ts';
-import type { Intent, Phase } from './types.ts';
+import { CHARACTERS } from './characters.ts';
+import { characterIn, GLYPHS, intentIn, mustDo, SPOKEN } from './judge.ts';
+import type { Phase } from './types.ts';
 
 const kind = (text: string, phase: Phase, current: string | null = phase === 'intro' ? null : 'juu') => {
   const intent = intentIn(text, phase, current);
@@ -37,7 +38,7 @@ describe('a question about the live stroke is a request to be shown', () => {
     expect(kind(said, 'writing')).toBe('reveal');
   });
 
-  test('once the stroke is done, the same question is the avatar\'s to answer from the board', () => {
+  test('once the stroke is done, the same question is Ren\'s to answer from the sheet', () => {
     expect(kind('Which way does it go?', 'coaching')).toBeNull();
     expect(kind('Show me.', 'coaching')).toBeNull();
     expect(kind('where do I start', 'intro')).toBeNull();
@@ -137,7 +138,7 @@ describe('starting over and clearing', () => {
   });
 });
 
-describe('what is left to the avatar', () => {
+describe('what is left to Ren', () => {
   test.each(['How am I doing?', 'Thank you!', 'What does eternity mean in Japanese culture?', 'Why does the horizontal come first?', 'That was fun'])('%s', (said) => {
     expect(kind(said, 'coaching', 'ei')).toBeNull();
   });
@@ -148,44 +149,83 @@ describe('what is left to the avatar', () => {
       for (const said of phrasings) expect(intentIn(said, phase, 'juu')?.kind).not.toBe('stroke');
     }
   });
+});
 
-  test('a word or two is not worth a model call', () => {
-    expect(worthAsking('hmm')).toBe(false);
-    expect(worthAsking('could you go over that again')).toBe(true);
+describe('the page-safe names', () => {
+  test('every character has spoken names, and every kanji its glyph, matching the character set', () => {
+    for (const c of CHARACTERS) {
+      expect(SPOKEN.some(([id]) => id === c.id), c.id).toBe(true);
+      if (c.script === 'kanji') expect(GLYPHS).toContainEqual([c.id, c.glyph]);
+    }
+    expect(GLYPHS.length).toBe(CHARACTERS.filter((c) => c.script === 'kanji').length);
   });
 });
 
-describe("the model's answer", () => {
-  const as = (answer: { action: string; character?: string }, phase: Phase, current: string | null = 'juu'): Intent | null => intentFromModel({ character: '', ...answer }, phase, current);
+describe('the safety net: what it does when Ren does not, and only what is safe twice', () => {
+  const net = (text: string, phase: Phase, current: string | null = phase === 'intro' ? null : 'juu') => {
+    const call = mustDo(text, phase, current);
+    return call ? (call.name === 'choose_character' ? `choose:${call.arguments.character}` : call.name) : null;
+  };
 
-  test('a reveal only while a stroke is live', () => {
-    expect(as({ action: 'show' }, 'writing')).toEqual({ kind: 'reveal' });
-    expect(as({ action: 'show' }, 'coaching')).toBeNull();
+  test.each([
+    ['Show me.', 'show_stroke'],
+    ['Can you show me this one?', 'show_stroke'],
+    ['Which way does it go?', 'show_stroke'],
+    ['which direction', 'show_stroke'],
+    ['Where do I start?', 'show_stroke'],
+    ['How do I draw it?', 'show_stroke'],
+    ['What shape is it?', 'show_stroke'],
+    ['Which stroke comes first?', 'show_stroke'],
+    ["I'm stuck.", 'show_stroke'],
+    ['im stuck', 'show_stroke'],
+    ['Start over.', 'start_over'],
+    ["Let's start again from the top.", 'start_over'],
+    ['Next.', null],                          // refused while a stroke is live: Ren says so from the sheet
+    ["I don't know", null],                   // left to Ren, who hears the whole sentence
+    ['Can I have a hint?', null],
+    ['help', null],
+    ["I don't know what eternity means", null],
+    ['How am I doing?', null],
+    ['Next character please', null],          // done twice it would skip one
+  ] as const)('while writing: %s', (said, expected) => {
+    expect(net(said, 'writing')).toBe(expected);
   });
 
-  test('a chosen character is resolved, the current one ignored, an unknown one passed on for the list', () => {
-    expect(as({ action: 'choose', character: 'tree' }, 'writing')).toEqual({ kind: 'start_character', id: 'ki' });
-    expect(as({ action: 'choose', character: 'juu' }, 'writing')).toBeNull();
-    expect(as({ action: 'choose', character: 'dragon' }, 'intro', null)).toEqual({ kind: 'start_character', id: 'dragon' });
-    expect(as({ action: 'choose', character: '' }, 'intro', null)).toBeNull();
+  test.each([
+    ['Next.', 'next_stroke'],
+    ['next stroke please', 'next_stroke'],
+    ['OK, next one.', 'next_stroke'],
+    ["I'm ready.", 'next_stroke'],
+    ['Go on.', 'next_stroke'],
+    ["What's next?", 'next_stroke'],
+    ['Yes.', null],                           // an answer to some other question as often as not
+    ['ok', null],
+    ['Show me.', null],                       // already on the sheet; Ren teaches it from the board
+    ['Start over', 'start_over'],
+  ] as const)('after a stroke: %s', (said, expected) => {
+    expect(net(said, 'coaching')).toBe(expected);
   });
 
-  test('"next" on the menu means the next character', () => {
-    expect(as({ action: 'next_stroke' }, 'debrief')).toEqual({ kind: 'next_character' });
-    expect(as({ action: 'next_stroke' }, 'coaching')).toEqual({ kind: 'next_stroke' });
+  test.each([
+    ["Let's do the tree one.", 'choose:ki'],
+    ['永', 'choose:ei'],
+    ['The letter A, please.', 'choose:latin_a'],
+    ['Can we do river?', 'choose:kawa'],
+    ['one', 'choose:ichi'],
+    ['Next.', null],                          // next character: not safe twice
+    ['Start over', null],
+  ] as const)('on the menu: %s', (said, expected) => {
+    expect(net(said, 'intro')).toBe(expected);
   });
 
-  test('nothing, and nonsense, is nothing', () => {
-    expect(as({ action: 'none' }, 'writing')).toBeNull();
-    expect(as({ action: 'stroke' }, 'writing')).toBeNull();
-    expect(intentFromModel(null, 'writing', 'juu')).toBeNull();
+  test('after the last stroke: another character by name, or this one again', () => {
+    expect(net("Let's try eternity", 'debrief')).toBe('choose:ei');
+    expect(net('One more time', 'debrief')).toBe('start_over');
+    expect(net('another one', 'debrief')).toBeNull();
   });
 
-  test('the prompt describes the board without the live stroke', () => {
-    const tutor = new StrokeTutor();
-    tutor.startCharacter('juu');
-    const prompt = intentPrompt(tutor.snapshot(), 'how does it go');
-    expect(prompt).toContain('drawing stroke 1 of 2');
-    expect(prompt).not.toContain('horizontal');
+  test('mid-character, a switch is left to Ren (it would wipe their progress)', () => {
+    expect(net("Let's switch to the tree", 'writing')).toBeNull();
+    expect(net('永', 'coaching')).toBeNull();
   });
 });

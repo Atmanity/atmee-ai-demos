@@ -1,16 +1,30 @@
 /**
- * Room colours, in one place.
+ * The drawing's colours, in one place.
  *
- * Shared by the plan and the comparison thumbnail so a bedroom is the same
- * colour in both. Two copies of this map is how the drawing and the thing it is
- * being compared against end up disagreeing about which room is which — the one
- * question a side-by-side view exists to answer.
+ * Shared by the plan, the lobby's sample and the comparison thumbnail so a
+ * bedroom is the same colour in all of them. Two copies of this map is how the
+ * drawing and the thing it is being compared against end up disagreeing about
+ * which room is which — the one question a side-by-side view exists to answer.
+ *
+ * Planwright draws like a drafting table: graphite line work on white paper,
+ * a non-photo-blue metre grid, yellow trace for what is picked, redline for
+ * what is wrong. Rooms are pale tints by use, so the line work reads first.
  */
+export const INK = "#22262a";
+export const PAPER = "#fbfbf8";
+export const BLUE = "#3f8fd2";
+export const REDLINE = "#d9452b";
+export const TRACE = "#f4ecb0";
+export const MAT = "#1f5c4a";
+export const WOOD = "#d9c4a3";
+export const WOOD_EDGE = "#8c7350";
+export const GLASS = "#7cc0e8";
+
 export const ROOM_FILL: Record<string, string> = {
-  living: "#eaf2f8", dining: "#f9f3e6", kitchen: "#eef6f0",
-  bedroom: "#f6efe4", bedroom_single: "#f6efe4", nursery: "#fcf0f1",
-  office: "#f1eef7", bathroom: "#e9f2f5", shower_room: "#e9f2f5",
-  wc: "#e9f2f5", utility: "#edf1f1", entry: "#f3f3f0", hall: "#f3f3f0",
-  corridor: "#f3f3f0", stairs: "#e8eef3", storage: "#efeeec",
-  closet: "#efeeec", balcony: "#eaf7f1", other: "#f1f1ee",
+  living: "#e4eee8", dining: "#ebefe0", kitchen: "#e0edee",
+  bedroom: "#e6ebf5", bedroom_single: "#e6ebf5", nursery: "#eee8f4",
+  office: "#ebe8f3", bathroom: "#dceff2", shower_room: "#dceff2",
+  wc: "#dceff2", utility: "#e4ecec", entry: "#f0f1ee", hall: "#f0f1ee",
+  corridor: "#f0f1ee", stairs: "#e3e7e9", storage: "#ecece8",
+  closet: "#ecece8", balcony: "#e2f0e7", other: "#efefeb",
 };

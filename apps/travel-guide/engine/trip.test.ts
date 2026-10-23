@@ -1,12 +1,12 @@
-// The operations: what they change, what they tell the guide, and how they
-// fail. A spoken "take me to Peru", a typed one and a tap on a chip all end up
-// here, so this is where the behaviour is pinned. Ported from test_trip.py and
-// the async half of test_the_trip_is_kept.py (test_rpc.py's coordinate checks
-// at the end), plus the flows that are new in this port: the destination box,
-// the map tap, "surprise me", the guide's own pick, and staged detail.
+// The operations: what they change, what they tell the host, and how they
+// fail. The host's tool calls and the buttons all end up here (through
+// tools.ts), so this is where the behaviour is pinned. Ported from
+// test_trip.py and the async half of test_the_trip_is_kept.py (test_rpc.py's
+// coordinate checks at the end), plus the flows that are new in this port:
+// the destination box, the map tap, "surprise me", and detail fetched ahead.
 import { beforeAll, describe, expect, test, vi } from 'vitest';
 import { IDEAS, WORLD_IDEAS } from './countries.ts';
-import { NOTES } from './director.ts';
+import { instructions } from './director.ts';
 import type { GeoCountry, RawSpot, WikiSummary } from './geo.ts';
 import { TravelState } from './state.ts';
 import * as trip from './trip.ts';
@@ -139,8 +139,8 @@ describe('planning a trip', () => {
   });
 });
 
-describe('headlines and dishes: fetched at once, staged, shown when asked', () => {
-  test('both are fetched as soon as the country is chosen, and staged rather than shown', async () => {
+describe('headlines and dishes: fetched at once, shown when asked', () => {
+  test('both are fetched as soon as the country is chosen, and kept off the board until asked for', async () => {
     let asked = 0;
     const { lookups } = fakeLookups({ headlines: async () => [{ title: 'Trams return', source: 'x', url: '', publishDate: '' }], dishes: async () => { asked += 1; return [{ name: 'Ramen', description: 'Broth and noodles' }]; } });
     const state = new TravelState(true);
@@ -185,8 +185,9 @@ describe('headlines and dishes: fetched at once, staged, shown when asked', () =
     await trip.chooseDestination(s2, fakeLookups({ headlines: async () => [{ title: 'Trams return', source: 'x', url: '', publishDate: '' }] }).lookups, 'Japan');
     const found = await trip.showHeadlines(s2);
     for (const line of [offered, missing, found]) expect(line.toLowerCase()).not.toContain('today');
-    // The one mention in the standing rules forbids it.
-    for (const note of NOTES) for (const m of note.matchAll(/today/gi)) expect(note.slice(Math.max(0, m.index! - 20), m.index)).toMatch(/never call them $/);
+    // The one mention in the host's rules forbids it.
+    const rules = instructions(true);
+    for (const m of rules.matchAll(/today/gi)) expect(rules.slice(Math.max(0, m.index! - 20), m.index)).toMatch(/never call them $/);
   });
 
   test('news before a destination is a prompt, not a lookup', async () => {
@@ -445,47 +446,16 @@ describe('the traveller', () => {
   });
 });
 
-describe('"you choose", asked out loud', () => {
-  test("the app waits for the guide's own pick, and puts it on the map", async () => {
-    const { lookups } = fakeLookups();
-    const state = new TravelState();
-    expect(await trip.apply(state, lookups, { kind: 'pick' }, 'spoken')).toBe('');
-    expect(state.snapshot().awaitingPick).toBe(true);
-    const cue = await trip.fromAvatar(state, lookups, "Let's go to Portugal, you'll love the light.");
-    expect(state.country).toBe('Portugal');
-    expect(cue).toContain('the country you just chose');
-    expect(state.snapshot().awaitingPick).toBe(false);
-  });
-
-  test('a question back ("Portugal or Greece?") is not a choice; the window closes after two lines', async () => {
-    const { lookups } = fakeLookups();
-    const state = new TravelState();
-    await trip.apply(state, lookups, { kind: 'pick' }, 'spoken');
-    expect(await trip.fromAvatar(state, lookups, 'Portugal, or maybe Greece?')).toBeNull();
-    expect(state.snapshot().awaitingPick).toBe(true);
-    expect(await trip.fromAvatar(state, lookups, 'Do you like beaches or mountains?')).toBeNull();
-    expect(state.snapshot().awaitingPick).toBe(false);
-    expect(await trip.fromAvatar(state, lookups, "Let's go to Portugal.")).toBeNull();
-    expect(state.country).toBe('');
-  });
-
-  test("the guide's words are ignored when nobody asked it to choose", async () => {
-    const state = new TravelState();
-    expect(await trip.fromAvatar(state, fakeLookups().lookups, 'Japan is lovely in spring.')).toBeNull();
-    expect(state.country).toBe('');
-  });
-
-  test('pressing "surprise me" or typing it lets the app pick at once', async () => {
-    const state = new TravelState();
-    expect(await trip.apply(state, fakeLookups().lookups, { kind: 'pick' }, 'button')).toContain('your pick');
-    expect(state.country).not.toBe('');
-  });
+test('pressing "surprise me" lets the app pick at once', async () => {
+  const state = new TravelState();
+  expect(await trip.apply(state, fakeLookups().lookups, { kind: 'pick' })).toContain('your pick');
+  expect(state.country).not.toBe('');
 });
 
 test('the board tabs switch what it shows', async () => {
   const state = new TravelState();
-  expect(await trip.apply(state, fakeLookups().lookups, { kind: 'show', stage: 'around' }, 'button')).toContain('which town');
+  expect(await trip.apply(state, fakeLookups().lookups, { kind: 'show', stage: 'around' })).toContain('which town');
   expect(state.stage).toBe('around');
-  await trip.apply(state, fakeLookups().lookups, { kind: 'show', stage: 'planning' }, 'button');
+  await trip.apply(state, fakeLookups().lookups, { kind: 'show', stage: 'planning' });
   expect(state.stage).toBe('planning');
 });

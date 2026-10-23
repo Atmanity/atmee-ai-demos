@@ -66,6 +66,8 @@ export function click(label) {
 // Every finished line, from the kit's window event: independent of the app's layout.
 const said = [];
 addEventListener('atmee:line', (e) => said.push(e.detail));
+// Every tool call the host makes, in the log.
+addEventListener('atmee:tool', (e) => mark(`TOOL ${e.detail.name} ${JSON.stringify(e.detail.arguments)}`));
 export const lines = () => said.map((l) => `${l.who === 'avatar' ? 'AVATAR' : 'USER'}: ${l.text}`);
 export const avatarCount = () => said.filter((l) => l.who === 'avatar').length;
 export const live = () => document.documentElement.dataset.call === 'live';

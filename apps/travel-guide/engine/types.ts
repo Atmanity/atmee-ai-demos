@@ -101,8 +101,6 @@ export interface Snapshot {
   stage: Stage;
   travelerName: string;
   continent: string;
-  /** The user asked the avatar to choose a country; the app is reading its next lines for one. */
-  awaitingPick: boolean;
   /** Something is still loading in the background (headlines, dishes, photos): the page polls. */
   pending: boolean;
   /** Whether a news source (WORLDNEWS_API_KEY) is configured at all. */
@@ -114,14 +112,14 @@ export interface Snapshot {
   trip: TripView;
 }
 
-/** Everything that can be done to the board, from a control, a typed line or speech. */
+/** Everything that can be done to the board: a button, or a host's tool call (engine/tools.ts). */
 export type Action =
   | { kind: 'name'; name: string }
   | { kind: 'destination'; country: string; city?: string; continent?: string }
   /** Free text from the destination box or "how about Bali": a country, or a place inside one. */
   | { kind: 'search'; query: string }
   | { kind: 'continent'; continent: string }
-  /** "You choose": the app picks (a button, a typed line) or reads the avatar's pick (speech). */
+  /** "Surprise me": the app picks. (Asked out loud, the host picks and calls choose_destination.) */
   | { kind: 'pick' }
   | { kind: 'news' }
   | { kind: 'food' }
@@ -138,17 +136,10 @@ export type Action =
 
 export type ActionKind = Action['kind'];
 
-/** Where an input came from; it decides whether the avatar needs telling (see director.eventFor). */
-export type Source = 'button' | 'typed' | 'spoken' | 'avatar';
-
+/** What the server answers a tool call or a button with: the board as it now is, and what happened, in words the host speaks from ('' for nothing). */
 export interface Outcome {
   snapshot: Snapshot;
-  /** Whether the input was a board action; a typed line that wasn't goes to the avatar as-is. */
-  handled: boolean;
-  kind?: ActionKind;
-  /** What the avatar should be told, in its own words; absent when it already knows. */
-  event?: string;
-  ttl?: number;
+  result: string;
 }
 
 /** The map tiles the page draws, configurable on the server. */

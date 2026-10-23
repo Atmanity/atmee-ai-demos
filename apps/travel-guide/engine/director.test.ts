@@ -1,12 +1,13 @@
-// What the guide is told: within the limits, never a fact it should not
-// claim, staged answers marked "only if they ask", and an event only when the
-// guide does not already know.
+// What the host is told: within the API's limits, every tool named in its
+// rules, the board in its state but never what is not on screen yet (so the
+// host must call the tool), and results that never claim what the app does
+// not know.
 import { describe, expect, test } from 'vitest';
-import { boardState, eventFor, NOTES, say, STATE_LIMIT, ttlFor } from './director.ts';
+import { boardState, instructions, pressed, say, STATE_LIMIT, tools } from './director.ts';
 import type { Snapshot, Spot } from './types.ts';
 
 const base = (): Snapshot => ({
-  seq: 1, stage: 'welcome', travelerName: '', continent: '', awaitingPick: false, pending: false, newsAvailable: true,
+  seq: 1, stage: 'welcome', travelerName: '', continent: '', pending: false, newsAvailable: true,
   map: null, news: null, food: null, spot: null, trip: { current: '', visited: [] },
 });
 const japan = (over: Partial<Snapshot> = {}): Snapshot => ({
@@ -20,17 +21,63 @@ const japan = (over: Partial<Snapshot> = {}): Snapshot => ({
 });
 const spot = (over: Partial<Spot> = {}): Spot => ({ name: 'Kiyomizu-dera', category: 'attraction', lat: 35, lon: 135.78, distance: 'about a 9 minute walk away', mapsUrl: '', imageUrl: null, summary: 'A Buddhist temple on a hillside.', ...over });
 
-test('every standing note fits the 2,000-character limit', () => {
-  for (const note of NOTES) expect(note.length).toBeLessThanOrEqual(2000);
+describe.each([true, false])('the tools and the rules, with a news source: %s', (news) => {
+  const list = tools(news);
+  const rules = instructions(news);
+
+  test('the tools fit the API: names, descriptions, schemas, timeouts', () => {
+    expect(list.length).toBeLessThanOrEqual(30);
+    const names = list.map((t) => t.name);
+    expect(new Set(names).size).toBe(names.length);
+    for (const tool of list) {
+      expect(tool.type).toBe('function');
+      expect(tool.name).toMatch(/^[a-z][a-z0-9_]{0,47}$/);
+      expect(['web_search', 'lookup']).not.toContain(tool.name);
+      expect(tool.description.length).toBeGreaterThan(0);
+      expect(tool.description.length).toBeLessThanOrEqual(500);
+      expect(tool.parameters.type).toBe('object');
+      expect(JSON.stringify(tool.parameters).length).toBeLessThanOrEqual(4096);
+      const mode = tool['x-atmee']?.mode;
+      // Only writing a name down needs no answer; everything the host speaks about waits for the app.
+      expect(mode).toBe(tool.name === 'remember_name' ? 'notify' : 'await');
+      if (mode === 'await') {
+        expect(tool['x-atmee']!.timeoutSeconds!).toBeGreaterThanOrEqual(8);
+        expect(tool['x-atmee']!.timeoutSeconds!).toBeLessThanOrEqual(28);
+      }
+    }
+    expect(JSON.stringify(list).length).toBeLessThanOrEqual(24576);
+  });
+
+  test('the rules fit, and name every tool', () => {
+    expect(rules.length).toBeLessThanOrEqual(4000);
+    for (const tool of list) expect(rules).toContain(tool.name);
+  });
+
+  test('the news is a tool only when there is a source, and never promised without one', () => {
+    expect(list.some((t) => t.name === 'show_news')).toBe(news);
+    expect(rules.includes('show_news')).toBe(news);
+    if (!news) expect(rules).toContain('no local news');
+  });
+
+  test('a destructive or surprising move is never the host\'s own idea', () => {
+    expect(rules).toMatch(/Never start something on your own/);
+    expect(rules).toMatch(/never claim/);
+  });
+});
+
+test('the tools take what the host heard, nothing the app decides', () => {
+  const params = Object.fromEntries(tools(true).map((t) => [t.name, Object.keys((t.parameters as { properties: object }).properties)]));
+  expect(params).toEqual({
+    choose_destination: ['place'], show_food: [], show_news: [], explore_near: ['place'], next_sight: [], previous_sight: [], remember_name: ['name'],
+  });
 });
 
 test('the worst board there is still fits the state limit', () => {
   const long = (n: number) => 'x'.repeat(n);
   const worst = japan({
     travelerName: 'Ana Sofia Ruiz',
-    awaitingPick: true,
-    news: { country: 'Japan', headlines: Array.from({ length: 5 }, () => ({ title: long(180), source: 'x', url: '', publishDate: '' })), shown: false, loading: false },
-    food: { country: 'Japan', dishes: Array.from({ length: 3 }, () => ({ name: long(80), description: long(160), imageUrl: null })), shown: false, loading: false },
+    news: { country: 'Japan', headlines: Array.from({ length: 5 }, () => ({ title: long(180), source: 'x', url: '', publishDate: '' })), shown: true, loading: false },
+    food: { country: 'Japan', dishes: Array.from({ length: 3 }, () => ({ name: long(80), description: long(160), imageUrl: null })), shown: true, loading: false },
     trip: { current: 'Japan', visited: Array.from({ length: 30 }, (_, i) => ({ country: `Country ${i} ${long(40)}`, city: long(80), dishes: [], headlineCount: 0, silhouette: null })) },
   });
   expect(boardState(worst).length).toBeLessThanOrEqual(STATE_LIMIT);
@@ -38,83 +85,86 @@ test('the worst board there is still fits the state limit', () => {
   expect(boardState(around).length).toBeLessThanOrEqual(STATE_LIMIT);
 });
 
-describe('staged answers', () => {
-  test('headlines and dishes are ready for the guide, but only "if they ask", until they are on screen', () => {
-    const staged = boardState(japan());
-    expect(staged).toContain('Cherry blossom early');
-    expect(staged).toContain('Ramen (Broth and noodles.)');
-    expect(staged).toMatch(/Only if they ask about the news/);
-    expect(staged).toMatch(/Only if they ask what to eat/);
+describe('the live board', () => {
+  test('dishes and headlines are in it once they are on screen, and not before: the host has to call for them', () => {
+    const hidden = boardState(japan());
+    expect(hidden).not.toContain('Ramen');
+    expect(hidden).not.toContain('Cherry blossom');
+    expect(hidden).toContain('call show_food');
+    expect(hidden).toContain('call show_news');
     const shown = boardState(japan({ news: { ...japan().news!, shown: true }, food: { ...japan().food!, shown: true } }));
-    expect(shown).toContain('On screen, the newest headlines');
-    expect(shown).toContain('On screen, dishes from Japan');
-    expect(shown).not.toMatch(/Only if they ask/);
+    expect(shown).toContain('On screen, dishes from Japan: Ramen (Broth and noodles.)');
+    expect(shown).toContain('Cherry blossom early');
+    expect(shown).not.toContain('call show_');
   });
 
-  test('no news source, or none came back: the guide says so rather than inventing some', () => {
-    expect(boardState(japan({ newsAvailable: false }))).toContain('No news source is set up');
-    expect(boardState(japan({ news: { country: 'Japan', headlines: [], shown: false, loading: false } }))).toContain('No headlines came back for Japan');
-    expect(boardState(japan({ news: { country: 'Japan', headlines: [], shown: false, loading: true } }))).toContain('still loading');
+  test('no news source: no news, and no tool named for it', () => {
+    const text = boardState(japan({ newsAvailable: false }));
+    expect(text).toContain('no local news');
+    expect(text).not.toContain('show_news');
+  });
+
+  test('the sight on screen and its facts are in it, the next one never is', () => {
+    const s: Snapshot = { ...base(), stage: 'around', spot: { place: 'Kyoto', origin: [35, 135.77], index: 0, total: 2, lookupFailed: false, spot: spot(), pins: [{ name: 'Kiyomizu-dera', category: 'attraction', lat: 35, lon: 135.78 }, { name: 'Nishiki Market', category: 'attraction', lat: 35.005, lon: 135.765 }] } };
+    const text = boardState(s);
+    expect(text).toContain('sight 1 of 2 is on screen: Kiyomizu-dera, an attraction, about a 9 minute walk away');
+    expect(text).toContain('A Buddhist temple on a hillside.');
+    expect(text).not.toContain('Nishiki Market');
+    expect(text).toContain('only next_sight knows');
+  });
+
+  test('not said yet, failed, or quiet: three different boards', () => {
+    expect(boardState({ ...base(), stage: 'around' })).toContain('asks which place');
+    expect(boardState({ ...base(), stage: 'around', spot: { place: 'Kyoto', origin: null, index: 0, total: 0, lookupFailed: true, spot: null, pins: [] } })).toContain('not answering');
+    expect(boardState({ ...base(), stage: 'around', spot: { place: 'Hemel', origin: null, index: 0, total: 0, lookupFailed: false, spot: null, pins: [] } })).toContain('nothing stands out');
+  });
+
+  test('the route is in it once there is one, and the way back is the tool', () => {
+    const two = japan({ trip: { current: 'Japan', visited: [{ country: 'Peru', city: '', dishes: [], headlineCount: 0, silhouette: null }, japan().trip.visited[0]] } });
+    expect(boardState(two)).toContain('Their route so far: Peru and Japan (Kyoto)');
+    expect(boardState(two)).toContain('choose_destination');
+    expect(boardState(japan())).not.toContain('route');
   });
 
   test('headlines are never called today\'s, except to forbid it', () => {
-    for (const text of [boardState(japan()), ...NOTES]) {
+    const shown = japan({ news: { ...japan().news!, shown: true } });
+    for (const text of [boardState(shown), instructions(true), say.news('Japan', shown.news!.headlines)]) {
       for (const m of text.matchAll(/today/gi)) expect(text.slice(Math.max(0, m.index! - 20), m.index)).toMatch(/never call them $/);
     }
   });
 });
 
-describe('around them', () => {
-  test('the current spot and its facts are in the state, and the next one never is', () => {
-    const s: Snapshot = { ...base(), stage: 'around', spot: { place: 'Kyoto', origin: [35, 135.77], index: 0, total: 2, lookupFailed: false, spot: spot(), pins: [{ name: 'Kiyomizu-dera', category: 'attraction', lat: 35, lon: 135.78 }, { name: 'Nishiki Market', category: 'attraction', lat: 35.005, lon: 135.765 }] } };
-    const text = boardState(s);
-    expect(text).toContain('spot 1 of 2 is on screen: Kiyomizu-dera, an attraction, about a 9 minute walk away');
-    expect(text).toContain('A Buddhist temple on a hillside.');
-    expect(text).not.toContain('Nishiki Market');
-    expect(text).toContain('never say which it is');
+describe('results', () => {
+  test('a result never has the host start the next thing itself: it asks', () => {
+    for (const text of [say.destination('Japan', { newsAvailable: true }), say.destination('Japan', { how: 'picked' })]) {
+      expect(text).toMatch(/ask whether/);
+      expect(text).toMatch(/only if they say yes/);
+    }
+    expect(say.destination('Japan', { newsAvailable: true })).toContain('headlines');
+    expect(say.destination('Japan')).not.toContain('headlines');
   });
 
-  test('asked where they are, failed, or quiet: three different things to say', () => {
-    expect(boardState({ ...base(), stage: 'around' })).toContain('Ask which town');
-    expect(boardState({ ...base(), stage: 'around', spot: { place: 'Kyoto', origin: null, index: 0, total: 0, lookupFailed: true, spot: null, pins: [] } })).toContain('not answering');
-    expect(boardState({ ...base(), stage: 'around', spot: { place: 'Hemel', origin: null, index: 0, total: 0, lookupFailed: false, spot: null, pins: [] } })).toContain('nothing stands out');
-  });
-});
-
-describe('events', () => {
-  test('spoken: nothing for what the guide answered from its state, a nudge not to repeat itself for a move it reacted to', () => {
-    expect(eventFor('food', say.food('Japan', ['Ramen']), 'spoken')).toBeNull();
-    expect(eventFor('news', say.noNews('Japan'), 'spoken')).toMatch(/^You may already have answered them; do not repeat yourself\. No headlines came back for Japan\./);
-    expect(eventFor('pick', '', 'spoken')).toBeNull();
-    expect(eventFor('destination', 'Japan is on the map now.', 'spoken')).toMatch(/^You may already have answered them; do not repeat yourself\. Japan is on the map now\./);
-    // The next spot is something it could not know: the app tells it.
-    expect(eventFor('next', 'Offer another one: Nishiki Market.', 'spoken')).toBe('Offer another one: Nishiki Market.');
+  test('dishes come with their words, so the host says the app\'s dishes and no others', () => {
+    const text = say.food('Japan', [{ name: 'Ramen', description: 'Broth and noodles.' }, { name: 'Sushi', description: '' }]);
+    expect(text).toContain('Ramen (Broth and noodles.); Sushi');
+    expect(text).toContain('adding no other dishes');
   });
 
-  test('typed: the line never reached the guide, so the event carries it', () => {
-    const e = eventFor('destination', 'Japan is on the map now.', 'typed', "Let's do Japan, what's it like in May?")!;
-    expect(e).toContain("Let's do Japan, what's it like in May?");
-    expect(e).toContain('answer that too');
+  test('a sight reads aloud, with its place in the list, and names no other', () => {
+    expect(say.firstSpot('Kyoto', spot(), 8)).toContain('the closest of 8 sights is on screen: Kiyomizu-dera, an attraction, about a 9 minute walk away');
+    expect(say.anotherSpot(spot({ category: 'museum' }), 2, 8)).toContain('sight 2 of 8: Kiyomizu-dera, a museum');
+    for (const text of [say.firstSpot('Kyoto', spot()), say.anotherSpot(spot())]) expect(text).toContain('naming no other sight');
   });
 
-  test('a button: the cue as it is; nothing to say: no event', () => {
-    expect(eventFor('food', 'Local dishes...', 'button')).toBe('Local dishes...');
-    expect(eventFor('goto', '', 'button')).toBeNull();
-  });
-
-  test('spots go stale fast; a new country is worth saying for longer', () => {
-    expect(ttlFor('next')).toBeLessThan(ttlFor('destination'));
-    for (const kind of ['next', 'destination', 'food'] as const) expect(ttlFor(kind)).toBeLessThanOrEqual(60);
-  });
-
-  test('the opening asks for a name only when it is not known, and picks up what is already on the board', () => {
-    expect(say.opening(base())).toContain('ask what they would like to be called');
-    expect(say.opening({ ...base(), travelerName: 'Sam' })).toContain('Greet Sam');
+  test('the opening picks up what is already on the board', () => {
+    expect(say.opening(base())).toContain('ask where in the world they are dreaming of');
+    expect(say.opening({ ...base(), travelerName: 'Sam' })).toContain('They are called Sam');
     expect(say.opening(japan())).toContain('They have already put Japan on the map');
   });
 
-  test('the spot line reads aloud: "an attraction", not "a attraction"', () => {
-    expect(say.firstSpot('Kyoto', spot())).toContain('Kiyomizu-dera, an attraction, about a 9 minute walk away');
-    expect(say.anotherSpot(spot({ category: 'museum' }))).toContain('a museum');
+  test('a slow lookup is admitted, never guessed at; a button is told as a press', () => {
+    expect(say.stillWorking('looking around Shibuya')).toContain('say nothing about the result yet');
+    expect(say.landed('Japan is on the map now.')).toMatch(/finished.*Japan is on the map now\./);
+    expect(pressed('Surprise me', 'Portugal is your pick.')).toBe('The user pressed "Surprise me" on screen. Portugal is your pick.');
   });
 });

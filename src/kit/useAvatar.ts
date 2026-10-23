@@ -137,6 +137,8 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
         },
         onSpeaking: setSpeaking,
         onToolCall: (call) => {
+          // For tests and analytics, whatever the app: every call the host makes, as a window event.
+          dispatchEvent(new CustomEvent('atmee:tool', { detail: call }));
           const handle = handlersRef.current.onToolCall;
           if (!handle) throw new Error('this page handles no tools');
           return handle(call);

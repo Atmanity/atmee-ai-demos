@@ -6,7 +6,7 @@
 //    entire lookup again;
 //  - "take me back to Niger" put NIGERIA on the map.
 import { describe, expect, test } from 'vitest';
-import { PICK_WINDOW_MS, TravelState, type Destination } from './state.ts';
+import { TravelState, type Destination } from './state.ts';
 
 const JAPAN: Destination = { country: 'Japan', isoCode: 'JP', center: [36, 138], bbox: [24, 122, 45.5, 153], outline: null };
 const PERU: Destination = { country: 'Peru', isoCode: 'PE', center: [-9.2, -75], bbox: [-18.3, -81.3, 0, -68.6], outline: null };
@@ -239,7 +239,7 @@ describe('the snapshot', () => {
     expect(s.map).toBeNull();
     expect(s.spot).toBeNull();
     expect(s.trip).toEqual({ current: '', visited: [] });
-    expect(Object.keys(s).sort()).toEqual(['awaitingPick', 'continent', 'food', 'map', 'news', 'newsAvailable', 'pending', 'seq', 'spot', 'stage', 'travelerName', 'trip']);
+    expect(Object.keys(s).sort()).toEqual(['continent', 'food', 'map', 'news', 'newsAvailable', 'pending', 'seq', 'spot', 'stage', 'travelerName', 'trip']);
   });
 
   test('anything still loading, for any country, keeps the page polling', () => {
@@ -251,14 +251,3 @@ describe('the snapshot', () => {
   });
 });
 
-describe('"you choose"', () => {
-  test('the app reads the guide for a pick only for a while, and only for a couple of lines', () => {
-    const state = new TravelState();
-    state.awaitPick(1000);
-    expect(state.isAwaitingPick(1000 + PICK_WINDOW_MS - 1)).toBe(true);
-    expect(state.isAwaitingPick(1000 + PICK_WINDOW_MS)).toBe(false);
-    state.awaitPick(1000);
-    state.awaitingPick!.lines = 0;
-    expect(state.isAwaitingPick(1001)).toBe(false);
-  });
-});

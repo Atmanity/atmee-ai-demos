@@ -1,0 +1,269 @@
+/* Arcwise: a physics classroom's two surfaces. The page is graph paper in
+   graphite ink; the range is a slate chalkboard, drawn in chalk, with one
+   tracer orange for the shot (and the Fire button that sends it), teal for the
+   aim you control, and yolk yellow for whatever you are trying to hit.
+   Display: Archivo, expanded, like the title block of a technical drawing.
+   Body: Atkinson Hyperlegible, made for reading. Figures: IBM Plex Mono.
+   Layout: the range on the left, Theo and the conversation on the right; on a
+   phone, Theo first, then the range, then the conversation. */
+:root {
+  --aw-paper: #eef2ee;
+  --aw-ink: #15242a;
+  --aw-slate: #1d3430;
+  --aw-chalk: #f3f0e4;
+  --aw-tracer: #ff6a2b;
+  --aw-teal: #12695f;
+  --aw-yolk: #f2c14e;
+
+  --aw-aim: #5fd3c3;       /* the teal, in chalk, on the board */
+  --aw-muted: #566769;
+  --aw-rule: #cfd9d2;
+  --aw-grid: #e1e8e2;
+  --aw-good: #17794a;
+  --aw-surface: #fbfcfa;
+
+  --aw-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --aw-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --aw-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  /* the kit's parts, in Arcwise's colours */
+  --call-accent: var(--aw-teal);
+  --call-accent-ink: #fff;
+  --call-bg: var(--aw-slate);
+  --call-surface: var(--aw-surface);
+  --call-ink: var(--aw-ink);
+  --call-muted: var(--aw-muted);
+  --call-line: var(--aw-rule);
+  --call-radius: 14px;
+  --call-font: var(--aw-body);
+  --accent: var(--aw-teal);
+  --page: var(--aw-paper);
+  --ink: var(--aw-ink);
+  --font: var(--aw-body);
+}
+
+html, body {
+  margin: 0;
+  color: var(--aw-ink);
+  background-color: var(--aw-paper);
+  background-image: linear-gradient(var(--aw-grid) 1px, transparent 1px), linear-gradient(90deg, var(--aw-grid) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+body { font: 16px/1.5 var(--aw-body); -webkit-font-smoothing: antialiased; }
+button { font: inherit; }
+:focus-visible { outline: 2.5px solid var(--aw-teal); outline-offset: 2px; }
+* { box-sizing: border-box; }
+
+/* ── shared ─────────────────────────────────────────────────────────────── */
+.aw-logo { display: inline-flex; align-items: center; gap: 10px; color: var(--aw-ink); text-decoration: none; font: 800 23px/1 var(--aw-display); font-stretch: 118%; letter-spacing: -0.01em; }
+.aw-eyebrow { margin: 0; font: 500 12px/1.3 var(--aw-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--aw-teal); }
+.aw-num { font: 500 13px/1 var(--aw-mono); color: var(--aw-muted); font-variant-numeric: tabular-nums; }
+.aw-primary, .aw-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border-radius: 10px; padding: 10px 18px; font-weight: 700; font-size: 15px; cursor: pointer; transition: transform .08s, filter .15s, background .15s; }
+.aw-primary { background: var(--aw-ink); color: #fff; border: 0; }
+.aw-primary:hover:not(:disabled) { filter: brightness(1.35); }
+.aw-secondary { background: var(--aw-surface); color: var(--aw-ink); border: 1.5px solid var(--aw-ink); }
+.aw-secondary:hover:not(:disabled) { background: #fff; }
+.aw-primary:active:not(:disabled), .aw-secondary:active:not(:disabled) { transform: translateY(1px); }
+.aw-primary:disabled, .aw-secondary:disabled { opacity: .45; cursor: default; }
+.aw-primary.is-big, .aw-secondary.is-big { min-height: 52px; padding: 14px 24px; font-size: 16px; }
+.aw-quiet { background: none; border: 0; padding: 10px 4px; color: var(--aw-muted); font-weight: 700; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.aw-quiet:hover:not(:disabled) { color: var(--aw-ink); }
+.aw-quiet:disabled { opacity: .45; cursor: default; }
+
+/* ── front door ─────────────────────────────────────────────────────────── */
+.aw-lobby { max-width: 1180px; margin: 0 auto; padding: 22px max(20px, env(safe-area-inset-right)) 64px max(20px, env(safe-area-inset-left)); }
+.aw-top.is-lobby { padding-bottom: 8px; }
+.aw-hero { display: grid; grid-template-columns: minmax(0, 1.02fr) minmax(0, .98fr); gap: 48px; align-items: center; padding: 52px 0 44px; }
+.aw-hero h1 { margin: 14px 0 18px; font: 800 clamp(36px, 5.2vw, 62px)/1.02 var(--aw-display); font-stretch: 112%; letter-spacing: -0.02em; text-wrap: balance; }
+.aw-lede { margin: 0; max-width: 46ch; font-size: 18px; line-height: 1.6; color: #2b3b40; }
+.aw-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+.aw-small { margin: 14px 0 0; font-size: 14px; color: var(--aw-muted); }
+.aw-board-art { margin: 0; }
+.aw-board-art svg { display: block; width: 100%; height: auto; border-radius: 14px; box-shadow: 0 0 0 6px #fff, 0 0 0 7px var(--aw-rule), 0 22px 44px rgba(21, 36, 42, .22); }
+.aw-board-art figcaption { margin-top: 16px; font: 500 12.5px/1.4 var(--aw-mono); color: var(--aw-muted); }
+.aw-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; border-top: 2px solid var(--aw-ink); padding-top: 22px; }
+.aw-steps article { display: grid; gap: 6px; align-content: start; }
+.aw-step-n { font: 600 14px var(--aw-mono); color: var(--aw-tracer); }
+.aw-steps h2 { margin: 0; font: 800 22px/1.15 var(--aw-display); font-stretch: 115%; }
+.aw-steps p { margin: 0; color: #3a4a4e; }
+.aw-syllabus-intro { margin-top: 48px; }
+.aw-syllabus-intro h2 { margin: 0 0 14px; font: 800 20px var(--aw-display); font-stretch: 115%; }
+.aw-syllabus-intro ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px; }
+.aw-syllabus-intro li { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 2px 10px; padding: 12px 0; border-bottom: 1px solid var(--aw-rule); }
+.aw-syllabus-intro li .aw-num { grid-row: span 2; padding-top: 3px; }
+.aw-syllabus-intro li b { font: 700 16px var(--aw-body); }
+.aw-syllabus-intro li span:last-child { color: var(--aw-muted); font-size: 15px; }
+
+/* ── the range ──────────────────────────────────────────────────────────── */
+.aw-app { max-width: 1320px; margin: 0 auto; padding: 14px max(20px, env(safe-area-inset-right)) 32px max(20px, env(safe-area-inset-left)); min-height: 100vh; }
+.aw-top { display: flex; align-items: center; gap: 18px; padding: 4px 0 14px; }
+.aw-pips { list-style: none; display: flex; gap: 6px; margin: 0 auto; padding: 0; }
+.aw-pips li { width: 26px; height: 10px; border-radius: 3px; border: 1.5px solid var(--aw-ink); background: transparent; }
+.aw-pips li.is-cleared { background: var(--aw-teal); border-color: var(--aw-teal); }
+.aw-pips li.is-current { box-shadow: 0 0 0 2px var(--aw-paper), 0 0 0 4px var(--aw-tracer); }
+.aw-tab { min-height: 44px; padding: 8px 14px; border-radius: 10px; border: 1.5px solid var(--aw-ink); background: var(--aw-surface); color: var(--aw-ink); font-weight: 700; cursor: pointer; white-space: nowrap; }
+.aw-tab b { font: 600 14px var(--aw-mono); margin-left: 4px; }
+.aw-controls { margin-left: 2px; }
+
+.aw-main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; grid-template-areas: "stage side"; gap: 20px 28px; align-items: start; }
+.aw-stage { grid-area: stage; display: grid; gap: 16px; align-content: start; min-width: 0; }
+/* Theo and the conversation stay in view while the range scrolls. */
+.aw-side { grid-area: side; position: sticky; top: 12px; display: flex; flex-direction: column; gap: 14px; max-height: calc(100vh - 24px); min-width: 0; }
+.aw-coach { display: grid; gap: 10px; align-content: start; flex: none; }
+.aw-chat { flex: 1 1 auto; min-height: 220px; }
+
+/* the brief */
+.aw-brief { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; align-items: start; }
+.aw-brief-n { font: 600 44px/0.95 var(--aw-mono); color: var(--aw-tracer); letter-spacing: -0.04em; }
+.aw-brief-name { margin: 0; font: 800 clamp(26px, 3vw, 34px)/1.05 var(--aw-display); font-stretch: 118%; letter-spacing: -0.015em; }
+.aw-brief-blurb { margin: 4px 0 8px; font-size: 17px; color: #2b3b40; }
+.aw-conditions { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; }
+.aw-conditions li { font: 500 12.5px/1 var(--aw-mono); padding: 6px 8px; border: 1px solid var(--aw-rule); border-radius: 6px; background: var(--aw-surface); color: var(--aw-ink); }
+
+/* the chalkboard */
+.aw-field { position: relative; aspect-ratio: 16 / 9; min-height: 240px; max-height: 62vh; border-radius: 14px; overflow: hidden; background: var(--aw-slate); box-shadow: 0 0 0 5px #fff, 0 0 0 6px var(--aw-rule), 0 18px 38px rgba(21, 36, 42, .2); }
+.aw-field-canvas { position: absolute; inset: 0; }
+.aw-canvas { display: block; touch-action: none; cursor: crosshair; }
+.aw-canvas.is-locked { cursor: default; }
+.aw-lock { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; text-align: center; color: var(--aw-chalk); background: rgba(29, 52, 48, .72); font: 600 16px/1.4 var(--aw-body); }
+.aw-field-hint { position: absolute; left: 56px; top: 14px; margin: 0; font: 500 12px var(--aw-mono); color: rgba(243, 240, 228, .7); pointer-events: none; }
+.aw-drag-readout { position: absolute; right: 14px; top: 12px; padding: 6px 10px; border-radius: 6px; background: rgba(0, 0, 0, .35); color: var(--aw-aim); font: 600 15px var(--aw-mono); pointer-events: none; }
+
+/* the console */
+.aw-console { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(170px, .9fr); gap: 12px; }
+.aw-stepper { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; align-items: center; gap: 0 10px; padding: 10px 10px 10px 14px; background: var(--aw-surface); border: 1.5px solid var(--aw-rule); border-radius: 12px; }
+.aw-stepper-label { font: 500 11.5px var(--aw-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--aw-muted); }
+.aw-stepper-value { grid-row: 2; font: 700 26px/1.1 var(--aw-mono); color: var(--aw-teal); font-variant-numeric: tabular-nums; }
+.aw-stepper-buttons { grid-row: 1 / span 2; grid-column: 2; display: flex; gap: 6px; }
+.aw-stepper-buttons button { width: 44px; height: 44px; border-radius: 10px; border: 1.5px solid var(--aw-ink); background: #fff; color: var(--aw-ink); font: 600 22px/1 var(--aw-mono); cursor: pointer; }
+.aw-stepper-buttons button:hover:not(:disabled) { background: var(--aw-paper); }
+.aw-stepper-buttons button:active:not(:disabled) { transform: translateY(1px); }
+.aw-stepper-buttons button:disabled { opacity: .35; cursor: default; }
+.aw-fire { position: relative; overflow: hidden; min-height: 72px; border: 0; border-radius: 12px; background: var(--aw-tracer); color: var(--aw-ink); font: 900 26px/1 var(--aw-display); font-stretch: 125%; letter-spacing: .06em; text-transform: uppercase; cursor: pointer; box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .18); transition: transform .08s, filter .15s; }
+.aw-fire:hover:not(:disabled) { filter: brightness(1.06) saturate(1.1); }
+.aw-fire:active:not(:disabled) { transform: translateY(2px); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .18); }
+.aw-fire:disabled { cursor: default; background: #f6c7b0; color: rgba(21, 36, 42, .6); box-shadow: none; }
+.aw-fire.is-flying { background: var(--aw-slate); color: var(--aw-chalk); font-size: 17px; letter-spacing: .08em; }
+.aw-fire-bar { position: absolute; left: 0; bottom: 0; height: 5px; width: 100%; background: var(--aw-tracer); transform-origin: left; animation: aw-fly var(--aw-flight, 1s) linear both; }
+
+/* the last shot */
+.aw-result { display: grid; gap: 8px; padding-top: 14px; border-top: 2px solid var(--aw-ink); min-height: 64px; }
+.aw-result-empty, .aw-result-flying { margin: 0; color: var(--aw-muted); font-size: 16px; }
+.aw-result-flying { font: 600 16px var(--aw-mono); color: var(--aw-ink); }
+.aw-result-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; }
+.aw-verdict { font: 700 14px/1 var(--aw-mono); letter-spacing: .04em; padding: 8px 10px; border-radius: 6px; }
+.aw-verdict.is-cleared { background: var(--aw-good); color: #fff; }
+.aw-verdict.is-missed { background: transparent; color: #b2400f; border: 1.5px solid #e2865a; }
+.aw-stats { display: flex; flex-wrap: wrap; gap: 4px 22px; margin: 0; }
+.aw-stats div { display: flex; align-items: baseline; gap: 6px; }
+.aw-stats dt { font: 500 11.5px var(--aw-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--aw-muted); }
+.aw-stats dd { margin: 0; font: 600 18px var(--aw-mono); font-variant-numeric: tabular-nums; }
+.aw-note { margin: 0; font-size: 17px; line-height: 1.55; max-width: 72ch; }
+.aw-result-since { margin: 0; font-size: 14px; color: var(--aw-muted); }
+.aw-refusal { margin: 0; padding: 10px 12px; border-left: 4px solid var(--aw-tracer); background: #fff3ec; color: #7a2c0a; font-weight: 700; }
+
+/* the lesson: a note written on the board */
+.aw-lesson { display: grid; gap: 8px; padding: 18px 20px; border-radius: 12px; background: var(--aw-slate); color: var(--aw-chalk); animation: aw-rise .35s ease-out; }
+.aw-lesson .aw-eyebrow { color: var(--aw-aim); }
+.aw-lesson-text { margin: 0; font-size: 18px; line-height: 1.55; max-width: 70ch; }
+.aw-lesson-actions { margin-top: 4px; }
+.aw-lesson .aw-primary { background: var(--aw-chalk); color: var(--aw-ink); }
+
+/* the six challenges */
+.aw-syllabus { display: grid; gap: 6px; }
+.aw-syllabus ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.aw-syllabus li button { width: 100%; min-height: 48px; display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 10px; border: 1.5px solid var(--aw-rule); background: var(--aw-surface); color: var(--aw-ink); text-align: left; cursor: pointer; }
+.aw-syllabus li button:hover:not(:disabled) { border-color: var(--aw-ink); }
+.aw-syllabus li button:disabled { cursor: default; opacity: .6; }
+.aw-syllabus li button.is-current { border-color: var(--aw-ink); background: #fff; box-shadow: inset 4px 0 0 var(--aw-tracer); }
+.aw-syllabus-name { font-weight: 700; font-size: 14.5px; line-height: 1.25; }
+.aw-tick { color: var(--aw-good); font-weight: 700; }
+.aw-syllabus > .aw-quiet { justify-self: start; }
+
+/* the logbook */
+.aw-logbook { display: grid; gap: 18px; padding: 24px; background: var(--aw-surface); border: 1.5px solid var(--aw-rule); border-radius: 14px; }
+.aw-logbook-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 16px; padding-bottom: 16px; border-bottom: 2px solid var(--aw-ink); }
+.aw-logbook-total { margin: 6px 0 2px; font: 800 30px/1.05 var(--aw-display); font-stretch: 115%; }
+.aw-logbook-total b { font: 700 54px/1 var(--aw-mono); color: var(--aw-teal); margin-right: 6px; letter-spacing: -0.04em; }
+.aw-logbook-sub { margin: 0; color: var(--aw-muted); }
+.aw-logbook-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.aw-entries { list-style: none; margin: 0; padding: 0; display: grid; }
+.aw-entries > li { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; padding: 14px 0; border-bottom: 1px solid var(--aw-rule); }
+.aw-entries > li .aw-num { padding-top: 5px; }
+.aw-entries > li.is-cleared .aw-num { color: var(--aw-good); }
+.aw-entry h2 { margin: 0; font: 800 19px/1.2 var(--aw-display); font-stretch: 112%; }
+.aw-entry p { margin: 4px 0 0; }
+.aw-entry-status { color: var(--aw-muted); }
+.aw-entry-status b { font-family: var(--aw-mono); color: var(--aw-ink); }
+.aw-entry-blurb { color: var(--aw-muted); }
+.aw-entry-note { font-size: 15px; }
+.aw-entry-lesson { padding: 10px 12px; border-left: 3px solid var(--aw-teal); background: #eaf4f1; font-size: 15px; line-height: 1.5; }
+.is-new .aw-entry h2 { color: var(--aw-muted); }
+
+/* Theo */
+.aw-coach-video { aspect-ratio: 4 / 5; width: 100%; box-shadow: 0 0 0 5px #fff, 0 0 0 6px var(--aw-rule), 0 18px 38px rgba(21, 36, 42, .22); }
+.aw-coach-meta { display: grid; gap: 6px; min-width: 0; }
+/* On a big screen his captions are on the video; beside a small one, here. */
+.aw-coach-caption { display: none; margin: 0; font-size: 15px; line-height: 1.45; color: var(--aw-ink); -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.aw-lesson :focus-visible { outline-color: var(--aw-aim); }
+.aw-nameplate { margin: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; color: var(--aw-muted); font-size: 14px; }
+.aw-nameplate b { font: 800 20px var(--aw-display); font-stretch: 115%; color: var(--aw-ink); }
+.aw-onair { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font: 500 11px var(--aw-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--aw-teal); }
+.aw-onair::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--aw-tracer); animation: aw-blink 1.6s ease-in-out infinite; }
+
+@keyframes aw-fly { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes aw-rise { from { transform: translateY(6px); opacity: 0; } }
+@keyframes aw-blink { 50% { opacity: .35; } }
+
+@media (min-width: 1001px) and (max-height: 760px) {
+  .aw-coach-video { aspect-ratio: 1; }
+}
+@media (max-width: 1000px) {
+  .aw-hero { grid-template-columns: minmax(0, 1fr); padding: 32px 0; gap: 32px; }
+  .aw-main { grid-template-columns: minmax(0, 1fr); grid-template-areas: "coach" "stage" "chat"; }
+  .aw-side { display: contents; }
+  .aw-coach { grid-area: coach; grid-template-columns: 160px minmax(0, 1fr); align-items: center; gap: 14px; }
+  .aw-chat { grid-area: chat; max-height: 380px; }
+  .aw-nameplate { align-items: baseline; }
+  .aw-coach-caption { display: -webkit-box; }
+  .aw-coach-video .call-caption { display: none; }   /* his words sit beside the video instead */
+  .aw-coach-video .call-status { padding: 8px; gap: 6px; }
+  .aw-coach-video .call-status strong { font-size: 14px; }
+  .aw-coach-video .call-status span { font-size: 12px; }
+  .aw-coach-video .call-again { padding: 8px 12px; font-size: 13px; }
+}
+@media (max-width: 640px) {
+  .aw-top { gap: 8px; flex-wrap: wrap; }
+  .aw-top .aw-logo span { font-size: 21px; }
+  .aw-logo svg { width: 30px; height: 30px; }
+  .aw-tab { padding: 8px 10px; font-size: 14px; }
+  /* On the call, Theo rides along at the top as a call bar: a small video and his words. */
+  .aw-coach.is-live { position: sticky; top: 0; z-index: 10; grid-template-columns: 76px minmax(0, 1fr); gap: 12px; margin: 0 -8px; padding: 8px; background: color-mix(in srgb, var(--aw-paper) 92%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-bottom: 1px solid var(--aw-rule); }
+  .aw-coach.is-live .aw-coach-video { box-shadow: 0 0 0 3px #fff, 0 0 0 4px var(--aw-rule); border-radius: 10px; }
+  .aw-coach.is-live .aw-nameplate b { font-size: 17px; }
+  .aw-coach.is-live .aw-coach-caption { font-size: 14px; -webkit-line-clamp: 2; }
+  .aw-coach.is-live .call-hear { padding: 6px 8px; font-size: 11px; width: 68px; white-space: normal; }
+  .aw-pips { order: 3; width: 100%; margin: 2px 0 0; }
+  .aw-pips li { flex: 1; }
+  .aw-tab { margin-left: auto; }
+  .aw-steps { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .aw-syllabus-intro ol { grid-template-columns: minmax(0, 1fr); }
+  .aw-cta > * { flex: 1 1 100%; }
+  .aw-brief { gap: 10px; }
+  .aw-brief-n { font-size: 30px; }
+  .aw-field { aspect-ratio: 4 / 3; min-height: 220px; }
+  .aw-console { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .aw-fire { grid-column: 1 / -1; min-height: 60px; }
+  .aw-stepper { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; padding: 10px; gap: 4px; }
+  .aw-stepper-value { font-size: 22px; }
+  .aw-stepper-buttons { grid-row: 3; grid-column: 1; }
+  .aw-stepper-buttons button { flex: 1; }
+  .aw-syllabus ol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .aw-logbook { padding: 16px; }
+  .aw-logbook-actions > * { flex: 1 1 auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aw-onair::before, .aw-lesson { animation: none; }
+  .aw-fire-bar { animation: none; transform: none; }
+  .aw-primary, .aw-secondary, .aw-fire { transition: none; }
+}

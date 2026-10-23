@@ -1,173 +1,215 @@
 // @vitest-environment jsdom
 //
-// The page's wiring, with the avatar kit replaced by a recorder: which input
-// does what to the range, what the avatar is sent (and what it is NOT sent),
-// and whether a typed line is kept by the app or handed to the avatar.
+// The page's wiring, with the call replaced by a recorder (the real safety
+// net kept): the front door, the opening, the host's tool calls answered by
+// the range with its real outcome, the buttons told as events, the safety net
+// stepping in, and the logbook when the call ends.
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AvatarHandlers } from '../../../src/kit/index.ts';
-import { NOTES, say } from '../engine/director.ts';
 
 const fake = vi.hoisted(() => ({
-  phase: 'starting' as string,
+  phase: 'idle' as string,
   handlers: {} as AvatarHandlers,
-  submit: undefined as ((text: string) => unknown) | undefined,
-  notes: [] as string[],
   states: [] as string[],
   events: [] as { text: string; ttl?: number }[],
-  said: [] as string[],
-  recorded: [] as string[],
+  starts: [] as { mic?: boolean }[],
 }));
 
-vi.mock('../../../src/kit/index.ts', () => ({
-  useAvatar: (_app: string, handlers: AvatarHandlers) => {
-    fake.handlers = handlers;
-    return {
-      phase: fake.phase,
-      note: (t: string) => fake.notes.push(t),
-      state: (t: string) => fake.states.push(t),
-      event: (text: string, ttl?: number) => fake.events.push({ text, ttl }),
-      say: (t: string) => fake.said.push(t),
-      record: (t: string) => fake.recorded.push(t),
-    };
-  },
-  AvatarStage: () => null,
-  Composer: ({ onSubmit }: { onSubmit: (t: string) => unknown }) => { fake.submit = onSubmit; return null; },
-  Transcript: () => null,
-}));
+vi.mock('../../../src/kit/index.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/kit/index.ts')>();
+  return {
+    ...actual,
+    useAvatar: (_app: string, handlers: AvatarHandlers) => {
+      fake.handlers = handlers;
+      return {
+        phase: fake.phase, micOn: false,
+        state: (t: string) => fake.states.push(t),
+        event: (text: string, ttl?: number) => fake.events.push({ text, ttl }),
+        start: async (opts?: { mic?: boolean }) => { fake.starts.push(opts ?? {}); },
+        say: () => {}, note: () => {}, record: () => {},
+      };
+    },
+    HostVideo: ({ children }: { children?: React.ReactNode }) => <div data-testid="host">{children}</div>,
+    CallStatus: () => null,
+    CallControls: () => null,
+    ChatPanel: () => null,
+  };
+});
 
 const { App } = await import('./App.tsx');
 
 beforeAll(() => { HTMLCanvasElement.prototype.getContext = (() => null) as never; });
 beforeEach(() => {
   vi.useFakeTimers();
-  Object.assign(fake, { phase: 'starting', notes: [], states: [], events: [], said: [], recorded: [] });
+  Object.assign(fake, { phase: 'idle', states: [], events: [], starts: [] });
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
-/** The page with the session on, everything said while it was starting cleared. */
+/** The page with Theo on the call, everything sent while he was on his way cleared. */
 function live() {
+  fake.phase = 'starting';
   const view = render(<App />);
   fake.phase = 'live';
   view.rerender(<App />);
-  Object.assign(fake, { events: [], said: [], recorded: [] });
+  Object.assign(fake, { events: [] });
   return view;
 }
-const type = async (text: string) => { await act(async () => { fake.submit!(text); }); };
-const speak = async (text: string) => { await act(async () => { fake.handlers.onUserSaid!(text, 'spoken'); }); };
+/** A tool call from Theo; the promise is the result he speaks from. */
+const tool = (name: string, args: Record<string, unknown> = {}) => fake.handlers.onToolCall!({ id: `call-${name}`, name, arguments: args }) as Promise<string>;
 const land = () => act(() => { vi.advanceTimersByTime(3_000); });
+const button = (name: string | RegExp) => screen.getByRole('button', { name }) as HTMLButtonElement;
 
-describe('the session', () => {
-  it('starting sends the rules, the range and an opening that names the challenge up', () => {
+describe('the front door', () => {
+  it('says what Arcwise is and starts a call by voice or by typing', () => {
     render(<App />);
-    expect(fake.notes).toEqual(NOTES);
-    expect(fake.states.at(-1)).toContain('Challenge: Clear the wall');
-    expect(fake.events).toEqual([{ text: expect.stringContaining('The first challenge is Clear the wall'), ttl: 60 }]);
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Forty-five degrees');
+    expect(screen.getAllByText(/Arcwise/).length).toBeGreaterThan(0);
+    for (const name of ['Clear the wall', 'On the Moon']) expect(screen.getByText(name)).toBeTruthy();
+    fireEvent.click(button('Start with your voice'));
+    fireEvent.click(button('Start by typing'));
+    expect(fake.starts).toEqual([{ mic: true }, { mic: false }]);
   });
 });
 
-describe('speech: the avatar is already answering, so the app only adds what it cannot know', () => {
-  it('"fire": no line at launch, then exactly one line, the landing, with the range\'s numbers', async () => {
+describe('the call', () => {
+  it('while Theo is on his way: the range is up but locked, and the opening names the challenge up', () => {
+    fake.phase = 'starting';
+    render(<App />);
+    expect(screen.getByText('Theo is on his way to the range…')).toBeTruthy();
+    expect(button('Fire').disabled).toBe(true);
+    expect(fake.states.at(-1)).toContain('Challenge 1 of 6: Clear the wall');
+    expect(fake.events).toEqual([{ text: expect.stringContaining('The challenge up is Clear the wall'), ttl: 60 }]);
+  });
+});
+
+describe("Theo's tools: the range acts, and the result is what he says", () => {
+  it('fire: the result arrives when the ball is down, with the numbers on screen at the same moment', async () => {
     live();
-    await speak('Fire!');
+    let result: string | undefined;
+    await act(async () => { void tool('fire').then((t) => { result = t; }); });
     expect(screen.getByText('In the air…')).toBeTruthy();
     expect(fake.states.at(-1)).toContain('in the air');
-    expect(fake.events).toEqual([]);
-    land();
-    expect(fake.events).toHaveLength(1);
-    expect(fake.events[0].text).toContain('0.76 m going past 40 m, 2.24 m below the top');
+    expect(result).toBeUndefined();
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    expect(result).toContain('"You were at 0.76 m going past 40 m, 2.24 m below the top.');
     expect(screen.getByText(/0\.76 m going past 40 m/)).toBeTruthy();
+    expect(fake.events).toEqual([]);   // the tool's result is the one account of it
   });
 
-  it('an aim moves the arrow and says nothing; a refused one is on the panel and told to the avatar', async () => {
+  it('aim: "try ninety" is refused with the numbers, on screen too; words go through the range\'s steps', async () => {
     live();
-    await speak('Make it steeper.');
-    expect(screen.getByText('50° · 20 m/s')).toBeTruthy();
-    expect(fake.events).toEqual([]);
-    await speak('Try ninety degrees.');
-    expect(screen.getByText('50° · 20 m/s')).toBeTruthy();
+    let text = '';
+    await act(async () => { text = await tool('aim', { angle_deg: 90 }); });
+    expect(text).toContain('90 is off the rail');
     expect(screen.getByRole('status').textContent).toContain('90 is off the rail');
-    expect(fake.events).toHaveLength(1);
-    expect(fake.events[0].text).toContain('If you have not already told them');
+    expect(screen.getByText('45°')).toBeTruthy();
+    await act(async () => { await tool('aim', { request: 'a bit steeper' }); });
+    expect(screen.getByText('48°')).toBeTruthy();
+    expect(screen.queryByRole('status')).toBeNull();   // the next change clears the refusal
   });
 
-  it('a question is left alone', async () => {
-    live();
-    await speak('Should I fire flatter?');
-    expect(screen.getByText('No shot yet.')).toBeTruthy();
-    expect(fake.events).toEqual([]);
-  });
-
-  it('a challenge by voice goes up with no line (the list is staged in the state)', async () => {
-    live();
-    await speak("Let's do the moon.");
-    expect(screen.getAllByText('On the Moon')).toHaveLength(2);
-    expect(fake.events).toEqual([]);
-    expect(fake.states.at(-1)).toContain('Challenge: On the Moon');
-  });
-});
-
-describe('typing: judged first, then kept or handed over', () => {
-  it('an action is kept by the app and gets its line; anything else goes to the avatar', async () => {
-    live();
-    await type('try forty degrees');
-    expect(fake.recorded).toEqual(['try forty degrees']);
-    expect(fake.said).toEqual([]);
-    expect(fake.events.map((e) => e.text)).toEqual([say.aimed()]);
-    expect(screen.getByText('40° · 20 m/s')).toBeTruthy();
-    await type('why did that miss?');
-    expect(fake.said).toEqual(['why did that miss?']);
-  });
-
-  it('"45 at 24 and fire": one shot, one line (the landing), no opinion on the aim first', async () => {
-    live();
-    await type('45 at 24 and fire');
-    expect(fake.events).toEqual([]);
-    land();
-    expect(fake.events).toHaveLength(1);
-    expect(fake.events[0].text).toContain('they cleared it');
-    expect(screen.getByText(/Forty-five degrees maximises range/)).toBeTruthy();
-  });
-
-  it('what the rules cannot read goes to the app\'s model, and its answer is applied', async () => {
+  it("aim: what the rules cannot read goes to the app's model", async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ command: { kind: 'aim', angle_deg: 70 } })));
     vi.stubGlobal('fetch', fetchMock);
     live();
-    await type('lob it like a mortar');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await act(async () => { await tool('aim', { request: 'lob it like a mortar' }); });
     expect(JSON.parse((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({
       text: 'lob it like a mortar', aim: { angle_deg: 45, speed_ms: 20 }, challengeId: 'wall40',
     });
-    expect(screen.getByText('70° · 20 m/s')).toBeTruthy();
-    expect(fake.recorded).toEqual(['lob it like a mortar']);
+    expect(screen.getByText('70°')).toBeTruthy();
   });
 
-  it('with no model (or no answer) the line goes to the avatar', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ command: null, reason: 'no_model' }))));
+  it('choose_challenge puts it up and says how; the lesson shows only after a clear', async () => {
     live();
-    await type('give it some welly');
-    expect(fake.said).toEqual(['give it some welly']);
+    let text = '';
+    await act(async () => { text = await tool('choose_challenge', { challenge: 'moonshot' }); });
+    expect(text).toContain('On the Moon is up');
+    expect(screen.getByRole('heading', { name: 'On the Moon' })).toBeTruthy();
+    expect(fake.states.at(-1)).toContain('Challenge 6 of 6: On the Moon');
+    expect(fake.events).toEqual([]);
   });
 });
 
-describe('the panel: the avatar cannot see it, so it is told what changed', () => {
-  it('a chip puts a challenge up with its intro; a drag-free Fire gets only the landing', () => {
+describe('the student\'s hands: Theo cannot see the screen, so he is told', () => {
+  it('Fire: one event, when it lands, with the range\'s numbers', () => {
     live();
-    fireEvent.click(screen.getByRole('button', { name: 'Into the headwind' }));
-    expect(fake.events).toHaveLength(1);
-    expect(fake.events[0].text).toContain('A new challenge is up: Into the headwind');
-    fireEvent.click(screen.getByRole('button', { name: 'Fire' }));
-    expect(fake.events).toHaveLength(1);
+    fireEvent.click(button('Fire'));
+    expect(fake.events).toEqual([]);
     land();
-    expect(fake.events[1].text).toContain('4.69 m short of the wall');
+    expect(fake.events).toHaveLength(1);
+    expect(fake.events[0].text).toMatch(/^The student pressed Fire on screen\. The shot landed and missed: "You were at 0\.76 m/);
   });
 
-  it('nothing is said to a session that is not on', () => {
+  it('a challenge from the list is told with its setup; dragging or stepping the aim is not', () => {
+    live();
+    fireEvent.click(button('Angle up one degree'));
+    expect(fake.events).toEqual([]);
+    fireEvent.click(button(/Into the headwind/));
+    expect(fake.events).toHaveLength(1);
+    expect(fake.events[0].text).toContain('The student picked "Into the headwind" on screen');
+  });
+
+  it('nothing is said to a call that is not on', () => {
     const view = live();
-    fireEvent.click(screen.getByRole('button', { name: 'Fire' }));
+    fireEvent.click(button('Fire'));
     fake.phase = 'ended';
     view.rerender(<App />);
     land();
     expect(fake.events).toEqual([]);
+  });
+});
+
+describe('the safety net', () => {
+  it('"fire" with no call from Theo: the range fires after 7 s and tells him where it landed', async () => {
+    live();
+    await act(async () => { fake.handlers.onUserSaid!('Fire!', 'spoken'); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(6_900); });
+    expect(screen.getByText(/No shot yet/)).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    expect(screen.getByText('In the air…')).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    expect(fake.events).toHaveLength(1);
+    expect(fake.events[0].text).toMatch(/^You did not call fire, so the app did it.*The shot landed and missed/);
+  });
+
+  it('when Theo calls fire himself, the net stays out of it: one shot', async () => {
+    live();
+    await act(async () => { fake.handlers.onUserSaid!('Fire!', 'spoken'); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); void tool('fire'); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(fake.events).toEqual([]);
+    expect(fake.states.at(-1)).toContain('Shots on this challenge: 1');
+  });
+
+  it('a question about firing is left to Theo', async () => {
+    live();
+    await act(async () => { fake.handlers.onUserSaid!('Should I fire flatter?', 'spoken'); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(screen.getByText(/No shot yet/)).toBeTruthy();
+    expect(fake.events).toEqual([]);
+  });
+});
+
+describe('the logbook', () => {
+  it('opens when the call ends with shots taken, and offers the call again', () => {
+    const view = live();
+    fireEvent.click(button('Fire'));
+    land();
+    fake.phase = 'ended';
+    view.rerender(<App />);
+    expect(screen.getByRole('heading', { name: /0 of 6 cleared/ })).toBeTruthy();
+    expect(screen.getByText('Not cleared yet: 1 shot')).toBeTruthy();
+    fireEvent.click(button('Call Theo again'));
+    expect(fake.starts).toHaveLength(1);
+  });
+
+  it('is a tab away during the call, with each cleared challenge\'s lesson', async () => {
+    live();
+    await act(async () => { void tool('aim', { angle_deg: 45, speed_ms: 24, then_fire: true }); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    fireEvent.click(button(/Logbook/));
+    expect(screen.getByRole('heading', { name: /1 of 6 cleared/ })).toBeTruthy();
+    expect(screen.getByText(/Forty-five degrees maximises range/)).toBeTruthy();
   });
 });

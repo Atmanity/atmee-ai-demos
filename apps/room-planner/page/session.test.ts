@@ -1,108 +1,76 @@
-// The order of things on the API, tested without a browser: a change is
-// applied, the avatar's state replaced, and THEN the event sent; words are
-// judged by the rules before the model; nothing is told to an avatar that is
-// not there yet.
+// The order of things, tested without a browser: a change is applied, the
+// architect's state replaced, and THEN she hears about it (her tool's result,
+// or an event for a change by hand); nothing is told to her before she is
+// there.
 import { describe, expect, test } from 'vitest';
-import type { JudgeContext } from '../engine/judge.ts';
 import type { Intent } from '../engine/types.ts';
-import { HomeSession, type ServerPort } from './session.ts';
+import { HomeSession, type Change, type ServerPort } from './session.ts';
 
-function harness({ live = true, judge = null as Awaited<ReturnType<ServerPort['judge']>>, photo = { intents: [], seen: '' } as Awaited<ReturnType<ServerPort['photo']>> } = {}) {
+function harness({ live = true, photo = { intents: [], seen: '' } as Awaited<ReturnType<ServerPort['photo']>> } = {}) {
   const log: string[] = [];
-  const asked: string[] = [];
-  const refusals: string[] = [];
+  const changes: Change[] = [];
   let isLive = live;
-  const server: ServerPort = {
-    judge: async (text) => { asked.push(text); return judge; },
-    photo: async () => photo,
-  };
   const session = new HomeSession(
     { state: (t) => log.push(`state:${t.slice(0, 40)}`), event: (t) => log.push(`event:${t}`), live: () => isLive },
-    server,
-    ({ refusal }) => { if (refusal) refusals.push(refusal); },
+    { photo: async () => photo },
+    (change) => { changes.push(change); log.push(`change${change.refusal ? ':refused' : ''}${change.drew ? ':drew' : ''}`); },
   );
-  return { session, log, asked, refusals, setLive: (v: boolean) => { isLive = v; } };
+  return { session, log, changes, setLive: (v: boolean) => { isLive = v; } };
 }
 
 const events = (log: string[]) => log.filter((l) => l.startsWith('event:'));
 
-describe('words', () => {
-  test('a command the rules know is applied without asking the model, state first, then the event', async () => {
+describe("the architect's tools", () => {
+  test('a call is applied and shown before its result goes back, and is not told twice', () => {
     const h = harness();
-    const heard = await h.session.words('a two bed with a study', 'spoken');
-    expect(heard).toEqual({ handled: true, refusal: null });
-    expect(h.asked).toEqual([]);
+    const result = h.session.tool('lay_out_floor', { bedrooms: 2, study: true });
+    expect(result).toMatch(/^Done: the ground floor is laid out/);
+    expect(h.log).toEqual(['state:Planwright, live plan (what the client s', 'change']);
+    expect(events(h.log)).toEqual([]);   // the result is her answer; no event repeats it
     expect(h.session.snapshot().level.rooms.length).toBeGreaterThan(4);
-    const last = h.log.slice(-2);
-    expect(last[0]).toMatch(/^state:Home planner, live plan/);
-    expect(last[1]).toMatch(/^event:The app has made the change the client asked for: the ground floor is laid out/);
   });
 
-  test('what the rules cannot read goes to the model, and its intents are applied', async () => {
-    const h = harness({ judge: { intents: [{ kind: 'generate', bedrooms: 3 }], ask: null } });
-    await h.session.words('we are a family of five, mostly working from home', 'spoken');
-    expect(h.asked).toEqual(['we are a family of five, mostly working from home']);
-    expect([...h.session.planner.home.level.rooms.values()].filter((r) => r.kind.startsWith('bedroom')).length).toBe(3);
-  });
-
-  test('chat is not an action: a typed line goes to the avatar as it is', async () => {
-    const h = harness({ judge: { intents: [], ask: null } });
-    expect(await h.session.words('That looks lovely', 'typed')).toEqual({ handled: false, refusal: null });
-    expect(events(h.log)).toEqual([]);
-  });
-
-  test('without a model the rules still work, and the rest is left to the avatar', async () => {
-    const h = harness({ judge: null });
-    expect((await h.session.words('undo', 'typed')).handled).toBe(true);   // refused: nothing to undo
-    expect((await h.session.words('what do you think of the hall', 'typed')).handled).toBe(false);
-  });
-
-  test('a refusal is told as a refusal and shown on the plan', async () => {
+  test('a refusal goes back as the reason, and is shown on the plan too', () => {
     const h = harness();
-    const heard = await h.session.words('undo', 'spoken');
-    expect(heard).toEqual({ handled: true, refusal: "There's nothing to undo yet." });
-    expect(h.refusals).toEqual(["There's nothing to undo yet."]);
-    expect(events(h.log)[0]).toContain('do NOT describe it as done');
+    expect(h.session.tool('undo_change')).toContain("There's nothing to undo yet.");
+    expect(h.changes[0].refusal).toBe("There's nothing to undo yet.");
   });
 
-  test('a request the model could not pin down becomes a question', async () => {
-    const h = harness({ judge: { intents: [], ask: 'Which bedroom, the main one or the second?' } });
-    await h.session.words('make the bedroom bigger', 'spoken');
-    expect(events(h.log)).toEqual(['event:The client asked for a change, but the app could not tell exactly what. Ask them this, in your own words, in one short line: Which bedroom, the main one or the second?']);
+  test('the sheet drawn by the architect opens on the page', () => {
+    const h = harness();
+    h.session.tool('lay_out_floor', { bedrooms: 1 });
+    h.session.tool('draw_sheet');
+    expect(h.changes[h.changes.length - 1]).toMatchObject({ drew: true, refusal: null });
+    expect(h.changes[h.changes.length - 1].snapshot.sheet?.status).toBe('ready');
   });
 
-  test('utterances are handled one at a time, in the order they were said', async () => {
-    let release: () => void = () => {};
-    const gate = new Promise<void>((r) => { release = r; });
-    const order: string[] = [];
-    const server: ServerPort = {
-      judge: async (text) => { await gate; order.push(text); return { intents: [{ kind: 'set_unit', unit: 'ft2' } as Intent], ask: null }; },
-      photo: async () => ({ error: 'none' }),
-    };
-    const session = new HomeSession({ state: () => {}, event: () => {}, live: () => true }, server, () => {});
-    const first = session.words('first thing', 'spoken');
-    const second = session.words('second thing', 'spoken');
-    release();
-    await Promise.all([first, second]);
-    expect(order).toEqual(['first thing', 'second thing']);
+  test('a question back changes nothing on the plan', () => {
+    const h = harness();
+    const before = JSON.stringify(h.session.snapshot().level);
+    expect(h.session.tool('trade_area', { take_from: 'hall', give_to: 'kitchen' })).toMatch(/^Not done yet, nothing changed/);
+    expect(JSON.stringify(h.session.snapshot().level)).toBe(before);
+  });
+
+  test('the opening asks for the size and the bedrooms on an empty floor', () => {
+    expect(harness().session.opening()).toContain('roughly how big the place is');
   });
 });
 
-describe('the panel', () => {
-  test('a small edit by hand updates the state and is not narrated', () => {
+describe('changes by hand', () => {
+  test('a small edit updates the state and is not narrated', () => {
     const h = harness();
     h.session.panel({ kind: 'generate', bedrooms: 1 });
     const before = events(h.log).length;
     const living = [...h.session.planner.home.level.rooms.values()].find((r) => r.kind === 'living')!;
     h.session.panel({ kind: 'select', id: living.id });
-    expect(h.log[h.log.length - 1]).toMatch(/^state:/);
+    expect(h.log[h.log.length - 2]).toMatch(/^state:/);
     expect(events(h.log).length).toBe(before);
   });
 
-  test('a milestone by hand is told, since the avatar cannot see the click', () => {
+  test('a milestone is told, since the architect cannot see the click', () => {
     const h = harness();
     h.session.panel({ kind: 'generate', bedrooms: 1 });
-    expect(events(h.log)[0]).toMatch(/^event:The client used the panel: the ground floor is laid out/);
+    expect(events(h.log)[0]).toMatch(/^event:The client changed the plan by hand: the ground floor is laid out/);
   });
 
   test('a refused click is shown, not spoken', () => {
@@ -111,17 +79,24 @@ describe('the panel', () => {
     expect(events(h.log)).toEqual([]);
   });
 
-  test('nothing is told to an avatar that is not there yet; the state still waits for it', () => {
+  test('nothing is told to an architect who is not there yet; the state still waits for her', () => {
     const h = harness({ live: false });
     h.session.panel({ kind: 'generate', bedrooms: 2 });
     expect(events(h.log)).toEqual([]);
     expect(h.log.some((l) => l.startsWith('state:'))).toBe(true);
   });
+
+  test('the sheet drawn by hand opens too', () => {
+    const h = harness();
+    h.session.panel({ kind: 'generate', bedrooms: 1 });
+    h.session.panel({ kind: 'draw_sheet' });
+    expect(h.changes[h.changes.length - 1].drew).toBe(true);
+  });
 });
 
 describe('photos', () => {
   test('pieces read from a photo are placed by the planner and told by what went in', async () => {
-    const h = harness({ photo: { intents: [{ kind: 'add_item', type: 'sofa_3', room: null, near: 'center' }, { kind: 'add_item', type: 'piano', room: null, near: 'center' }], seen: 'a living room' } });
+    const h = harness({ photo: { intents: [{ kind: 'add_item', type: 'sofa_3', room: null, near: 'center' }, { kind: 'add_item', type: 'piano', room: null, near: 'center' }] as Intent[], seen: 'a living room' } });
     h.session.panel({ kind: 'generate', bedrooms: 1 });
     const result = await h.session.photo('room', { sample: 'room' });
     expect(result).toEqual({ added: ['a 3-seat sofa in the living room'], refused: [expect.stringContaining('a piano')], seen: 'a living room' });
@@ -133,5 +108,3 @@ describe('photos', () => {
     expect(await h.session.photo('piece', { sample: 'room' })).toEqual({ error: 'no model' });
   });
 });
-
-void ({} as JudgeContext);

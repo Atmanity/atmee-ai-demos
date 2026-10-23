@@ -125,6 +125,27 @@ describe('the reducer', () => {
     }
     expect(JSON.stringify(p.snapshot().level)).toBe(before);
   });
+
+  test('a brief with the size of the place is one step, even when the floor shrinks', () => {
+    // Resizing first as its own step refused any shrink ("it would cut into
+    // the kitchen") and the layout then went ahead at the old size.
+    const p = new Planner(1200, 900);
+    applied(p.apply({ kind: 'generate', bedrooms: 3 }));
+    const done = applied(p.apply({ kind: 'generate', bedrooms: 1, w: 700, h: 600 })).done;
+    expect(done.size).toEqual({ w_cm: 700, h_cm: 600 });
+    expect([p.home.level.w_cm, p.home.level.h_cm]).toEqual([700, 600]);
+    applied(p.apply({ kind: 'undo' }));
+    expect([p.home.level.w_cm, p.home.level.h_cm]).toEqual([1200, 900]);
+    expect([...p.home.level.rooms.values()].filter((r) => r.kind.startsWith('bedroom')).length).toBe(3);
+  });
+
+  test('a brief at a size that cannot hold it is refused and leaves the plan as it was', () => {
+    const p = new Planner();
+    applied(p.apply({ kind: 'generate', bedrooms: 2 }));
+    const before = JSON.stringify(p.snapshot().level);
+    refused(p.apply({ kind: 'generate', bedrooms: 5, office: true, dining: true, w: 300, h: 300 }));
+    expect(JSON.stringify(p.snapshot().level)).toBe(before);
+  });
 });
 
 describe('schemes', () => {

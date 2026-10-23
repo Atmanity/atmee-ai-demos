@@ -79,11 +79,12 @@ export type Intent =
   | { kind: 'reset' };
 
 /**
- * Who asked. It decides what the avatar is told afterwards: it can see neither
- * the panel nor a line the app kept for itself, but it has already started
- * answering anything the student SAID.
+ * Who asked: the student's hands on the screen (the arrow, the steppers, Fire,
+ * the challenge list), the host through one of its tools, or the range itself
+ * (only the landing). It decides who tells the host what happened: a tool's
+ * result does for the host's own calls; the screen's are told as events.
  */
-export type Source = 'panel' | 'typed' | 'spoken' | 'range';
+export type Source = 'panel' | 'host' | 'range';
 
 export type Result =
   | { applied: true; seq: number; snapshot: RangeSnapshot }
@@ -98,7 +99,7 @@ export interface Change {
   previous: RangeSnapshot;
 }
 
-/** What a line of words asks the range to do (judge.ts). */
+/** What a line of words asks the range to do (judge.ts): the aim tool's words, and the safety net's phrases. */
 export type Command =
   | { kind: 'fire' }
   | { kind: 'aim'; angle_deg?: number; speed_ms?: number; thenFire?: boolean }

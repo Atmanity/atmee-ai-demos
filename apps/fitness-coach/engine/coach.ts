@@ -3,9 +3,9 @@
 // The original ran five LiveKit AgentTasks in a TaskGroup (ask the goal, ask
 // the level, await the plan, ask the starting move, coach the move), with the
 // recording tools as the only writers and a ConstraintSensing mixin reading
-// every user message. The Avatar API has no function calling, so the avatar
-// cannot record anything: this class does, from a tap, a typed line or the
-// user's speech (judged by `judge.ts`), and tells the avatar what happened.
+// every user message. Here this class is the one writer: the host's tool
+// calls (`engine/actions.ts`) and the user's taps reach it, and it says what
+// happened in words the host speaks from.
 //
 // It keeps the original's hard-won guarantees:
 // - a heard constraint is an enforced constraint: every plan that reaches the
@@ -16,11 +16,11 @@
 //   advances afterwards, and the hold is re-checked after every await, because
 //   the guard before an await cannot see a disclosure that lands during it.
 import * as cons from './constraints.ts';
-import { ackClause, builtAround, say } from './director.ts';
+import { builtAround, say } from './director.ts';
 import { GOAL_COUNT, GOAL_SEED, goalOptions, TRAINING_GOAL_OPTIONS } from './goals.ts';
 import { acceptGoal, baseMoveName, buildFallbackPlan, buildStartMovePrompt, findStep, normalizeLevel, rebuildSummaryLine } from './plan.ts';
 import { FitnessState } from './state.ts';
-import type { AvatarEvent, Command, FitnessPlan, How, Intent, Level, Outcome, Stage, VideoPayload, View } from './types.ts';
+import type { AvatarEvent, Command, FitnessPlan, Intent, Level, Outcome, Stage, VideoPayload, View } from './types.ts';
 
 /** Renders demo clips (engine/video.ts), seen from the coach. */
 export interface Renderer {
@@ -40,7 +40,7 @@ export interface CoachOptions {
   seed?: string;
 }
 
-/** What one typed or spoken line means to the app (see judge.ts). */
+/** What one input means to the coach: the limits it carries, and what it asks for. */
 export interface Judgement {
   constraints: cons.Constraints;
   intent: Intent | null;
@@ -48,15 +48,9 @@ export interface Judgement {
   level?: Level | null;
 }
 
-export interface JudgeContext {
-  stage: Stage;
-  plan: FitnessPlan | null;
-  goal: string;
-  level: string;
-}
-
-const HOLD_REFUSAL = 'The session is on hold until a doctor or qualified health professional clears you.';
-const NO_DEMOS = 'Video demos are not switched on for this session.';
+/** Shown on the board, so in the product's words. */
+export const HOLD_REFUSAL = 'Your workout is paused until a doctor or qualified health professional clears you.';
+const NO_DEMOS = 'Move videos are not available right now.';
 
 const warn = (message: string, ...args: unknown[]) => console.warn(`[fitness-coach] ${message}`, ...args);
 
@@ -111,10 +105,6 @@ export class Coach {
     if (!this.board.goal) return 'goal';
     if (!this.board.plan) return this.board.level ? 'planning' : 'level';
     return this.board.startMove ? 'coach' : 'move';
-  }
-
-  context(): JudgeContext {
-    return { stage: this.stage(), plan: this.board.plan, goal: this.board.goal, level: this.board.level };
   }
 
   view(): View {
@@ -191,33 +181,34 @@ export class Coach {
         const chosen = acceptGoal(value);
         if (!chosen) return refuse('That is not a workout goal.');
         if (plan || this.planning) return refuse('Start over to change what you train.');
-        return this.out(this.act({ kind: 'goal', goal: chosen }, 'tap'));
+        return this.out(this.act({ kind: 'goal', goal: chosen }));
       }
       case 'level':
       case 'relevel': {
         const level = normalizeLevel(value);
         if (!level) return refuse('That is not a level.');
         if (!goal) return refuse('Choose what to train first.');
-        return this.out(this.act(plan || this.planning ? { kind: 'relevel', level } : { kind: 'level', level }, 'tap'));
+        return this.out(this.act(plan || this.planning ? { kind: 'relevel', level } : { kind: 'level', level }));
       }
       case 'move': {
         if (!plan) return refuse('There is no plan yet.');
         const step = findStep(plan, baseMoveName(value));
         if (!step) return refuse('That move is not on the plan any more.');
-        return this.out(this.act({ kind: 'move', move: baseMoveName(step) }, 'tap'));
+        return this.out(this.act({ kind: 'move', move: baseMoveName(step) }));
       }
       case 'restart':
-        return this.out(this.act({ kind: 'restart' }, 'tap'));
+        return this.out(this.act({ kind: 'restart' }));
       default:
         return refuse('Unknown action.');
     }
   }
 
   /**
-   * A typed or spoken line, already judged. Constraints first (the original
-   * read them on every user message, before anything else), then the intent.
+   * An input from the host's tools (or the page's own safety check): the
+   * limits it carries first (the original read them on every user message,
+   * before anything else), then what it asks for.
    */
-  hear(judgement: Judgement, how: Exclude<How, 'tap'>): Outcome {
+  hear(judgement: Judgement): Outcome {
     const board = this.board;
     if (judgement.level && !board.level && !board.overheardLevel) board.overheardLevel = judgement.level;
 
@@ -228,62 +219,48 @@ export class Coach {
       if (fresh.length) {
         this.clearanceSaid.push(...fresh);
         this.freeze();
-        // Never staged: the avatar's own reply to the disclosure may already
-        // have gone wrong ("please name a warm-up move"), so the exact words
-        // follow even after a spoken line.
+        // The host's own reply to the disclosure may already have gone wrong
+        // ("please name a warm-up move"), so the exact words always follow.
         return this.out([{ text: say.clearance(fresh), ttl: 60 }], true);
       }
     }
     if (this.halted) {
-      if (judgement.intent) return this.out([{ text: say.onHold(judgement.intent), ttl: 20, staged: true }], true);
+      if (judgement.intent) return this.out([{ text: say.onHold(judgement.intent), ttl: 20 }], true);
       return this.out([], false);
     }
 
     const events: AvatarEvent[] = [];
-    let labels: string[] = [];
     if (changed) {
-      labels = cons.newConstraintLabels(before, board.constraints).filter((l) => !this.acknowledged.includes(l));
+      const labels = cons.newConstraintLabels(before, board.constraints).filter((l) => !this.acknowledged.includes(l));
       this.acknowledged.push(...labels);
       // No plan yet: the limits go into the plan prompt. A plan being built:
       // it is enforced against the limits as they stand when it lands.
       if (board.plan && !this.planning) events.push(...this.scheduleRebuild());
     }
-    // Nothing for the app to do: the avatar answers the line itself (its
-    // notes tell it to acknowledge a limit in a few words).
+    // Only limits: the caller says what they changed (the acknowledgement is its to word).
     if (!judgement.intent) return this.out(events, false);
 
-    const done = this.act(judgement.intent, how);
-    // An intent with nothing to do at this step: the avatar answers the line.
+    const done = this.act(judgement.intent);
+    // An intent with nothing to do at this step.
     if (!done.length) return this.out(events, false);
-    // A typed line the app handles is not seen by the avatar, so the event
-    // carries the acknowledgement. After speech the avatar has already given it.
-    if (how === 'typed' && labels.length && done.length) {
-      done[0] = { ...done[0], text: done[0].text + ackClause(labels, this.rebuildPending) };
-    }
     return this.out([...done, ...events], true);
   }
 
   // -- the steps ------------------------------------------------------------
 
-  private act(intent: Intent, how: How): AvatarEvent[] {
+  private act(intent: Intent): AvatarEvent[] {
     const plan = this.board.plan;
     switch (intent.kind) {
       case 'goal': return this.chooseGoal(intent.goal, intent.level ?? null);
       case 'level': return this.chooseLevel(intent.level);
       case 'relevel': return this.relevel(intent.level);
       case 'move': return this.chooseMove(intent.move);
-      case 'demo': {
-        if (!plan) return [{ text: say.noPlanYet(), ttl: 20 }];
-        // "Show me a demo" while coaching a move means that move.
-        const move = intent.move ?? (this.board.startMove || null);
-        return move ? this.chooseMove(move, true) : [{ text: say.askWhichMove(plan), ttl: 20, staged: true }];
-      }
       case 'unknownMove':
-        return plan ? [{ text: say.notOnPlan(intent.heard, plan), ttl: 20, staged: true }] : [{ text: say.noPlanYet(), ttl: 20 }];
+        return plan ? [{ text: say.notOnPlan(intent.heard, plan), ttl: 20 }] : [{ text: say.noPlanYet(), ttl: 20 }];
       case 'restart': return this.restart();
       default: {
         const unknown: never = intent;
-        warn('unknown intent %o (%s)', unknown, how);
+        warn('unknown intent %o', unknown);
         return [];
       }
     }
@@ -293,8 +270,6 @@ export class Coach {
     const stage = this.stage();
     // Once a plan exists or is being built, only "start over" changes the goal.
     if (stage !== 'goal' && stage !== 'level') return [];
-    // Pre-staged at the goal step; a change of mind at the level step is not.
-    const staged = stage === 'goal';
     this.board.noteGoal(goal);
     // A level already said is an ANSWER: "core and cardio, I'm a beginner"
     // recorded the goal and then asked the one thing the person had just
@@ -302,9 +277,9 @@ export class Coach {
     const known = level ?? normalizeLevel(this.board.overheardLevel);
     if (known) {
       this.board.noteLevel(known);
-      return [{ text: say.goalAndLevel(goal, known), ttl: 30, staged }, ...this.startPlan('first')];
+      return [{ text: say.goalAndLevel(goal, known), ttl: 30 }, ...this.startPlan('first')];
     }
-    return [{ text: say.goal(goal), ttl: 30, staged }];
+    return [{ text: say.goal(goal), ttl: 30 }];
   }
 
   private chooseLevel(level: Level): AvatarEvent[] {
@@ -313,11 +288,11 @@ export class Coach {
       // A bare level is the common derail when asked what to train; a plan
       // for "beginner beginner" is worse than asking again.
       this.board.overheardLevel = level;
-      return [{ text: say.levelOnly(level), ttl: 20, staged: true }];
+      return [{ text: say.levelOnly(level), ttl: 20 }];
     }
     if (stage === 'level') {
       this.board.noteLevel(level);
-      return [{ text: say.level(this.board.goal, level), ttl: 30, staged: true }, ...this.startPlan('first')];
+      return [{ text: say.level(this.board.goal, level), ttl: 30 }, ...this.startPlan('first')];
     }
     return this.relevel(level);
   }
@@ -332,15 +307,15 @@ export class Coach {
       this.board.noteLevel(level);
       return [{ text: say.level(this.board.goal, level), ttl: 30 }, ...this.startPlan('first')];
     }
-    return [{ text: say.relevel(level), ttl: 30, staged: true }, ...this.startPlan('relevel')];
+    return [{ text: say.relevel(level), ttl: 30 }, ...this.startPlan('relevel')];
   }
 
-  /** The starting move, or another move later. `askedForDemo`: the user asked for a clip by name. */
-  private chooseMove(move: string, askedForDemo = false): AvatarEvent[] {
+  /** The starting move, or another move later. */
+  private chooseMove(move: string): AvatarEvent[] {
     const plan = this.board.plan;
     if (!plan) return [{ text: say.noPlanYet(), ttl: 20 }];
     const step = findStep(plan, move);
-    if (!step) return [{ text: say.notOnPlan(move, plan), ttl: 20, staged: true }];
+    if (!step) return [{ text: say.notOnPlan(move, plan), ttl: 20 }];
     const name = baseMoveName(step);
     const firstPick = this.stage() === 'move';
     const { video } = this.board;
@@ -351,11 +326,11 @@ export class Coach {
     if (this.renderer?.available()) {
       // Started at once, so the render has a head start on the avatar's words.
       this.board.video = this.renderer.start({ prompt: buildStartMovePrompt(name, this.board.goal, this.board.level, this.opts.hasReference) });
-      return [{ text: say.moveRendering(name), ttl: 30, staged: true }];
+      return [{ text: say.moveRendering(name), ttl: 30 }];
     }
-    // No key: said plainly, never a spinner that does not resolve.
+    // No key: coached in words, never a spinner that does not resolve.
     this.board.video = { status: 'unavailable', request_id: '', prompt: '', message: NO_DEMOS };
-    return [{ text: firstPick || askedForDemo ? say.moveNoDemo(name) : say.switchMove(name), ttl: 30, staged: true }];
+    return [{ text: firstPick ? say.moveNoDemo(name) : say.switchMove(name), ttl: 30 }];
   }
 
   private restart(): AvatarEvent[] {

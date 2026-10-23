@@ -1,163 +1,88 @@
-# Fitness Coach
+# Spotter
 
-Tell a coach what you want to train and your level (say it, type it or tap
-it) and get a plan on screen built around your limits (time, equipment,
-injuries), enforced in code, plus a walk-through of the move you start with,
-and a rendered demo clip when a video key is configured. Mention a condition
-no exercise swap makes safe (pregnancy, a cardiac history, recent surgery…)
-and the session stops.
+A workout built around you, coached by Sammy. Tell her what you want to train,
+your level and anything to work around (twenty minutes, no kit, a sore knee):
+Spotter builds the plan, enforces every limit in code, and Sammy coaches your
+first move. Mention a condition no exercise swap makes safe (pregnancy, a
+cardiac history, recent surgery…) and Spotter pauses the workout at once and
+sends you to your doctor first. Rebuilt from the `fitness-coach` mini-app as a
+standalone product on the Avatar API.
 
-Ported from `Atmanity/apps/apps/fitness-coach` (a Python LiveKit agent: five
-AgentTasks, five tools, a regex constraint engine, a clearance hold and an xAI
-demo pipeline, plus a React panel) onto the Avatar API, following
-`docs/PORTING.md`.
-
-## Using it
-
-1. **Start the session.** The coach greets you; the board asks *What do you
-   want to train?* with six goals to tap.
-2. **Goal, then level**: tap, type or say them ("core and cardio, I'm a
-   beginner" does both at once). The plan appears a few seconds later: title,
-   minutes, warm-up, workout, form cues.
-3. **Starting move**: tap a move (*Start here*) or say it ("the plank", "the
-   first warm-up move"). With demos on, a clip renders on the stage (a minute
-   or two); with demos off, the coach talks you through it.
-4. **Any time**: say or type a limit ("only 20 minutes", "no equipment",
-   "bad knee", "no lunges", "torn ACL"). It shows as a chip and the plan is
-   rebuilt in code; the coach says what changed. Tap any move for its demo,
-   *Rebuild as* another level, or *Start over* (your limits are kept).
+Open it at `/apps/fitness-coach/`.
 
 | Env | Needed for | Without it |
 |---|---|---|
-| `GEMINI_API_KEY` | the plan (`structured()` with the original plan prompt), and judging a goal or level said in free form | the original's built-in plan (enforced the same way); goals and levels by rules only |
-| `XAI_API_KEY` (optional) | demo clips (`grok-imagine-video`) | the board and the coach say plainly that demos are off; nothing is called |
+| `GEMINI_API_KEY` | the plan (`structured()` with the original plan prompt) | the built-in plan, enforced the same way |
+| `XAI_API_KEY` (optional) | move videos (`grok-imagine-video`, 1 to 3 minutes each) | moves are coached in words; the screen never offers a video |
 | `XAI_VIDEO_MODEL` (optional) | another xAI video model | `grok-imagine-video` |
 | `FITNESS_VIDEO_REFERENCE_IMAGE_URLS` (optional) | reference images for the trainer's look, comma-separated public URLs | a generic trainer |
 
-## How it works on the API
+## How it works
 
-The engine runs on the server (`server.ts` + `engine/`): the plan and the demo
-come from paid APIs whose keys stay there, and the board needs one writer that
-re-checks the safety hold after every await (a disclosure can land while the
-plan model is thinking). The page draws the server's view and relays outcomes
-to the avatar.
-
-| Feature | Mechanism |
+| Part | Where |
 |---|---|
-| The guided flow: goal → level → plan → starting move → coaching (the original's five AgentTasks) | `engine/coach.ts`: the app's own step machine, the one writer of the board. No conductor: a per-turn conductor would be a second decider that can disagree with it |
-| Recording a goal, level, move; a re-level; a demo of another move; start over (the original's tools) | buttons (`command`), typed lines and speech through `engine/judge.ts`: rules first; Gemini `structured()` only for a goal or level said in free form |
-| The plan | Gemini with the original `PLAN_SYSTEM_PROMPT` and the limits in the prompt, then `enforce()` in code on every path (model, rebuild, built-in plan, model timeout) |
-| Limits (time, equipment, injuries, banned moves) | `engine/constraints.ts`, the original regex engine, read from every typed and spoken line; chips on the board; an existing plan is rebuilt (a limit heard mid-rebuild gets its own pass) and the diff is sent as an event |
-| The clearance hold | parsed on every line; the server freezes the flow (no plan, rebuild, render or tap advances; an in-flight render is stopped); the exact sentence goes to the avatar as an event and is shown on the board's hold card; the state and a standing note forbid coaching |
-| The demo clip | `engine/video.ts`: xAI generate → poll → download, kept by this server and played from `/api/apps/fitness-coach/clips/:token` (the page never sees the provider URL). No key: "demos are off" from the start |
-| What is on the screen (the original's `[Panel]` and `[Plan constraints]` notes) | `state` (`director.ts` `boardState`): the plan, the limits and whether the plan already obeys them, the demo status, the step, and what to say if the user does the predictable next thing |
-| Outcomes (plan ready, rebuilt, demo ready or failed, choices tapped) | `event`s. Each is marked `staged` when the state already told the avatar what to say for it; after speech those are not sent again |
-| Background work (a plan landing, a rebuild, a render finishing) | a server-sent event stream per session, carrying the same outcomes |
-| The coach's style and the stop rule | three standing `note`s, condensed from the original instructions |
-| The persona the original assumed ("Sammy") | `avatar.json` |
+| The session: goal → level → plan → first move → coaching, with the safety pause over all of it | `engine/coach.ts`, on the server: the one writer of the screen, which re-checks the pause after every await (a disclosure can land while the plan model is thinking). |
+| Limits (time, equipment, injuries, banned moves) and the pause conditions | `engine/constraints.ts`, the original regex engine: parsed from the user's words, put in the plan prompt, then enforced in code on every plan (model, rebuild, built-in, timeout). |
+| Sammy's actions | Six `await` tools (`engine/director.ts`): `set_goal(goal, level?)`, `set_level(level)` (also "easier"/"harder"), `add_limits(words)`, `start_move(move)`, `start_over`, `stop_for_safety(condition)`. The page answers each `atmee.tool` call by asking the server (`engine/actions.ts`), which acts and returns the words Sammy speaks from. |
+| Waiting for the plan | A tool that builds or rebuilds a plan waits for it (up to 13 s, inside a 20 s tool timeout), so Sammy's first reply is the plan on the screen, or exactly what a limit changed ("That takes walking lunges and high knees out of your workout"). Past that, the result says it is still coming and the landing follows as an event. |
+| The safety pause | Twice. The page reads every finished line (spoken or typed) itself: a condition freezes the screen at once and the server's plan with it (`/hold`). Sammy's `stop_for_safety` is the second path and returns the exact sentence to say; if she has not called it 4 s later, the page does and gives her the words. After that every tool and tap is refused and the screen shows no exercise. |
+| What Sammy sees | `state` (`boardState`): the plan, the limits and whether the plan already obeys them, the move video's status, the step. Never the render prompt or a clip address. Questions about the screen are answered from it without a tool. |
+| Buttons | Goal and level tiles, every plan move, "Rebuild as" a level, "Start over": they act at once and Sammy is told by an event (she cannot see the screen). |
+| The safety net | `useToolNet` (kit): when the user clearly says "start over", or gives a limit, and Sammy does not call the tool within 7 s, the page does it and tells her. Goals, levels and moves are left out ("harder" twice is two levels). |
+| Background work | A plan landing late, a rebuild, a move video finishing: the server's event stream (`/stream`), as an event for Sammy and a new screen. While a tool is waiting it claims those words, so nothing is said twice. |
+| The screens | A front door (`page/Lobby.tsx`); the call: Sammy's frame, a step track, and one panel per step (goal tiles, levels, the plan being built, the plan sheet, "Now" coaching a move, the pause), with the plan to save as a text file when the call ends (`page/Workout.tsx`), styled in `page/spotter.css`. |
+| The host the product was designed for | `avatar.json` (Sammy). |
 
 ## What the API could not do
 
-Status after the live run of 2026-10-23 (below): **seen** = observed live,
-**expected** = not yet observed.
+Status before the live run of the rebuilt product. **Seen**: observed live.
+**Expected**: not observed yet.
 
-1. **The avatar's own reply to a safety disclosure cannot be gated.**
-   *Safety-critical; held in one run, said twice.* The original spoke a fixed sentence
-   from code ("I have to stop us there… check with your doctor…") and gave
-   the model no turn at all, because the model, merely instructed, said "Thank
-   you for sharing. Please name a warm-up move." Through the API the avatar
-   hears "I'm 7 months pregnant" and answers at once, before the app has
-   parsed it. What the app does: a standing note with the stop rule (the
-   avatar's only guidance for that first reply), then an event with the exact
-   sentence (said in its own words, possibly after a wrong first reply, so it
-   may be heard twice), the hold card on the board in the same words, the
-   state forbidding any exercise from then on, and every tap refused. None of
-   this is a gate; the avatar's immediate reply can still coach. Live, the
-   standing note was enough: "I'm seven months pregnant" got "I actually have
-   to stop us right there. I'm not able to program or coach a workout around
-   pregnancy…" as the avatar's own first reply, then the event said it again.
-2. **Nothing can gate the avatar after a hold.** *Held in one run*: "Can we
-   just do the plank anyway?" got "I can't really do that… check in with your
-   doctor first". The
-   original raised `StopResponse` in every tool. Here the app freezes the
-   board, but the avatar can still name exercises if asked; only the state and
-   the notes ask it not to. Muting it would also deafen the app (API-GAPS 2),
-   so it is not used.
-3. **Exact words cannot be forced.** *Seen*: "my left knee is bad" got the
-   platform's filler "Man, that's rough," and then "I've got your knee taken
-   care of with this routine", said while the plan was still being rebuilt.
-   The event then named the swap ("moves like supported box squats"). The original said
-   its acknowledgements ("Noted on your knee — I'm rebuilding the plan around
-   it now."), the rebuild diff ("That takes lunges and squats out of your
-   workout…"), the plan-ready and demo notices word for word, at the right
-   moment. They are events now: paraphrased, spoken once nobody has the floor
-   (after the avatar's own reply), dropped after their ttl.
-4. **A spoken choice is answered before the app records it.** *Expected* (live,
-   goal, level and the first move were each recorded as the avatar said). "Glutes", "beginner", "the plank": the avatar replies from the
-   state's staged lines while the app judges the same words. If the two read
-   them differently (the app hears no goal, the avatar thinks it did), the
-   avatar can ask "what level?" over a board still asking for the goal. The
-   original's tool calls made recording and replying one act.
-5. **The persona belongs to the avatar.** *Seen* ("I'm Emily, a
-   twenty-one-year-old college student…", then "I'll be your coach for
-   today"). The shared test
-   avatar greets as itself before the app's opening; the coach the original
-   assumed (`avatar.json`) needs a dedicated avatar, and a strongly
-   characterised avatar may refuse to coach at all (API-GAPS 4).
-6. **No per-session speech hints.** *Expected* (every move was heard right). The original biased
-   Deepgram toward exercise words (burpees, HIIT, glutes, kettlebell…). A
-   misheard move is a demo of the wrong exercise; the judge's word matching
-   absorbs some of it.
-7. **The ~10 s check-in.** *Seen* ("Whenever you're ready, lie on your stomach
-   and gently squeeze your glutes…"). The original deliberately had
-   no idle nudge (someone mid-set should not be prodded); the API's check-in
-   cannot be turned off.
+1. **The host's own reply to a disclosure cannot be gated.** *Expected.*
+   Safety-critical. Sammy is told to call `stop_for_safety` before saying
+   anything else, and the screen pauses by itself whatever she says; but her
+   first reply is still hers, and a model that ignores the rule could coach
+   for a sentence. If she does not call the tool, the page gives her the words
+   4 s later. (In the first port, without tools, the standing note held: "I
+   actually have to stop us right there…".)
+2. **Nothing gates the host after the pause.** *Expected.* Every tool refuses
+   and the screen shows no exercise, but she could still name one if asked;
+   only her instructions and the state forbid it. Muting her would also deafen
+   the page (API-GAPS 2).
+3. **Tools are called when the host decides.** *Expected.* She may narrate
+   "I've rebuilt it around your knee" without calling `add_limits`; the safety
+   net does it 7 s later and she corrects herself. A goal, level or move she
+   narrates without the call is not netted: the screen does not move until she
+   calls it or the user taps.
+4. **Exact words cannot be forced.** *Expected.* The stop sentence comes back
+   in her own words; the screen shows the exact wording.
+5. **A slow plan is silence.** *Expected.* While a tool waits (up to 13 s) she
+   says at most one filler line.
+6. **Tools need a Causeur session.** *Expected.* On a behaviour-module avatar
+   the tools are ignored: the buttons, the page's own pause and the safety net
+   still work.
+7. **The persona belongs to the avatar.** *Seen in the first port* ("I'm Emily,
+   a twenty-one-year-old college student…"). `avatar.json` is the coach the
+   product was designed for.
+8. **No speech hints** for exercise words (burpees, glutes, kettlebell).
+   *Expected.* `start_move` matches moves by whole words and position.
+9. **The ~10 s check-in** prods someone mid-set. *Seen in the first port.*
 
-Not API gaps, but limits of this sample: clips are kept in memory (lost on a
-restart; a real app stores them), and engine sessions live in memory for three
-hours.
-
-## What changed from the original, and why
-
-- **Gone with the platform:** the five AgentTasks and their latches, the
-  speech-scheduling workarounds and the `DemoNarrator` (held, claimed and
-  re-armed notices across task handovers), the panel RPCs, `app.state_sync`,
-  the wire envelopes, the rotating spoken-line pools (their tone lives on as
-  examples in the events), the STT keyterms, and the long-term memory.
-- **New controls**, because the avatar cannot record anything: every plan move
-  is a button (the original had no move tap), *Rebuild as* and *Start over*.
-- **Small fixes found while porting**, each tested: durations said in words
-  ("twenty minutes"); a limit heard while the first plan is being built still
-  binds it; a demo of a move a rebuild removed is taken off the screen; a move
-  name is matched by whole words, so "go" no longer matches "good mornings".
+Fixed by tools, compared with the first port: a spoken choice is no longer
+answered before it is recorded (the race the first port's gap 4 described),
+the "staged answers" in the state are gone, and the plan announcement is one
+reply instead of "I'm building it" followed by an event.
 
 ## Tested
 
-- `npx vitest run apps/fitness-coach`: 362 tests, about 270 ported and 90 new. Ported from the original:
-  the constraint engine (`test_constraints_reach_the_plan.py`, the parse cases
-  of `test_clearance_stops_the_session.py` and `test_the_injury_is_acknowledged.py`),
-  the plan and move resolution (`test_plan.py`), the video pipeline
-  (`test_video.py`, without the narrator), the logic of the clearance, re-level,
-  compound-answer and note-truth tests, and the panel's `board.test.ts` and
-  `parsers.test.ts`. New: the judge with real phrasings, the director (limits,
-  staging, nothing invites coaching under a hold), the step machine and its
-  stream, and a jsdom render of the board's controls.
-- Live: one run on staging (Gemini key, no xAI key), below.
-
-### Live run (staging, avatar `baf61f2c`, 2026-10-23)
-
-Spoken lines through `tools/live-test/harness.js`:
-
-- "I want to work on my glutes." → level cards; the avatar asked the level.
-- "Beginner, please." → "putting together your glutes plan right now", then
-  "Your plan is ready on your screen!"
-- "Oh, and my left knee is bad." → "Working around: knee", squats and lunges
-  gone, the swap named by event (gap 3).
-- "Let's start with the first warm-up move." → prone glute squeezes, talked
-  through since demo videos are off.
-- "Can you make it harder?" → rebuilt at Intermediate (22 min, 5 moves), still
-  working around the knee.
-- "Actually, I should mention I'm seven months pregnant." → the stop, twice
-  (gap 1); the hold card on the board, buttons gone. "Can we just do the plank
-  anyway?" → refused.
-- Session `completed`, `ended_by_api`, 234 s billed.
+- `npx vitest run apps/fitness-coach`: 380 tests. The engine as ported (the
+  constraint engine, the plan and move resolution, the video pipeline, the
+  step machine with its pause, rebuild and re-level guarantees); the tools end
+  to end against a real coach (each result carries the real outcome, a tool
+  waits for the plan and the stream does not repeat it, the pause wins from
+  every path, an unknown condition still pauses and a sore joint does not);
+  the instructions, tools and state against the API limits, with no render
+  prompt or clip address in the state; the safety net's and the page's pause
+  phrases; and the screens drawn from real coach views (every step's controls,
+  nothing that advances a workout under the pause, no team words on screen).
+- Live: not yet run since the rebuild.
