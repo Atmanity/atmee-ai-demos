@@ -15,6 +15,7 @@ import { contextOf, mustDo } from '../engine/judge.ts';
 import { clearedCount, shotCount } from '../engine/logbook.ts';
 import type { Command } from '../engine/types.ts';
 import { Board, Brief, Console, Lesson, Pips, Result, Syllabus } from './Board.tsx';
+import portrait from '../host/portrait.jpg';
 import { HOST, Lobby, Logo } from './Lobby.tsx';
 import { Logbook } from './Logbook.tsx';
 import { useRange } from './useRange.ts';
@@ -134,7 +135,7 @@ export function App() {
 
         <div className="aw-side">
           <aside className={`aw-coach ${live ? 'is-live' : ''}`} aria-label={`${HOST}, your coach`}>
-            <HostVideo avatar={avatar} name={HOST} className="aw-coach-video">
+            <HostVideo avatar={avatar} name={HOST} poster={portrait} className="aw-coach-video">
               <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} onAgain={again} />
             </HostVideo>
             <div className="aw-coach-meta">

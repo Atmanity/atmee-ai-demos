@@ -41,7 +41,7 @@ vi.mock('../../../src/kit/index.ts', async () => {
         note: () => {},
       };
     },
-    HostVideo: () => <div data-testid="host" />,
+    HostVideo: ({ poster }: { poster?: string }) => <div data-testid="host" data-poster={poster ?? ''} />,
     CallStatus: () => null,
     CallControls: () => null,
     ChatPanel: ({ onSubmit }: { onSubmit: (text: string) => void }) => (
@@ -135,6 +135,15 @@ describe('the front door', () => {
     expect(pageText()).not.toMatch(BACKSTAGE);
   });
 
+  test('the visitor sees who they will talk to: Alex\'s face beside his name', () => {
+    render(<App />);
+    const tag = document.querySelector('.by-host-tag')!;
+    expect(tag.textContent).toBe('Your instructor Alex · paramedic');
+    const img = tag.querySelector('img')!;
+    expect(img.getAttribute('src')).toMatch(/portrait/);
+    expect(img.getAttribute('alt')).toBe('');   // the name sits beside it
+  });
+
   test('the voice button asks for the microphone', () => {
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: 'Start with your voice' }));
@@ -151,6 +160,8 @@ describe('a drill', () => {
     expect(opening.text).toContain(CHOKING_ADULT.steps[0].prompt);
     expect(opening.ttl).toBe(60);
     expect(fake.states.at(-1)).toContain('Step 1 of 6, waiting for their answer');
+    // Alex's face fills the frame while the call connects.
+    expect(screen.getByTestId('host').getAttribute('data-poster')).toMatch(/portrait/);
     expect(pageText()).toContain(SAFETY_LINE);
     expect(pageText()).not.toMatch(BACKSTAGE);
   });

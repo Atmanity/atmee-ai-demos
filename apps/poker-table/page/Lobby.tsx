@@ -1,5 +1,6 @@
 // Blindside's front door: what it is, how a match goes, and the way in.
 import { BIG_BLIND, SMALL_BLIND, STARTING_STACK } from '../engine/types.ts';
+import dex from '../host/portrait.jpg';
 import { CardView } from './CardView.tsx';
 
 /** The mark: a chip, its blind side in shadow. */
@@ -36,6 +37,7 @@ export function Lobby({ onPlay }: { onPlay: (mic: boolean) => void }) {
       <header className="bs-top is-lobby"><Logo /></header>
       <main className="bs-hero">
         <div className="bs-hero-copy">
+          <p className="bs-seat-chip"><img src={dex} alt="" /><span>Across the felt tonight: <b>Dex</b></span></p>
           <p className="bs-eyebrow">Heads-up no-limit hold’em</p>
           <h1>One table. Two stacks. Dex across the felt.</h1>
           <p className="bs-lede">
@@ -70,10 +72,7 @@ function TablePreview() {
       <div className="bs-preview-felt">
         <div className="bs-preview-dex">
           <div className="bs-preview-tile">
-            <svg viewBox="0 0 80 100" className="bs-preview-figure">
-              <circle cx="40" cy="38" r="17" />
-              <path d="M8 100c2-24 16-36 32-36s30 12 32 36z" />
-            </svg>
+            <img src={dex} alt="" className="bs-preview-face" />
             <span className="bs-preview-plate"><b>Dex</b> 1,060</span>
           </div>
           <div className="bs-preview-hole">

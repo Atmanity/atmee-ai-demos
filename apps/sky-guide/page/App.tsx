@@ -18,6 +18,7 @@ import type { Intent, SkyView } from '../engine/types.ts';
 import { Dome, NightStrip, NoticeBar, Side, SkyHeader } from './Chart.tsx';
 import { Lobby, Logo } from './Lobby.tsx';
 import { NightCard } from './NightCard.tsx';
+import portrait from '../host/portrait.jpg';
 import { NIGHT, RED } from './SkyDome.tsx';
 import { browserPlace, useRedLight } from './start.ts';
 import './lodestar.css';
@@ -196,7 +197,7 @@ export function App() {
         <Side view={view} night={night} tab={tab} host={HOST} onTab={setTab} onIntent={control} />
 
         <aside className="ls-host" aria-label={`${HOST}, your guide`}>
-          <HostVideo avatar={avatar} name={HOST} className="ls-host-video">
+          <HostVideo avatar={avatar} name={HOST} poster={portrait} className="ls-host-video">
             <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} onAgain={callAgain} />
           </HostVideo>
           <div className="ls-nameplate">

@@ -2,6 +2,7 @@
 // with, and the way in. The real-emergency numbers are on it too: someone who
 // lands here in the middle of one needs a dispatcher, not a drill.
 import { SAFETY_LINE } from '../engine/lines.ts';
+import portrait from '../host/portrait.jpg';
 import { DRILLS, PREVIEW } from './drills.ts';
 import { CheckIcon, Emblem, EyeIcon, LockIcon, Mark, PhoneIcon, Pictogram } from './icons.tsx';
 
@@ -35,6 +36,7 @@ export function Lobby({ choice, onChoose, onStart }: { choice: string; onChoose:
 
       <main className="by-hero">
         <div className="by-hero-copy">
+          <p className="by-host-tag"><img src={portrait} alt="" width={40} height={40} /><span>Your instructor <b>Alex</b> · paramedic</span></p>
           <p className="by-eyebrow">CPR and first-aid practice with a paramedic</p>
           <h1>Be the bystander who knows what to do.</h1>
           <p className="by-lede">Alex, a calm paramedic instructor, walks you through an emergency one step at a time. Say what you would do; the drill checks it against the real algorithm and teaches each step with the exact numbers.</p>
@@ -102,7 +104,7 @@ function Preview() {
         </ol>
       </div>
       <figcaption className="by-preview-host">
-        <span className="by-avatar-dot">A</span>
+        <img className="by-avatar-dot" src={portrait} alt="" />
         <span><b>Alex</b> “Good. Now push to the beat, and let the chest come all the way back up.”</span>
       </figcaption>
     </figure>

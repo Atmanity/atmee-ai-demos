@@ -15,6 +15,7 @@ const fake = vi.hoisted(() => ({
   said: [] as string[],
   recorded: [] as string[],
   starts: [] as unknown[],
+  poster: undefined as unknown,
   chatProps: null as null | Record<string, unknown>,
   handlers: {} as {
     onToolCall?: (call: { id: string; name: string; arguments: Record<string, unknown> }) => Promise<unknown>;
@@ -40,7 +41,7 @@ vi.mock('../../../src/kit/index.ts', async () => {
         record: (t: string) => fake.recorded.push(t),
       };
     },
-    HostVideo: ({ children }: { children?: ReactNode }) => <div className="host">{children}</div>,
+    HostVideo: ({ children, poster }: { children?: ReactNode; poster?: string }) => { fake.poster = poster; return <div className="host">{children}</div>; },
     CallStatus: () => null,
     CallControls: () => null,
     ChatPanel: (props: Record<string, unknown>) => { fake.chatProps = props; return null; },
@@ -87,6 +88,11 @@ describe('the front door', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('A real game');
     expect(screen.getAllByText('Kibitz').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Play by typing' })).toBeTruthy();
+    // Who you will play, before the call: her face beside her name (so the image itself is decorative).
+    const card = document.querySelector('.kb-player-card')!;
+    expect(card.textContent).toContain('Sasha');
+    expect(card.querySelector('img')?.getAttribute('alt')).toBe('');
+    expect(card.querySelector('img')?.getAttribute('src')).toMatch(/portrait\.jpg/);
     fireEvent.click(screen.getByRole('button', { name: 'Play with your voice' }));
     expect(fake.starts).toEqual([{ mic: true }]);
   });
@@ -95,6 +101,8 @@ describe('the front door', () => {
 describe('the game', () => {
   it('sets up the board while Sasha arrives, and opens with one event', async () => {
     await live();
+    // Her face fills the frame until the video plays.
+    expect(String(fake.poster)).toMatch(/portrait\.jpg/);
     expect(fake.events[0]).toMatch(/^You have just greeted them; do not greet or introduce yourself again\. /);
     expect(fake.events[0]).toContain('invite their first move');
     expect(lastState()).toContain("It is the player's move");

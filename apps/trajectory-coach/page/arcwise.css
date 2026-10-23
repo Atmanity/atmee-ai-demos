@@ -74,6 +74,12 @@ button { font: inherit; }
 .aw-lobby { max-width: 1180px; margin: 0 auto; padding: 22px max(20px, env(safe-area-inset-right)) 64px max(20px, env(safe-area-inset-left)); }
 .aw-top.is-lobby { padding-bottom: 8px; }
 .aw-hero { display: grid; grid-template-columns: minmax(0, 1.02fr) minmax(0, .98fr); gap: 48px; align-items: center; padding: 52px 0 44px; }
+/* Theo on the front door: a coach's card, square like a staff badge, in the drawing's ink. */
+.aw-coach-card { display: inline-flex; align-items: center; gap: 12px; margin: 0 0 18px; padding: 6px 16px 6px 6px; background: var(--aw-surface); border: 1.5px solid var(--aw-ink); border-radius: 12px; box-shadow: 4px 4px 0 var(--aw-ink); }
+.aw-coach-card img { width: 52px; height: 52px; border-radius: 8px; object-fit: cover; object-position: 50% 20%; background: var(--aw-rule); }
+.aw-coach-card > span { display: grid; gap: 1px; font-size: 15px; color: var(--aw-muted); }
+.aw-coach-card b { color: var(--aw-ink); font: 800 17px var(--aw-display); font-stretch: 115%; }
+.aw-coach-card small { font: 500 11.5px var(--aw-mono); letter-spacing: .04em; color: var(--aw-teal); }
 .aw-hero h1 { margin: 14px 0 18px; font: 800 clamp(36px, 5.2vw, 62px)/1.02 var(--aw-display); font-stretch: 112%; letter-spacing: -0.02em; text-wrap: balance; }
 .aw-lede { margin: 0; max-width: 46ch; font-size: 18px; line-height: 1.6; color: #2b3b40; }
 .aw-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }

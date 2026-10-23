@@ -69,7 +69,11 @@ button, input { font: inherit; }
 .cl-hero h1 { margin: 14px 0 18px; font: 700 clamp(36px, 5.2vw, 60px)/1.05 var(--cl-display); letter-spacing: -0.025em; color: var(--cl-ink); text-wrap: balance; }
 .cl-hero h1 em { font-style: normal; background: linear-gradient(transparent 60%, rgba(243, 211, 107, .9) 60% 92%, transparent 92%); }
 .cl-lede { margin: 0; max-width: 48ch; font-size: 18.5px; line-height: 1.55; color: #2c3a33; }
-.cl-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+/* who they will talk to: a photo in the board's aluminium frame, on a name card */
+.cl-host-tag { display: flex; align-items: center; gap: 12px; max-width: 46ch; margin: 22px 0 0; padding: 6px 16px 6px 6px; width: fit-content; background: #fff; border: 1px solid var(--cl-line); border-left: 4px solid var(--cl-board); border-radius: 6px; font-size: 15px; line-height: 1.4; color: #2c3a33; }
+.cl-host-tag img { flex: none; width: 46px; height: 46px; object-fit: cover; border-radius: 3px; border: 3px solid var(--cl-frame); }
+.cl-host-tag b { font: 700 16px var(--cl-display); color: var(--cl-ink); }
+.cl-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
 .cl-small { margin: 14px 0 0; font-size: 14px; color: var(--cl-muted); }
 
 /* the board halfway through a lesson, as a picture */
@@ -92,7 +96,8 @@ button, input { font: inherit; }
 .cl-preview-tray { display: flex; justify-content: flex-end; gap: 8px; margin: -1px 14px 0; padding: 10px 12px; background: linear-gradient(#d3d8d0, #b4bab1); border-radius: 0 0 8px 8px; transform: rotate(-1.2deg); }
 .cl-preview-tray .cl-key { cursor: default; }
 .cl-preview-voice { position: absolute; left: -16px; bottom: 0; max-width: 76%; margin: 0; padding: 10px 14px; background: #fff; border-radius: 10px; box-shadow: 0 10px 24px rgba(21, 36, 30, .16); font-size: 14.5px; line-height: 1.4; }
-.cl-preview-voice b { display: block; margin-bottom: 2px; font: 700 12px var(--cl-body); letter-spacing: .12em; text-transform: uppercase; color: var(--cl-green); }
+.cl-preview-who { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font: 700 12px var(--cl-body); letter-spacing: .12em; text-transform: uppercase; color: var(--cl-green); }
+.cl-preview-who img { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; }
 
 .cl-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; border-top: 2px solid var(--cl-ink); padding-top: 28px; }
 .cl-steps article { display: grid; gap: 8px; align-content: start; }

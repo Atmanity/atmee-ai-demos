@@ -1,4 +1,5 @@
 // Chalkline's front door: what it is, how a lesson goes, and the way in.
+import portrait from '../host/portrait.jpg';
 import { HOST, Logo } from './brand.tsx';
 
 const STEPS: [string, string][] = [
@@ -24,7 +25,11 @@ export function Lobby({ onStart }: { onStart: (mic: boolean) => void }) {
             <h1>Say the equation. Reveal the working <em>one line at a time.</em></h1>
             <p className="cl-lede">
               Chalkline puts any quadratic on the board with its graph, then walks your class through factoring,
-              completing the square or the formula at the pace you set. {HOST}, the board’s voice, reads every line out exactly as it’s written.
+              completing the square or the formula at the pace you set.
+            </p>
+            <p className="cl-host-tag">
+              <img src={portrait} alt="" width={46} height={46} />
+              <span><b>{HOST}</b> is the board’s voice: she reads every line out exactly as it’s written.</span>
             </p>
             <div className="cl-cta">
               <button type="button" className="cl-primary is-big" onClick={() => onStart(true)}>Start with your voice</button>
@@ -83,7 +88,10 @@ function Preview() {
         <span className="cl-key">‹ Back</span>
         <span className="cl-key is-next">Next line ›</span>
       </div>
-      <p className="cl-preview-voice"><b>{HOST}</b> “We want two numbers that multiply to 6 and add to minus 5.”</p>
+      <p className="cl-preview-voice">
+        <span className="cl-preview-who"><img src={portrait} alt="" />{HOST}</span>
+        “We want two numbers that multiply to 6 and add to minus 5.”
+      </p>
     </div>
   );
 }

@@ -102,6 +102,11 @@ select.pw-input { flex: 1 1 140px; cursor: pointer; }
 /* ── front door ─────────────────────────────────────────────────────────── */
 .pw-lobby { max-width: 1240px; margin: 0 auto; padding: 20px max(20px, env(safe-area-inset-right)) 64px max(20px, env(safe-area-inset-left)); }
 .pw-hero { display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr); gap: 56px; align-items: center; padding: 52px 0 64px; }
+.pw-host-tag { display: inline-flex; align-items: center; gap: 12px; margin: 0 0 18px; }
+.pw-host-tag img { width: 44px; height: 44px; object-fit: cover; border: 1.5px solid var(--pw-graphite); background: var(--pw-paper); box-shadow: 4px 4px 0 var(--pw-blueprint); transform: rotate(-3deg); }
+.pw-host-tag > span { display: grid; gap: 1px; line-height: 1.15; }
+.pw-host-tag-role { font: 500 11px var(--pw-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--pw-muted); }
+.pw-host-tag b { font: 800 18px var(--pw-display); font-stretch: 112%; color: var(--pw-graphite); }
 .pw-hero h1 { margin: 16px 0 20px; font: 800 clamp(40px, 6vw, 76px)/.96 var(--pw-display); font-stretch: 112%; letter-spacing: -0.025em; text-wrap: balance; }
 .pw-lede { margin: 0; max-width: 44ch; font-size: 18.5px; line-height: 1.55; color: #323a46; }
 .pw-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
@@ -297,6 +302,7 @@ select.pw-input { flex: 1 1 140px; cursor: pointer; }
   .pw-titleblock > span:nth-child(3) { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .pw-host-tag img { transform: none; }
   .pw-spinner, .pw-onair::before, .pw-redline { animation: none; }
   .pw-primary, .pw-secondary { transition: none; }
 }

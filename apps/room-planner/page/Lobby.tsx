@@ -2,6 +2,7 @@
 // real plan (laid out and traded by the planner itself) as the picture.
 import { useMemo } from "react";
 
+import portrait from "../host/portrait.jpg";
 import { FloorPlan } from "./FloorPlan.tsx";
 import { areaLabel, metres } from "./geometry.ts";
 import { lobbySample } from "./sample.ts";
@@ -40,6 +41,14 @@ export function Lobby({ onStart, host = "Iris" }: { onStart: (mic: boolean) => v
       <header className="pw-top is-lobby"><Logo /></header>
       <main className="pw-hero">
         <div className="pw-hero-copy">
+          {/* Who you will be talking to, pinned like a photo on the board. */}
+          <p className="pw-host-tag">
+            <img src={portrait} alt="" width={44} height={44} />
+            <span>
+              <span className="pw-host-tag-role">Your architect</span>
+              <b>{host}</b>
+            </span>
+          </p>
           <p className="pw-eyebrow">A home planner you talk to</p>
           <h1>Talk your home into shape.</h1>
           <p className="pw-lede">

@@ -77,6 +77,10 @@ button { font: inherit; }
 .bs-hero { display: grid; grid-template-columns: minmax(0, 1.02fr) minmax(0, .98fr); gap: 56px; align-items: center; padding: 52px 0 56px; }
 .bs-hero h1 { margin: 14px 0 18px; font: 800 clamp(46px, 6.4vw, 84px)/.94 var(--bs-display); letter-spacing: .005em; text-transform: uppercase; text-wrap: balance; }
 .bs-lede { margin: 0; max-width: 48ch; font-size: 18px; line-height: 1.6; color: #efdfe0; }
+/* who you'll be playing: Dex's face in a brass ring, like a seat marker */
+.bs-seat-chip { display: inline-flex; align-items: center; gap: 10px; margin: 0 0 16px; padding: 4px 16px 4px 4px; border-radius: 999px; background: rgba(22, 7, 11, .55); border: 1px solid rgba(228, 180, 90, .4); font-size: 14px; color: var(--bs-mist); }
+.bs-seat-chip img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 2px var(--bs-brass), 0 0 0 4px rgba(22, 7, 11, .9); }
+.bs-seat-chip b { font: 800 17px/1 var(--bs-display); letter-spacing: .06em; text-transform: uppercase; color: var(--bs-ivory); }
 .bs-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
 .bs-small { margin: 14px 0 0; font-size: 13.5px; color: var(--bs-mist); }
 .bs-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; border-top: 1px solid var(--bs-line); padding-top: 30px; }
@@ -95,7 +99,7 @@ button { font: inherit; }
 .bs-preview-felt::before { content: ""; position: absolute; inset: 22px; border-radius: inherit; border: 1.5px solid rgba(228, 180, 90, .28); pointer-events: none; }
 .bs-preview-dex { position: relative; display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 14px; width: 100%; margin-top: -70px; }
 .bs-preview-tile { grid-column: 2; position: relative; width: 150px; aspect-ratio: 4 / 5; border-radius: 16px; overflow: hidden; background: linear-gradient(170deg, #5a2530, #1f0a0f); border: 3px solid var(--bs-brass); box-shadow: 0 14px 30px rgba(0, 0, 0, .45); }
-.bs-preview-figure { position: absolute; inset: 14% 0 0; width: 100%; height: 86%; fill: rgba(246, 240, 227, .2); }
+.bs-preview-face { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .bs-preview-plate { position: absolute; left: 8px; right: 8px; bottom: 8px; display: flex; justify-content: space-between; padding: 4px 8px; border-radius: 8px; background: rgba(22, 7, 11, .8); font: 600 12px var(--bs-body); color: var(--bs-mist); }
 .bs-preview-plate b { color: var(--bs-ivory); }
 .bs-preview-hole { grid-column: 1; justify-self: end; display: flex; gap: 4px; margin-bottom: 8px; }

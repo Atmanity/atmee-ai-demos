@@ -73,6 +73,10 @@ button, input { font: inherit; }
 .by-top { display: flex; align-items: center; gap: 18px; padding: 4px 0 14px; }
 .by-top-sos { margin: 0 0 0 auto; display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--by-slate); }
 .by-hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: 56px; align-items: center; padding: 44px 0 56px; }
+/* Alex's ID tag: the face you will talk to, worn like a responder's badge */
+.by-host-tag { display: inline-flex; align-items: center; gap: 10px; margin: 0 0 14px; padding: 4px 14px 4px 4px; background: #fff; border: 1px solid var(--by-rule); border-left: 4px solid var(--by-green); border-radius: 6px; font-size: 14px; color: var(--by-slate); }
+.by-host-tag img { width: 40px; height: 40px; flex: none; border-radius: 4px; object-fit: cover; }
+.by-host-tag b { font: 700 18px var(--by-display); letter-spacing: .03em; color: var(--by-forest); }
 .by-hero h1 { margin: 12px 0 16px; font: 700 clamp(46px, 6vw, 78px)/.95 var(--by-display); letter-spacing: -.005em; color: var(--by-forest); text-wrap: balance; }
 .by-lede { margin: 0; max-width: 50ch; font-size: 18px; line-height: 1.55; color: var(--by-forest); }
 .by-pick { margin: 26px 0 0; padding: 0; border: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -105,7 +109,7 @@ button, input { font: inherit; }
 .by-ticks .is-locked { background: var(--by-mist); color: var(--by-slate); }
 .by-preview-host { position: absolute; left: -22px; bottom: -26px; display: flex; gap: 12px; align-items: center; max-width: 340px; padding: 12px 16px; border-radius: 10px; background: var(--by-forest); color: #e4efe8; font-size: 14px; line-height: 1.4; box-shadow: 0 14px 30px rgba(11, 46, 34, .3); }
 .by-preview-host b { display: block; color: #fff; font: 700 17px var(--by-display); letter-spacing: .03em; }
-.by-avatar-dot { width: 38px; height: 38px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--by-amber); color: var(--by-forest); font: 700 20px var(--by-display); }
+.by-avatar-dot { width: 40px; height: 40px; flex: none; border-radius: 6px; object-fit: cover; background: var(--by-amber); box-shadow: 0 0 0 2px var(--by-amber); }
 
 .by-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; padding-top: 30px; border-top: 1px solid var(--by-rule); }
 .by-steps article { display: grid; gap: 8px; align-content: start; }

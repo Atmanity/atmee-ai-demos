@@ -36,6 +36,10 @@ test('the front door says what Notch is and has a way in by voice and by typing'
   const onStart = vi.fn();
   render(<Lobby onStart={onStart} />);
   expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Ask Emery');
+  // Who they will talk to, before the call: her face, with her name beside it (so the image is decorative).
+  const stylist = screen.getByText('Your stylist').closest('p')!;
+  expect(stylist.textContent).toContain('Emery');
+  expect(stylist.querySelector('img')!.getAttribute('alt')).toBe('');
   fireEvent.click(screen.getByRole('button', { name: /Talk to Emery/ }));
   expect(onStart).toHaveBeenLastCalledWith(true);
   fireEvent.click(screen.getByRole('button', { name: 'Chat by typing' }));

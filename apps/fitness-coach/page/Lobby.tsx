@@ -1,5 +1,7 @@
-// Spotter's front door: what it is, how a workout goes, the promise that sets
-// it apart (every limit is enforced, and it knows when to stop), and the way in.
+// Spotter's front door: who coaches you, what it is, how a workout goes, the
+// promise that sets it apart (every limit is enforced, and it knows when to
+// stop), and the way in.
+import portrait from '../host/portrait.jpg';
 
 /** The mark: a floor spot on rubber matting, the marker you stand on in a gym. */
 export function Mark({ size = 34 }: { size?: number }) {
@@ -34,7 +36,11 @@ export function Lobby({ host, onStart }: { host: string; onStart: (mic: boolean)
       <header className="sp-top is-lobby"><Logo /></header>
       <main className="sp-hero">
         <div className="sp-hero-copy">
-          <p className="sp-eyebrow">Personal training with {host}</p>
+          {/* Who you will talk to, before the call: a gym name badge. The name sits beside the photo, so the photo is decorative. */}
+          <p className="sp-badge">
+            <img src={portrait} alt="" />
+            <span><span className="sp-label">Your coach</span><b>{host}</b></span>
+          </p>
           <h1>A workout built around you.</h1>
           <p className="sp-lede">
             Tell {host} what you want to train, how experienced you are and what to work around. She builds the plan,
@@ -88,7 +94,7 @@ function PlanPreview({ host }: { host: string }) {
         </ol>
       </div>
       <div className="sp-preview-coach">
-        <span className="sp-preview-dot">{host[0]}</span>
+        <img className="sp-preview-dot" src={portrait} alt="" />
         <p><b>{host}</b>Noted on your knee. I've taken the lunges out and kept it to twenty minutes.</p>
       </div>
     </div>

@@ -15,6 +15,7 @@ import { Game, type Intent, type Sent } from './Game.tsx';
 import { Logo, Lobby } from './Lobby.tsx';
 import { Scoresheet } from './Scoresheet.tsx';
 import { isSoundMuted, setSoundMuted, sounds } from './sounds.ts';
+import portrait from '../host/portrait.jpg';
 import './kibitz.css';
 
 const ID = 'chess-opponent';
@@ -215,7 +216,7 @@ export function App() {
 
       <main className="kb-main">
         <section className={`kb-host${avatar.audioBlocked ? ' is-blocked' : ''}`} aria-label={`${HOST}, your opponent`}>
-          <HostVideo avatar={avatar} name={HOST} className="kb-host-video">
+          <HostVideo avatar={avatar} name={HOST} poster={portrait} className="kb-host-video">
             <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} />
           </HostVideo>
           <div className="kb-nameplate">

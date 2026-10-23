@@ -109,6 +109,8 @@ describe('the page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Type instead' }));
     expect(call.starts).toEqual([{ mic: false }]);
     expect(screen.getAllByText('Calling Reese…').length).toBeGreaterThan(0);
+    // Reese's face fills the frame until the video plays.
+    expect(document.querySelector('.oc-video .call-poster')!.getAttribute('src')).toMatch(/portrait\.jpg/);
     await screen.findByText('Nothing on the board yet');
     expect(call.states.at(-1)).toContain('[Live market board] The board is empty');
   });

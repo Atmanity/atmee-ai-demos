@@ -30,7 +30,7 @@ vi.mock('../../../src/kit/index.ts', async (importOriginal) => {
         say: () => {}, note: () => {}, record: () => {},
       };
     },
-    HostVideo: ({ children }: { children?: React.ReactNode }) => <div data-testid="host">{children}</div>,
+    HostVideo: ({ children, poster }: { children?: React.ReactNode; poster?: string }) => <div data-testid="host" data-poster={poster}>{children}</div>,
     CallStatus: () => null,
     CallControls: () => null,
     ChatPanel: () => null,
@@ -66,6 +66,11 @@ describe('the front door', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Forty-five degrees');
     expect(screen.getAllByText(/Arcwise/).length).toBeGreaterThan(0);
     for (const name of ['Clear the wall', 'On the Moon']) expect(screen.getByText(name)).toBeTruthy();
+    // Theo's face and name before the call: the photo is decorative, his name is beside it.
+    const face = document.querySelector('.aw-coach-card img') as HTMLImageElement;
+    expect(face.getAttribute('src')).toContain('portrait');
+    expect(face.getAttribute('alt')).toBe('');
+    expect(document.querySelector('.aw-coach-card')!.textContent).toContain('Coached by Theo');
     fireEvent.click(button('Start with your voice'));
     fireEvent.click(button('Start by typing'));
     expect(fake.starts).toEqual([{ mic: true }, { mic: false }]);
@@ -77,6 +82,7 @@ describe('the call', () => {
     fake.phase = 'starting';
     render(<App />);
     expect(screen.getByText('Theo is on his way to the range…')).toBeTruthy();
+    expect(screen.getByTestId('host').dataset.poster).toContain('portrait');   // his face while the call connects
     expect(button('Fire').disabled).toBe(true);
     expect(fake.states.at(-1)).toContain('Challenge 1 of 6: Clear the wall');
     expect(fake.events).toEqual([{ text: expect.stringMatching(/^You have just greeted them;.*the challenge up is Clear the wall/), ttl: 60 }]);

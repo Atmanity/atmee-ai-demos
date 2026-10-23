@@ -3,6 +3,7 @@
 // and the tag with the one fix.
 import { MicIcon } from '../../../src/kit/index.ts';
 import { HOST } from '../engine/director.ts';
+import portrait from '../host/portrait.jpg';
 import exampleOutfit from './sample-outfit.jpg';
 
 /** A tape measure with one notch cut out: the score, and the name. */
@@ -38,7 +39,11 @@ export function Lobby({ onStart }: { onStart: (mic: boolean) => void }) {
       <header className="nt-top is-lobby"><Logo /></header>
       <main className="nt-hero">
         <div className="nt-hero-copy">
-          <p className="nt-eyebrow">A personal stylist, on call</p>
+          <p className="nt-stylist">
+            {/* Her name is beside it, so the face is decoration to a screen reader. */}
+            <img src={portrait} alt="" />
+            <span><span className="nt-label">Your stylist</span><span><b>{HOST}</b>, ex-runway, styling on call</span></span>
+          </p>
           <h1>Is this the outfit? <em>Ask {HOST}.</em></h1>
           <p className="nt-lede">
             Show {HOST} a photo of what you’re wearing and tell her where you’re going. She scores it for the occasion,

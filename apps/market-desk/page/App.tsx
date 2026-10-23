@@ -12,6 +12,7 @@ import { DeskBoard, type IntentResult } from './Board.tsx';
 import { Closing } from './Closing.tsx';
 import { Lobby, Logo } from './Lobby.tsx';
 import { Tape } from './Tape.tsx';
+import portrait from '../host/portrait.jpg';
 import { useDesk } from './useDesk.ts';
 import './outcry.css';
 
@@ -136,7 +137,7 @@ function Booth({ avatar, live, wantMic }: { avatar: Avatar; live: boolean; wantM
   const status = avatar.phase === 'idle' ? { title: `Calling ${HOST}…`, detail: '' } : callCopy(avatar, HOST);
   return (
     <aside className="oc-booth" aria-label={`${HOST}, your analyst`}>
-      <HostVideo avatar={avatar} name={HOST} className="oc-video">
+      <HostVideo avatar={avatar} name={HOST} poster={portrait} className="oc-video">
         {avatar.phase === 'idle' ? (
           // Before the call is placed (the browser may be asking for the microphone).
           <div className="call-status" role="status">

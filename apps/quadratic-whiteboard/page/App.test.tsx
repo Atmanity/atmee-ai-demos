@@ -20,6 +20,7 @@ const fake = vi.hoisted(() => ({
   onToolCall: undefined as undefined | ((call: Call) => Promise<unknown>),
   onUserSaid: undefined as undefined | ((text: string, how: 'spoken' | 'typed') => void),
   setPhase: undefined as undefined | ((phase: string) => void),
+  poster: undefined as undefined | string,
 }));
 
 vi.mock('../../../src/kit/index.ts', async () => {
@@ -40,7 +41,10 @@ vi.mock('../../../src/kit/index.ts', async () => {
         note: () => {}, say: () => {}, record: () => {},
       };
     },
-    HostVideo: ({ children }: { children?: unknown }) => children ?? null,
+    HostVideo: ({ children, poster }: { children?: unknown; poster?: string }) => {
+      fake.poster = poster;
+      return children ?? null;
+    },
     CallStatus: () => null,
     CallControls: () => null,
     ChatPanel: () => null,
@@ -105,12 +109,18 @@ describe('the front door', () => {
     expect(heading()).toBe('Say the equation. Reveal the working one line at a time.');
     expect(screen.getByRole('button', { name: 'Start with your voice' })).toBeTruthy();
     expect(screen.getByText('Reveal at your pace')).toBeTruthy();
+    // Who they will talk to, before the call: Ada's face beside her name (so the photo is decorative).
+    const tag = screen.getByText(/is the board’s voice/).closest('p')!;
+    expect(tag.textContent).toContain('Ada');
+    expect(tag.querySelector('img')!.getAttribute('alt')).toBe('');
+    expect(tag.querySelector('img')!.getAttribute('src')).toMatch(/portrait\.jpg/);
     expect(document.body.textContent).not.toMatch(PLUMBING);
   });
 
-  it('starts a call by typing without the microphone', async () => {
+  it('starts a call by typing without the microphone, with Ada\'s face in the frame while it connects', async () => {
     await live();
     expect(fake.started).toEqual([{ mic: false }]);
+    expect(fake.poster).toMatch(/portrait\.jpg/);
   });
 });
 

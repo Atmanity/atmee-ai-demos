@@ -80,7 +80,13 @@ q { quotes: "“" "”"; font-weight: 600; }
 .ms-hero-label { max-width: 380px; margin-left: auto; transform: rotate(2.5deg); box-shadow: 12px 12px 0 var(--ms-tomato); }
 .ms-hero-bubble { position: absolute; left: 0; bottom: 0; max-width: 300px; padding: 14px 16px; border-radius: 6px 6px 6px 0; background: var(--ms-ink); color: #fff; font-size: 15px; line-height: 1.45; box-shadow: 6px 6px 0 var(--ms-lemon); }
 .ms-hero-who { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font: 700 12px var(--ms-body); letter-spacing: .1em; text-transform: uppercase; color: var(--ms-lemon); }
-.ms-hero-who i { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--ms-lemon); color: var(--ms-ink); font: 900 14px var(--ms-display); font-style: normal; letter-spacing: 0; }
+.ms-hero-who img { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; border: 2px solid var(--ms-lemon); }
+/* The host's byline, set like a label's maker line: a framed face, a small caps role, the name in the display face. */
+.ms-host-tag { display: inline-flex; align-items: center; gap: 12px; margin: 14px 0 0; padding: 5px 16px 5px 5px; background: var(--ms-paper); border: 2px solid var(--ms-ink); box-shadow: 4px 4px 0 var(--ms-tomato); }
+.ms-host-tag img { width: 46px; height: 46px; object-fit: cover; border: 2px solid var(--ms-ink); }
+.ms-host-tag span { display: grid; line-height: 1.1; }
+.ms-host-tag small { font: 800 11px var(--ms-body); letter-spacing: .12em; text-transform: uppercase; color: var(--ms-muted); }
+.ms-host-tag b { font: 900 24px/1 var(--ms-display); font-stretch: 78%; }
 .ms-how { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; border-top: 8px solid var(--ms-ink); padding-top: 22px; }
 .ms-how article { display: grid; gap: 6px; align-content: start; }
 .ms-how-n { font: 900 15px var(--ms-display); color: var(--ms-tomato); }

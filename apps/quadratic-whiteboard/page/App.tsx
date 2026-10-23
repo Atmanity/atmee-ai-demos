@@ -10,6 +10,7 @@ import { boardState, said } from '../engine/director.ts';
 import { mustDo } from '../engine/judge.ts';
 import type { Intent } from '../engine/table.ts';
 import type { Outcome, ToolOutcome, View } from '../engine/types.ts';
+import portrait from '../host/portrait.jpg';
 import { Board, Recap, Tray, type BoardStatus } from './Board.tsx';
 import { HOST, Logo } from './brand.tsx';
 import { Lobby } from './Lobby.tsx';
@@ -179,7 +180,7 @@ export function App() {
         </div>
 
         <aside className="cl-host" aria-label={`${HOST}, the board’s voice`}>
-          <HostVideo avatar={avatar} name={HOST} className="cl-host-video">
+          <HostVideo avatar={avatar} name={HOST} poster={portrait} className="cl-host-video">
             <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} />
           </HostVideo>
           <p className="cl-nameplate">

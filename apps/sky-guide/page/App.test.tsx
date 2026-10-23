@@ -60,6 +60,16 @@ describe('the front door', () => {
     expect(call.avatar.start).toHaveBeenCalledWith({ mic: false });
     expect(document.body.textContent).not.toMatch(/\b(?:session|avatar|API|Atmee|demo|sample|mini-app|tool)\b/i);
   });
+
+  it('shows who they will talk to: Mira\'s face beside her name (so the photo itself is decorative)', () => {
+    call.avatar = fakeAvatar('idle');
+    const { container } = render(<App />);
+    const guide = container.querySelector('.ls-guide')!;
+    expect(guide.textContent).toContain('Your guide tonight is Mira');
+    const face = guide.querySelector('img')!;
+    expect(face.getAttribute('src')).toMatch(/portrait\.jpg/);
+    expect(face.getAttribute('alt')).toBe('');
+  });
 });
 
 describe('the live chart', () => {
@@ -100,6 +110,12 @@ describe('the live chart', () => {
     expect(screen.getByRole('button', { name: 'Orion' }).getAttribute('aria-pressed')).toBe('true');
     expect(call.avatar.event).toHaveBeenLastCalledWith(expect.stringContaining('The user lit Orion on the chart.'), 20);
     expect(screen.getByRole('button', { name: 'Your night · 1' })).toBeTruthy();
+  });
+
+  it('shows Mira\'s face in her frame until the video plays', () => {
+    call.avatar = fakeAvatar('connecting');
+    const { container } = render(<App />);
+    expect(container.querySelector('.ls-host-video .call-poster')?.getAttribute('src')).toMatch(/portrait\.jpg/);
   });
 
   it('keeps Mira\'s picture of the chart current', async () => {

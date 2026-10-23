@@ -15,6 +15,7 @@ import { emergencySnapshot, SAFETY_LINE } from '../engine/lines.ts';
 import { clearedBy, mustDo } from '../engine/net.ts';
 import { isRealEmergency } from '../engine/safety.ts';
 import type { ActReply, Command, ToolReply, View } from '../engine/types.ts';
+import portrait from '../host/portrait.jpg';
 import { DRILLS } from './drills.ts';
 import { Emergency } from './Emergency.tsx';
 import { Lobby, Logo } from './Lobby.tsx';
@@ -237,7 +238,7 @@ export function App() {
 
       <main className="by-main">
         <section className="by-host" aria-label={`${HOST}, your instructor`}>
-          <HostVideo avatar={avatar} name={HOST} className="by-host-video" />
+          <HostVideo avatar={avatar} name={HOST} poster={portrait} className="by-host-video" />
           <div className="by-nameplate">
             <p className="by-who"><b>{HOST}</b> <span>Paramedic instructor</span></p>
             {live && <p className="by-oncall">On call</p>}

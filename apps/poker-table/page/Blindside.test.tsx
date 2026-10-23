@@ -59,6 +59,16 @@ describe('the front door', () => {
     expect(onPlay.mock.calls).toEqual([[true], [false]]);
   });
 
+  it("shows Dex's face before the call, next to his name", () => {
+    const { container } = render(<Lobby onPlay={() => undefined} />);
+    const chip = container.querySelector('.bs-seat-chip')!;
+    expect(chip.textContent).toBe('Across the felt tonight: Dex');
+    const face = chip.querySelector('img')!;
+    expect(face.getAttribute('src')).toMatch(/portrait/);
+    expect(face.getAttribute('alt')).toBe('');   // the name sits beside it
+    expect(container.querySelector('.bs-preview-face')?.getAttribute('src')).toMatch(/portrait/);
+  });
+
   it('never names the machinery', () => {
     const { container } = render(<Lobby onPlay={() => undefined} />);
     const words = container.textContent!.toLowerCase();
@@ -97,8 +107,9 @@ describe('the felt', () => {
     expect(screen.getByText('thinking…')).toBeTruthy();
   });
 
-  it('before the first deal: an empty table and Dex on his way', () => {
-    render(<Felt view={null} avatar={fakeAvatar('starting')} />);
+  it("before the first deal: an empty table, and Dex's face in his seat while he is on his way", () => {
+    const { container } = render(<Felt view={null} avatar={fakeAvatar('starting')} />);
+    expect(container.querySelector('.bs-dex-video .call-poster')?.getAttribute('src')).toMatch(/portrait/);
     expect(screen.getByText('Dex is shuffling up…')).toBeTruthy();
     expect(screen.getByText('Calling Dex…')).toBeTruthy();
     expect(screen.queryByRole('img', { name: 'A face-down card' })).toBeNull();

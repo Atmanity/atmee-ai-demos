@@ -85,7 +85,14 @@ h1, h2, h3 { margin: 0; }
 .yd-poster svg { display: block; width: 100%; height: 100%; border-radius: 3px; box-shadow: 0 34px 60px -24px rgba(11, 72, 112, 0.55); }
 .yd-poster-label { font: 500 11px var(--yd-mono); letter-spacing: 0.14em; fill: var(--yd-paper); }
 .yd-poster-voice { position: absolute; left: -28px; top: 34px; max-width: 230px; margin: 0; padding: 12px 14px; background: var(--yd-paper); color: var(--yd-ink); font-size: 14.5px; line-height: 1.45; box-shadow: 0 14px 30px -12px rgba(11, 72, 112, 0.5); border-left: 4px solid var(--yd-sun); }
-.yd-poster-voice b { display: block; margin-bottom: 2px; font: 500 11px var(--yd-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--yd-sea-soft); }
+.yd-poster-voice b { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font: 500 11px var(--yd-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--yd-sea-soft); }
+.yd-poster-voice img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 2px var(--yd-sun); }
+/* Who you will talk to, before the call: a luggage tag with the guide's face. */
+.yd-guide-tag { display: inline-flex; align-items: center; gap: 12px; margin: 0 0 18px; padding: 6px 16px 6px 6px; background: var(--yd-paper); border-left: 5px solid var(--yd-sun); box-shadow: 0 10px 24px -14px rgba(11, 72, 112, 0.5); }
+.yd-guide-tag img { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 2px var(--yd-paper), 0 0 0 4px var(--yd-sea); }
+.yd-guide-tag span { display: grid; gap: 1px; font: 500 11px/1.3 var(--yd-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--yd-sea-soft); }
+.yd-guide-tag b { font: 400 26px/1 var(--yd-display); letter-spacing: 0.04em; color: var(--yd-sea); }
+.yd-guide-tag small { font: 400 13px var(--yd-body); letter-spacing: 0; text-transform: none; color: var(--yd-stone); }
 .yd-poster-ticket { position: absolute; right: -22px; bottom: 38px; display: grid; gap: 2px; padding: 12px 18px 12px 22px; background: var(--yd-sun); color: var(--yd-sea); box-shadow: 0 14px 30px -12px rgba(11, 72, 112, 0.55);
   -webkit-mask: radial-gradient(circle at 0 50%, transparent 8px, #000 8.5px); mask: radial-gradient(circle at 0 50%, transparent 8px, #000 8.5px); }
 .yd-ticket-kicker { font: 500 10.5px var(--yd-mono); letter-spacing: 0.12em; text-transform: uppercase; }

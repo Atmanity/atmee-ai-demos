@@ -190,6 +190,12 @@ describe('the front door', () => {
     const onStart = vi.fn();
     render(<Lobby host="Sammy" onStart={onStart} />);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('A workout built around you.');
+    // Sammy's face is on the badge, decorative because her name sits beside it.
+    const badge = document.querySelector('.sp-badge')!;
+    expect(badge.textContent).toContain('Your coach');
+    expect(badge.textContent).toContain('Sammy');
+    expect(badge.querySelector('img')?.getAttribute('src')).toMatch(/portrait\.jpg/);
+    expect(badge.querySelector('img')?.getAttribute('alt')).toBe('');
     fireEvent.click(screen.getByRole('button', { name: 'Talk to Sammy' }));
     fireEvent.click(screen.getByRole('button', { name: 'Type instead' }));
     expect(onStart.mock.calls).toEqual([[true], [false]]);

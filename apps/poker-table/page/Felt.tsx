@@ -7,6 +7,7 @@ import { CallStatus, HostVideo, type Avatar } from '../../../src/kit/index.ts';
 import { HOST } from '../engine/director.ts';
 import { handRankLabel } from '../engine/evaluator.ts';
 import type { TableView } from '../engine/types.ts';
+import portrait from '../host/portrait.jpg';
 import { CardView } from './CardView.tsx';
 import { ChipStack } from './ChipStack.tsx';
 
@@ -53,7 +54,7 @@ export function Felt({ view, avatar, message }: { view: TableView | null; avatar
             {dealt ? (dexCards ? dexCards.map((c) => <CardView key={c} card={c} size="sm" />) : <><CardView faceDown size="sm" /><CardView faceDown size="sm" /></>) : null}
           </div>
           <figure className="bs-dex" aria-label={`${HOST}, your opponent`}>
-            <HostVideo avatar={avatar} name={HOST} captions={false} className="bs-dex-video">
+            <HostVideo avatar={avatar} name={HOST} poster={portrait} captions={false} className="bs-dex-video">
               <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} />
             </HostVideo>
             <figcaption className="bs-plate">

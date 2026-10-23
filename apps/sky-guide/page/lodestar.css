@@ -98,7 +98,11 @@ em { font-style: normal; color: var(--ls-star); }
 .ls-hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: 56px; align-items: center; padding: 44px 0 48px; }
 .ls-hero h1 { margin: 16px 0 20px; font: 400 clamp(46px, 6.6vw, 88px)/.96 var(--ls-display); letter-spacing: -.01em; text-wrap: balance; }
 .ls-lede { margin: 0; max-width: 44ch; font-size: 18px; line-height: 1.6; color: color-mix(in srgb, var(--ls-star) 82%, var(--ls-haze)); }
-.ls-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+.ls-guide { display: flex; align-items: center; gap: 14px; max-width: 46ch; margin: 26px 0 0; padding-top: 18px; border-top: 1px solid var(--ls-line); font-size: 15px; line-height: 1.5; color: var(--ls-haze); }
+.ls-guide img { flex: none; width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 2px solid var(--ls-night); box-shadow: 0 0 0 1.5px var(--ls-brass), 0 0 0 5px color-mix(in srgb, var(--ls-brass) 18%, transparent); }
+:root[data-light="red"] .ls-guide img { filter: grayscale(1) sepia(1) saturate(5) hue-rotate(-38deg) brightness(.75); }
+.ls-guide b { color: var(--ls-star); font: italic 400 20px/1 var(--ls-display); }
+.ls-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
 .ls-small { margin: 14px 0 0; font-size: 13px; color: var(--ls-haze); }
 .ls-preview { margin: 0; display: grid; gap: 14px; justify-items: center; }
 .ls-preview-dome { width: min(100%, 480px); }
@@ -215,7 +219,7 @@ em { font-style: normal; color: var(--ls-star); }
 
 /* Mira */
 .ls-host-video { aspect-ratio: 4 / 5; width: 100%; box-shadow: 0 0 0 1px var(--ls-line), 0 24px 60px rgba(0, 0, 0, .45); }
-:root[data-light="red"] .ls-host-video video { filter: grayscale(1) sepia(1) saturate(5) hue-rotate(-38deg) brightness(.75); }
+:root[data-light="red"] .ls-host-video video, :root[data-light="red"] .ls-host-video .call-poster { filter: grayscale(1) sepia(1) saturate(5) hue-rotate(-38deg) brightness(.75); }
 .ls-nameplate { display: grid; gap: 4px; }
 .ls-nameplate p { margin: 0; display: flex; align-items: baseline; gap: 8px; color: var(--ls-haze); font-size: 14px; }
 .ls-nameplate b { font: 400 26px/1 var(--ls-display); color: var(--ls-star); }

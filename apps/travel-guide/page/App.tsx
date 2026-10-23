@@ -10,6 +10,7 @@ import { mustDo, netContext, stillNeeded, type NetTool } from '../engine/judge.t
 import { isNewer, parseSnapshot } from '../engine/messages.ts';
 import type { Action, MapConfig, Outcome, Snapshot } from '../engine/types.ts';
 import { Guidebook } from './Guidebook.tsx';
+import portrait from '../host/portrait.jpg';
 import { Lobby, Logo } from './Lobby.tsx';
 import { emptyNotes, notesFrom, tripSize, tripText } from './notes.ts';
 import { describeBounds } from './outline.ts';
@@ -253,7 +254,7 @@ export function App() {
             )}
           </div>
           <figure className={`yd-host ${live ? 'is-live' : 'is-waiting'}`} aria-label={`${HOST}, your guide`}>
-            <HostVideo avatar={avatar} name={HOST} className="yd-host-video">
+            <HostVideo avatar={avatar} name={HOST} poster={portrait} className="yd-host-video">
               <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} />
             </HostVideo>
             <figcaption className="yd-nameplate"><b>{HOST}</b><span>your guide</span>{live && <span className="yd-onair">Live</span>}</figcaption>

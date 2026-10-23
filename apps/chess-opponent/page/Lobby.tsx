@@ -1,5 +1,6 @@
 // Kibitz's front door: what it is, how a game goes, and the way in.
 import { Chessboard } from 'react-chessboard';
+import sasha from '../host/portrait.jpg';
 import { BoardBoundary, DARK_SQUARE, LIGHT_SQUARE } from './ChessBoard.tsx';
 
 export function Logo() {
@@ -47,7 +48,7 @@ function DemoBoard() {
       <figcaption className="kb-demo-note">
         <span className="kb-demo-move">2…d6</span>
         <span>“Keeps your knight off e5 and lets my bishop out. Sicilian, if you’re keeping score.”</span>
-        <span className="kb-demo-who">Sasha</span>
+        <span className="kb-demo-who"><img src={sasha} alt="" />Sasha</span>
       </figcaption>
       <p className="kb-demo-sheet">1. e4 c5 2. Nf3 d6</p>
     </figure>
@@ -60,7 +61,10 @@ export function Lobby({ onPlay }: { onPlay: (mic: boolean) => void }) {
       <header className="kb-top is-lobby"><Logo /></header>
       <main className="kb-hero">
         <div className="kb-hero-copy">
-          <p className="kb-eyebrow">Chess with Sasha</p>
+          <p className="kb-player-card">
+            <img src={sasha} alt="" />
+            <span><small>Across the board</small><span><b>Sasha</b>club player</span></span>
+          </p>
           <h1>A real game, with someone across the board.</h1>
           <p className="kb-lede">Sasha is a club player with a dry wit. She plays her own moves, explains every one, and names the opening when she spots it. Talk to her, type, or just move the pieces.</p>
           <div className="kb-cta">

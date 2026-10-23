@@ -14,6 +14,7 @@ import { hasNotes } from '../engine/notes.ts';
 import { reasonFrom } from '../engine/nutrition.ts';
 import { EMPTY_SHELF, parseShelf } from '../engine/shelf.ts';
 import type { Outcome, RecipeDetails, RecipeIdea, View } from '../engine/types.ts';
+import portrait from '../host/portrait.jpg';
 import { Board, CameraIcon, type Work } from './Board.tsx';
 import { Lobby, Logo } from './Lobby.tsx';
 import { downloadNotes, Notes } from './Notes.tsx';
@@ -363,7 +364,8 @@ export function App() {
       <main className="ms-main">
         <div className="ms-side">
           <aside className="ms-host" aria-label={`${HOST}, your nutritionist`}>
-            <HostVideo avatar={avatar} name={HOST} className="ms-host-video">
+            {/* Rachel's face fills the frame while the call connects, instead of a dark box. */}
+            <HostVideo avatar={avatar} name={HOST} poster={portrait} className="ms-host-video">
               <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} />
             </HostVideo>
             <div className="ms-nameplate">

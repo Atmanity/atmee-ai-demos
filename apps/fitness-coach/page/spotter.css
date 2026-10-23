@@ -95,7 +95,13 @@ button { font: inherit; }
 .sp-preview-coach { position: absolute; left: 18px; right: 70px; bottom: 16px; display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 10px; background: #2a2d31; color: #fff; box-shadow: 0 14px 30px rgba(0, 0, 0, .35); }
 .sp-preview-coach p { margin: 0; font-size: 14px; line-height: 1.45; }
 .sp-preview-coach b { display: block; font: 700 13px var(--sp-display); letter-spacing: .12em; text-transform: uppercase; color: var(--sp-tangerine); }
-.sp-preview-dot { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--sp-tangerine); color: var(--sp-rubber); font: 800 19px/1 var(--sp-display); }
+.sp-preview-dot { flex: none; width: 36px; height: 36px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 2px var(--sp-tangerine); }
+/* Sammy's name badge on the front door: a square photo on a tangerine strip, like a gym staff badge. */
+.sp-badge { display: inline-flex; align-items: center; gap: 12px; margin: 0; padding: 0 16px 0 0; border-radius: 8px; background: var(--sp-card); border: 1px solid var(--sp-mat); box-shadow: inset 0 -4px 0 var(--sp-tangerine); overflow: hidden; }
+.sp-badge img { width: 54px; height: 58px; object-fit: cover; object-position: 50% 20%; display: block; }
+.sp-badge > span { display: grid; gap: 2px; padding-bottom: 4px; }
+.sp-badge .sp-label { color: var(--sp-ember); }
+.sp-badge b { font: 800 24px/1 var(--sp-display); letter-spacing: .04em; text-transform: uppercase; color: var(--sp-rubber); }
 
 .sp-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; border-top: 3px solid var(--sp-rubber); padding-top: 26px; }
 .sp-steps article { display: grid; gap: 6px; align-content: start; }

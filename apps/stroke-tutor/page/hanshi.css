@@ -65,6 +65,11 @@ h1, h2 { text-wrap: balance; }
 .hs-lobby { max-width: 1180px; margin: 0 auto; padding: 22px max(20px, env(safe-area-inset-right)) 56px max(20px, env(safe-area-inset-left)); }
 .hs-top.is-lobby { padding-bottom: 6px; }
 .hs-hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: 56px; align-items: center; padding: 52px 0 56px; }
+/* Ren on the front door: a square portrait on paper, ruled in vermilion like a seal on a sheet. */
+.hs-host-credit { display: flex; align-items: center; gap: 14px; margin: 0; color: #dfe5e6; font-size: 15px; }
+.hs-host-credit img { width: 52px; height: 52px; flex: none; object-fit: cover; object-position: center 20%; border: 3px solid var(--hs-paper); box-shadow: 0 0 0 1.5px var(--hs-shu), 0 8px 18px rgba(0, 0, 0, .35); }
+.hs-host-credit > span { display: grid; gap: 3px; }
+.hs-host-credit b { font: 800 17px var(--hs-display); color: var(--hs-paper); }
 .hs-hero h1 { margin: 16px 0 20px; font: 800 clamp(38px, 5.4vw, 66px)/1.08 var(--hs-display); letter-spacing: -.01em; color: var(--hs-paper); }
 .hs-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
 .hs-small { margin: 14px 0 0; max-width: 52ch; font-size: 13.5px; line-height: 1.55; color: var(--hs-ash); }
@@ -78,7 +83,7 @@ h1, h2 { text-wrap: balance; }
 .hs-showcase-ren { position: absolute; right: 0; top: 0; margin: 0; display: flex; gap: 10px; align-items: center; padding: 10px 14px 10px 10px; background: var(--hs-felt-up); border: 1px solid var(--hs-rule); border-radius: 999px; font-size: 14px; color: #dfe5e6; box-shadow: 0 12px 26px rgba(0, 0, 0, .3); }
 .hs-showcase-ren > span:last-child { display: grid; }
 .hs-showcase-ren b { font: 700 12px var(--hs-body); color: var(--hs-paper); }
-.hs-showcase-face { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--hs-shu); color: #fff; font: 800 16px var(--hs-display); }
+.hs-showcase-face { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; object-position: center 20%; box-shadow: 0 0 0 2px var(--hs-shu); }
 
 .hs-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; border-top: 1px solid var(--hs-rule); padding-top: 30px; }
 .hs-steps article { display: grid; gap: 8px; align-content: start; }

@@ -215,6 +215,11 @@ describe('the words on screen', () => {
     const starts: boolean[] = [];
     render(<Lobby onStart={(mic) => starts.push(mic)} />);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Write every character in the right order.');
+    // Ren's face before the call, named beside it (so the image itself is decorative).
+    const credit = screen.getByText(/Taught by/).closest('p')!;
+    expect(credit.textContent).toContain('Taught by Ren');
+    expect(credit.querySelector('img')!.getAttribute('src')).toMatch(/portrait\.jpg/);
+    expect(credit.querySelector('img')!.getAttribute('alt')).toBe('');
     fireEvent.click(screen.getByRole('button', { name: 'Start with your voice' }));
     fireEvent.click(screen.getByRole('button', { name: 'Start by typing' }));
     expect(starts).toEqual([true, false]);

@@ -75,9 +75,15 @@ test('the front door says what it is and offers voice or typing', () => {
   render(<App />);
   expect(screen.getByRole('heading', { level: 1, name: 'Where to next?' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Talk to Lumi' })).toBeTruthy();
+  // Who they will talk to, before the call: her face beside her name (so the image itself says nothing).
+  const tag = screen.getByText('Your guide').closest('.yd-guide-tag')!;
+  expect(tag.textContent).toContain('Lumi');
+  expect(tag.querySelector('img')!.getAttribute('src')).toMatch(/portrait\.jpg/);
+  expect(tag.querySelector('img')!.getAttribute('alt')).toBe('');
   fireEvent.click(screen.getByRole('button', { name: 'Chat by typing' }));
   expect(kit.avatar.start).toHaveBeenCalledWith({ mic: false });
   expect(screen.getByText('Calling Lumi…')).toBeTruthy(); // in Lumi's frame
+  expect(document.querySelector('.yd-host .call-poster')!.getAttribute('src')).toMatch(/portrait\.jpg/); // her face while the call connects
   expect(posts[0].path).toBe('/trips');
 });
 

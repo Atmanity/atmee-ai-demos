@@ -1,5 +1,6 @@
 // Lodestar's front door: what it is, how it works, and the way in, beside
 // the real sky over the chosen place tonight (the same chart the call opens on).
+import portrait from '../host/portrait.jpg';
 import type { SkyView } from '../engine/types.ts';
 import { PLACES } from '../engine/sky.ts';
 import { SkyDome, type DomePalette } from './SkyDome.tsx';
@@ -44,6 +45,11 @@ export function Lobby({ view, host, palette, onPlace, onStart }: {
           <p className="ls-lede">
             Lodestar charts the sky over any city, at any hour, and {host}, your guide, tells you what's up,
             where to look and what each star is. Only from the star catalogue: she never guesses.
+          </p>
+          <p className="ls-guide">
+            {/* Decorative: her name is right beside it. */}
+            <img src={portrait} alt="" width={48} height={48} />
+            <span>Your guide tonight is <b>{host}</b>, who has spent years pointing at things in the dark for people seeing them for the first time.</span>
           </p>
           <div className="ls-cta">
             <button type="button" className="ls-primary is-big" onClick={() => onStart(true)}>Talk to {host}</button>

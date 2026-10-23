@@ -34,7 +34,7 @@ vi.mock('../../../src/kit/index.ts', async (importOriginal) => {
         say: () => {}, note: () => {}, record: () => {},
       };
     },
-    HostVideo: ({ children }: { children?: React.ReactNode }) => <div data-testid="host">{children}</div>,
+    HostVideo: ({ children, poster }: { children?: React.ReactNode; poster?: string }) => <div data-testid="host" data-poster={poster}>{children}</div>,
     CallStatus: () => null,
     CallControls: () => null,
     ChatPanel: () => null,
@@ -121,6 +121,7 @@ describe('a lesson', () => {
     fake.phase = 'starting';
     const view = render(<App />);
     expect(screen.getByText('Ren is laying out your sheet…')).toBeTruthy();
+    expect(screen.getByTestId('host').dataset.poster).toMatch(/portrait\.jpg/);   // Ren's face while the call connects
     await settle();
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('What would you like to write?');
     expect(fake.events).toEqual([]);   // held until Ren can hear it

@@ -14,6 +14,7 @@ import { Mirror, OccasionPicker, Rail, Verdict } from './Fitting.tsx';
 import { Lobby, Logo } from './Lobby.tsx';
 import { Notes, type Rating } from './Notes.tsx';
 import { preparePhoto } from './photo.ts';
+import portrait from '../host/portrait.jpg';
 import exampleOutfit from './sample-outfit.jpg';
 import './notch.css';
 
@@ -290,7 +291,7 @@ export function App() {
         </div>
 
         <aside className="nt-host" aria-label={`${HOST}, your stylist`}>
-          <HostVideo avatar={avatar} name={HOST} className="nt-host-video">
+          <HostVideo avatar={avatar} name={HOST} poster={portrait} className="nt-host-video">
             <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} />
           </HostVideo>
           <div className="nt-nameplate">

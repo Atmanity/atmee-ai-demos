@@ -21,6 +21,7 @@ import { boardState, say } from '../engine/director.ts';
 import { mustDo, mustSetLevel, mustStartMove, mustStop, type NetCall, type NetContext } from '../engine/judge.ts';
 import type { Command, Outcome, View } from '../engine/types.ts';
 import { Workout, type Pending } from './Workout.tsx';
+import portrait from '../host/portrait.jpg';
 import { Lobby, Logo } from './Lobby.tsx';
 import { parseSnapshot } from './parsers.ts';
 import { planFileName, planText } from './plan-text.ts';
@@ -185,7 +186,8 @@ export function App() {
 
       <main className="sp-main">
         <aside className={`sp-coach${live ? ' is-live' : ''}`} aria-label={`${HOST}, your coach`}>
-          <HostVideo avatar={avatar} name={HOST} className="sp-coach-video">
+          {/* Sammy's face fills the frame while the call connects, instead of a dark box. */}
+          <HostVideo avatar={avatar} name={HOST} poster={portrait} className="sp-coach-video">
             <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} />
           </HostVideo>
           <div className="sp-nameplate">

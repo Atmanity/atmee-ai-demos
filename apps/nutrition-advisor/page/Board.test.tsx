@@ -57,6 +57,10 @@ describe('the front door', () => {
     const onStart = vi.fn();
     const { container } = render(<Lobby host="Rachel" onStart={onStart} />);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toMatch(/Ask about any food/);
+    // Who you will talk to, before the call: a face beside the name (so the photo itself says nothing).
+    const tag = container.querySelector('.ms-host-tag')!;
+    expect(tag.textContent).toBe('Your nutritionistRachel');
+    expect(tag.querySelector('img')!.getAttribute('alt')).toBe('');
     fireEvent.click(screen.getByText('Talk to Rachel'));
     fireEvent.click(screen.getByText('Type instead'));
     expect(onStart.mock.calls).toEqual([[true], [false]]);

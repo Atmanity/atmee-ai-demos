@@ -308,6 +308,11 @@ describe('the other screens', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Talk to Reese' }));
     fireEvent.click(screen.getByRole('button', { name: 'Type instead' }));
     expect(onStart.mock.calls).toEqual([[true], [false]]);
+    // Reese's face, before the call: decorative, since the name sits beside it.
+    const face = document.querySelector('.oc-host-badge img') as HTMLImageElement;
+    expect(face.getAttribute('src')).toMatch(/portrait\.jpg/);
+    expect(face.getAttribute('alt')).toBe('');
+    expect(face.closest('p')!.textContent).toBe('Reese your analyst on the desk');
     // The words the product never puts on screen.
     expect(document.body.textContent).not.toMatch(/\b(session|avatar|API|Atmee|demo|sample|mini-app)\b/i);
   });

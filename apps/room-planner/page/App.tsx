@@ -9,6 +9,7 @@ import { contextOf, mustDo, roomSideCm } from '../engine/judge.ts';
 import type { PlanSnapshot } from '../engine/types.ts';
 import { areaLabel } from './geometry.ts';
 import { Lobby, Logo } from './Lobby.tsx';
+import portrait from '../host/portrait.jpg';
 import { HomeSession, type ServerPort } from './session.ts';
 import { Studio, type Photos, type Purpose } from './Studio.tsx';
 import './planwright.css';
@@ -133,7 +134,7 @@ export function App() {
 
   const host = (
     <section className="pw-host">
-      <HostVideo avatar={avatar} name={HOST} className="pw-host-video">
+      <HostVideo avatar={avatar} name={HOST} poster={portrait} className="pw-host-video">
         <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} />
       </HostVideo>
       <div className="pw-nameplate">

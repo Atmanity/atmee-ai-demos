@@ -1,4 +1,5 @@
 // Hanshi's front door: what it is, how a lesson goes, and the way in.
+import ren from '../host/portrait.jpg';
 import { HOST } from './Desk.tsx';
 
 /** The mark: a vermilion seal with the practice grid and one brush stroke, 一. */
@@ -47,7 +48,7 @@ function Showcase() {
         </svg>
       </div>
       <p className="hs-showcase-verdict"><b>Correct</b>Down, then across, in one stroke.</p>
-      <p className="hs-showcase-ren"><span className="hs-showcase-face">{HOST.charAt(0)}</span><span><b>{HOST}</b>“Stroke three: watch the sheet.”</span></p>
+      <p className="hs-showcase-ren"><img className="hs-showcase-face" src={ren} alt="" /><span><b>{HOST}</b>“Stroke three: watch the sheet.”</span></p>
     </div>
   );
 }
@@ -59,7 +60,10 @@ export function Lobby({ onStart }: { onStart: (mic: boolean) => void }) {
       <main>
         <section className="hs-hero">
           <div className="hs-hero-copy">
-            <p className="hs-eyebrow">Stroke-order lessons with {HOST}</p>
+            <p className="hs-host-credit">
+              <img src={ren} alt="" />
+              <span><span className="hs-eyebrow">Stroke-order lessons</span>Taught by <b>{HOST}</b>, a calligraphy teacher</span>
+            </p>
             <h1>Write every character in the right order.</h1>
             <p className="hs-lede">{HOST}, a calm calligraphy teacher, watches you write one stroke at a time on a practice sheet, and tells you straight away when a stroke comes out of order or runs the wrong way. Your handwriting is never judged.</p>
             <div className="hs-cta">

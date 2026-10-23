@@ -14,6 +14,7 @@ import type { GridPoint } from './ink.ts';
 import { Lobby, Logo } from './Lobby.tsx';
 import { nextMarks, type Marks } from './marks.ts';
 import { saveSheet } from './save.ts';
+import ren from '../host/portrait.jpg';
 import './hanshi.css';
 
 const API = '/api/apps/stroke-tutor';
@@ -204,7 +205,7 @@ export function App() {
         <div className="hs-deskwrap">{desk}</div>
 
         <aside className="hs-teacher" aria-label={`${HOST}, your teacher`}>
-          <HostVideo avatar={avatar} name={HOST} className="hs-video">
+          <HostVideo avatar={avatar} name={HOST} poster={ren} className="hs-video">
             <CallStatus avatar={avatar} name={HOST} again={`Call ${HOST} again`} />
           </HostVideo>
           <div className="hs-nameplate">

@@ -1,5 +1,6 @@
 // Morsel's front door: what it is, how it works, and the way in.
 import { builtInCard } from '../engine/fallback.ts';
+import portrait from '../host/portrait.jpg';
 import { Label } from './Label.tsx';
 
 export function Logo() {
@@ -39,6 +40,8 @@ export function Lobby({ host, onStart }: { host: string; onStart: (mic: boolean)
       <main className="ms-hero">
         <div className="ms-hero-copy">
           <p className="ms-eyebrow">A nutritionist you can talk to</p>
+          {/* Who you will talk to, before the call: the name sits beside the face, so the photo is decorative. */}
+          <p className="ms-host-tag"><img src={portrait} alt="" /><span><small>Your nutritionist</small><b>{host}</b></span></p>
           <h1>Ask about any food. See what's really in it.</h1>
           <p className="ms-lede">
             {host}, a friendly nutritionist, looks up anything you eat and puts the facts on a clear label: what stands out, how it
@@ -54,7 +57,7 @@ export function Lobby({ host, onStart }: { host: string; onStart: (mic: boolean)
           <figure className="ms-hero-visual" aria-hidden="true">
             <div className="ms-hero-label"><Label data={AVOCADO} compact /></div>
             <figcaption className="ms-hero-bubble">
-              <span className="ms-hero-who"><i>{host.charAt(0)}</i>{host}</span>
+              <span className="ms-hero-who"><img src={portrait} alt="" />{host}</span>
               Mostly the good, unsaturated kind of fat, and 10 grams of fiber. That's a lot for one fruit.
             </figcaption>
           </figure>

@@ -1,4 +1,5 @@
-// Outcry's front door: what it is, how it works, and the way in.
+// Outcry's front door: what it is, who you will talk to, how it works, and the way in.
+import reese from '../host/portrait.jpg';
 
 /** The mark: a pit trader's badge in oxblood, clipped on, with a brass tick across it. */
 export function Mark({ size = 34 }: { size?: number }) {
@@ -56,6 +57,8 @@ export function Lobby({ onStart }: { onStart: (mic: boolean) => void }) {
       <header className="oc-top is-lobby"><Logo /></header>
       <main className="oc-hero">
         <div className="oc-hero-copy">
+          {/* Who picks up: Reese's face, pinned like a floor badge. The name sits beside it, so the photo is decorative. */}
+          <p className="oc-host-badge"><img src={reese} alt="" /><span><b>Reese</b> your analyst on the desk</span></p>
           <p className="oc-eyebrow">A live stock watchlist, read aloud</p>
           <h1>Call out a ticker. Reese reads the tape.</h1>
           <p className="oc-lede">Build a board of up to six stocks just by naming them. Reese, your analyst, puts each one up with its real last sale, today’s move and its 52-week range, and tells you when the one on watch moves. Reese never tells you what to buy.</p>

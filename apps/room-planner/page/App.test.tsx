@@ -82,6 +82,11 @@ describe('the front door', () => {
     // The example exchange carries the planner's own numbers.
     expect(screen.getByText(/^Done: the main bedroom is [\d.]+ square metres now, the /)).toBeTruthy();
     expect(screen.getByText('Start by typing')).toBeTruthy();
+    // Who you will talk to, before the call: her face beside her name (so the image is decorative).
+    const tag = document.querySelector('.pw-host-tag')!;
+    expect(tag.textContent).toBe('Your architectIris');
+    expect(tag.querySelector('img')!.getAttribute('src')).toMatch(/portrait/);
+    expect(tag.querySelector('img')!.getAttribute('alt')).toBe('');
     expect(document.body.textContent).not.toMatch(/\b(avatar|session|demo|sample|mini-app|Atmee|API|tools?|state|events?)\b/i);
   });
 
@@ -90,6 +95,8 @@ describe('the front door', () => {
     fireEvent.click(screen.getByText('Start by typing'));
     expect(fake.started).toEqual([{ mic: false }]);
     await waitFor(() => expect(screen.getByText('Calling Iris…')).toBeTruthy());
+    // Her face fills the frame while the call connects, not a dark box.
+    expect(document.querySelector('.pw-host-video .call-poster')!.getAttribute('src')).toMatch(/portrait/);
     expect(fake.events[0]).toContain('roughly how big the place is');
     expect(lastState()).toContain('Planwright, live plan');
     expect(screen.getByText('9 m × 7 m, nothing drawn yet')).toBeTruthy();

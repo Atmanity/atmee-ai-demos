@@ -1,5 +1,6 @@
-// Yonder's front door: what it is, how it works, and the two ways in.
+// Yonder's front door: who your guide is, what it is, how it works, and the two ways in.
 import { useId } from 'react';
+import portrait from '../host/portrait.jpg';
 
 /** The mark: a sun going down over the sea, seen through a round window. */
 export function Mark({ size = 34 }: { size?: number }) {
@@ -48,7 +49,7 @@ function Poster({ host }: { host: string }) {
           </g>
         ))}
       </svg>
-      <figcaption className="yd-poster-voice"><b>{host}</b>In Belém, get the pastéis de nata still warm. Go early.</figcaption>
+      <figcaption className="yd-poster-voice"><b><img src={portrait} alt="" />{host}</b>In Belém, get the pastéis de nata still warm. Go early.</figcaption>
       <div className="yd-poster-ticket">
         <span className="yd-ticket-kicker">Sight 1 of 8 · 6 min walk</span>
         <span className="yd-ticket-name">Jerónimos Monastery</span>
@@ -69,6 +70,7 @@ export function Lobby({ host, onStart }: { host: string; onStart: (mic: boolean)
       <header className="yd-lobby-top"><Logo /></header>
       <main className="yd-hero">
         <div className="yd-hero-copy">
+          <p className="yd-guide-tag"><img src={portrait} alt="" /><span>Your guide <b>{host}</b><small>has been almost everywhere</small></span></p>
           <p className="yd-eyebrow">Trip dreaming, with a friend who has been</p>
           <h1>Where to next?</h1>
           <p className="yd-lede">
