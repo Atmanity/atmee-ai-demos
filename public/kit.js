@@ -42,7 +42,7 @@
 
   // A chat-style transcript. avatar(text, final) grows one live bubble per
   // sentence and settles it when the sentence is complete. heard(text, final,
-  // segment) does the same for the user's spoken words, one bubble per
+  // segment, seq) does the same for the user's spoken words, one bubble per
   // segment. A typed turn comes back as a user transcription too; that echo
   // is not shown again.
   const ECHO_MS = 60000; // a typed turn can wait out a long avatar turn before it is sent
@@ -76,14 +76,18 @@
         stick();
       },
       user(text, who) { typed.push({ n: norm(text), at: Date.now() }); bubble('me', who || names.user || 'You', text); },
-      heard(text, final, segment) {
+      heard(text, final, segment, seq = 0) {
         let seg = spoken.get(segment);
         if (seg && seg.done) return;
         if (!seg) {
-          seg = { d: null, done: false };
+          seg = { d: null, done: false, seq: 0 };
           spoken.set(segment, seg);
           if (spoken.size > 200) spoken.delete(spoken.keys().next().value);
         }
+        // An interim that started before one already shown is stale; a final
+        // always wins.
+        if (!final && seq && seq < seg.seq) return;
+        seg.seq = Math.max(seg.seq, seq);
         if (final) seg.done = true;
         // An interim never takes a bubble away (it may land after a fuller
         // one): one that repeats a typed turn only waits to be shown, and the

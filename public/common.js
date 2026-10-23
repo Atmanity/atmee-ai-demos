@@ -6,11 +6,13 @@
 //
 //   const mic = await Atmee.requestMic();          // in the lobby, or null for typing only
 //   const s = await Atmee.join({ usecase, video, audio, mic, tools,
-//     onPhase(phase, detail), onCaption(text, final), onUserCaption(text, final, segmentId),
+//     onPhase(phase, detail), onCaption(text, final), onUserCaption(text, final, segmentId, seq),
 //     onSpeaking(bool), onVideo(bool), onMessage(msg), onRelay(topic, text), onEnd() });
 //
 // onCaption carries the avatar's words; onUserCaption the user's spoken words
 // as recognised (interims of one utterance share a segment id, then a final).
+// seq numbers the streams in the order they started, so one that finishes
+// late can be told from a newer one.
 //   s.user(kind, text)  tell the server what the user did (the use case decides)
 //   s.setMuted(bool)    mute or unmute the user's microphone
 //   s.end()
@@ -145,7 +147,9 @@
     // stream carrying the whole utterance so far, the last one is attributed
     // lk.transcription_final, and all of them share lk.segment_id. They are
     // never the avatar's turn, so they touch neither arrival nor the floor.
+    let userSeq = 0;
     async function userCaption(reader, info) {
+      const seq = ++userSeq; // taken when the stream starts, before it is read
       const attrs = info.attributes || {};
       const final = attrs['lk.transcription_final'] === 'true';
       const segment = attrs['lk.segment_id'] || info.id;
@@ -153,7 +157,7 @@
       try { for await (const chunk of reader) text += chunk; } catch (e) {}
       text = cleanUserText(text);
       if (debug) console.log(`[atmee] ${stamp()} heard${final ? ' (final)' : ''} ${segment}: ${text}`);
-      if (opts.onUserCaption && (text || final)) opts.onUserCaption(text, final, segment);
+      if (opts.onUserCaption && (text || final)) opts.onUserCaption(text, final, segment, seq);
     }
 
     // App tool calls arrive as an RPC to this participant; registered before
