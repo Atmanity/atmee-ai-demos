@@ -208,12 +208,14 @@ function trainingState(h) {
 //    No app tools: here information only flows from the app to the avatar
 //    (state and events); the companion has nothing to make the app do.
 // ---------------------------------------------------------------------------
+const COMPANION = "You are a quiet companion sitting next to the user while they work. You see their screen through short descriptions the app sends you. Speak only when something noteworthy happens or when spoken to; keep it to one or two sentences; never narrate routine activity.";
 const presence = {
   title: "Presence / companion (screen observer)",
   page: "presence.html",
-  onLinked(h) { return [state("You are a quiet companion sitting next to the user while they work. You see their screen through short descriptions the app sends you. Speak only when something noteworthy happens or when spoken to; keep it to one or two sentences; never narrate routine activity.")]; },
+  // A state replaces the one before, so each one carries the companion's role.
+  onLinked(h) { return [state(COMPANION)]; },
   onObservation(h, seen) {
-    const out = [state(`What the user's screen shows now: ${seen.description}`)];
+    const out = [state(`${COMPANION} What the user's screen shows now: ${seen.description}`)];
     if (seen.noteworthy) out.push(event(`Something changed on the user's screen: ${seen.noteworthy}. React briefly if it deserves a word; otherwise stay quiet.`, 15));
     return out;
   },
