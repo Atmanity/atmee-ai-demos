@@ -3,19 +3,104 @@
 <head>
 <meta charset="utf-8">
 <title>Atmee Showcase</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Nineteen apps, each run by a live conversational avatar, all on one avatar platform: the Atmee Avatar API.">
+<meta name="color-scheme" content="light dark">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="kit.css">
 <style>
-  :root { --bg: #f6f5f2; --surface: #fff; --text: #16151a; --muted: #6b6970; --line: #e6e3dd; --font: "Inter", system-ui, sans-serif; }
-  .wrap { max-width: 1120px; margin: 0 auto; padding: 56px max(16px, env(safe-area-inset-left, 0px)) 64px; padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-  .hero { display: grid; gap: 14px; max-width: 720px; margin-bottom: 40px; }
-  .hero h1 { font-size: clamp(36px, 5vw, 56px); font-weight: 800; letter-spacing: -.03em; }
-  .hero p { font-size: 19px; color: var(--muted); margin: 0; }
+  /* The showcase's own tokens (kit.css leaves colours to each page). Layout: a sticky
+     bar, a two-column hero (the pitch beside a wall of the hosts' real faces, each a
+     link into its app), a category filter, the card grid, then how it works. */
+  :root {
+    --bg: #f6f5f2; --surface: #fff; --surface-2: #efede8; --text: #16151a; --muted: #5f5d66; --line: #e3e0d9;
+    --accent: #3442c9; --accent-ink: #fff; --accent-soft: #e7e9fb; --live: #17a34a;
+    --bar: rgb(246 245 242 / .82); --tile: #dcd9d2; --shadow-lift: 0 18px 40px rgb(0 0 0 / .08);
+    --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111116; --surface: #1a1a21; --surface-2: #24242d; --text: #f1f0f4; --muted: #a3a1ad; --line: #2e2e38;
+      --accent: #8f9bff; --accent-ink: #0d0f2a; --accent-soft: #23264a; --live: #3ddc84;
+      --bar: rgb(17 17 22 / .8); --tile: #2a2a33; --shadow-lift: 0 18px 40px rgb(0 0 0 / .45);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #111116; --surface: #1a1a21; --surface-2: #24242d; --text: #f1f0f4; --muted: #a3a1ad; --line: #2e2e38;
+    --accent: #8f9bff; --accent-ink: #0d0f2a; --accent-soft: #23264a; --live: #3ddc84;
+    --bar: rgb(17 17 22 / .8); --tile: #2a2a33; --shadow-lift: 0 18px 40px rgb(0 0 0 / .45);
+    color-scheme: dark;
+  }
+  html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  html, body { height: auto; }
+  body { background: var(--bg); color: var(--text); }
+  a:focus-visible, button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 10px; }
+  .gutter { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .skip { position: absolute; left: 12px; top: -48px; z-index: 30; background: var(--accent); color: var(--accent-ink); padding: 8px 14px; border-radius: 999px; font-weight: 600; text-decoration: none; }
+  .skip:focus { top: 12px; }
+
+  /* The bar */
+  .bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--bar); border-bottom: 1px solid transparent; transition: border-color .2s;
+    -webkit-backdrop-filter: saturate(1.4) blur(14px); backdrop-filter: saturate(1.4) blur(14px); }
+  .bar.scrolled { border-bottom-color: var(--line); }
+  .bar .gutter { display: flex; align-items: center; gap: 24px; height: 64px; }
+  .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--text); text-decoration: none; font-weight: 700; font-size: 18px; letter-spacing: -.02em; }
+  .brand svg { width: 30px; height: 30px; flex: none; }
+  .brand small { font-weight: 500; font-size: 14px; color: var(--muted); letter-spacing: 0; padding-left: 10px; border-left: 1px solid var(--line); }
+  .bar nav { display: flex; gap: 4px; margin-left: auto; }
+  .bar nav a { color: var(--muted); text-decoration: none; font-weight: 500; font-size: 14px; padding: 8px 12px; border-radius: 999px; }
+  .bar nav a:hover { color: var(--text); background: var(--surface-2); }
+  .bar .cta { padding: 9px 16px; font-size: 14px; text-decoration: none; }
+  .ext { width: 12px; height: 12px; vertical-align: -1px; margin-left: 3px; }
+
+  /* The hero */
+  .hero { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); gap: 56px; align-items: center; padding-block: 64px 56px; }
+  .pitch { display: grid; gap: 20px; min-width: 0; }
+  .live-note { display: inline-flex; align-items: center; gap: 8px; width: fit-content; padding: 6px 12px 6px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); font-size: 13px; font-weight: 600; color: var(--muted); }
+  .live-note i { width: 8px; height: 8px; border-radius: 50%; background: var(--live); box-shadow: 0 0 0 0 var(--live); animation: beat 2s ease-out infinite; }
+  @keyframes beat { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--live) 60%, transparent); } 70%, 100% { box-shadow: 0 0 0 7px transparent; } }
+  .hero h1 { font-size: clamp(36px, 4.6vw, 56px); font-weight: 800; letter-spacing: -.035em; line-height: 1.04; }
+  .hero h1 em { font-style: normal; color: var(--accent); }
+  .hero .sub { font-size: clamp(17px, 1.6vw, 19px); color: var(--muted); margin: 0; max-width: 34em; line-height: 1.55; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+  .actions .btn { text-decoration: none; }
+  .proof { display: grid; grid-template-columns: repeat(3, auto); justify-content: start; gap: 10px 32px; margin: 4px 0 0; padding: 18px 0 0; border-top: 1px solid var(--line); }
+  .proof div { display: grid; gap: 2px; }
+  .proof dt { font-size: 13px; color: var(--muted); }
+  .proof dd { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; min-width: 3ch; order: -1; }
+
+  /* The wall of hosts: five columns, the even ones dropped half a tile. */
+  .wall-wrap { min-width: 0; }
+  .wall { list-style: none; margin: 0; padding: 0 0 calc((100% - 4 * 12px) / 10); display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+  .wall li { aspect-ratio: 1; min-width: 0; }
+  .wall li:nth-child(5n+2), .wall li:nth-child(5n+4) { transform: translateY(50%); }
+  .wall a, .wall .yours { position: relative; display: block; width: 100%; height: 100%; border-radius: 22%; overflow: hidden; background: var(--tile); text-decoration: none; color: inherit; transition: transform .18s ease, box-shadow .18s ease; }
+  .wall img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 25%; display: block; opacity: 0; transition: opacity .35s; }
+  .wall img.in { opacity: 1; }
+  .wall a:hover, .wall a:focus-visible { transform: translateY(-3px) scale(1.04); box-shadow: var(--shadow-lift); z-index: 1; }
+  .wall .tag { position: absolute; left: 6px; right: 6px; bottom: 6px; padding: 4px 6px; border-radius: 8px; background: rgb(10 10 14 / .72); color: #fff; font-size: 11px; font-weight: 600; line-height: 1.25; text-align: center;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0; transform: translateY(4px); transition: opacity .15s, transform .15s; }
+  .wall a:hover .tag, .wall a:focus-visible .tag { opacity: 1; transform: none; }
+  .wall .yours { display: grid; place-items: center; text-align: center; padding: 8px; background: transparent; border: 1.5px dashed var(--line); color: var(--muted); font-size: 12px; font-weight: 600; line-height: 1.3; }
+  .wall-note { margin: 14px 0 0; font-size: 13px; color: var(--muted); text-align: center; }
+
+  /* The apps */
+  .apps-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+  .apps-head h2, .how h2 { font-size: 28px; font-weight: 750; letter-spacing: -.02em; }
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; min-height: 38px; }
+  .filters button { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer; }
+  .filters button span { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .filters button:hover { background: var(--surface-2); }
+  .filters button[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: var(--bg); }
+  .filters button[aria-pressed="true"] span { color: inherit; opacity: .7; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
   .app { display: flex; flex-direction: column; border-radius: 20px; overflow: hidden; background: var(--surface); border: 1px solid var(--line); text-decoration: none; color: inherit; transition: transform .15s, box-shadow .15s; }
-  .app:hover { transform: translateY(-3px); box-shadow: 0 18px 40px rgb(0 0 0 / .08); }
+  .app:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); }
+  .app:focus-visible { outline-offset: 4px; border-radius: 20px; }
   .app .art { height: 150px; display: flex; align-items: end; padding: 18px; color: #fff; position: relative; }
   .app .art .glyph { position: absolute; right: 18px; top: 14px; font-size: 52px; opacity: .9; }
   .app .art b { font-size: 22px; letter-spacing: -.01em; }
@@ -27,108 +112,280 @@
   .app .body { padding: 18px; display: grid; gap: 10px; flex: 1; }
   .app .body p { margin: 0; color: var(--muted); }
   .app .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
-  .app .open { font-weight: 600; }
-  .extra { font-size: 14px; color: var(--muted); }
+  .app .open { font-weight: 600; color: var(--text); }
+  .extra { font-size: 14px; color: var(--muted); margin: 16px 0 0; }
   .extra a { color: inherit; }
-  footer { margin-top: 40px; color: var(--muted); font-size: 14px; }
+
+  /* How it works: a real order, so numbered. */
+  .how { padding-block: 72px 8px; display: grid; gap: 24px; }
+  .how ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; counter-reset: step; }
+  .how li { counter-increment: step; display: grid; gap: 8px; align-content: start; padding: 22px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); min-width: 0; }
+  .how li::before { content: counter(step); width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 14px; }
+  .how h3 { font-size: 17px; font-weight: 700; }
+  .how p { margin: 0; color: var(--muted); }
+  .how code { font: 13px/1.4 ui-monospace, Menlo, monospace; background: var(--surface-2); padding: 1px 6px; border-radius: 6px; overflow-wrap: anywhere; }
+  footer { padding-block: 40px 64px; color: var(--muted); font-size: 14px; }
+  footer code { overflow-wrap: anywhere; }
+
+  @media (max-width: 960px) {
+    .hero { grid-template-columns: minmax(0, 1fr); gap: 36px; padding-block: 44px 40px; }
+    .wall-wrap { max-width: 560px; }
+    .how ol { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 720px) {
+    .bar nav a.optional { display: none; }
+    .bar .gutter { gap: 12px; }
+    .brand small { display: none; }
+    /* One scrolling row of faces, names shown. */
+    .wall { padding: 0 0 6px; grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 76px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; }
+    .wall::-webkit-scrollbar { display: none; }
+    .wall li { scroll-snap-align: start; }
+    .wall li:nth-child(5n+2), .wall li:nth-child(5n+4) { transform: none; }
+    .wall .tag { opacity: 1; transform: none; font-size: 10px; left: 4px; right: 4px; bottom: 4px; padding: 2px 4px; }
+    .wall-note { text-align: left; margin-top: 10px; }
+    /* The faces straight after the pitch, before the buttons. */
+    .hero { display: flex; flex-direction: column; align-items: stretch; gap: 20px; }
+    .pitch { display: contents; }
+    .live-note { order: 1; } .hero h1 { order: 2; } .hero .sub { order: 3; } .wall-wrap { order: 4; } .actions { order: 5; } .proof { order: 6; }
+    .grid { grid-template-columns: minmax(0, 1fr); }
+    .actions .btn.lg { padding: 12px 20px; font-size: 15px; }
+  }
+  @media (max-width: 420px) {
+    .bar nav { display: none; }
+    .bar .cta { margin-left: auto; }
+    .proof { gap: 10px 18px; }
+    .proof dt { font-size: 12px; }
+    /* Two equal buttons on one row, whichever font has loaded (no reflow when Inter arrives). */
+    .actions { display: grid; grid-template-columns: 1fr 1fr; }
+    .actions .btn.lg { padding: 12px 8px; font-size: 14px; }
+    .proof dd { font-size: 22px; }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header class="hero">
-    <div class="eyebrow">Built on the Atmee Avatar API</div>
-    <h1 id="headline">Five products, one avatar platform.</h1>
-    <p>Each of these is a complete app with its own brand and flow. Behind every one is the same conversational avatar, steered by what the app knows.</p>
-  </header>
-  <section class="grid" id="apps">
-    <a class="app" href="training.html">
-      <div class="art" style="background:linear-gradient(150deg,#2c2463,#4b3fd1)"><img class="face" data-usecase="training" alt="" hidden><span class="glyph">🎓</span><b>Ledger Academy</b></div>
-      <div class="body"><p>A live trainer teaches a short incident-response course, takes your questions, and quizzes you at the end.</p><div class="tags"><span class="chip">Training</span><span class="chip">Lesson plan</span><span class="chip">Quiz</span></div><span class="open">Start the course →</span></div>
+<a class="skip" href="#apps">Skip to the apps</a>
+<header class="bar" id="bar">
+  <div class="gutter">
+    <a class="brand" href="/" aria-label="Atmee showcase home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" style="fill:var(--text)"/><circle cx="16" cy="13" r="5.2" style="fill:var(--bg)"/><path d="M7.5 26.5c1.6-4.3 4.8-6.4 8.5-6.4s6.9 2.1 8.5 6.4" style="fill:none;stroke:var(--bg)" stroke-width="2.6" stroke-linecap="round"/><circle cx="24.5" cy="7.5" r="2.6" style="fill:var(--live)"/></svg>
+      Atmee <small>Showcase</small>
     </a>
-    <a class="app" href="recruiter.html">
-      <div class="art" style="background:linear-gradient(150deg,#0b4f43,#0d7c66)"><img class="face" data-usecase="recruiter" alt="" hidden><span class="glyph">💼</span><b>Northwind Talent</b></div>
-      <div class="body"><p>A first-round screening call with a recruiter who follows a structured agenda and answers your questions.</p><div class="tags"><span class="chip">Hiring</span><span class="chip">Interview</span></div><span class="open">Join the call →</span></div>
-    </a>
-    <a class="app" href="presence.html">
-      <div class="art" style="background:linear-gradient(150deg,#f7a072,#e2643f)"><img class="face" data-usecase="presence" alt="" hidden><span class="glyph">🫶</span><b>Kin</b></div>
-      <div class="body"><p>A companion that keeps you company while you work, and speaks up when something on your screen deserves a word.</p><div class="tags"><span class="chip">Companion</span><span class="chip">Screen aware</span></div><span class="open">Work with Kin →</span></div>
-    </a>
-    <a class="app" href="game.html">
-      <div class="art" style="background:linear-gradient(150deg,#1b2a3a,#3a2a12)"><img class="face" data-usecase="game" alt="" hidden><span class="glyph">🏝️</span><b style="font-family:Georgia,serif;letter-spacing:.04em">Isle of Whispers</b></div>
-      <div class="body"><p>A treasure hunt told by a narrator who reacts to every step, and an oracle who answers only at the shrine.</p><div class="tags"><span class="chip">Game</span><span class="chip">Story</span></div><span class="open">Begin the tale →</span></div>
-    </a>
-    <a class="app" href="livestream-host.html">
-      <div class="art" style="background:linear-gradient(150deg,#1a0f1f,#ff3d81)"><img class="face" data-usecase="livestream" alt="" hidden><span class="glyph">🌙</span><b>Nightcap Live</b></div>
-      <div class="body"><p>An AI co-host runs a live show and talks with the chat, answering questions by name.</p><div class="tags"><span class="chip">Live stream</span><span class="chip">Chat</span></div><span class="open">Open the studio →</span></div>
-    </a>
-  </section>
-  <p class="extra" style="margin-top:16px">Viewers of Nightcap Live chat from the <a href="livestream-viewer.html">chat page</a>.</p>
-  <footer>Add <code>?debug</code> to the address of Ledger Academy, Northwind Talent, Kin, Isle of Whispers or Nightcap Live to see what it sends the avatar.</footer>
-</div>
-<script>
-  // Each card's avatar face, from the server (it keeps the API key and the image); without one the emoji stays.
-  for (const img of document.querySelectorAll(".app .face")) {
-    img.addEventListener("load", () => img.parentElement.classList.add("has-face"));
-    img.addEventListener("error", () => img.remove());
-    img.hidden = false;
-    img.src = `/api/avatars/${img.dataset.usecase}/portrait`;
-  }
+    <nav aria-label="Page">
+      <a href="#apps">Apps</a>
+      <a href="#how" class="optional">How it works</a>
+      <a href="https://atmee.ai" class="optional" rel="noopener">atmee.ai<svg class="ext" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2h6v6M10 2 3 9" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></a>
+    </nav>
+    <a class="btn primary cta" href="#apps">Try an app</a>
+  </div>
+</header>
 
+<main>
+  <section class="gutter hero" aria-labelledby="headline">
+    <div class="pitch">
+      <span class="live-note"><i aria-hidden="true"></i>Built on the Atmee Avatar API</span>
+      <h1 id="headline"><span id="count-word">Nineteen</span> real apps, <em>one avatar platform.</em></h1>
+      <p class="sub">Each app has its own brand and flow, and a live avatar runs it: it talks with you, reacts to what is on screen, works the app through its tools and keeps to an agenda. Every one is built on the same API.</p>
+      <div class="actions">
+        <a class="btn primary lg" href="#apps" id="browse">Browse the 19 apps</a>
+        <a class="btn ghost lg" href="#how">How it works</a>
+      </div>
+      <dl class="proof" aria-live="polite">
+        <div><dt>apps, each with a host</dt><dd id="stat-apps">19</dd></div>
+        <div><dt>tools the hosts call</dt><dd id="stat-tools">–</dd></div>
+        <div><dt>API behind them all</dt><dd>1</dd></div>
+      </dl>
+    </div>
+    <div class="wall-wrap">
+      <!-- Twenty empty tiles hold the wall's size until the list arrives (nineteen hosts and yours). -->
+      <ul class="wall" id="wall" aria-label="The hosts: open an app by its host"><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li></ul>
+      <p class="wall-note">Pick a face to open its app.</p>
+    </div>
+  </section>
+
+  <section class="gutter" id="apps" aria-labelledby="apps-title">
+    <div class="apps-head">
+      <h2 id="apps-title">The apps</h2>
+      <div class="filters" id="filters" role="group" aria-label="Show apps by kind"></div>
+    </div>
+    <div class="grid" id="grid">
+      <a class="app" href="training.html" data-id="training" data-kind="learn">
+        <div class="art" style="background:linear-gradient(150deg,#2c2463,#4b3fd1)"><img class="face" data-usecase="training" alt="" width="96" height="96" hidden><span class="glyph">🎓</span><b>Ledger Academy</b></div>
+        <div class="body"><p>A live trainer teaches a short incident-response course, takes your questions, and quizzes you at the end.</p><div class="tags"><span class="chip">Training</span><span class="chip">Lesson plan</span><span class="chip">Quiz</span></div><span class="open">Start the course →</span></div>
+      </a>
+      <a class="app" href="recruiter.html" data-id="recruiter" data-kind="work">
+        <div class="art" style="background:linear-gradient(150deg,#0b4f43,#0d7c66)"><img class="face" data-usecase="recruiter" alt="" width="96" height="96" hidden><span class="glyph">💼</span><b>Northwind Talent</b></div>
+        <div class="body"><p>A first-round screening call with a recruiter who follows a structured agenda and answers your questions.</p><div class="tags"><span class="chip">Hiring</span><span class="chip">Interview</span></div><span class="open">Join the call →</span></div>
+      </a>
+      <a class="app" href="presence.html" data-id="presence" data-kind="work">
+        <div class="art" style="background:linear-gradient(150deg,#f7a072,#e2643f)"><img class="face" data-usecase="presence" alt="" width="96" height="96" hidden><span class="glyph">🫶</span><b>Kin</b></div>
+        <div class="body"><p>A companion that keeps you company while you work, and speaks up when something on your screen deserves a word.</p><div class="tags"><span class="chip">Companion</span><span class="chip">Screen aware</span></div><span class="open">Work with Kin →</span></div>
+      </a>
+      <a class="app" href="game.html" data-id="game" data-kind="play">
+        <div class="art" style="background:linear-gradient(150deg,#1b2a3a,#3a2a12)"><img class="face" data-usecase="game" alt="" width="96" height="96" hidden><span class="glyph">🏝️</span><b style="font-family:Georgia,serif;letter-spacing:.04em">Isle of Whispers</b></div>
+        <div class="body"><p>A treasure hunt told by a narrator who reacts to every step, and an oracle who answers only at the shrine.</p><div class="tags"><span class="chip">Game</span><span class="chip">Story</span></div><span class="open">Begin the tale →</span></div>
+      </a>
+      <a class="app" href="livestream-host.html" data-id="livestream" data-kind="work">
+        <div class="art" style="background:linear-gradient(150deg,#1a0f1f,#ff3d81)"><img class="face" data-usecase="livestream" alt="" width="96" height="96" hidden><span class="glyph">🌙</span><b>Nightcap Live</b></div>
+        <div class="body"><p>An AI co-host runs a live show and talks with the chat, answering questions by name.</p><div class="tags"><span class="chip">Live stream</span><span class="chip">Chat</span></div><span class="open">Open the studio →</span></div>
+      </a>
+    </div>
+    <p class="extra">Viewers of Nightcap Live chat from the <a href="livestream-viewer.html">chat page</a>.</p>
+  </section>
+
+  <section class="gutter how" id="how" aria-labelledby="how-title">
+    <h2 id="how-title">How it works</h2>
+    <ol>
+      <li><h3>The app starts a session</h3><p>Its server makes one call, <code>POST /v1/session</code>, naming the avatar, a time limit and the tools the avatar may use. The API key never reaches the browser.</p></li>
+      <li><h3>The avatar joins the page</h3><p>It arrives as live video and voice in the app's own room: it listens, answers in its own voice, and hears what the app tells it about the screen.</p></li>
+      <li><h3>The app and the avatar steer each other</h3><p>The app sends state and events; the avatar calls the app's tools to move the board, pin a poll or grade an answer. An agenda keeps a lesson or an interview on track.</p></li>
+    </ol>
+  </section>
+</main>
+
+<footer class="gutter">Add <code>?debug</code> to the address of Ledger Academy, Northwind Talent, Kin, Isle of Whispers or Nightcap Live to see what it sends the avatar.</footer>
+
+<script>
   // The other apps, when the site's server runs them (npm run dev, the container): the same
   // cards in the same grid, from its list. The card copy is here, beside the cards above.
+  // [glyph, tags, call to action, kind]; kind is the filter it falls under.
   const CARDS = {
-    "guess-the-city": ["📮", ["Game", "Geography", "Clues"], "Play with Marco"],
-    "chess-opponent": ["♟️", ["Game", "Chess"], "Play Sasha"],
-    "poker-table": ["🃏", ["Game", "Hold'em"], "Sit down with Dex"],
-    "stroke-tutor": ["🖌️", ["Lesson", "Calligraphy"], "Write with Ren"],
-    "bls-tutor": ["⛑️", ["Training", "First aid", "Drills"], "Train with Alex"],
-    "quadratic-whiteboard": ["✏️", ["Lesson", "Algebra"], "Solve with Ada"],
-    "trajectory-coach": ["🎯", ["Lesson", "Physics"], "Aim with Theo"],
-    "sky-guide": ["🔭", ["Explore", "Astronomy"], "Stargaze with Mira"],
-    "nutrition-advisor": ["🥗", ["Advisor", "Nutrition"], "Ask Rachel"],
-    "fashion-advisor": ["👗", ["Advisor", "Style"], "Ask Emery"],
-    "fitness-coach": ["🏋️", ["Coach", "Workout"], "Train with Sammy"],
-    "market-desk": ["📈", ["Markets", "Live quotes"], "Call Reese"],
-    "travel-guide": ["🗺️", ["Travel", "Live map"], "Plan with Lumi"],
-    "room-planner": ["🏠", ["Home", "Floor plan"], "Draw with Iris"],
+    "guess-the-city": ["📮", ["Game", "Geography", "Clues"], "Play with Marco", "play"],
+    "chess-opponent": ["♟️", ["Game", "Chess"], "Play Sasha", "play"],
+    "poker-table": ["🃏", ["Game", "Hold'em"], "Sit down with Dex", "play"],
+    "stroke-tutor": ["🖌️", ["Lesson", "Calligraphy"], "Write with Ren", "learn"],
+    "bls-tutor": ["⛑️", ["Training", "First aid", "Drills"], "Train with Alex", "learn"],
+    "quadratic-whiteboard": ["✏️", ["Lesson", "Algebra"], "Solve with Ada", "learn"],
+    "trajectory-coach": ["🎯", ["Lesson", "Physics"], "Aim with Theo", "learn"],
+    "sky-guide": ["🔭", ["Explore", "Astronomy"], "Stargaze with Mira", "learn"],
+    "nutrition-advisor": ["🥗", ["Advisor", "Nutrition"], "Ask Rachel", "advice"],
+    "fashion-advisor": ["👗", ["Advisor", "Style"], "Ask Emery", "advice"],
+    "fitness-coach": ["🏋️", ["Coach", "Workout"], "Train with Sammy", "advice"],
+    "market-desk": ["📈", ["Markets", "Live quotes"], "Call Reese", "advice"],
+    "travel-guide": ["🗺️", ["Travel", "Live map"], "Plan with Lumi", "advice"],
+    "room-planner": ["🏠", ["Home", "Floor plan"], "Draw with Iris", "advice"],
   };
+  const KINDS = [["all", "All"], ["learn", "Learn"], ["play", "Play"], ["advice", "Advice"], ["work", "Work and live"]];
   const NUMBER = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen", "Twenty"];
   const darker = (hex, k) => "#" + hex.slice(1).match(/../g).map((c) => Math.round(parseInt(c, 16) * k).toString(16).padStart(2, "0")).join("");
   const light = (hex) => { const [r, g, b] = hex.slice(1).match(/../g).map((c) => parseInt(c, 16) / 255); return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.5; };
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
-  fetch("/api/apps").then((r) => (r.ok ? r.json() : [])).then((list) => {
-    if (!Array.isArray(list) || !list.length) return;
-    const ids = Object.keys(CARDS);
-    const rank = (id) => (ids.includes(id) ? ids.indexOf(id) : ids.length);
-    list.sort((x, y) => rank(x.id) - rank(y.id));
-    const grid = document.getElementById("apps");
-    for (const a of list) {
-      const [glyph, tags, open] = CARDS[a.id] ?? ["", [], `Open ${a.title}`];
-      // White titles on every card, as on the five: a light brand colour is deepened to carry them.
-      const brand = /^#[0-9a-f]{6}$/i.test(a.brand?.color || "") ? a.brand.color : "#2b3150";
-      const color = light(brand) ? darker(brand, 0.7) : brand;
-      const card = el("a", "app");
-      card.href = `/apps/${a.id}/`;
-      const art = el("div", "art");
-      art.style.background = `linear-gradient(150deg,${darker(color, 0.6)},${color})`;
-      const img = el("img", "face");
-      img.alt = "";
-      img.addEventListener("load", () => art.classList.add("has-face"));
+  const grid = document.getElementById("grid");
+
+  // A card's face: shown once it loads; without one the emoji stays.
+  const face = (img, art, src) => {
+    img.addEventListener("load", () => art.classList.add("has-face"));
+    img.addEventListener("error", () => img.remove());
+    img.hidden = false;
+    img.src = src;
+  };
+  // The five's faces come from the server (it keeps the API key and the image).
+  for (const img of document.querySelectorAll(".app .face")) face(img, img.parentElement, `/api/avatars/${img.dataset.usecase}/portrait`);
+
+  // The bar gets its rule once the page scrolls under it.
+  const bar = document.getElementById("bar");
+  const onScroll = () => bar.classList.toggle("scrolled", window.scrollY > 4);
+  addEventListener("scroll", onScroll, { passive: true }); onScroll();
+
+  // The wall of hosts: one tile per card, the same portrait (already cached by the card), and a last tile for yours.
+  function buildWall() {
+    const wall = document.getElementById("wall");
+    wall.replaceChildren();
+    for (const card of grid.querySelectorAll(".app")) {
+      const title = card.querySelector(".art b").textContent;
+      const host = card.dataset.host;
+      const li = el("li");
+      const a = el("a");
+      a.href = card.getAttribute("href");
+      a.setAttribute("aria-label", host ? `${host}, host of ${title}` : `The host of ${title}`);
+      a.style.background = card.querySelector(".art").style.background;
+      const img = el("img");
+      img.alt = ""; img.width = 192; img.height = 192; img.decoding = "async";
+      img.addEventListener("load", () => img.classList.add("in"));
       img.addEventListener("error", () => img.remove());
-      img.src = `/api/apps/${a.id}/portrait`;
-      art.append(img);
-      if (glyph) art.append(el("span", "glyph", glyph));
-      art.append(el("b", "", a.title));
-      const tagRow = el("div", "tags");
-      for (const t of tags) tagRow.append(el("span", "chip", t));
-      const body = el("div", "body");
-      body.append(el("p", "", a.tagline), tagRow, el("span", "open", `${open} →`));
-      card.append(art, body);
-      grid.append(card);
+      img.src = card.dataset.portrait;
+      a.append(img, el("span", "tag", host ? `${host} · ${title}` : title));
+      li.append(a);
+      wall.append(li);
     }
-    const total = document.querySelectorAll(".app").length;
-    document.getElementById("headline").textContent = `${NUMBER[total] || total} products, one avatar platform.`;
-  }).catch(() => {});
+    const li = el("li");
+    const yours = el("a", "yours", "Your app next");
+    yours.href = "https://atmee.ai"; yours.rel = "noopener";
+    li.append(yours);
+    wall.append(li);
+  }
+
+  // The filter: one button per kind that has apps, with its count.
+  let kind = "all";
+  function buildFilters() {
+    const box = document.getElementById("filters");
+    box.replaceChildren();
+    const cards = [...grid.querySelectorAll(".app")];
+    for (const [k, label] of KINDS) {
+      const n = k === "all" ? cards.length : cards.filter((c) => c.dataset.kind === k).length;
+      if (!n) continue;
+      const b = el("button");
+      b.type = "button";
+      b.dataset.kind = k;
+      b.setAttribute("aria-pressed", String(k === kind));
+      b.append(label, el("span", "", String(n)));
+      b.addEventListener("click", () => { kind = k; apply(); });
+      box.append(b);
+    }
+  }
+  function apply() {
+    for (const c of grid.querySelectorAll(".app")) c.hidden = kind !== "all" && c.dataset.kind !== kind;
+    for (const b of document.querySelectorAll("#filters button")) b.setAttribute("aria-pressed", String(b.dataset.kind === kind));
+  }
+
+  function setCounts(apps, tools) {
+    document.getElementById("count-word").textContent = NUMBER[apps] || String(apps);
+    document.getElementById("stat-apps").textContent = String(apps);
+    document.getElementById("stat-tools").textContent = tools == null ? "–" : String(tools);
+    document.getElementById("browse").textContent = `Browse the ${apps} apps`;
+  }
+
+  for (const card of grid.querySelectorAll(".app")) card.dataset.portrait = `/api/avatars/${card.dataset.id}/portrait`;
+
+  const getJson = (url) => fetch(url).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  Promise.all([getJson("/api/usecases"), getJson("/api/apps")]).then(([five, list]) => {
+    let tools = five ? Object.values(five).reduce((n, u) => n + (Array.isArray(u.tools) ? u.tools.length : 0), 0) : null;
+    if (Array.isArray(list) && list.length) {
+      const ids = Object.keys(CARDS);
+      const rank = (id) => (ids.includes(id) ? ids.indexOf(id) : ids.length);
+      list.sort((x, y) => rank(x.id) - rank(y.id));
+      for (const a of list) {
+        const [glyph, tags, open, k] = CARDS[a.id] ?? ["", [], `Open ${a.title}`, "advice"];
+        // White titles on every card, as on the five: a light brand colour is deepened to carry them.
+        const brand = /^#[0-9a-f]{6}$/i.test(a.brand?.color || "") ? a.brand.color : "#2b3150";
+        const color = light(brand) ? darker(brand, 0.7) : brand;
+        const card = el("a", "app");
+        card.href = `/apps/${a.id}/`;
+        card.dataset.id = a.id;
+        card.dataset.kind = k;
+        card.dataset.portrait = `/api/apps/${a.id}/portrait`;
+        if (a.host) card.dataset.host = a.host;
+        const art = el("div", "art");
+        art.style.background = `linear-gradient(150deg,${darker(color, 0.6)},${color})`;
+        const img = el("img", "face");
+        img.alt = ""; img.width = 96; img.height = 96;
+        art.append(img);
+        face(img, art, card.dataset.portrait);
+        if (glyph) art.append(el("span", "glyph", glyph));
+        art.append(el("b", "", a.title));
+        const tagRow = el("div", "tags");
+        for (const t of tags) tagRow.append(el("span", "chip", t));
+        const body = el("div", "body");
+        body.append(el("p", "", a.tagline), tagRow, el("span", "open", `${open} →`));
+        card.append(art, body);
+        grid.append(card);
+        if (tools != null) tools += Number(a.tools) || 0;
+      }
+    }
+    setCounts(grid.querySelectorAll(".app").length, tools);
+    buildWall();
+    buildFilters();
+    apply();
+  });
 </script>
 </body>
 </html>

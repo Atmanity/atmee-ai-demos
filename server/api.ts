@@ -58,7 +58,11 @@ function caught(router: Router): Router {
 export const api = caught(Router());
 
 api.get('/apps', (_req, res) => {
-  res.json([...apps.values()].map(({ id, title, tagline, brand }) => ({ id, title, tagline, brand, host: hostName.get(id) ?? null, avatar: Boolean(avatarFor(id)) })));
+  // tools and agenda: what the home page counts (the functions each host may call, and whether it keeps to a conductor).
+  res.json([...apps.values()].map(({ id, title, tagline, brand, appTools, conductor }) => ({
+    id, title, tagline, brand, host: hostName.get(id) ?? null, avatar: Boolean(avatarFor(id)),
+    tools: appTools?.tools.length ?? 0, agenda: Boolean(conductor?.graph),
+  })));
 });
 
 // Each host's face, small, for the home page's tiles (the portrait is 2048 px).
