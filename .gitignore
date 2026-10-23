@@ -3,3 +3,4 @@ dist
 .env
 tools/live-test/audio
 *.log
+.env.local

@@ -27,9 +27,15 @@ npm run typecheck
 npm run classic         # the classic five on :3333
 ```
 
-Node 20.19+ or 22. Each app gets its avatar from `AVATAR_<APP_ID>` (for
-example `AVATAR_CHESS_OPPONENT`), else `AVATAR_DEFAULT`; an app's
-`avatar.json` is the persona it was designed for.
+Node 22.9+ (for `--env-file-if-exists`). `npm run dev` and `npm start` read
+`.env`, then `.env.local` if it exists, so a key in `.env.local` wins: create one
+without printing it with `atmee keys create --name mini-apps --scopes
+avatars:read,avatars:write --out .env.local` (the account must own the hosts).
+
+Each app has its own host: `apps/<id>/avatar.json` is its persona and its
+`avatarId`, an avatar of that account. `AVATAR_<APP_ID>` (for example
+`AVATAR_CHESS_OPPONENT`) overrides it, and `AVATAR_DEFAULT` serves an app with
+neither.
 
 ## How an app is put together
 
