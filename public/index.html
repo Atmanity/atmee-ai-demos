@@ -31,13 +31,17 @@
   .extra { font-size: 14px; color: var(--muted); }
   .extra a { color: inherit; }
   footer { margin-top: 40px; color: var(--muted); font-size: 14px; }
+  /* The mini-apps, when the site's server runs them: the same cards, under their own heading. */
+  .more { margin-top: 56px; display: grid; gap: 14px; }
+  .more h2 { font-size: clamp(24px, 3vw, 30px); font-weight: 800; letter-spacing: -.02em; margin: 0; }
+  .more > p { color: var(--muted); margin: 0 0 6px; max-width: 720px; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="hero">
     <div class="eyebrow">Built on the Atmee Avatar API</div>
-    <h1>Five products, one avatar platform.</h1>
+    <h1 id="headline">Five products, one avatar platform.</h1>
     <p>Each of these is a complete app with its own brand and flow. Behind every one is the same conversational avatar, steered by what the app knows.</p>
   </header>
   <section class="grid">
@@ -63,6 +67,11 @@
     </a>
   </section>
   <p class="extra" style="margin-top:16px">Viewers of Nightcap Live chat from the <a href="livestream-viewer.html">chat page</a>.</p>
+  <section class="more" id="more" hidden aria-labelledby="more-title">
+    <h2 id="more-title">Fourteen more, each with its own host</h2>
+    <p>Games, tutors and advisors, each a product of its own. The host acts through the app's tools, so every verdict, clue and number comes from the app.</p>
+    <div class="grid" id="more-grid"></div>
+  </section>
   <footer>Add <code>?debug</code> to any app's address to see what it sends the avatar.</footer>
 </div>
 <script>
@@ -73,6 +82,40 @@
     img.hidden = false;
     img.src = `/api/avatars/${img.dataset.usecase}/portrait`;
   }
+
+  // The mini-apps, when the site's server runs them (npm run dev, the container): their cards, from its list.
+  const NUMBER = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen", "Twenty"];
+  const darker = (hex) => "#" + hex.replace("#", "").match(/../g).map((c) => Math.round(parseInt(c, 16) * 0.6).toString(16).padStart(2, "0")).join("");
+  fetch("/api/apps").then((r) => (r.ok ? r.json() : [])).then((list) => {
+    if (!Array.isArray(list) || !list.length) return;
+    const grid = document.getElementById("more-grid");
+    // Games, then tutors, then advisors, as the catalogue (/apps/) shelves them.
+    const ORDER = ["guess-the-city", "chess-opponent", "poker-table", "stroke-tutor", "bls-tutor", "quadratic-whiteboard", "trajectory-coach", "sky-guide", "nutrition-advisor", "fashion-advisor", "fitness-coach", "market-desk", "travel-guide", "room-planner"];
+    const rank = (id) => (ORDER.includes(id) ? ORDER.indexOf(id) : ORDER.length);
+    list.sort((x, y) => rank(x.id) - rank(y.id));
+    for (const a of list) {
+      const color = /^#[0-9a-f]{6}$/i.test(a.brand?.color || "") ? a.brand.color : "#2b3150";
+      const card = document.createElement("a");
+      card.className = "app";
+      card.href = `/apps/${a.id}/`;
+      card.innerHTML = `<div class="art"><img class="face" alt=""><b></b></div><div class="body"><p></p><div class="tags"></div><span class="open"></span></div>`;
+      const art = card.querySelector(".art");
+      art.style.background = `linear-gradient(150deg,${darker(color)},${color})`;
+      art.style.color = a.brand?.ink || "#fff";
+      art.querySelector("b").textContent = a.title;
+      card.querySelector("p").textContent = a.tagline;
+      if (a.host) { const chip = document.createElement("span"); chip.className = "chip"; chip.textContent = `Hosted by ${a.host}`; card.querySelector(".tags").append(chip); }
+      card.querySelector(".open").textContent = `Open ${a.title} →`;
+      const img = card.querySelector(".face");
+      img.addEventListener("load", () => art.classList.add("has-face"));
+      img.addEventListener("error", () => img.remove());
+      img.src = `/api/apps/${a.id}/portrait`;
+      grid.append(card);
+    }
+    document.getElementById("more").hidden = false;
+    const total = document.querySelectorAll(".app").length;
+    document.getElementById("headline").textContent = `${NUMBER[total] || total} products, one avatar platform.`;
+  }).catch(() => {});
 </script>
 </body>
 </html>

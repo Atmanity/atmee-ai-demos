@@ -1,6 +1,8 @@
 // /api: the apps (discovered from apps/<id>/server.ts), their sessions, and
 // each app's own routes under /api/apps/<id>/.
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import sharp from 'sharp';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import type { AppServer } from './app-server.ts';
 import { endSession, setConductor, startSession } from './atmee.ts';
@@ -20,10 +22,12 @@ for (const dir of readdirSync('apps').sort()) {
 // Each app's host: AVATAR_<APP_ID> in the environment, else the dedicated
 // avatar in the app's avatar.json (`avatarId`), else AVATAR_DEFAULT.
 const ownAvatar = new Map<string, string>();
+const hostName = new Map<string, string>();
 for (const dir of readdirSync('apps')) {
   try {
-    const id = JSON.parse(readFileSync(`apps/${dir}/avatar.json`, 'utf8')).avatarId;
-    if (typeof id === 'string' && id) ownAvatar.set(dir, id);
+    const host = JSON.parse(readFileSync(`apps/${dir}/avatar.json`, 'utf8'));
+    if (typeof host.avatarId === 'string' && host.avatarId) ownAvatar.set(dir, host.avatarId);
+    if (typeof host.name === 'string') hostName.set(dir, host.name.split(' ')[0]);
   } catch {
     // no avatar.json, or no dedicated host yet
   }
@@ -54,7 +58,24 @@ function caught(router: Router): Router {
 export const api = caught(Router());
 
 api.get('/apps', (_req, res) => {
-  res.json([...apps.values()].map(({ id, title, tagline, brand }) => ({ id, title, tagline, brand, avatar: Boolean(avatarFor(id)) })));
+  res.json([...apps.values()].map(({ id, title, tagline, brand }) => ({ id, title, tagline, brand, host: hostName.get(id) ?? null, avatar: Boolean(avatarFor(id)) })));
+});
+
+// Each host's face, small, for the home page's tiles (the portrait is 2048 px).
+const portraits = new Map<string, Promise<Buffer | null>>();
+api.get('/apps/:app/portrait', async (req, res) => {
+  const id = req.params.app;
+  if (!apps.has(id)) return void res.status(404).end();
+  if (!portraits.has(id)) {
+    portraits.set(id, readFile(`apps/${id}/host/portrait.jpg`)
+      .then((jpg) => sharp(jpg).resize(192, 192, { fit: 'cover', position: 'top' }).webp({ quality: 80 }).toBuffer())
+      .catch(() => null));
+  }
+  const webp = await portraits.get(id)!;
+  if (!webp) return void res.status(404).end();
+  res.setHeader('Content-Type', 'image/webp');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.end(webp);
 });
 
 api.post('/apps/:app/session', async (req, res) => {
