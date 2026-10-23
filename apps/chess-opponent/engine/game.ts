@@ -48,7 +48,18 @@ export const SECOND_PHRASES = new RegExp([
   // `\byou\b` matches inside "you're" (the apostrophe is not a word character).
   String.raw`\bafter you\b(?![\w'’])`,
 ].join('|'));
-export const FIRST_PHRASES = /\bgo(?:ing)? first\b|\bi start\b|\bme first\b|\bi'?ll start\b/;
+/**
+ * "I start" names a seat; "I start over", "I'll start again", "I'll start a
+ * new game" ask for a rematch. Read as a seat, "can I start over?" once
+ * seated the player on White instead of dealing the next game.
+ */
+const NOT_A_SEAT = String.raw`(?!\s+(?:over|again|afresh|a new|another|anew)\b)`;
+export const FIRST_PHRASES = new RegExp([
+  String.raw`\bgo(?:ing)? first\b`,
+  String.raw`\bi start\b${NOT_A_SEAT}`,
+  String.raw`\bme first\b`,
+  String.raw`\bi'?ll start\b${NOT_A_SEAT}`,
+].join('|'));
 
 const stripChars = (text: string, chars: string) => {
   let start = 0;

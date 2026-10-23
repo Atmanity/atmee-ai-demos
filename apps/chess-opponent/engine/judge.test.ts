@@ -151,6 +151,15 @@ describe('the safety net: what it does when the host does not, and only what is 
     expect(net('Rematch, same colours', at(30, true))).toBe('new_game');
   });
 
+  test('"start over" is a rematch on the same side, never a seat on White', () => {
+    // Bugbot: "I start" inside "I'll start over" made the net call choose_side(white): nothing for a
+    // White player, a reseat for a Black one, and no rematch either way.
+    expect(net("I'll start over.", at(30, true))).toBe('new_game');
+    expect(net('Can I start over?', at(30, true))).toBe('new_game');
+    expect(net("Let's start again", at(30, true))).toBe('new_game');
+    expect(net("I'll start over as Black", at(30, true))).toBe('choose_side:black');
+  });
+
   test('a finished game cannot be resigned again', () => {
     expect(net('I resign.', at(20, true))).toBeNull();
     expect(net('Rematch!', at(20, true))).toBe('new_game');

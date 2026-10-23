@@ -179,6 +179,17 @@ describe('what the side and strength parsers promise', () => {
     expect(parseSide(phrase)).toBe(side);
   });
 
+  test.each(['can I start over', "I'll start over", 'I start again', "I'll start a new game", 'I start afresh', 'you start over', "I'll start another one"])(
+    'starting over is a new game, not a seat: %s',
+    // "I start" inside "can I start over" once seated a player on White instead of dealing a rematch.
+    (phrase) => expect(parseSide(phrase)).toBeNull(),
+  );
+
+  test.each([["I'll start", 'white'], ['I start', 'white'], ["let's go, I'll start then", 'white'], ['I start, okay?', 'white']])(
+    'starting the game is still a seat: %s',
+    (phrase, side) => expect(parseSide(phrase)).toBe(side),
+  );
+
   test.each(["I'll take the second one", 'wait a second', "come on, after you're done thinking", 'can you start us off'])(
     'filler does not decide the seating: %s',
     (phrase) => expect(parseSide(phrase)).toBeNull(),
