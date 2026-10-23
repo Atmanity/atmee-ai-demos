@@ -79,7 +79,7 @@ these channels:
 | `atmee.app` `note` | context kept, never replaced | pinned facts |
 | `atmee.app` `event` | something to comment on when the avatar has the floor, with a `ttl_s` | chat digests, game moves, screen changes, a poll result |
 | `atmee.app` `mute` / `unmute` | the user is heard as silence, or heard again | the narrator ignores the player except at the shrine |
-| `lk.transcription` (in) | the avatar's words | captions and transcripts only; no app reads state from them |
+| `lk.transcription` (in) | the avatar's words, and the user's spoken words as recognised (sent under the user's identity) | captions and transcripts only; no app reads state from them |
 | RPC `atmee.tool` (in) | an app tool call; the handler's return value is the result | everything the avatar makes the app do |
 
 `usecases/index.js` holds the behaviour of all five apps: a conductor graph where the app needs

@@ -41,9 +41,27 @@
   }
 
   // A chat-style transcript. avatar(text, final) grows one live bubble per
-  // sentence and settles it when the sentence is complete.
+  // sentence and settles it when the sentence is complete. heard(text, final,
+  // segment, seq) does the same for the user's spoken words, one bubble per
+  // segment. A typed turn comes back as a user transcription too; that echo
+  // is not shown again.
+  const ECHO_MS = 60000; // a typed turn can wait out a long avatar turn before it is sent
+  const norm = (t) => String(t).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
   function transcript(el, names) {
-    let live = null;
+    let live = null, typed = [];
+    // segment -> { d: its bubble (none for an echo), done }. A segment is
+    // remembered after its final, so a stream that lands late (the streams of
+    // one segment are read concurrently) updates nothing and adds no bubble.
+    const spoken = new Map();
+    // Whether text repeats a recent typed turn; consume takes that turn off
+    // the list (on a final, so one typed turn hides one echo).
+    const echoOf = (text, consume) => {
+      const n = norm(text), at = Date.now();
+      typed = typed.filter((x) => at - x.at < ECHO_MS);
+      const i = typed.findIndex((x) => x.n === n);
+      if (i >= 0 && consume) typed.splice(i, 1);
+      return i >= 0;
+    };
     const stick = () => { el.scrollTop = el.scrollHeight; };
     function bubble(cls, who, text) {
       const d = document.createElement('div'); d.className = `bubble ${cls}`;
@@ -57,10 +75,37 @@
         if (final) { live.classList.remove('live'); live = null; }
         stick();
       },
-      user(text, who) { bubble('me', who || names.user || 'You', text); },
+      user(text, who) { typed.push({ n: norm(text), at: Date.now() }); bubble('me', who || names.user || 'You', text); },
+      heard(text, final, segment, seq = 0) {
+        let seg = spoken.get(segment);
+        if (seg && seg.done) return;
+        if (!seg) {
+          seg = { d: null, done: false, seq: 0 };
+          spoken.set(segment, seg);
+          if (spoken.size > 200) spoken.delete(spoken.keys().next().value);
+        }
+        // An interim that started before one already shown is stale; a final
+        // always wins.
+        if (!final && seq && seq < seg.seq) return;
+        seg.seq = Math.max(seg.seq, seq);
+        if (final) seg.done = true;
+        // An interim never takes a bubble away (it may land after a fuller
+        // one): one that repeats a typed turn only waits to be shown, and the
+        // final decides whether the segment was that turn's echo.
+        const gone = final ? !text || echoOf(text, true) : !text || (!seg.d && echoOf(text, false));
+        if (gone) { if (final && seg.d) { seg.d.remove(); seg.d = null; } return; }
+        if (!seg.d) {
+          // A new utterance settles any whose final never came.
+          spoken.forEach((x) => x.d && x.d.classList.remove('live'));
+          seg.d = bubble('me live', names.user || 'You', text);
+        }
+        seg.d.querySelector('.t').textContent = text;
+        if (final) seg.d.classList.remove('live');
+        stick();
+      },
       other(text, who) { bubble('them', who, text); },
       note(text) { const d = document.createElement('div'); d.className = 'system-note'; d.textContent = text; el.appendChild(d); stick(); },
-      clear() { el.innerHTML = ''; live = null; },
+      clear() { el.innerHTML = ''; live = null; typed = []; spoken.clear(); },
     };
   }
 

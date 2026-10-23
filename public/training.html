@@ -76,7 +76,6 @@
   .trainer .tag { position: absolute; left: 12px; top: 12px; z-index: 1; display: flex; align-items: center; gap: 6px; background: rgb(0 0 0 / .45); color: #fff; padding: 4px 10px; border-radius: 99px; font-size: 13px; font-weight: 500; }
   .trainer .tag .dot { width: 7px; height: 7px; border-radius: 50%; background: #9ca3af; }
   .trainer.talking .tag .dot { background: #4ade80; }
-  .trainer .caption { font-size: 15px; bottom: 12px; }
   .chat { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
   .chat .transcript { flex: 1; padding: 16px; }
   .chat .foot { display: flex; gap: 8px; align-items: center; padding: 12px; border-top: 1px solid var(--line); }
@@ -139,7 +138,6 @@
     <div class="stage trainer" id="trainer">
       <span class="tag"><span class="dot"></span>Your trainer</span>
       <video id="video" autoplay playsinline muted></video><audio id="audio" autoplay></audio>
-      <div class="caption" id="caption"></div>
       <div class="overlay" id="overlay"></div>
     </div>
     <div class="card chat">
@@ -183,7 +181,6 @@
   // stage: lesson (slides 1-3) -> qna (the closing "Questions?" slide) -> quiz -> done
   let s, stage = 'lesson', slideNo = 1, score = 0, answered = 0, quizAt = -1, verdicts = [], feedback = [], finished = false, stopClock = () => {};
   const tr = UI.transcript($('transcript'), { avatar: 'Trainer', user: 'You' });
-  const caption = UI.captions($('caption'));
   const debug = UI.debugLog();
   const sender = UI.politeSender(() => s);
   const overlay = UI.stage($('overlay'), {
@@ -292,7 +289,8 @@
       s = await Atmee.join({
         usecase: 'training', video: $('video'), audio: $('audio'), mic, tools,
         onPhase: (p, d) => overlay.phase(p, d),
-        onCaption: (text, final) => { caption(text, final); tr.avatar(text, final); },
+        onCaption: tr.avatar,
+        onUserCaption: tr.heard,
         onSpeaking: (v) => { $('trainer').classList.toggle('talking', v); sender.speaking(v); $('hint').textContent = v && sender.waiting ? 'Your message will be sent when the trainer finishes the sentence.' : ''; },
         onRelay: debug,
         onEnd: () => { stopClock(); overlay.ended('<div class="title">The lesson has ended</div><button class="btn primary" onclick="location.reload()">Start again</button>'); lock(true); },
