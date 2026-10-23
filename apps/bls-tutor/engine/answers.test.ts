@@ -7,7 +7,7 @@
 // to catch. answerForm() is the one normaliser both sides go through.
 import { describe, expect, test } from 'vitest';
 import { find, SCENARIOS } from './scenarios.ts';
-import { answerForm, grade } from './tutor.ts';
+import { answerForm, grade, matches } from './tutor.ts';
 
 type Table = Record<string, { right: string[]; wrong: string[] }>;
 
@@ -16,9 +16,20 @@ type Table = Record<string, { right: string[]; wrong: string[] }>;
  * breathing, pass; giving breaths in any words fails (the mix-up the step is
  * there to stop).
  */
+/** One answer for each of he, she and they (and his, her, their). */
+const forEach = (...forms: string[]) => forms;
 const CHECK = {
-  right: ['is he ok?', 'is she ok', 'are you ok?', 'are they okay', 'can you hear me?', 'is he alright', 'look for breathing', 'listen to see if she breathes', 'feel for his breath on my cheek', 'is she breathing?'],
-  wrong: ['give him two breaths', 'breathe into his mouth', "I'd breathe for her", 'give her a couple of breaths', 'blow into his mouth', 'breathe for him twice'],
+  right: [
+    'is he ok?', 'is she ok', 'are you ok?', 'are they okay', 'can you hear me?', 'is he alright', 'look for breathing', 'listen to see if she breathes', 'feel for his breath on my cheek', 'is she breathing?',
+    ...forEach("he's okay", "she's okay", "they're okay"),
+    ...forEach("check if he's okay", "check if she's okay", "check if they're okay"),
+    ...forEach("see if he's okay", "see if she's okay", "see if they're alright"),
+    ...forEach('feel for his breath', 'feel for her breath', 'feel for their breath'),
+    ...forEach('listen for his breathing', 'listen for her breathing', 'listen for their breathing'),
+    ...forEach('check whether he is breathing', "check whether she's breathing", "check whether they're breathing"),
+    'look at her chest to see if she is breathing', 'ask him if he is all right', 'listen to him breathe',
+  ],
+  wrong: ['give him two breaths', 'breathe into his mouth', "I'd breathe for her", 'give her a couple of breaths', 'blow into his mouth', 'breathe for him twice', 'give her two breaths', 'breathe into their mouth', 'give them rescue breathing'],
 };
 const withCheck = (rows: { right: string[]; wrong: string[] }) => ({ right: [...rows.right, ...CHECK.right], wrong: [...rows.wrong, ...CHECK.wrong] });
 
@@ -170,9 +181,20 @@ describe('the normaliser', () => {
     ["I'd call", 'you would call'], ['tells me to stop', 'tells you to stop'], ["he's breathing", 'they is breathing'],
     ["the water's edge", 'water edge'], ['start rescue breathing', 'start rescue breaths'], ['do mouth to mouth', 'do rescue breaths'],
     ['Look, listen and feel for a breath.', 'look listen and feel for breath'],
+    ['feel for her breath', 'feel for they breath'], ['feel for his breath', 'feel for they breath'], ['tells me my turn', 'tells you you turn'],
     ['Is she okay?', 'is they ok'], ['are you alright', 'are you ok'], ['is he all right', 'is they ok'],
   ])('%s → %s', (said, form) => {
     expect(answerForm(said)).toBe(form);
+  });
+
+  test('phrases: all parts in any order, any alternative, each from a word start, "$" a whole word', () => {
+    const said = (t: string) => ` ${answerForm(t)} `;
+    expect(matches(said("he's okay, I checked"), 'check|see|is + ok$')).toBe(true);
+    expect(matches(said('look around'), 'ok$')).toBe(false);          // not inside "look"
+    expect(matches(said('give two breaths'), 'breath$')).toBe(false); // "breaths" is giving them
+    expect(matches(said('he is unresponsive'), 'unrespon')).toBe(true);
+    expect(matches(said('check his breathing'), 'listen|check + breathing')).toBe(true);
+    expect(matches(said('check his mouth'), 'listen|check + breathing')).toBe(false);
   });
 
   test('a range or a count that is not a ratio is left alone', () => {

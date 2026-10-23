@@ -77,17 +77,18 @@ const CALL_FOR_HELP = [
 ] as const;
 
 /**
- * Finding out whether someone responds and breathes. Breathing counts only
- * with a looking or listening word ("check + breathing": every part present),
- * never "breathe" alone, which is how people say giving breaths ("breathe
- * into his mouth"). Pronouns are in answerForm's form: "they ok" takes "is
- * he ok", "you ok" takes "are you ok".
+ * Finding out whether someone responds and breathes, as concepts rather than
+ * exact strings (tutor.ts matches(): " + " all of, "|" any of, each from a
+ * word start, "$" a whole word), so pronouns and word order do not matter:
+ * asking whether they are ok is a checking word plus "ok"; a breathing check
+ * is a looking or listening word plus breathing or a breath. "Breathe" on its
+ * own, and "breaths", are how people say giving breaths, so neither counts.
  */
 const CHECK_RESPONSE = [
-  'respon', 'shout', 'tap', 'shake', 'wake', 'ask them', 'you ok', 'they ok', 'can you hear',
-  'check + breathing', 'check + breathes', 'look + breathing', 'look + breathes', 'listen + breathing', 'listen + breathes',
-  'feel + breathing', 'see + breathing', 'see + breathes', 'watch + breathing', 'whether + breathing', 'whether + breathes',
-  'they breathing', 'is breathing', 'for breath', 'for their breath', 'chest ris', 'chest move',
+  'respon', 'unrespon', 'shout', 'tap', 'shake', 'wake', 'can you hear',
+  'ask|check|see|is|are|whether|if|tap|shout|can + ok$',
+  'look|listen|feel|check|see|watch|whether|if|is|are + breathing|breathes|breathe$|breath$',
+  'chest ris', 'chest move',
 ] as const;
 
 /** Lay rescuers do not check a pulse: the same correction wherever it comes up. */

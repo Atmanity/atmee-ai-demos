@@ -311,11 +311,26 @@ export class BlsTutor {
 export function grade(step: Step, text: string): Verdict {
   const said = ` ${answerForm(text)} `;
   if (!said.trim()) return { ok: false, note: step.hint };
-  // "check + breathing": every part somewhere in the answer.
-  const has = (phrase: string) => phrase.split(' + ').every((part) => said.includes(answerForm(part)));
+  const has = (phrase: string) => matches(said, phrase);
   if (step.forbidden.some(has)) return { ok: false, note: step.forbiddenNote || step.hint };
   if (step.expected.some(has)) return { ok: true, note: step.teach };
   return { ok: false, note: step.hint };
+}
+
+/**
+ * Whether an answer (already in answerForm, padded with spaces) says a phrase.
+ * A phrase is one or more parts joined by " + ", all of which must appear, in
+ * any order ("check|see|listen + breathing"); a part is alternatives joined by
+ * "|", any of which will do. Each alternative is matched from the start of a
+ * word ("respon" takes "responds", "ok" does not take "look"), and one ending
+ * in "$" only as whole words ("breath$" is not "breaths").
+ */
+export function matches(said: string, phrase: string): boolean {
+  return phrase.split(' + ').every((part) => part.split('|').some((alt) => {
+    const whole = alt.endsWith('$');
+    const form = answerForm(whole ? alt.slice(0, -1) : alt);
+    return Boolean(form) && said.includes(` ${form}${whole ? ' ' : ''}`);
+  }));
 }
 
 const NUMBERS: Record<string, string> = {
@@ -323,9 +338,12 @@ const NUMBERS: Record<string, string> = {
   eleven: '11', twelve: '12', thirteen: '13', fourteen: '14', fifteen: '15', sixteen: '16', seventeen: '17', eighteen: '18', nineteen: '19',
   twenty: '20', thirty: '30', forty: '40', fifty: '50', sixty: '60',
 };
+/** One word for the learner and one for the casualty, whatever the person, case or gender. */
 const PRONOUNS: Record<string, string> = {
-  i: 'you', me: 'you', we: 'you', us: 'you', my: 'your', our: 'your', myself: 'yourself',
-  he: 'they', she: 'they', him: 'them', her: 'them', his: 'their', hers: 'their',
+  i: 'you', me: 'you', my: 'you', mine: 'you', myself: 'you', we: 'you', us: 'you', our: 'you', ours: 'you',
+  you: 'you', your: 'you', yours: 'you', yourself: 'you',
+  he: 'they', she: 'they', him: 'they', her: 'they', his: 'they', hers: 'they', himself: 'they', herself: 'they',
+  they: 'they', them: 'they', their: 'they', theirs: 'they', themselves: 'they',
   okay: 'ok', alright: 'ok',
 };
 
@@ -336,9 +354,9 @@ const PRONOUNS: Record<string, string> = {
  * "thirty two", "30 to two", "thirty-two", "32") becomes "30:2"; 9-1-1 and
  * "nine one one" become 911; contractions are expanded, possessives and
  * articles dropped, punctuation gone; first and second person become one
- * ("tells me to stop" is "tells you to stop"), and so do he, she, him, her
- * (phrases are written in the same form: "they ok" takes "is he ok"); okay
- * and alright are ok;
+ * ("tells me to stop" is "tells you to stop", "my" is "you"), and every
+ * third person becomes "they" (he, she, him, her, his, their), so "feel for
+ * her breath" and "feel for his breath" are one answer; okay and alright are ok;
  * giving breaths ("rescue breathing", "mouth to mouth") becomes "rescue
  * breaths", which a breathing check does not contain.
  */
