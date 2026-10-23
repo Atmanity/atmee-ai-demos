@@ -6,7 +6,7 @@
 // in `actions.ts`, a control's line in the narrator (`narration` below).
 import { SkyChart } from './chart.ts';
 import { told } from './director.ts';
-import { epochForNight, nightOf, SkyError, tonight } from './sky.ts';
+import { epochForNight, nightOf, SkyError } from './sky.ts';
 import type { Intent, SkyView } from './types.ts';
 import { materialChange, type Change } from './words.ts';
 
@@ -22,7 +22,7 @@ export interface Applied {
 }
 
 export interface ApplyOptions {
-  /** The real time now (unix seconds), for "tonight", "midnight" and clock hours. */
+  /** The real time now (unix seconds), for "tonight" (midnight, dawn and clock hours are on the chart's own night). */
   now?: number;
   /**
    * A new place keeps the hour of the night rather than the instant: "the sky
@@ -42,8 +42,11 @@ function applyOne(chart: SkyChart, intent: Intent, now: number): void {
       return chart.setPlace(intent.label, intent.lat, intent.lon);
     case 'set_time': {
       if (intent.clockHour !== undefined) {
+        // On the night the chart shows: the small hours after its midnight,
+        // the afternoon and evening before it.
         if (!(intent.clockHour >= 0 && intent.clockHour <= 24)) throw new SkyError(`I couldn't read ${intent.clockHour} as an hour.`);
-        return chart.setTime({ epoch: tonight(now, chart.tz, intent.clockHour % 24) });
+        const hour = intent.clockHour % 24;
+        return chart.setTime({ epoch: chart.onThisNight(hour < 12 ? hour + 24 : hour) });
       }
       if (intent.nightHours !== undefined) {
         const epoch = epochForNight(nightOf(chart.epoch, chart.tz).date, Number(intent.nightHours), chart.tz);

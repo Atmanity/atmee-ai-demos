@@ -13,7 +13,7 @@
 //   part of the change that pushed it down. The snapshot never names a star the
 //   chart cannot draw.
 import { BY_ID, CONSTELLATION_NAMES, factFor, FIGURES, findConstellation, findStar, STARS, starsIn, type Star } from './catalog.ts';
-import { altAz, circumpolarity, clockLabel, findPlace, nextRise, nightOf, offsetForLongitude, PLACES, SkyError, spokenHour, tonight } from './sky.ts';
+import { altAz, circumpolarity, clockLabel, epochForNight, findPlace, nextRise, nightOf, offsetForLongitude, PLACES, SkyError, spokenHour, tonight } from './sky.ts';
 import type { Figure, FigureStatus, SkySnapshot, SkyView, VisibleStar } from './types.ts';
 
 /** The brightest N above the horizon. The catalogue is smaller than this, so it
@@ -96,15 +96,20 @@ export class SkyChart {
     this.settle();
   }
 
-  /** Move the instant: an absolute epoch, a relative shift, or a preset. */
+  /**
+   * Move the instant: an absolute epoch, a relative shift, or a preset.
+   * "Tonight" is the real evening at this place (the way back from any date);
+   * "midnight" and "dawn" are on the night the chart already shows, so a night
+   * picked on the strip or by date survives them.
+   */
   setTime({ epoch, shiftHours, preset, now }: { epoch?: unknown; shiftHours?: unknown; preset?: string | null; now?: number } = {}): void {
     let target: number;
     if (preset) {
       const k = String(preset).trim().toLowerCase();
       const base = now ?? Date.now() / 1000;
       if (['tonight', 'now', 'this evening', 'evening'].includes(k)) target = tonight(base, this.tz);
-      else if (['midnight', 'tonight midnight'].includes(k)) target = tonight(base, this.tz, 0);
-      else if (['dawn', 'sunrise', 'before dawn'].includes(k)) target = tonight(base, this.tz, 5);
+      else if (['midnight', 'tonight midnight'].includes(k)) target = this.onThisNight(24);
+      else if (['dawn', 'sunrise', 'before dawn'].includes(k)) target = this.onThisNight(29);
       else throw new SkyError(`I don't know when ${preset} is — try a time, or an hour from now.`);
     } else if (shiftHours !== undefined && shiftHours !== null) {
       const hours = number(shiftHours, 'shift');
@@ -155,7 +160,7 @@ export class SkyChart {
     // horizon has no LINE the chart can draw, so accepting it would light up a
     // figure that renders as nothing while the avatar says it is on screen.
     if (!this.linesFor(abbr, this.visibleIds()).length) {
-      throw new SkyError(`${full} isn't up at this hour from ${this.placeLabel}${this.riseClause(starsIn(abbr)[0])}.`);
+      throw new SkyError(`${full} isn't up at this hour from ${this.placeLabel}${this.figureRiseClause(abbr)}.`);
     }
     this.figureCon = abbr;
   }
@@ -194,15 +199,53 @@ export class SkyChart {
     return Object.keys(FIGURES).map((con) => {
       const lines = this.linesFor(con, ids);
       const name = CONSTELLATION_NAMES[con] ?? con;
-      if (!lines.length) return { con, name, up: false, anchor: null, rise: this.riseClause(starsIn(con)[0]).replace(/^ — /, '') };
+      if (!lines.length) return { con, name, up: false, anchor: null, rise: this.figureRiseClause(con).replace(/^ — /, '') };
       const own = new Set(lines.flat());
       const anchor = visible.filter((s) => own.has(s.id)).reduce((a, b) => (b.mag < a.mag ? b : a));
       return { con, name, up: true, anchor, rise: '' };
     });
   }
 
+  /** The epoch `hours` after the local midnight that starts the night the chart
+   *  shows (12 to 36: noon, through midnight at 24, to the next noon). */
+  onThisNight(hours: number): number {
+    return epochForNight(nightOf(this.epoch, this.tz).date, hours, this.tz)!;
+  }
+
+  /**
+   * When the figure can next be drawn: the first moment one of its lines has
+   * both ends above the horizon, or null if none ever does from here. Not the
+   * brightest star's next rise: that star can already be up while its
+   * companions are down (or the figure has just set), and its next rise is then
+   * tomorrow's while the figure can be drawn later tonight.
+   *
+   * Exact rather than searched: two stars are both up for one stretch of each
+   * sidereal day, and that stretch starts when one of them rises, so the first
+   * time is now or one of the two next rises.
+   */
+  figureRise(abbr: string): number | null {
+    const up = (star: Star, epoch: number) => altAz(star.raH, star.decDeg, this.lat, this.lon, epoch)[0] > 0;
+    let first: number | null = null;
+    for (const [a, b] of FIGURES[abbr] ?? []) {
+      const [sa, sb] = [BY_ID.get(a)!, BY_ID.get(b)!];
+      const candidates = [this.epoch, nextRise(sa.raH, sa.decDeg, this.lat, this.lon, this.epoch), nextRise(sb.raH, sb.decDeg, this.lat, this.lon, this.epoch)]
+        .filter((t): t is number => t !== null)
+        .map((t) => (t === this.epoch ? t : t + 30))   // just after the rise, when it is above the horizon
+        .sort((x, y) => x - y);
+      const both = candidates.find((t) => up(sa, t) && up(sb, t));
+      if (both !== undefined && (first === null || both < first)) first = both;
+    }
+    return first;
+  }
+
+  /** "— it rises about two in the morning" for a figure, or that it never does from here. */
+  figureRiseClause(abbr: string): string {
+    const rise = this.figureRise(abbr);
+    return rise === null ? ' — it never rises from that latitude' : ` — it rises ${spokenHour(rise, this.tz)}`;
+  }
+
   /** "— it rises about two in the morning", or the honest alternative ("" when
-   *  it never sets). Also used for a star that is down. */
+   *  it never sets). For a star that is down. */
   riseClause(star: Star): string {
     if (circumpolarity(star.decDeg, this.lat) === 'never') return ' — it never rises from that latitude';
     const rise = nextRise(star.raH, star.decDeg, this.lat, this.lon, this.epoch);

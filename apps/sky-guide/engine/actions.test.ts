@@ -121,7 +121,7 @@ describe('show_constellation', () => {
     const sky = chart();
     const done = await run(sky, 'show_constellation', { name: 'Orion' });
     expect(sky.figureCon).toBeNull();
-    expect(done.result).toMatch(/^Not up now: Orion isn't up at this hour from Taipei — it rises about half past 2 in the morning\. Nothing is drawn\./);
+    expect(done.result).toMatch(/^Not up now: Orion isn't up at this hour from Taipei — it rises about quarter past 2 in the morning\. Nothing is drawn\./);
     expect(done.result).toMatch(/it is well up by about .* in the morning, so offer to show the sky then, and move the clock only if they ask/);
     const later = done.notice!.later!;
     const hour = localClock(later, 8).hour;
@@ -183,6 +183,15 @@ describe('move_chart', () => {
     const sky = chart();
     await run(sky, 'move_chart', { time });
     check(sky);
+  });
+
+  test('a time asked for after a date stays on that night', async () => {
+    const sky = chart();
+    await run(sky, 'move_chart', { time: 'December 21st' });
+    await run(sky, 'move_chart', { time: 'midnight' });
+    expect(nightOf(sky.epoch, sky.tz)).toEqual({ date: '2026-12-21', hours: 24 });
+    await run(sky, 'move_chart', { time: '3 am' });
+    expect(nightOf(sky.epoch, sky.tz)).toEqual({ date: '2026-12-21', hours: 27 });
   });
 
   test('"back to tonight" and "now" are the evening; already there, the host says so', async () => {

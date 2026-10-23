@@ -83,7 +83,7 @@ first reply.
 
 ## Tested
 
-- `npx vitest run apps/sky-guide`: 311 tests. The engine as ported (the
+- `npx vitest run apps/sky-guide`: 317 tests. The engine as ported (the
   closed-form astronomy, the catalogue, the chart's refusals and settling, the
   judge's phrasings, the narrator, the projection); the tools against the API
   limits, lenient schemas and the instructions naming each; the state's worst

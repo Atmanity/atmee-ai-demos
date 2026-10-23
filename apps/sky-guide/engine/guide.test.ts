@@ -193,6 +193,23 @@ describe('time words beyond the original\'s', () => {
     expect(nightOf(sky.epoch, sky.tz)).toEqual({ date: night, hours: 22.5 });
   });
 
+  test('Midnight, Before dawn and a clock hour stay on the night the chart shows; Tonight is the real evening', () => {
+    // Symptom: pick 21 December, press Midnight, and the chart jumped back to
+    // the next real midnight in August.
+    const sky = chart();
+    run(sky, [{ kind: 'set_time', date: '2026-12-21' }]);
+    run(sky, [{ kind: 'set_time', preset: 'midnight' }]);
+    expect(nightOf(sky.epoch, sky.tz)).toEqual({ date: '2026-12-21', hours: 24 });
+    run(sky, [{ kind: 'set_time', preset: 'dawn' }]);
+    expect(nightOf(sky.epoch, sky.tz)).toEqual({ date: '2026-12-21', hours: 29 });
+    run(sky, [{ kind: 'set_time', clockHour: 3 }]);
+    expect(nightOf(sky.epoch, sky.tz)).toEqual({ date: '2026-12-21', hours: 27 });
+    run(sky, [{ kind: 'set_time', clockHour: 22.5 }]);
+    expect(nightOf(sky.epoch, sky.tz)).toEqual({ date: '2026-12-21', hours: 22.5 });
+    run(sky, [{ kind: 'set_time', preset: 'tonight' }]);
+    expect(nightOf(sky.epoch, sky.tz)).toEqual({ date: '2026-08-05', hours: 21 });
+  });
+
   test('a date that does not exist is refused', () => {
     expect(run(chart(), [{ kind: 'set_time', month: 4, day: 31 }]).refusals[0]).toContain("couldn't read");
   });

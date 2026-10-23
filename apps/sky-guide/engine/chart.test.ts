@@ -4,7 +4,7 @@
 import { describe, expect, test } from 'vitest';
 import { BY_ID, FACTS, factFor, FIGURES, STARS } from './catalog.ts';
 import { MAX_VISIBLE, SkyChart } from './chart.ts';
-import { SkyError } from './sky.ts';
+import { altAz, PLACES, SkyError, spokenHour } from './sky.ts';
 
 // 2026-08-05, 8 pm in Taipei. Fixed so nothing here depends on when the suite
 // runs: a sky test with a live clock passes for months and then fails on the
@@ -248,6 +248,35 @@ describe('the figures at a glance (new in this port: the state and the buttons r
         }
       }
     }
+  });
+
+  test('a figure rises when one of its lines can first be drawn, not when its brightest star next rises', () => {
+    // The brightest star can already be up while its companions are still
+    // down (or the figure has just set): its NEXT rise is then tomorrow's,
+    // while the figure can be drawn later tonight. Checked against a minute-
+    // by-minute search of when a line first has both ends above the horizon.
+    const firstDrawable = (sky: SkyChart, con: string) => {
+      const up = (id: string, t: number) => { const s = BY_ID.get(id)!; return altAz(s.raH, s.decDeg, sky.lat, sky.lon, t)[0] > 0; };
+      for (let t = sky.epoch; t < sky.epoch + 26 * 3600; t += 60) if (FIGURES[con].some(([a, b]) => up(a, t) && up(b, t))) return t;
+      return null;
+    };
+    let brightestAlreadyUp = 0;
+    for (const place of PLACES.filter((_, i) => i % 2 === 0)) {
+      for (let hour = 0; hour < 24; hour += 3) {
+        const sky = chart(place.label, EPOCH + hour * 3600);
+        const ids = sky.visibleIds();
+        for (const f of sky.figures().filter((x) => !x.up)) {
+          const brightest = STARS.find((s) => s.con === f.con)!;
+          if (!ids.has(brightest.id)) continue;   // the case the brightest star's rise got wrong
+          brightestAlreadyUp++;
+          const t = firstDrawable(sky, f.con);
+          const said = f.rise;
+          const near = t === null ? ['it never rises from that latitude'] : [t - 420, t, t + 420].map((x) => `it rises ${spokenHour(x, sky.tz)}`);
+          expect(near, `${place.label} +${hour}h ${f.name}: "${said}"`).toContain(said);
+        }
+      }
+    }
+    expect(brightestAlreadyUp, 'the fixture must exercise the case').toBeGreaterThan(5);
   });
 
   test('a figure never seen from a latitude says so', () => {

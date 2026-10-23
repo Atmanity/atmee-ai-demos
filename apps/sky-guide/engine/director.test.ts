@@ -148,7 +148,7 @@ describe('the live chart is the chart, in words', () => {
   test('which figures are up with where to look, and which are down with when they rise', () => {
     const text = skyState(chart().view());
     expect(text).toContain('Scorpius about halfway up in the south (by Antares)');
-    expect(text).toMatch(/Figures not up now: [^.]*Orion \(it rises about half past 2 in the morning\)/);
+    expect(text).toMatch(/Figures not up now: [^.]*Orion \(it rises about quarter past 2 in the morning\)/);
   });
 
   test('the marked star\'s catalogue fact verbatim, or that nothing is marked', () => {
