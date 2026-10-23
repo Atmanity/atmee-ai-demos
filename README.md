@@ -64,7 +64,7 @@ server's `onTool` hook.
 
 | app | tools | why |
 |---|---|---|
-| **Ledger Academy** | `show_slide {n: 1..4}`, `ask_quiz_question {n: 1..2}`, `grade_answer {question, correct, feedback?}`, all notify | the deck opens on slide 1; the trainer puts up slides 2–3 and the closing "Questions?" slide (4), shows each quiz question, and records each verdict, which is the score |
+| **Ledger Academy** | `show_slide {n: 1..4}` (notify), `ask_quiz_question {n: 1..2}` and `grade_answer {question, correct, feedback?}` (await) | the deck opens on slide 1; the trainer puts up slides 2–3 and the closing "Questions?" slide (4). The quiz is the page's: `ask_quiz_question` answers with the question to ask, and `grade_answer` records the verdict (the score) and answers with what comes next, the second question or the final score, so a graded question is never asked again and the module ends after the last grade |
 | **Northwind Talent** | `set_agenda_step {step}` notify, `record_answer {topic, summary}` notify | the live agenda and a "Screening notes" panel filled by the recruiter as the candidate answers |
 | **Isle of Whispers** | `reveal_clue {seek}` **await**, `give_item {item}` notify | the oracle's powers, at the shrine only: the island's secrets are the game's, so the oracle asks where the key/chest/map lies and speaks from the answer while it glows on the map; it may gift a lantern (lights the tiles around you) or a charm |
 | **Nightcap Live** | `pin_message {text}` notify, `start_poll {question, options[2..4]}` notify | the host pins lines and runs polls in the stream chat; the server shows them to the studio and every viewer, counts votes, and tells the host the result when the poll closes |

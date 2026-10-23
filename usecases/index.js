@@ -151,32 +151,36 @@ const training = {
   title: "Internal training: lesson, Q&A, quiz",
   page: "training.html",
   speakAfterS: 1.5,
+  // The lesson is the conductor's: each slide is a step the trainer speaks
+  // through on its own (`speak` edges), then the closing questions slide waits
+  // for the trainee. The quiz is one last step, and the course app runs it:
+  // its tools answer the trainer (await) with the question on the screen and,
+  // once an answer is graded, what comes next, so the question order and the
+  // end of the module never depend on the judge seeing a tool call.
   conductor: {
     start: "intro",
     nodes: [
       { id: "intro", instructions: "You are the trainer for a 10-minute module on incident response. Welcome the trainee, say there are three short slides, then a quick Q&A and a two-question quiz. Slide 1 is already on their screen: go straight into it without waiting.", edges: [{ to: "slide1", speak: true }] },
       { id: "slide1", instructions: `Teach slide 1 (already on the screen) in about four sentences, in your own words: "${SLIDES[0].body}" Then move on.`, edges: [{ to: "slide2", speak: true }] },
       { id: "slide2", instructions: `Put slide 2 up with show_slide, then teach it in about four sentences: "${SLIDES[1].body}" Give one example of what goes wrong when one person takes two roles. Then move on.`, edges: [{ to: "slide3", speak: true }] },
-      { id: "slide3", instructions: `Put slide 3 up with show_slide, then teach it in about four sentences: "${SLIDES[2].body}" Then put up slide 4, the closing questions slide, and ask whether the trainee has questions before the quiz.`, edges: [{ to: "qna" }] },
-      { id: "qna", instructions: "Answer the trainee's questions about the three slides. If they have none, say so and start the quiz.", edges: [{ to: "quiz1", when: "The trainee has no more questions, or asked to start the quiz." }, { to: "qna" }] },
-      { id: "quiz1", instructions: `Show quiz question 1 with ask_quiz_question, then ask it: "${QUIZ[0].q}" Wait for the answer. Record your verdict with grade_answer as question 1 (the answer is: ${QUIZ[0].a}), then tell the trainee whether it was right and why in one sentence.`, edges: [{ to: "quiz2", when: "The trainee has answered question 1 and you have told them whether it was right." }, { to: "quiz1" }] },
-      { id: "quiz2", instructions: `Show quiz question 2 with ask_quiz_question, then ask it: "${QUIZ[1].q}" Wait for the answer. Record your verdict with grade_answer as question 2 (the answer is: ${QUIZ[1].a}), then tell the trainee whether it was right.`, edges: [{ to: "wrap", when: "The trainee has answered question 2 and you have told them whether it was right." }, { to: "quiz2" }] },
-      { id: "wrap", instructions: "Give the score out of two from the app state, one sentence of encouragement, and close the module.", emotion: "warm" },
+      { id: "slide3", instructions: `Put slide 3 up with show_slide, then teach it in about four sentences: "${SLIDES[2].body}" That is the last lesson slide.`, edges: [{ to: "questions", speak: true }] },
+      { id: "questions", instructions: "First put up slide 4, the closing questions slide, with show_slide (unless the app state says it is on screen already). Ask whether the trainee has any questions before the quiz, and answer the ones they ask about the three slides, briefly. Do not start the quiz until they say they have none or ask for it.", edges: [{ to: "quiz", when: "The trainee said they have no (more) questions, or asked to start the quiz." }, { to: "questions" }] },
+      { id: "quiz", instructions: `Run the two-question quiz; the course app decides which question comes next. Call ask_quiz_question with n 1 and ask the question it returns, in its words, then wait for the trainee's answer. When they answer, judge it (the right answers: question 1, ${QUIZ[0].a}; question 2, ${QUIZ[1].a}; close enough counts), record it with grade_answer, and then do exactly what its result tells you. Grade only the trainee's own answer to the question on screen, given after you asked it; when you speak again on your own (they are quiet), never grade: repeat the question or ask whether they need a hint. Never ask a question again once it is graded.`, emotion: "warm" },
     ],
   },
   // The deck, the quiz and the score are the course app's: the trainer puts
-  // each slide and quiz question up and records each verdict, and the page
-  // shows them at once. The deck opens on slide 1.
+  // each slide up and records each verdict, and the page shows them at once
+  // and answers with what is on the screen now. The deck opens on slide 1.
   appTools: {
-    instructions: "You teach from the course app's slide deck on the trainee's screen, and the app runs the quiz and keeps the score; the screen changes only when you use these. Slide 1 is already up when you start. Put slide 2 and slide 3 up with show_slide as you move on to them, and slide 4, the closing questions slide, when you invite questions. Before you ask each quiz question, show it with ask_quiz_question. As soon as you have judged the trainee's answer, record it with grade_answer (the question number and whether it was right) before you tell them; that is how their score is counted.",
+    instructions: "You teach from the course app's slide deck on the trainee's screen, and the app runs the quiz and keeps the score; the screen changes only when you use these. Slide 1 is already up when you start. Put slide 2 and slide 3 up with show_slide as you move on to them, and slide 4, the closing questions slide, when you invite questions. When the quiz starts, call ask_quiz_question and ask the question it returns. As soon as you have judged an answer, record it with grade_answer (the question number and whether it was right) before you tell the trainee, and follow its result: it gives you the next question, or the final score once the quiz is over.",
     tools: [
       tool("show_slide", "Put a slide on the trainee's screen as you move on to it: lesson slide 2 or 3, or 4, the closing questions slide before the quiz.", { n: { type: "integer", minimum: 1, maximum: 4 } }, ["n"]),
-      tool("ask_quiz_question", "Show quiz question n (1 or 2) on the trainee's screen, right before you ask it.", { n: { type: "integer", minimum: 1, maximum: 2 } }, ["n"]),
-      tool("grade_answer", "Record your verdict on the trainee's answer to quiz question 1 or 2, so the course app counts their score. Once per question.", {
+      tool("ask_quiz_question", "Put quiz question n (1 or 2) on the trainee's screen; the app answers with the question to ask, or the one to ask instead if n is already graded.", { n: { type: "integer", minimum: 1, maximum: 2 } }, ["n"], { mode: "await", timeoutSeconds: 5 }),
+      tool("grade_answer", "Record your verdict on the trainee's answer to the quiz question on screen, so the course app counts their score; the app answers with what to do next (the next question, or the final score). Once per question.", {
         question: { type: "integer", minimum: 1, maximum: 2 },
         correct: { type: "boolean" },
         feedback: { type: "string", maxLength: 160, description: "One short line shown under the question, e.g. 'Only the incident commander decides.'" },
-      }, ["question", "correct"]),
+      }, ["question", "correct"], { mode: "await", timeoutSeconds: 5 }),
     ],
   },
   slides: SLIDES,
@@ -185,13 +189,17 @@ const training = {
     if (msg.kind === "slide") { h.memo.slide = Number(msg.text); return [state(trainingState(h))]; }
     // The page counts the score from grade_answer, and the state carries it.
     if (msg.kind === "score") { h.memo.score = Number(msg.text) || 0; return [state(trainingState(h))]; }
+    // Which quiz question is on screen and how many are graded, as "<on>/<graded>".
+    if (msg.kind === "quiz") { const [on, graded] = String(msg.text).split("/").map(Number); h.memo.quiz = { on, graded }; return [state(trainingState(h))]; }
     if (msg.kind === "typed") return [say(msg.text)];
     return [];
   },
 };
 function trainingState(h) {
   const s = SLIDES.find((x) => x.id === h.memo.slide);
-  return `Training app state. Slide on screen: ${s ? `${s.id} "${s.title}"` : h.memo.slide === 4 ? '4, the closing "Questions?" slide' : "1"}. Quiz score so far: ${h.memo.score || 0} of 2. The trainee answers by voice or by typing.`;
+  const q = h.memo.quiz;
+  const screen = q ? (q.graded >= 2 ? "the quiz is over" : `quiz question ${q.on}`) : `slide ${s ? `${s.id} "${s.title}"` : h.memo.slide === 4 ? '4, the closing "Questions?" slide' : "1"}`;
+  return `Training app state. On screen: ${screen}. Quiz questions graded: ${q ? q.graded : 0} of 2; score so far: ${h.memo.score || 0} of 2. The trainee answers by voice or by typing.`;
 }
 
 // ---------------------------------------------------------------------------
