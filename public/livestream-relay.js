@@ -119,7 +119,7 @@
   // A viewer: one receiving peer connection, made anew for each offer.
   // ---------------------------------------------------------------------------
   function viewer({ video, send, onState = () => {} }) {
-    let pc = null, pcId = null, chain = Promise.resolve(), state = '', live = false, recheck = null, fullRetry = null;
+    let pc = null, pcId = null, chain = Promise.resolve(), state = '', live = false, recheck = null, fullRetry = null, turnedAway = false;
     const set = (s, d) => { if (s === state && !d) return; state = s; onState(s, d || {}); };
 
     video.muted = true; video.playsInline = true; video.autoplay = true;
@@ -167,12 +167,15 @@
       handle(msg) {
         if (msg.type === 'stream') {
           live = !!msg.live;
-          if (!live) { drop(); set('offline'); } else if (state !== 'playing' && state !== 'full') set('tuning');
+          if (!live) { drop(); set('offline'); } else if (state !== 'playing') set('tuning');
+          if (live && turnedAway) send({ type: 'watch' }); // the cap counts again now: full, or a spot
           return true;
         }
-        if (msg.type === 'watching') { clearTimeout(fullRetry); if (state === 'full') set(live ? 'tuning' : 'offline'); return true; }
+        if (msg.type === 'watching') { turnedAway = false; clearTimeout(fullRetry); if (state === 'full') set(live ? 'tuning' : 'offline'); return true; }
         if (msg.type === 'watch-full') {
-          drop(); set('full', { max: msg.max });
+          // Full only matters while something is on: offline, the page says offline
+          // and keeps asking, so it holds a spot once the stream starts.
+          turnedAway = true; drop(); if (live) set('full', { max: msg.max }); else set('offline');
           clearTimeout(fullRetry); fullRetry = setTimeout(() => send({ type: 'watch' }), 10000);
           return true;
         }
