@@ -25,6 +25,7 @@ import express from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
+import sharp from "sharp";
 import { WebSocketServer } from "ws";
 import { USECASES } from "./usecases/index.js";
 import { describeFrame } from "./usecases/observer.js";
@@ -167,12 +168,14 @@ app.get("/api/usecases", (_req, res) => res.json(Object.fromEntries(Object.entri
 
 // Each app's avatar face for the home page cards. The API hands out the
 // portrait (thumbnailUrl) as a presigned link that expires within the hour, so
-// the page never sees it: the server fetches the image right away, keeps the
-// bytes, and serves them from here. A kept image is checked again after
-// PORTRAIT_TTL_MS (a replaced portrait shows up then); when that check fails
-// the old image is served on. No avatar, or one without a portrait, is a 404
+// the page never sees it: the server fetches the image right away, shrinks it
+// to a 192 px WebP (the card draws a 96 px circle; every current browser takes
+// WebP), keeps those bytes and serves them from here. A kept image is checked
+// again after PORTRAIT_TTL_MS (a replaced portrait shows up then); when that
+// check fails the old image is served on. No avatar, or one without a portrait, is a 404
 // and the card keeps its emoji.
 const PORTRAIT_TTL_MS = 30 * 60 * 1000;
+const PORTRAIT_PX = 192;
 const portraits = new Map(); // usecase -> { at, avatarId, image?: { bytes, type, etag } }
 const portraitLoads = new Map(); // usecase -> the fetch in flight
 async function loadPortrait(avatarId) {
@@ -184,10 +187,14 @@ async function loadPortrait(avatarId) {
   const img = await fetch(url, { signal: AbortSignal.timeout(20_000) });
   const type = img.headers.get("content-type") || "";
   if (!img.ok || !type.startsWith("image/")) throw new Error(`portrait -> ${img.status} ${type}`);
-  const bytes = Buffer.from(await img.arrayBuffer());
+  // The portraits are square head-and-shoulders shots; a taller one keeps its top, where the face is.
+  const bytes = await sharp(Buffer.from(await img.arrayBuffer()))
+    .resize(PORTRAIT_PX, PORTRAIT_PX, { fit: "cover", position: "top" })
+    .webp({ quality: 80 })
+    .toBuffer();
   // The storage object's name changes when the portrait is replaced.
-  const etag = `"${createHmac("sha256", "portrait").update(new URL(url).pathname).digest("hex").slice(0, 16)}"`;
-  return { bytes, type, etag };
+  const etag = `"${createHmac("sha256", `portrait-webp-${PORTRAIT_PX}`).update(new URL(url).pathname).digest("hex").slice(0, 16)}"`;
+  return { bytes, type: "image/webp", etag };
 }
 app.get("/api/avatars/:usecase/portrait", async (req, res) => {
   const name = req.params.usecase;
