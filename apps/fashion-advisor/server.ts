@@ -54,6 +54,7 @@ const app: AppServer = {
   id: ID,
   title: 'Notch',
   tagline: 'A stylist rates your outfit for the occasion, names the one fix and the pieces that take it up a notch.',
+  brand: { color: '#95515c', ink: '#ffffff' },
   maxSeconds: 900,
   // Try-ons need an image model; without one Emery is not offered them at all.
   appTools: { instructions: instructions(models.tryOnAvailable), tools: tools(models.tryOnAvailable) },

@@ -21,6 +21,7 @@ const app: AppServer = {
   id: ID,
   title: 'Planwright',
   tagline: 'Talk your home into shape with Iris, an architect who draws while you talk.',
+  brand: { color: '#1f4e8c', ink: '#ffffff' },
   maxSeconds: 900,
   appTools: { instructions: INSTRUCTIONS, tools: TOOLS },
   routes(router) {

@@ -26,6 +26,7 @@ const app: AppServer = {
   id: ID,
   title: 'Arcwise',
   tagline: 'A projectile-motion range: aim, fire, and Theo explains in real numbers where it landed.',
+  brand: { color: '#5fd3c3', ink: '#15242a' },
   maxSeconds: 900,
   appTools: { instructions: INSTRUCTIONS, tools: TOOLS },
   routes(router) {

@@ -107,10 +107,26 @@ test('when Lumi forgets the call, the safety net makes it and tells Lumi', async
   await inCall();
   await act(async () => { await kit.handlers.onToolCall({ id: 'c1', name: 'choose_destination', arguments: { place: 'Japan' } }); });
   vi.useFakeTimers();
+  // Some time later (a call just before the words means Lumi acted on them her own way, and the net stands down).
+  await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
   act(() => kit.handlers.onUserSaid('What should I eat there?', 'spoken'));
   await act(async () => { await vi.advanceTimersByTimeAsync(7100); });
   expect(posts.at(-1)).toEqual({ path: '/trips/t1/tool', body: { name: 'show_food', arguments: {} } });
   expect(kit.avatar.event).toHaveBeenLastCalledWith(expect.stringMatching(/^You did not call show_food.*Ramen/), 30);
+});
+
+test('when it was done meanwhile (here by a button), the safety net stands down quietly', async () => {
+  await inCall();
+  await act(async () => { await kit.handlers.onToolCall({ id: 'c1', name: 'choose_destination', arguments: { place: 'Japan' } }); });
+  vi.useFakeTimers();
+  await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+  act(() => kit.handlers.onUserSaid('What should I eat there?', 'spoken'));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'What should I eat there?' })); await vi.advanceTimersByTimeAsync(100); });
+  const told = kit.avatar.event.mock.calls.length;
+  const sent = posts.length;
+  await act(async () => { await vi.advanceTimersByTimeAsync(7100); });
+  expect(posts.length).toBe(sent);
+  expect(kit.avatar.event.mock.calls.length).toBe(told);
 });
 
 test('when the call ends, the trip it made is on screen with a way to keep it', async () => {

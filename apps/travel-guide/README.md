@@ -22,7 +22,7 @@ Open it at `/apps/travel-guide/`.
 | Lumi's rules | The session's tool `instructions`: she reaches the map only through the tools, and never names a sight, dish, headline or distance a tool did not give her. |
 | What Lumi sees | `state`: what is on the screen (the country, the dishes and headlines once shown, the sight and its facts, the route). Never the next sight, and never dishes or headlines before they are shown, so she has to call for them. |
 | Buttons | Search, Surprise me, idea chips, the route, Eat / News / Wander, a place box, Use my location, next and previous, pins and map taps: they act at once and Lumi is told by an event. Switching a tab only moves the board; Lumi just gets the new state. |
-| The safety net | `useToolNet` (kit) with `mustDo` (`engine/judge.ts`): when the user plainly asks for a country by name ("let's go to Portugal", "back to Japan"), the food, the news, or the next or previous sight, and Lumi does not call the tool within 7 s, the page does it and tells her. The sight moves carry the sight they started from, so a late call cannot skip one. Exploring a place is left to Lumi (her reading of the place, and a slow lookup). |
+| The safety net | `useToolNet` (kit) with `mustDo` (`engine/judge.ts`): when the user plainly asks for a country by name ("let's go to Portugal", "back to Japan"), the food, the news, or the next or previous sight, and Lumi does not call the tool within 7 s, the page does it and tells her. If the move was made meanwhile (by Lumi her own way, or a button), it stands down quietly; the sight moves also carry the sight they started from, so a late call cannot skip one. Exploring a place is left to Lumi (her reading of the place, and a slow lookup). |
 | The screens | The front door (`page/Lobby.tsx`); the map with Lumi's tile in its corner and the place plate at its foot (`page/App.tsx`, `page/TravelMap.tsx`); the guidebook beside it (`page/Guidebook.tsx`); the trip and its notes (`page/Summary.tsx`, `page/notes.ts`), shown when the call ends. Styled in `page/yonder.css`. |
 
 ```
@@ -84,7 +84,7 @@ tools, in their descriptions and results.
 
 ## Tested
 
-- `npx vitest run apps/travel-guide`: 334 tests. The engine's ported tests
+- `npx vitest run apps/travel-guide`: 336 tests. The engine's ported tests
   (geo parsers and failures, the mainland and outline rules, the state and
   trip rules, the name filter, the snapshot parsers, the strip's projection);
   the tools and instructions against the API limits, with and without a news
@@ -94,7 +94,8 @@ tools, in their descriptions and results.
   safety-net move doing nothing); the safety net's phrases; the guidebook,
   the trip summary and its notes rendered; and the page's wiring with the call
   faked (a tool call answered from the server, a button told to Lumi, the net
-  acting when she forgets, the trip on screen when the call ends).
+  acting when she forgets and standing down when it was done meanwhile, the
+  trip on screen when the call ends).
 - A server smoke run (2026-10-23, no model or news key) through the routes
   against the live free services: Portugal outlined with its built-in dishes
   and Wikipedia lines, "Alfama, Lisbon" explored (every Overpass mirror failed;

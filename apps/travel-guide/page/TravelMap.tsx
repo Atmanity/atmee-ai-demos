@@ -12,9 +12,9 @@ export type MapPick = 'destination' | 'around';
 export type MapMode = 'world' | 'country' | 'around';
 
 // Yonder's palette (page/yonder.css): Leaflet paths take colours, not variables.
-const PINE = '#0f3d3a';
-const FLAMINGO = '#e8466c';
-const SUN = '#f2a93b';
+const SEA = '#0b4870';
+const CORAL = '#f0677a';
+const SUN = '#f2b234';
 
 /** Whether to jump rather than fly: the user asked for less motion. */
 const still = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -79,19 +79,19 @@ export function TravelMap({ config, mode, map, spots, onPick, onSpot }: {
     if (mode === 'country' && map) {
       if (map.outline) {
         const rings = map.outline.map((ring) => ring.map(([lon, lat]) => [lat, lon] as L.LatLngTuple));
-        L.polygon(rings, { color: PINE, weight: 2.5, fillColor: SUN, fillOpacity: 0.22, interactive: false }).addTo(group);
+        L.polygon(rings, { color: SEA, weight: 2.5, fillColor: SUN, fillOpacity: 0.22, interactive: false }).addTo(group);
       } else if (map.center) {
-        L.circleMarker(map.center, { radius: 9, color: PINE, weight: 3, fillColor: SUN, fillOpacity: 1, interactive: false }).addTo(group);
+        L.circleMarker(map.center, { radius: 9, color: SEA, weight: 3, fillColor: SUN, fillOpacity: 1, interactive: false }).addTo(group);
       }
     }
     if (mode === 'around' && spots) {
       if (spots.origin) {
-        L.circleMarker(spots.origin, { radius: 7, color: '#fff', weight: 3, fillColor: PINE, fillOpacity: 1 }).bindTooltip(`Around ${spots.place}`).addTo(group);
+        L.circleMarker(spots.origin, { radius: 7, color: '#fff', weight: 3, fillColor: SEA, fillOpacity: 1 }).bindTooltip(`Around ${spots.place}`).addTo(group);
       }
       spots.pins.forEach((pin, index) => {
         const current = index === spots.index;
         // Paths pass their clicks on to the map by default, which would open "plan a trip here" over the pin.
-        L.circleMarker([pin.lat, pin.lon], { radius: current ? 11 : 7, color: '#fff', weight: current ? 3 : 2, fillColor: current ? FLAMINGO : PINE, fillOpacity: current ? 1 : 0.75, bubblingMouseEvents: false })
+        L.circleMarker([pin.lat, pin.lon], { radius: current ? 11 : 7, color: '#fff', weight: current ? 3 : 2, fillColor: current ? CORAL : SEA, fillOpacity: current ? 1 : 0.75, bubblingMouseEvents: false })
           .bindTooltip(pin.name, { direction: 'top', permanent: current, className: 'yd-tip' })
           .on('click', (ev) => {
             L.DomEvent.stopPropagation(ev);

@@ -30,7 +30,7 @@ const app: AppServer = {
   id: ID,
   title: 'Hanshi',
   tagline: 'Learn stroke order with Ren, a calligraphy teacher who watches every stroke.',
-  brand: { color: '#e2462f', ink: '#ffffff' },
+  brand: { color: '#1f2b2f', ink: '#fcfcfa' },
   maxSeconds: 900,
   appTools: { instructions: INSTRUCTIONS, tools: TOOLS },
   routes(router) {

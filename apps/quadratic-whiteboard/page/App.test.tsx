@@ -123,7 +123,7 @@ describe('the lesson', () => {
     expect(document.body.textContent).not.toMatch(PLUMBING);
   });
 
-  it('moves the board on Ada\'s calls and hands him the result to speak from', async () => {
+  it('moves the board on Ada\'s calls and hands her the result to speak from', async () => {
     await live();
     expect(await call('put_up_equation', { equation: 'x squared minus four x plus three' })).toContain('y = x² - 4x + 3 is on the board');
     expect(heading()).toBe('y = x² − 4x + 3');
@@ -159,10 +159,12 @@ describe('the lesson', () => {
 });
 
 describe('the safety net', () => {
-  it('hides the graph itself when Ada only says he will, and tells him', async () => {
+  it('hides the graph itself when Ada only says she will, and tells her', async () => {
     await live();
     await call('put_up_equation', { equation: 'x^2 - 4x + 3' });
     vi.useFakeTimers();
+    // The host talks for a few seconds before the next words: a call that long ago is the last turn's, not a reply to them.
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
     act(() => fake.onUserSaid!('Hide the graph, please.', 'spoken'));
     await act(async () => { await vi.advanceTimersByTimeAsync(7100); });
     vi.useRealTimers();

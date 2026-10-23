@@ -341,6 +341,8 @@ describe('the safety net', () => {
     vi.useFakeTimers();
     await spoken("he's not breathing");
     await tool('stop_for_emergency');
+    // The host talks for a few seconds before the next words: a call that long ago is the last turn's, not a reply to them.
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
     await spoken("Sorry, false alarm, nobody's hurt.");
     await act(async () => { await vi.advanceTimersByTimeAsync(7500); });
     expect(screen.queryByRole('alert')).toBeNull();

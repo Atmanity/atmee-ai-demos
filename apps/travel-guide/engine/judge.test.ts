@@ -3,7 +3,7 @@
 // something safe to do twice. The name filter is ported from
 // test_the_trip_is_kept.py.
 import { describe, expect, test } from 'vitest';
-import { actionIn, isAName, mustDo, netContext, titleCase, type NetCall, type NetContext } from './judge.ts';
+import { actionIn, isAName, mustDo, netContext, stillNeeded, titleCase, type NetCall, type NetContext } from './judge.ts';
 import type { Snapshot } from './types.ts';
 
 describe('names', () => {
@@ -67,6 +67,20 @@ describe('the safety net', () => {
   ];
   test.each(cases)('%s', (said, ctx, expected) => {
     expect(mustDo(said, ctx)).toEqual(expected);
+  });
+
+  test('stands down when the move was made meanwhile, by the host its own way or by a button', () => {
+    const food: NetCall = { name: 'show_food', arguments: {} };
+    expect(stillNeeded(food, JAPAN)).toBe(true);
+    expect(stillNeeded(food, { ...JAPAN, foodShown: true })).toBe(false);
+    const next: NetCall = { name: 'next_sight', arguments: { from: 1 } };
+    expect(stillNeeded(next, SIGHTS)).toBe(true);
+    expect(stillNeeded(next, { ...SIGHTS, sight: { index: 2, total: 4 } })).toBe(false); // already moved
+    const go: NetCall = { name: 'choose_destination', arguments: { place: 'Portugal' } };
+    expect(stillNeeded(go, JAPAN)).toBe(true);
+    expect(stillNeeded(go, { ...JAPAN, current: 'Portugal' })).toBe(false);
+    expect(stillNeeded({ name: 'choose_destination', arguments: { place: 'Japan' } }, SIGHTS)).toBe(true); // its page from its sights
+    expect(stillNeeded({ name: 'show_news', arguments: {} }, { ...JAPAN, newsShown: true })).toBe(false);
   });
 
   test('reads its context from the board', () => {

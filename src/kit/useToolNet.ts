@@ -18,7 +18,7 @@ const EARLY_MS = 6000;
  * change, and the net's own "new game" seven seconds later dealt a second
  * one). Doing nothing then beats doing it twice.
  */
-const ANY_EARLY_MS = 3000;
+const ANY_EARLY_MS = 1500;
 
 export function useToolNet(opts: {
   /** The tool call the player's words clearly ask for, or null. Only for actions that are safe to repeat. */

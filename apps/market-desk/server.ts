@@ -72,6 +72,7 @@ const app: AppServer = {
   id: ID,
   title: 'Outcry',
   tagline: 'Call out a ticker. Reese reads the tape, and never gives advice.',
+  brand: { color: '#f4c430', ink: '#2b1116' },
   maxSeconds: 600,
   // No agenda: the desk is driven by the user and by the board.
   conductor: null,

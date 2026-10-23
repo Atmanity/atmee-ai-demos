@@ -19,6 +19,7 @@ const app: AppServer = {
   id: ID,
   title: 'Lodestar',
   tagline: 'Any sky on Earth, at any hour, and Mira to name every star in it.',
+  brand: { color: '#0b1331', ink: '#f2eee1' },
   maxSeconds: 900,
   appTools: { instructions: INSTRUCTIONS, tools: TOOLS },
   routes(router) {

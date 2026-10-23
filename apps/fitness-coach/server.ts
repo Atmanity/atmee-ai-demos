@@ -64,6 +64,7 @@ const app: AppServer = {
   id: ID,
   title: 'Spotter',
   tagline: 'A workout built around you, coached by Sammy.',
+  brand: { color: '#ff7a1a', ink: '#1c1e21' },
   maxSeconds: 900,
   appTools: { instructions: INSTRUCTIONS, tools: TOOLS },
   routes(router) {

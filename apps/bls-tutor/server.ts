@@ -32,6 +32,7 @@ const app: AppServer = {
   id: ID,
   title: 'Bystander',
   tagline: 'CPR and first-aid drills with Alex, a calm paramedic: practise the minutes before help arrives.',
+  brand: { color: '#0f7a4f', ink: '#ffffff' },
   maxSeconds: 900,
   appTools: { instructions: INSTRUCTIONS, tools: TOOLS },
   routes(router) {

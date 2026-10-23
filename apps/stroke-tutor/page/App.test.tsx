@@ -172,6 +172,8 @@ describe('a lesson', () => {
     await live();
     await tool('choose_character', { character: 'ten' });
     fake.events.length = 0;
+    // The host talks for a few seconds before the next words: a call that long ago is the last turn's, not a reply to them.
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
     act(() => fake.handlers.onUserSaid!('Which way does it go?', 'spoken'));
     await act(async () => { await vi.advanceTimersByTimeAsync(7_500); });
     await settle();

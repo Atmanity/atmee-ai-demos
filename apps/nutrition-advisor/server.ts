@@ -249,6 +249,7 @@ const app: AppServer = {
   id: ID,
   title: 'Morsel',
   tagline: 'Ask about any food: Rachel, a friendly nutritionist, shows you what is in it.',
+  brand: { color: '#c8341e', ink: '#ffffff' },
   maxSeconds: 900,
   appTools: { instructions: INSTRUCTIONS, tools: TOOLS },
   routes(router) {

@@ -41,6 +41,7 @@ const app: AppServer = {
   id: ID,
   title: 'Chalkline',
   tagline: 'Say the equation; reveal the working one exact line at a time, with Ada reading it out.',
+  brand: { color: '#213d33', ink: '#f4f1e6' },
   // The board takes no turns of its own: no agenda for the host.
   conductor: null,
   maxSeconds: 900,

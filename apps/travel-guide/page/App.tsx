@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CallControls, CallStatus, ChatPanel, HostVideo, clock, useAvatar, useToolNet, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
 import { boardState, pressed, say, tools } from '../engine/director.ts';
-import { mustDo, netContext } from '../engine/judge.ts';
+import { mustDo, netContext, stillNeeded, type NetTool } from '../engine/judge.ts';
 import { isNewer, parseSnapshot } from '../engine/messages.ts';
 import type { Action, MapConfig, Outcome, Snapshot } from '../engine/types.ts';
 import { Guidebook } from './Guidebook.tsx';
@@ -141,7 +141,8 @@ export function App() {
       const call = held.current ? mustDo(text, netContext(held.current)) : null;
       return call ? { id: `net-${Date.now()}`, name: call.name, arguments: call.arguments } : null;
     },
-    run: (call) => onToolCall(call),
+    // Done meanwhile (by Lumi her own way, or a button): stand down quietly.
+    run: async (call) => (held.current && !stillNeeded({ name: call.name as NetTool, arguments: call.arguments }, netContext(held.current)) ? null : onToolCall(call)),
     avatar: () => avatarRef.current!,
   });
   const avatar = useAvatar('travel-guide', {

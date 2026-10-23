@@ -68,6 +68,7 @@ const app: AppServer = {
   id: ID,
   title: 'Yonder',
   tagline: 'Dream up your next trip on a live map with Lumi, a friend who has been.',
+  brand: { color: '#f0677a', ink: '#102335' },
   maxSeconds: 900,
   appTools: { instructions: instructions(NEWS), tools: tools(NEWS) },
   routes(router) {

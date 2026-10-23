@@ -120,6 +120,21 @@ export function mustDo(text: string, ctx: NetContext): NetCall | null {
   return null;
 }
 
+/**
+ * Whether the net's call still has something to do on the board as it is now,
+ * seven seconds after the words: the host (or a button) may have done it its
+ * own way meanwhile, and then the net stands down quietly.
+ */
+export function stillNeeded(call: NetCall, ctx: NetContext): boolean {
+  switch (call.name) {
+    case 'show_food': return Boolean(ctx.current) && !ctx.foodShown;
+    case 'show_news': return Boolean(ctx.current) && ctx.newsAvailable && !ctx.newsShown;
+    case 'next_sight':
+    case 'previous_sight': return ctx.stage === 'around' && ctx.sight?.index === call.arguments.from;
+    case 'choose_destination': return call.arguments.place !== ctx.current || ctx.stage === 'around';
+  }
+}
+
 // ─── controls ─────────────────────────────────────────────────────────────
 
 /** An action sent by a control on the page, checked field by field (it is input like any other), or null. */
