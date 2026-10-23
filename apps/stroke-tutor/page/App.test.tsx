@@ -76,15 +76,16 @@ async function fakeFetch(url: string, init?: { method?: string; body?: string })
   const path = url.replace('/api/apps/stroke-tutor', '');
   const body = init?.body ? JSON.parse(init.body) : undefined;
   requests.push({ path, body });
-  if ([...gone].some((id) => path.startsWith(`/lessons/${id}`))) return { ok: false, status: 404, json: async () => ({ error: 'no_lesson' }) };
-  if (path === '/lessons' && failLayouts > 0) {
-    failLayouts -= 1;
-    return { ok: false, status: 502, json: async () => ({}) };
-  }
+  // A late request meets the server as it is when it arrives.
   const late = lateRequests.findIndex((m) => m(path));
   if (late >= 0) {
     lateRequests.splice(late, 1);
     await new Promise<void>((resolve) => arrivals.push(resolve));
+  }
+  if ([...gone].some((id) => path.startsWith(`/lessons/${id}`))) return { ok: false, status: 404, json: async () => ({ error: 'no_lesson' }) };
+  if (path === '/lessons' && failLayouts > 0) {
+    failLayouts -= 1;
+    return { ok: false, status: 502, json: async () => ({}) };
   }
   for (const [method, re, keys, fn] of routes) {
     const m = path.match(re);
@@ -487,5 +488,34 @@ describe('a stroke in flight for stroke 1 when Ren starts the same character ove
     expect(screen.getByText(/Write stroke/).textContent).toContain('1 of 2');
     expect(screen.queryByText('Correct')).toBeNull();
     expect(screen.getByRole('alert').textContent).toContain('The sheet moved on before that stroke arrived');
+  });
+});
+
+describe('two recoveries of one lost sheet', () => {
+  it('the slower one, overtaken, says nothing: the newer one has laid out the sheet and said so', async () => {
+    await live();
+    await tool('choose_character', { character: 'ten' });
+    arriveLate((p) => p.endsWith('/stroke'));
+    await act(async () => { draw([[150, 450], [850, 450]], { samples: 40 }); });   // a stroke on its way, slowly
+    await settle();
+    gone.add(lessonId());
+    holdNext((p) => p === '/lessons');                                               // the first recovery's lay-out is slow
+    let first: Promise<unknown> = Promise.resolve();
+    act(() => { first = fake.handlers.onToolCall!({ id: 'call-next', name: 'next_stroke', arguments: {} }) as Promise<unknown>; });
+    await settle();
+    fake.events.length = 0;
+    await arrive();                                                                  // the stroke hits the lost sheet too: a second recovery, which lands first
+    await settle();
+    await release();                                                                 // then the first, overtaken
+    await settle();
+    let result = '';
+    await act(async () => { result = String(await first); });
+    expect(result).not.toContain('could not be set up');
+    expect(result).not.toContain('has been set up again');
+    const said = fake.events.map((e) => e.text).join(' ');
+    expect(said).not.toContain('could not be set up');
+    expect(said).toContain('has been set up again');
+    expect(screen.queryByText("Your sheet couldn't be laid out.")).toBeNull();
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('What would you like to write?');
   });
 });

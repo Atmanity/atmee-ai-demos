@@ -36,6 +36,8 @@ const get = <T,>(path: string) => call<T>(path);
 /** Every answer that moves the sheet carries the lesson's `seq`: only one newer than the sheet on screen may move it. */
 interface Acted { view: Snapshot; event?: string; refused?: string; seq?: number }
 interface Written { id: string; glyph: string; correct: number; total: number }
+/** How a lay-out ended: on screen (with Ren's opening), overtaken by a newer one (which speaks for itself), or failed. */
+type LaidOut = { status: 'laid'; opening: string } | { status: 'overtaken' } | { status: 'failed' };
 
 export function App() {
   const [view, setView] = useState<Snapshot | null>(null);
@@ -86,43 +88,45 @@ export function App() {
   }, []);
 
   /**
-   * A fresh lesson from the server; resolves with its opening once it is on
-   * screen, or null. A lay-out that lands after its call failed still lays out
-   * the sheet (the sheet outlives calls); one overtaken by a newer lay-out, or
-   * by the page going, is dropped.
+   * A fresh lesson from the server, and how it ended. A lay-out that lands
+   * after its call failed still lays out the sheet (the sheet outlives calls);
+   * one overtaken by a newer lay-out, or by the page going, is dropped and
+   * says so, so its caller stays quiet rather than report a loss.
    */
-  const layOut = useCallback(async (): Promise<string | null> => {
+  const layOut = useCallback(async (): Promise<LaidOut> => {
     const mine = ++setupGen.current;
     lesson.current = null;
     setBroken(false);
     try {
       const { id, view: first, opening, seq } = await post<{ id: string; view: Snapshot; opening: string; seq?: number }>('/lessons');
-      if (mine !== setupGen.current) return null;
+      if (mine !== setupGen.current) return { status: 'overtaken' };
       lesson.current = id;
       seqRef.current = seq ?? 0;
       land(first);
       setMiss(null);
       setPicking(false);
-      return opening;
+      return { status: 'laid', opening };
     } catch (err) {
-      if (mine !== setupGen.current) return null;
+      if (mine !== setupGen.current) return { status: 'overtaken' };
       console.warn(err);
       setBroken(true);
-      return null;
+      return { status: 'failed' };
     }
   }, [land]);
 
   /**
    * The server lost the lesson: a fresh sheet, and the learner is told why
    * their progress is gone. Resolves with what Ren should be told: a fresh
-   * sheet, or none at all. A coaching line still waiting is about the lost
-   * sheet, so it goes.
+   * sheet, or none at all; null when a newer recovery overtook this one (that
+   * one speaks). A coaching line still waiting is about the lost sheet, so it goes.
    */
-  const recover = useCallback(async (): Promise<string> => {
+  const recover = useCallback(async (): Promise<string | null> => {
     coach.clear();
-    const laid = (await layOut()) !== null;
-    if (laid) setNotice(RELAID);
-    return laid ? say.relaid() : say.lost();
+    const done = await layOut();
+    if (done.status === 'overtaken') return null;
+    if (done.status === 'failed') return say.lost();
+    setNotice(RELAID);
+    return say.relaid();
   }, [coach, layOut]);
 
   // Ren's tool calls: the server acts, the sheet follows, the result is what Ren says.
@@ -142,7 +146,8 @@ export function App() {
       return result;
     } catch (err) {
       if (!(err instanceof LessonGone)) throw err;
-      return await recover();
+      // A tool must answer; an overtaken recovery answers only that the sheet is being set up.
+      return (await recover()) ?? say.relaying();
     } finally {
       setBusy(false);
     }
@@ -178,7 +183,7 @@ export function App() {
     if (avatar.phase !== 'starting') return;
     const id = lesson.current;
     if (!id || !viewRef.current) {
-      void layOut().then((opening) => { if (opening) coach.push({ text: opening, ttlS: TTL.opening }); });
+      void layOut().then((done) => { if (done.status === 'laid') coach.push({ text: done.opening, ttlS: TTL.opening }); });
       return;
     }
     const resume = () => coach.push({ text: say.resume(viewRef.current!), ttlS: TTL.opening });
@@ -190,7 +195,7 @@ export function App() {
       if (lesson.current !== id) return;
       if (!(err instanceof LessonGone)) return resume();   // a hiccup: carry on with the sheet on screen
       const told = await recover();
-      coach.push({ text: told === say.relaid() ? say.relaidOpening() : say.lostOpening(), ttlS: TTL.opening });
+      if (told) coach.push({ text: told === say.lost() ? say.lostOpening() : say.relaidOpening(), ttlS: TTL.opening });
     });
   }, [avatar.phase]);
 
@@ -212,7 +217,8 @@ export function App() {
       if (cue) coach.push(cue);
     } catch (err) {
       if (err instanceof LessonGone) {
-        coach.push({ text: await recover(), ttlS: TTL.cue });
+        const told = await recover();
+        if (told) coach.push({ text: told, ttlS: TTL.cue });
         return;
       }
       console.warn(err);
@@ -240,7 +246,8 @@ export function App() {
       if (cue) coach.push(cue);
     } catch (err) {
       if (err instanceof LessonGone) {
-        coach.push({ text: await recover(), ttlS: TTL.cue });
+        const told = await recover();
+        if (told) coach.push({ text: told, ttlS: TTL.cue });
         return;
       }
       console.warn(err);
