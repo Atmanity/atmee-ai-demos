@@ -107,6 +107,13 @@ api.post('/apps/:app/session', async (req, res) => {
   res.status(201).json(r.session);
 });
 
+/** Ends every session this server started and has not seen end: on shutdown, so a rollout leaves no room running. */
+export async function endLiveSessions() {
+  const ids = [...started.keys()];
+  started.clear();
+  await Promise.allSettled(ids.map((id) => endSession(id)));
+}
+
 api.post('/apps/:app/session/:id/end', async (req, res) => {
   if (started.get(req.params.id) !== req.params.app) return void res.status(404).json({ error: 'not_found' });
   const r = await endSession(req.params.id);

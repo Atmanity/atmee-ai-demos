@@ -9,3 +9,5 @@ export declare const app: Express;
 export declare const requirePassword: RequestHandler;
 /** Takes a WebSocket upgrade for the five apps (the livestream chat). */
 export declare function handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void;
+/** Ends the five apps' live sessions (for the process's own shutdown). */
+export declare function shutdown(): Promise<void>;

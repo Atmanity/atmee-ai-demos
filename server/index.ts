@@ -12,8 +12,8 @@
 // password for every app).
 import { createServer } from 'node:http';
 import express from 'express';
-import { app as fiveApps, handleUpgrade, requirePassword } from '../server.js';
-import { api } from './api.ts';
+import { app as fiveApps, handleUpgrade, requirePassword, shutdown as endFiveSessions } from '../server.js';
+import { api, endLiveSessions } from './api.ts';
 import { isMiniAppPath } from './site.ts';
 
 // Its own variable: PORT is what server.js reads when it runs on its own (3333).
@@ -59,3 +59,14 @@ app.use((req, res, next) => (isMiniAppPath(req.path, production) ? miniapps(req,
 const server = createServer(app);
 server.on('upgrade', handleUpgrade);
 server.listen(PORT, HOST, () => console.log(`http://localhost:${PORT}/  (every app: the five and the fourteen)`));
+
+// Ctrl-C locally, SIGTERM from Kubernetes on a rollout: end every app's live sessions first.
+let stopping = false;
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, async () => {
+    if (stopping) return;
+    stopping = true;
+    await Promise.allSettled([endFiveSessions(), endLiveSessions()]);
+    process.exit(0);
+  });
+}

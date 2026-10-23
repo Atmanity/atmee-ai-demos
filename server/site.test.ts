@@ -20,9 +20,13 @@ test('the mini-apps own /apps and /api/apps (and their page files); everything e
 // through a server it did not create, and it does not open a port of its own.
 let server: Server;
 let port: number;
+const signalsBefore = { SIGINT: 0, SIGTERM: 0 };
+let signalsAfter = { ...signalsBefore };
 beforeAll(async () => {
   process.env.ATMEE_API_KEY ||= 'test-key-unused';
+  for (const s of ['SIGINT', 'SIGTERM'] as const) signalsBefore[s] = process.listenerCount(s);
   const five = await import('../server.js');
+  signalsAfter = { SIGINT: process.listenerCount('SIGINT'), SIGTERM: process.listenerCount('SIGTERM') };
   server = createServer(five.app);
   server.on('upgrade', five.handleUpgrade);
   port = await new Promise<number>((r) => server.listen(0, '127.0.0.1', () => r((server.address() as AddressInfo).port)));
@@ -38,4 +42,8 @@ test('the five apps answer from inside the site\'s server: their pages, API and 
   const ws = new WebSocket(`ws://127.0.0.1:${port}/?usecase=livestream&role=viewer`);
   await new Promise<void>((resolve, reject) => { ws.on('open', () => resolve()); ws.on('error', reject); });
   ws.close();
+});
+
+test('mounted, server.js leaves the signals to the site\'s server (which ends both halves\' sessions)', () => {
+  expect(signalsAfter).toEqual(signalsBefore);
 });

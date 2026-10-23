@@ -366,11 +366,12 @@ wss.on("connection", (ws, req) => {
 setInterval(() => { for (const h of hubs.values()) if (h.session && h.def.tick) relay(h, h.def.tick(h, (m) => broadcast(h, m))); }, 5000);
 
 // Ctrl-C locally, SIGTERM from Kubernetes on a rollout: end the live sessions first.
-for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, async () => { for (const h of hubs.values()) await endSession(h).catch(() => {}); process.exit(0); });
+export async function shutdown() {
+  for (const h of hubs.values()) await endSession(h).catch(() => {});
 }
-// Run on its own (`node server.js`) it listens itself; the site's server
-// (server/index.ts) mounts the same app and WebSocket beside the mini-apps.
+// Run on its own (`node server.js`) it listens and handles the signals itself;
+// the site's server (server/index.ts) mounts the same app and WebSocket beside
+// the mini-apps, and its shutdown calls this one.
 export { app };
 export function handleUpgrade(req, socket, head) {
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
@@ -379,4 +380,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const server = createServer(app);
   server.on("upgrade", handleUpgrade);
   server.listen(PORT, () => console.log(`http://localhost:${PORT}/  (use cases: ${Object.keys(USECASES).join(", ")}; password ${PASSWORD ? "on" : "off"})`));
+  for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => shutdown().then(() => process.exit(0)));
 }
