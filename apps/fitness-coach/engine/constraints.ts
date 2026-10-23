@@ -152,15 +152,16 @@ const LEAD_IN = new Set(['have', 'had', 'has', 'ever', 'been', 'got', 'gotten', 
  * Whether the report at `at` is negated: walking back from it within its
  * clause, over that verb's own auxiliaries only, a negation comes first ("I
  * nearly broke…", "I've never had a fracture", "I didn't fracture…"); or "no"
- * right before it ("no fractures", "no broken bones"). The subject or any
- * other word ends the walk, so an interjection is not a hedge: "No, I have
- * broken my wrist" and "oh no I broke my ankle" are reports. For a safety
- * rule, when unsure, hold.
+ * as the determiner of the injury itself ("no fractures", "no broken
+ * bones"). The subject or any other word ends the walk, and "no" before a
+ * possessive or an article is an interjection, so these are reports: "No, I
+ * have broken my wrist", "oh no I broke my ankle", "no my wrist is broken".
+ * For a safety rule, when unsure, hold.
  */
-function hedgedAt(low: string, at: number): boolean {
+function hedgedAt(low: string, at: number, match: string): boolean {
   const clause = low.slice(Math.max(0, at - 80), at).split(/[,.;!?]|\b(?:and|but|so|because|though)\b/).pop() ?? '';
   const words = clause.trim().split(/\s+/).filter(Boolean).reverse();
-  if (words[0] === 'no') return true;
+  if (words[0] === 'no') return !/^(?:my|our|your|his|her|their|the|both|a|an)\b/.test(match);
   for (const word of words) {
     if (HEDGE.test(word)) return true;
     if (!LEAD_IN.has(word)) return false;
@@ -178,7 +179,7 @@ export function injuriesIn(low: string): string[] {
       let match: RegExpExecArray | null;
       let reported = false;
       while ((match = shape.exec(low))) {
-        if (!hedgedAt(low, match.index)) { reported = true; break; }
+        if (!hedgedAt(low, match.index, match[0])) { reported = true; break; }
       }
       if (reported) { found.push(label); break; }
     }

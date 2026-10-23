@@ -414,10 +414,15 @@ describe('the injury reader: verb × part × shape × hedge', () => {
     ['No, I have broken my wrist', 'a fracture'], ['No I have broken my wrist', 'a fracture'], ['Oh no, I broke my ankle', 'a fracture'],
     ['oh no I broke my ankle', 'a fracture'], ["no I've fractured my ankle", 'a fracture'], ['no no I actually broke my wrist', 'a fracture'],
     ['nope I cracked a rib', 'a fracture'], ['not great I dislocated my shoulder', 'a dislocation'], ['no I have a fracture in my wrist', 'a fracture'],
+    // "No" before a possessive report is an interjection too (Bugbot round 5).
+    ['oh no my wrist is broken', 'a fracture'], ['oh no, my wrist is broken', 'a fracture'], ['No my ankle is fractured', 'a fracture'],
+    ['No, my ankle is fractured', 'a fracture'], ['no no my shoulder got dislocated', 'a dislocation'], ['no the bone was broken', 'a fracture'],
+    ['no her collarbone is cracked', 'a fracture'],
   );
   hedged.push(
     "I've never had a fracture", 'no dislocations so far', "nothing's broken, just bruised", 'no broken bones, just a sprain',
     "I haven't broken my wrist", "I've not broken my wrist", 'I have never broken a bone', 'oh no I almost broke my ankle',
+    'no fractures', 'no fractures, thankfully', 'no broken ribs', 'oh no, no broken bones',
   );
   const idioms = [
     'I cracked my back this morning', 'I cracked my neck', 'I crack my knuckles a lot', 'I cracked my knuckles', 'this is breaking my back',
