@@ -9,6 +9,7 @@ import { mustDo, type Command } from '../engine/judge.ts';
 import type { View } from '../engine/types.ts';
 import { Clues, Postcard, Summary } from './Board.tsx';
 import { Lobby, Logo } from './Lobby.tsx';
+import marco from '../host/portrait.jpg';
 import './postmark.css';
 
 const API = '/api/apps/guess-the-city';
@@ -105,7 +106,7 @@ export function App() {
         </div>
 
         <aside className="pm-host" aria-label={`${HOST}, your host`}>
-          <HostVideo avatar={avatar} name={HOST} className="pm-host-video">
+          <HostVideo avatar={avatar} name={HOST} poster={marco} className="pm-host-video">
             <CallStatus avatar={avatar} name={HOST} again="Call Marco again" />
           </HostVideo>
           <p className="pm-nameplate"><b>{HOST}</b> your host{live && <span className="pm-onair">On air</span>}</p>

@@ -22,9 +22,11 @@ export function callCopy(avatar: Avatar, name: string): { title: string; detail:
 }
 
 /** The host's video, with live captions, a speaking ring and "tap to hear" when the browser blocks sound. */
-export function HostVideo({ avatar, name, captions = true, className = '', children }: {
+export function HostVideo({ avatar, name, poster, captions = true, className = '', children }: {
   avatar: Avatar;
   name: string;
+  /** The host's portrait, shown until their video plays (the app's host/portrait.jpg). */
+  poster?: string;
   /** Show the host's words over the video. */
   captions?: boolean;
   className?: string;
@@ -34,6 +36,7 @@ export function HostVideo({ avatar, name, captions = true, className = '', child
   const live = avatar.phase === 'live';
   return (
     <div className={`call-video ${avatar.speaking ? 'is-speaking' : ''} ${live ? 'is-live' : ''} ${className}`}>
+      {poster && <img className="call-poster" src={poster} alt="" aria-hidden="true" />}
       <video ref={avatar.videoRef} playsInline muted aria-label={`${name}'s video`} />
       <audio ref={avatar.audioRef} autoPlay />
       {live && captions && <Caption text={avatar.caption} />}

@@ -51,6 +51,10 @@ button { font: inherit; }
 .pm-quiet:hover:not(:disabled) { color: var(--pm-red); }
 .pm-quiet:disabled { opacity: .5; cursor: default; }
 
+.pm-host-chip { display: inline-flex; align-items: center; gap: 10px; margin: 0; padding: 4px 14px 4px 4px; border-radius: 999px; background: var(--pm-card); box-shadow: 0 1px 0 rgba(23, 34, 74, .06), 0 6px 16px rgba(23, 34, 74, .1); font-size: 14px; color: var(--pm-muted); }
+.pm-host-chip img { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 2px solid #fff; outline: 2px dashed var(--pm-red); outline-offset: 1px; }
+.pm-host-chip b { color: var(--pm-navy); }
+
 /* ── front door ─────────────────────────────────────────────────────────── */
 .pm-lobby { max-width: 1160px; margin: 0 auto; padding: 22px max(20px, env(safe-area-inset-right)) 56px max(20px, env(safe-area-inset-left)); }
 .pm-top.is-lobby { padding-bottom: 8px; }

@@ -13,6 +13,8 @@
 
 .call-video { position: relative; overflow: hidden; background: var(--call-bg); border-radius: var(--call-radius); isolation: isolate; }
 .call-video video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+/* The portrait waits under the video, which covers it once frames arrive (an empty video element is transparent). */
+.call-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .call-video::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 0 var(--call-accent); transition: box-shadow .25s; pointer-events: none; z-index: 2; }
 .call-video.is-speaking::after { box-shadow: inset 0 0 0 3px var(--call-accent); }
 .call-caption { position: absolute; left: 12px; right: 12px; bottom: 14px; text-align: center; z-index: 3; }

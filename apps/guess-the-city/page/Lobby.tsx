@@ -1,4 +1,5 @@
 // Postmark's front door: what the game is, how to play, and the way in.
+import marco from '../host/portrait.jpg';
 
 export function Logo() {
   return (
@@ -25,7 +26,7 @@ export function Lobby({ onPlay }: { onPlay: (mic: boolean) => void }) {
       <header className="pm-top is-lobby"><Logo /></header>
       <main className="pm-hero">
         <div className="pm-hero-copy">
-          <p className="pm-eyebrow">A city guessing game with Marco</p>
+          <p className="pm-host-chip"><img src={marco} alt="" /><span>Hosted by <b>Marco</b></span></p>
           <h1>One photo. Three clues. Where in the world?</h1>
           <p className="pm-lede">Marco, a well-travelled host, deals you three mystery cities. Guess from the photo alone for full points, or open a clue when you're stuck.</p>
           <div className="pm-cta">
