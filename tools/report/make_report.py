@@ -30,11 +30,11 @@ GAPS = [
     ('server', 'Only the open page can answer', 'Tool calls and room messages go through the page; the server cannot reach the room.'),
 ]
 
-OTHER_TESTS = 14  # src/avatar: the typed-turn floor and the tool-call plumbing
+OTHER_TESTS = 20  # src/avatar and src/kit: the typed-turn floor, the tool-call plumbing, call scope
 
 APPS = [
   # ---------------- Games ----------------
-  dict(id='guess-the-city', name='Postmark', host='Marco', group='Games', tests=23,
+  dict(id='guess-the-city', name='Postmark', host='Marco', group='Games', tests=27,
     tagline='Three mystery cities, one photo on each postcard, and a host who never knows the answer.',
     purpose='A city-guessing game. Marco deals three mystery cities, each a single photo on a postcard. Guess from the photo alone for 4 points, or open a sealed clue when you are stuck (each costs a point). Say your guess or type it. This is the reference app the other thirteen follow.',
     built=[
@@ -55,7 +55,7 @@ APPS = [
     verdict='No regressions.',
     live='Round 2, on Marco\'s own host (103 s): one greeting; a guess, a clue, the reveal and the next city each went through its tool in 2.3 to 3.6 s, with no safety-net catches. Since then the photo is ready before Marco announces it (not yet run live).'),
 
-  dict(id='chess-opponent', name='Kibitz', host='Sasha', group='Games', tests=552,
+  dict(id='chess-opponent', name='Kibitz', host='Sasha', group='Games', tests=568,
     tagline='Chess with a club player who plays her own moves, says why, and needles you a little.',
     purpose='Play a full game of chess against Sasha. Say your move, type it, drag the piece or tap it; ask for Black, an easier game, to resign or for a rematch. She names openings and explains her moves. At the end the game downloads as a PGN scoresheet.',
     built=[
@@ -77,7 +77,7 @@ APPS = [
     verdict='Fixed.',
     live='Round 2, on Sasha\'s own host (118 s): one greeting; a typed "Ra5" refused on the board; "E four." called `play_move` in 2.8 s (1.e4 Nf6, Alekhine\'s Defence named); "Black, please." flipped the board, with her first move in the same reply. The safety net was not needed.'),
 
-  dict(id='poker-table', name='Blindside', host='Dex', group='Games', tests=190,
+  dict(id='poker-table', name='Blindside', host='Dex', group='Games', tests=204,
     tagline='Heads-up no-limit hold\'em against a sharp, talkative opponent who never sees his own cards.',
     purpose='Heads-up Texas Hold\'em: 1,000 chips each, blinds 10 and 20, played until one stack is empty. Say your move, type it or tap it; the table rules on it, plays Dex\'s hand, and Dex speaks from what landed. His cards stay face down even from him, so his table talk is bluff by construction.',
     built=[
@@ -99,7 +99,7 @@ APPS = [
     live='Round 2, on Dex\'s own host (153 s): one greeting; the chart, a call with Dex\'s answer, and the player\'s cards each went through their tool in 2.6 s. Missed: "Check." facing a bet and "New match" mid-hand. Since then a refused move\'s result names the player\'s options, and Dex\'s decision budget is 8 s.'),
 
   # ---------------- Tutors ----------------
-  dict(id='stroke-tutor', name='Hanshi', host='Ren', group='Tutors', tests=269,
+  dict(id='stroke-tutor', name='Hanshi', host='Ren', group='Tutors', tests=291,
     tagline='Stroke-order lessons with a calligraphy teacher who grades order and direction, never your handwriting.',
     purpose='Write a character one stroke at a time on a practice sheet. Ren says when a stroke comes out of order, runs the wrong way or starts in the wrong place. Seven characters, from 一 to 永, plus the capitals A and E. Draw with a finger, a stylus or a mouse; talk to Ren or type.',
     built=[
@@ -120,7 +120,7 @@ APPS = [
     verdict='Fixed.',
     live='Round 2, on Ren\'s own host (277 s): one greeting; 木 with stroke 1 drawn backwards first, every verdict the sheet\'s, then 十. "Next." called its tool 4 of 5 times; the safety net took the fifth. Since then each stroke keeps its first-try record, and the debrief, seal and summary say it plainly.'),
 
-  dict(id='bls-tutor', name='Bystander', host='Alex', group='Tutors', tests=274,
+  dict(id='bls-tutor', name='Bystander', host='Alex', group='Tutors', tests=786,
     tagline='CPR and first-aid practice with a calm paramedic instructor, one step at a time.',
     purpose='Practice for ordinary people: an adult collapse in a café, a child by a pool, choking at dinner, someone unresponsive but breathing. Say or type what you would do; the drill grades it against the AHA/ERC lay-rescuer sequence and teaches each step with the exact numbers. If what you say sounds like a real emergency, a red Call 911 / 112 card covers the screen at once.',
     built=[
@@ -141,7 +141,7 @@ APPS = [
     verdict='Partly fixed.',
     live='Round 2, on Alex\'s own host (119 s): one greeting, then the safety line and the choking scene. A wrong answer, the emergency and the false alarm went through `check_answer`, `stop_for_emergency` and `resume_practice`. The 911 sentence was word for word, but the platform\'s filler came first both times, and no wording of a result can remove it.'),
 
-  dict(id='quadratic-whiteboard', name='Chalkline', host='Ada', group='Tutors', tests=392,
+  dict(id='quadratic-whiteboard', name='Chalkline', host='Ada', group='Tutors', tests=397,
     tagline='A maths board a teacher drives by voice: name a quadratic, pick a method, reveal the working a line at a time.',
     purpose='For a teacher in front of a class. Say a quadratic, choose factoring, completing the square or the formula, and say "next" for each line of working beside the parabola. Ada reads each new line exactly as written: surds stay surds. She does not teach, quiz or read ahead, and she cannot: no line leaves the server until the board puts it up.',
     built=[
@@ -163,7 +163,7 @@ APPS = [
     verdict='Fixed.',
     live='Round 2, on Ada\'s own host (118 s): one greeting in the new persona; put up, factoring, two lines and a typed "Hide the graph." each called once, in 1.1 to 4.2 s, with no doubled openers. Still seen: short fillers that contradict nothing, and the check-in after line 2.'),
 
-  dict(id='trajectory-coach', name='Arcwise', host='Theo', group='Tutors', tests=286,
+  dict(id='trajectory-coach', name='Arcwise', host='Theo', group='Tutors', tests=293,
     tagline='A projectile range drawn to scale, and a coach who explains each miss in the range\'s own numbers.',
     purpose='Learn projectile motion by shooting. Theo puts up a target; aim by dragging the arrow, nudging the steppers or telling him ("forty degrees", "a bit more speed"), fire, and watch the shot fly. Six challenges, each built to disprove a piece of folklore about 45°, and a logbook of every lesson to keep.',
     built=[
@@ -184,7 +184,7 @@ APPS = [
     verdict='Fixed.',
     live='Round 2, on Theo\'s own host (114 s): "Fire!" during the greeting, "Start over." and "Make it a bit steeper." each called their tool in 2.4 to 3.3 s; the safety net had nothing to do.'),
 
-  dict(id='sky-guide', name='Lodestar', host='Mira', group='Tutors', tests=311,
+  dict(id='sky-guide', name='Lodestar', host='Mira', group='Tutors', tests=317,
     tagline='Tonight\'s sky from anywhere on Earth, with a guide who only says what the chart worked out.',
     purpose='A night-sky chart for any city and any night between 1900 and 2100: 135 naked-eye stars and 18 constellation figures. Ask Mira "where\'s Vega?", "show me Orion", "the sky from Lisbon at midnight" or "two hours later". What you looked at becomes your night\'s list, to download and take outside.',
     built=[
@@ -206,7 +206,7 @@ APPS = [
     live='Round 2, on Mira\'s own host (122 s): one greeting, then straight to "Taipei around nine tonight"; Kyoto refused with Tokyo offered, Vega marked, Cygnus drawn, the clock moved to 11 pm.'),
 
   # ---------------- Advisors and tools ----------------
-  dict(id='nutrition-advisor', name='Morsel', host='Rachel', group='Advisors and tools', tests=284,
+  dict(id='nutrition-advisor', name='Morsel', host='Rachel', group='Advisors and tools', tests=321,
     tagline='Name a food or add a photo: its nutrition label, a side-by-side table, and recipes talked through.',
     purpose='Ask Rachel about any food (say it, type it, or add a photo of the food or its label) and its label lands on your table: serving, calories, macros against a 2,000-calorie day, a 1 to 10 score and her plain-words takeaway. Foods stay side by side; a recipe is talked through two steps at a time. Notes to take home at the end.',
     built=[
@@ -227,7 +227,7 @@ APPS = [
     verdict='Fixed.',
     live='Round 2, on Rachel\'s own host (120 s): one greeting; "What\'s in a banana?" called `look_up_food` in 2.7 s with no safety net; potassium answered without a number. Still seen: the platform\'s doubled filler.'),
 
-  dict(id='fashion-advisor', name='Notch', host='Emery', group='Advisors and tools', tests=171,
+  dict(id='fashion-advisor', name='Notch', host='Emery', group='Advisors and tools', tests=187,
     tagline='A stylist on call: one photo of your outfit, a score for the occasion, the one fix, and pieces to finish it.',
     purpose='Tell Emery what you are dressing for (a job interview, a summer wedding, a first date) and share one photo: upload it, drag it onto the mirror, or borrow the example outfit. Notch scores it out of 10 for that occasion, says what works and the one fix, and hangs pieces on a rail with shop links. With an image model it puts a piece on your photo. The fitting ends with notes to download.',
     built=[
@@ -249,7 +249,7 @@ APPS = [
     verdict='Partly fixed.',
     live='Round 2, on Emery\'s own host, with no xAI key: one greeting; the occasion, "Rate it again." and "More streetwear." each called their tool in 3.2 to 4.0 s, none by the safety net; the fitting notes opened at hang-up. Since then: one score per picture and occasion, no opening in an empty room, swatch cards on the rail.'),
 
-  dict(id='fitness-coach', name='Spotter', host='Sammy', group='Advisors and tools', tests=420,
+  dict(id='fitness-coach', name='Spotter', host='Sammy', group='Advisors and tools', tests=665,
     tagline='A workout built around your goal, level and limits, with a coach who stops when it is not safe.',
     purpose='Tell Sammy what you want to train, your level and anything to work around (twenty minutes, no kit, a sore knee). Spotter builds the plan, enforces every limit in code, and Sammy coaches your first move. Mention a condition no exercise swap makes safe (pregnancy, a cardiac history, recent surgery) and the workout pauses at once.',
     built=[
@@ -270,7 +270,7 @@ APPS = [
     verdict='Fixed.',
     live='Round 2, on Sammy\'s own host: every step reached its tool on the first try in 2.9 to 4.9 s; the plan was built, started and made harder by voice, and the safety stop paused the screen. Since then every limit goes in one call, and a rebuilt plan says the started move is gone.'),
 
-  dict(id='market-desk', name='Outcry', host='Reese', group='Advisors and tools', tests=277,
+  dict(id='market-desk', name='Outcry', host='Reese', group='Advisors and tools', tests=293,
     tagline='A live stock watchlist you build by talking, read by an analyst who never gives advice.',
     purpose='Name a company ("put Nvidia up") and Reese puts it on a six-slot board with its real last sale, today\'s move, the 52-week range and how old the print is. The stock on watch refreshes every minute, and Reese speaks up when it moves a point. Ask what to buy and he says it straight: "I read the tape, I don\'t give advice."',
     built=[
@@ -291,7 +291,7 @@ APPS = [
     verdict='Partly fixed.',
     live='Round 2, on Reese\'s own host (100 s): one greeting; two stocks added with their real moves; the advice refusal held; the closing sheet\'s time in English. "Pull up Tesla." was missed again and done by the safety net. Since then the net\'s note to Reese says plainly that the page did it.'),
 
-  dict(id='travel-guide', name='Yonder', host='Lumi', group='Advisors and tools', tests=351,
+  dict(id='travel-guide', name='Yonder', host='Lumi', group='Advisors and tools', tests=381,
     tagline='Dream up your next trip on a live map, with a friend who has been.',
     purpose='Name a country (or a city in one, or "you choose") and it lands on the map with its outline. Ask what to eat and three local dishes appear with their photos; ask what is worth seeing around a street or a square and the sights come one at a time, each with a photo, a line from Wikipedia, a distance and a maps link. The trip downloads as notes at the end.',
     built=[
@@ -312,7 +312,7 @@ APPS = [
     verdict='Fixed.',
     live='Round 2, on Lumi\'s own host (147 s): one greeting; Portugal, Alfama\'s sights and the next sight each called their tool, with photos; no safety-net catches. Since then each Overpass mirror gets only what is left of the 14 s budget (not yet run live).'),
 
-  dict(id='room-planner', name='Planwright', host='Iris', group='Advisors and tools', tests=303,
+  dict(id='room-planner', name='Planwright', host='Iris', group='Advisors and tools', tests=312,
     tagline='Plan a home by talking to an architect: rooms, walls, doors and furniture at real sizes.',
     purpose='Tell Iris roughly how big your place is and who lives there; she lays out a whole floor in seconds, and then you argue with it: trade area between rooms, knock two together, add a window and a bed, add an upstairs, save schemes and compare them, undo, and take the drawing sheet away. Dragging walls and furniture works by hand too.',
     built=[

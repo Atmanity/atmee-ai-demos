@@ -244,14 +244,18 @@ an app acting on speech acts twice on typed text.
   with `retryAfter: 120`, while other API calls answered in 0.2 s and no
   session was left holding credits. An app cannot tell "busy" from "broken",
   or say how long to wait.
-- **Intermittent video artefacts on the v2 hosts.** Seen live, never in a
-  host's seed clip: Theo's idle video showed large orange 3-D letters over his
-  face (round 1) and later his plain grey backdrop turned into a rocky,
-  sculpture-like scene; Reese's video sat on an eye-level close-up for a whole
-  call (round 2); Emery's video showed the empty backdrop, with no one in it,
-  for several seconds while she spoke (round 3). A repeat of Reese and Theo,
-  six screenshots, was framed normally, so they come and go. The page cannot
-  tell or fix it.
+- **Video artefacts and frame jumps came from the seed.** Live, some hosts showed garbled
+  frames (Theo's large orange 3-D letters, a rocky backdrop, Marco's face flipping to a
+  yellow-white texture), an eye-level close-up on Reese, an empty frame on Emery, and snaps.
+  Measured with an in-page meter on the same app and script, Marco's first seed jumped 7.8 times
+  per speaking minute with about 18 garbage frames; his second seed 1.5 and none, in line with a
+  demo avatar (Maren, 0.7). The avatar settings (`blackoutRecovery` and the rest) and the session
+  requests were identical to the demo avatars', and the app holding its messages until the host's
+  turn ended did not help (main's recruiter, 2.2). Seeds had been picked by how much the mouth
+  moved in the short preview clips, which does not predict live stability: screen a host's
+  serving seed live and switch to another (`PUT /v1/avatars/{id}/selected_candidate`) if it
+  jumps. The API gives no way to see a seed's live stability before choosing it. A few snaps
+  where speech segments meet (filler to reply, speaking to idle) remain on every avatar.
 - **Building the hosts:** the create-avatar skill's lip-sync contact sheet
   crops a fixed band that catches the chin, not the mouth, on a tight
   headshot; the hosts were judged on a mouth-centred crop instead.
