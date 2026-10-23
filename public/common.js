@@ -225,7 +225,9 @@
       const st = participant.attributes && participant.attributes['lk.agent.state'];
       if (st !== undefined && floor.agentState(st) && debug) console.log(`[atmee] ${stamp()} agent ${st}`);
     });
-    room.on(RoomEvent.Disconnected, () => { linked = false; floor.close(); clearInterval(floorTimer); if (!ended) { ended = true; releaseMic(); opts.onEnd && opts.onEnd(); } });
+    // Out of the room (the session ended, its time ran out, the network dropped):
+    // the server releases this visitor's session too, so the avatar is free.
+    room.on(RoomEvent.Disconnected, () => { linked = false; floor.close(); clearInterval(floorTimer); if (!ended) { ended = true; releaseMic(); endOnServer(); ws.close(); opts.onEnd && opts.onEnd(); } });
 
     try {
       await room.connect(s.serverUrl, s.userToken);
@@ -253,7 +255,9 @@
     const sendLinked = () => ws.send(JSON.stringify({ type: 'linked' }));
     if (ws.readyState === 1) sendLinked(); else ws.addEventListener('open', sendLinked, { once: true });
     phase('live', { maxSeconds: s.maxSeconds, video: !!faceOn });
-    addEventListener('pagehide', () => { if (!ended) navigator.sendBeacon(endUrl); });
+    // Always: ending an already-ended session is a no-op on the server, and an
+    // unload can drop the socket's close.
+    addEventListener('pagehide', () => { navigator.sendBeacon(endUrl); });
     return api;
   }
 
