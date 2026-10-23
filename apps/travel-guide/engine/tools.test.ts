@@ -31,8 +31,9 @@ const sights = (): RawSpot[] => [
 function fakeLookups(over: Partial<Lookups> = {}) {
   const calls: string[] = [];
   const lookups: Lookups = {
-    // The named few, and any other real-sounding country ("surprise me" picks from the ideas); Atlantis is nowhere.
-    country: async (name) => { calls.push(`country:${name}`); return name === 'Atlantis' ? null : structuredClone(COUNTRIES[name] ?? country(name, name.slice(0, 2).toUpperCase(), [10, 10])); },
+    // The named few, and any other real-sounding country ("surprise me" picks from the ideas), each with its own
+    // code as real ones have (Niger and Nigeria must not collide); Atlantis is nowhere.
+    country: async (name) => { calls.push(`country:${name}`); return name === 'Atlantis' ? null : structuredClone(COUNTRIES[name] ?? country(name, name.replace(/\s/g, '').slice(0, 6).toUpperCase(), [10, 10])); },
     place: async (q) => {
       calls.push(`place:${q}`);
       if (/shibuya/i.test(q)) return { place: 'Shibuya', country: 'Japan', isoCode: 'JP', lat: 35.658, lon: 139.7016 };
@@ -101,6 +102,17 @@ describe('choose_destination', () => {
     expect(said).toContain('back on the map');
     expect(said).toContain('Japan dish');
     expect(calls).toEqual([]);
+  });
+
+  test('a country whose name sits inside one on the route is placed, not mistaken for it', async () => {
+    const { lookups, calls } = fakeLookups();
+    const state = new TravelState();
+    await runTool(state, lookups, 'choose_destination', { place: 'Nigeria' });
+    await runTool(state, lookups, 'choose_destination', { place: 'Peru' });
+    calls.length = 0;
+    expect(await runTool(state, lookups, 'choose_destination', { place: 'Niger' })).toMatch(/^Done: Niger is on the map/);
+    expect(state.country).toBe('Niger');
+    expect(calls).toContain('country:Niger');
   });
 
   test('the country on screen: its page comes back from its sights, or the host hears it is already there', async () => {
@@ -181,6 +193,23 @@ describe('the sights', () => {
     expect(said).toMatch(/^Already done: sight 2 of 3/);
     await runTool(state, lookups, 'next_sight', { from: 1 });
     expect(state.spotIndex).toBe(2);
+  });
+
+  test('the safety net\'s move queued behind the host\'s own is checked when its turn comes, not before', async () => {
+    // Same race as the explore: the check ran outside the lock, so a net Next queued behind the host's Next
+    // (still describing its sight) passed the check and then moved again, skipping a sight.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const slow = fakeLookups();
+    const state = new TravelState();
+    await runTool(state, slow.lookups, 'explore_near', { place: 'Shibuya station' });
+    slow.lookups.summary = async (title) => { await gate; return { title, coordinates: null, image: null, extract: '' }; };
+    const host = runTool(state, slow.lookups, 'next_sight');
+    const net = runTool(state, slow.lookups, 'next_sight', { from: 0 });
+    release();
+    const [, netSaid] = await Promise.all([host, net]);
+    expect(state.spotIndex).toBe(1);
+    expect(netSaid).toMatch(/^Already done: sight 2 of 3/);
   });
 
   test('the next sight brings the sights back from the country\'s page', async () => {

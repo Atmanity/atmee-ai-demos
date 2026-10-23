@@ -386,6 +386,45 @@ describe('what is around them', () => {
     expect(lines.filter((l) => l.includes('last standout spot'))).toHaveLength(1);
   });
 
+  test('a next sight asked for while the first is still being described waits its turn, and each names its own', async () => {
+    // Bugbot: the explore set the queue outside the lock and described whatever sight was current after its
+    // Wikipedia wait, so a Next in that window made the first spoken result name the second sight.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const { lookups } = fakeLookups({ summary: async (t) => { await gate; return summaryOf(t); } });
+    const state = new TravelState();
+    const exploring = trip.explorePlace(state, lookups, 'Kyoto');
+    await new Promise((r) => setTimeout(r, 0));
+    const next = trip.nextSpot(state, lookups);
+    release();
+    const [first, second] = await Promise.all([exploring, next]);
+    expect(first).toContain('Kiyomizu-dera');
+    expect(first).not.toContain('Nishiki Market');
+    expect(second).toContain('Nishiki Market');
+    expect(state.spotIndex).toBe(1);
+  });
+
+  test('of two explores, the later one wins, whichever answers first', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const { lookups } = fakeLookups({
+      place: async (q) => (q === 'Kyoto' ? { place: 'Kyoto', country: 'Japan', isoCode: 'JP', lat: 35, lon: 135.77 } : { place: 'Lisbon', country: 'Portugal', isoCode: 'PT', lat: 38.7, lon: -9.1 }),
+      nearby: async (lat) => {
+        if (lat === 35) { await gate; return kyotoSpots(); }
+        return [{ name: 'São Jorge Castle', category: 'castle', lat: 38.7139, lon: -9.1335 }];
+      },
+    });
+    const state = new TravelState();
+    const older = trip.explorePlace(state, lookups, 'Kyoto');
+    await new Promise((r) => setTimeout(r, 0));
+    const newer = await trip.explorePlace(state, lookups, 'Lisbon');
+    release();
+    const olderSaid = await older;
+    expect([state.aroundPlace, state.spot!.name]).toEqual(['Lisbon', 'São Jorge Castle']);
+    expect(newer).toContain('São Jorge Castle');
+    expect(olderSaid).toMatch(/^Not done: .*somewhere else/);
+  });
+
   test('next spot before looking anywhere asks where they are', async () => {
     const state = new TravelState();
     expect(await trip.nextSpot(state, fakeLookups().lookups)).toContain('which town');

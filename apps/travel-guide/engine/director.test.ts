@@ -86,7 +86,7 @@ test('every result starts with the plain outcome, so the first real words are th
     say.destination('Japan'), say.destination('Japan', { how: 'picked' }), say.noCountryForNews(), say.news('Japan', japan().news!.headlines),
     say.noNews('Japan'), say.noCountryForFood(), say.food('Japan', [{ name: 'Ramen', description: '' }]), say.noFood('Japan'),
     say.revisited('Japan', []), say.alreadyHere('Japan'), say.notOnTrip(['Peru']), say.nothingToGoBack(), say.askPlace(), say.countryNotTown('Japan'),
-    say.placeNotFound('Nowhere'), say.lookupDown('Kyoto'), say.quiet('Kyoto'), say.firstSpot('Kyoto', spot()), say.anotherSpot(spot()), say.lastSpot(),
+    say.placeNotFound('Nowhere'), say.lookupDown('Kyoto'), say.superseded('Kyoto'), say.alreadyMoved(2, 8, 'Gion'), say.quiet('Kyoto'), say.firstSpot('Kyoto', spot()), say.anotherSpot(spot()), say.lastSpot(),
     say.firstAlready('Kyoto'), say.nothingQueued('Kyoto'), say.askWhereToLook(), say.notLookedYet(), say.nothingToShow(), say.noCountryThere(),
     say.badCoordinates(), say.showPlanning('Japan'), say.showPlanning(''), say.showAround('Kyoto', spot()), say.showAround('', null),
     say.stillWorking('looking around Kyoto'), say.lateFailed(), say.serviceDown(), say.freshTrip(),

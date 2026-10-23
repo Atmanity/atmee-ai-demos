@@ -102,16 +102,14 @@ function leaveSights(state: TravelState) {
 /**
  * The next sight or the one before. `from` is the safety net's: the sight it
  * saw on screen when the user asked. If the host has moved since, the move is
- * already made, and making it again would skip a sight nobody saw.
+ * already made, and making it again would skip a sight nobody saw; the check
+ * happens in the move's turn (trip.nextSpot), not before it.
  */
 async function moveSight(state: TravelState, lookups: Lookups, way: 'next' | 'previous', from?: unknown): Promise<string> {
-  if (typeof from === 'number' && state.spots.length && from !== state.spotIndex) {
-    const view = state.spotView()?.spot;
-    return view ? `Already done: sight ${state.spotIndex + 1} of ${state.spots.length} is on screen, ${view.name}. Carry on from it.` : say.nothingToShow();
-  }
   if (state.spots.length && state.stage !== 'around') {
     state.stage = 'around';
     state.bump();
   }
-  return way === 'next' ? trip.nextSpot(state, lookups) : trip.previousSpot(state, lookups);
+  const seen = typeof from === 'number' ? from : undefined;
+  return way === 'next' ? trip.nextSpot(state, lookups, seen) : trip.previousSpot(state, lookups, seen);
 }

@@ -13,7 +13,7 @@ import { say } from './director.ts';
 import { cleanText, distancePhrase, haversineM, mapsUrl, type GeoCountry, type GeoPlace, type RawSpot, type WikiSummary } from './geo.ts';
 import { isAName } from './judge.ts';
 import { countryOutline, MAX_SILHOUETTE_BYTES, primaryBbox } from './rings.ts';
-import type { TravelState, TripEntry } from './state.ts';
+import { spotOf, type TravelState, type TripEntry } from './state.ts';
 import type { Action, Headline } from './types.ts';
 
 /** A dish the app may suggest; `wiki` names the Wikipedia article when the name alone would miss it. */
@@ -218,30 +218,53 @@ export async function explorePlace(state: TravelState, lookups: Lookups, place: 
   const query = clean(place, 120);
   if (!query) return say.askPlace();
   if (isCountryName(query)) return say.countryNotTown(canonicalCountry(query));
+  const ticket = ++state.exploreTicket;
   const located = await lookups.place(query);
   if (!located) return say.placeNotFound(query);
-  return loadSpots(state, lookups, located.place, located.lat, located.lon);
+  return loadSpots(state, lookups, ticket, located.place, located.lat, located.lon);
 }
 
 /** The same from coordinates: "use my location", or "what's around here" on the map. */
 export async function exploreCoordinates(state: TravelState, lookups: Lookups, lat: number, lon: number): Promise<string> {
   if (!validCoordinates(lat, lon)) return say.badCoordinates();
+  const ticket = ++state.exploreTicket;
   const located = await lookups.reverse(lat, lon);
-  return loadSpots(state, lookups, located?.place || 'your area', lat, lon);
+  return loadSpots(state, lookups, ticket, located?.place || 'your area', lat, lon);
 }
 
-async function loadSpots(state: TravelState, lookups: Lookups, place: string, lat: number, lon: number): Promise<string> {
+/**
+ * Replace the sights and describe the first, inside the same lock as next and
+ * previous: a Next pressed while the first is still being described waits its
+ * turn instead of moving the queue under it. The lookup itself runs outside
+ * the lock; an explore that a later one overtook replaces nothing.
+ */
+async function loadSpots(state: TravelState, lookups: Lookups, ticket: number, place: string, lat: number, lon: number): Promise<string> {
   const spots = await lookups.nearby(lat, lon);
-  state.setSpots(place, [lat, lon], spots);
-  state.bump();
-  if (spots === null) return say.lookupDown(place);
-  if (!spots.length) return say.quiet(place);
-  return presentSpot(state, lookups, true);
+  return state.spotTurn.run(async () => {
+    if (ticket !== state.exploreTicket) return say.superseded(place);
+    state.setSpots(place, [lat, lon], spots);
+    state.bump();
+    if (spots === null) return say.lookupDown(place);
+    if (!spots.length) return say.quiet(place);
+    return presentSpot(state, lookups, true);
+  });
+}
+
+/**
+ * `from` is the sight the safety net saw when the user asked: checked when
+ * this move's turn comes (inside the lock), since a move queued behind the
+ * host's own would otherwise pass the check and then move again.
+ */
+function movedSince(state: TravelState, from: number | undefined): string | null {
+  if (from === undefined || !state.spots.length || from === state.spotIndex) return null;
+  return say.alreadyMoved(state.spotIndex + 1, state.spots.length, state.spot!.name);
 }
 
 /** The next spot, from a button or "another one". Serialized: see TravelState.spotTurn. */
-export function nextSpot(state: TravelState, lookups: Lookups): Promise<string> {
+export function nextSpot(state: TravelState, lookups: Lookups, from?: number): Promise<string> {
   return state.spotTurn.run(async () => {
+    const moved = movedSince(state, from);
+    if (moved) return moved;
     if (!state.spots.length) return state.aroundPlace ? say.nothingQueued(state.aroundPlace) : say.askWhereToLook();
     if (!state.advanceSpot()) return say.lastSpot();
     return presentSpot(state, lookups, false);
@@ -249,8 +272,10 @@ export function nextSpot(state: TravelState, lookups: Lookups): Promise<string> 
 }
 
 /** The spot before this one. Shares next's lock for the same reason. */
-export function previousSpot(state: TravelState, lookups: Lookups): Promise<string> {
+export function previousSpot(state: TravelState, lookups: Lookups, from?: number): Promise<string> {
   return state.spotTurn.run(async () => {
+    const moved = movedSince(state, from);
+    if (moved) return moved;
     if (!state.spots.length) return say.notLookedYet();
     if (!state.rewindSpot()) return say.firstAlready(state.aroundPlace);
     return presentSpot(state, lookups, false);
@@ -266,10 +291,16 @@ export function gotoSpot(state: TravelState, lookups: Lookups, index: number): P
   });
 }
 
-/** Give the current spot its distance, a maps link, and (once) a photo and a sentence from Wikipedia. */
+/**
+ * Give the current spot its distance, a maps link, and (once) a photo and a
+ * sentence from Wikipedia. Callers hold spotTurn; the spot, its place in the
+ * queue and the place are taken before the Wikipedia wait, so what is said is
+ * always the sight this call started with.
+ */
 async function presentSpot(state: TravelState, lookups: Lookups, first: boolean): Promise<string> {
   const spot = state.spot;
   if (!spot) return say.nothingToShow();
+  const [place, position, total] = [state.aroundPlace, state.spotIndex + 1, state.spots.length];
   const origin = state.origin ?? [spot.lat, spot.lon];
   spot.distance = distancePhrase(haversineM(origin[0], origin[1], spot.lat, spot.lon));
   spot.mapsUrl = mapsUrl(spot.name, spot.lat, spot.lon);
@@ -285,9 +316,9 @@ async function presentSpot(state: TravelState, lookups: Lookups, first: boolean)
     }
   }
   state.bump();
-  console.info('[Travel] spot %d/%d near %s photo=%s', state.spotIndex + 1, state.spots.length, state.aroundPlace, Boolean(spot.imageUrl));
-  const view = state.spotView()!.spot!;
-  return first ? say.firstSpot(state.aroundPlace, view, state.spots.length) : say.anotherSpot(view, state.spotIndex + 1, state.spots.length);
+  console.info('[Travel] spot %d/%d near %s photo=%s', position, total, place, Boolean(spot.imageUrl));
+  const view = spotOf(spot);
+  return first ? say.firstSpot(place, view, total) : say.anotherSpot(view, position, total);
 }
 
 // ─── one entry point ──────────────────────────────────────────────────────

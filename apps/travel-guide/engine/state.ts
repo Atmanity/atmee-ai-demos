@@ -8,7 +8,7 @@
 // publish; with the headlines and dishes now loading in the background (and
 // possibly landing after the user moved on), one home per country is what
 // keeps a late answer from landing on the wrong one.
-import { norm } from './countries.ts';
+import { canonicalCountry, countriesIn, isCountryName, norm } from './countries.ts';
 import type { CountryMap, Dish, Headline, Snapshot, Spot, SpotView, Stage, TripView } from './types.ts';
 
 /** Every country this session has looked at, with what it gathered. */
@@ -56,6 +56,9 @@ export interface QueuedSpot {
   image?: string | null;
 }
 
+/** A queued spot as the board and the host see it. */
+export const spotOf = (s: QueuedSpot): Spot => ({ name: s.name, category: s.category, lat: s.lat, lon: s.lon, distance: s.distance ?? '', mapsUrl: s.mapsUrl ?? '', imageUrl: s.imageUrl ?? null, summary: s.summary ?? '' });
+
 /** Runs one task at a time, in arrival order. */
 export class Mutex {
   private tail: Promise<unknown> = Promise.resolve();
@@ -84,6 +87,8 @@ export class TravelState {
   visited: TripEntry[] = [];
 
   aroundPlace = '';
+  /** Moves on with every explore: only the latest one may replace the sights (an older lookup can answer last). */
+  exploreTicket = 0;
   origin: [number, number] | null = null;
   spots: QueuedSpot[] = [];
   spotIndex = 0;
@@ -148,12 +153,18 @@ export class TravelState {
    * WHOLE trip before any partial match: one predicate per entry let a partial
    * hit on an earlier stop beat the exact name of a later one, and "back to
    * Niger" landed on Nigeria.
+   *
+   * A partial match ("jap") is only for words that are not themselves a
+   * country: "Niger" with only Nigeria on the route is somewhere new, as are
+   * Guinea, Sudan, Dominica, Ireland and Congo beside their longer namesakes.
+   * Another name for a country ("the UK") is compared by its usual name.
    */
   revisit(country: string): boolean {
     const wanted = norm(country || '');
     if (!wanted) return false;
-    const entry = this.visited.find((e) => norm(e.country) === wanted || norm(e.isoCode) === wanted)
-      ?? this.visited.find((e) => norm(e.country).includes(wanted));
+    const named = norm(countriesIn(country)[0] ?? canonicalCountry(country));
+    const entry = this.visited.find((e) => [wanted, named].includes(norm(e.country)) || norm(e.isoCode) === wanted)
+      ?? (isCountryName(country) ? undefined : this.visited.find((e) => norm(e.country).includes(wanted)));
     if (!entry || entry.country === this.country) return false;
     this.country = entry.country;
     this.stage = 'planning';
@@ -242,9 +253,7 @@ export class TravelState {
   spotView(): SpotView | null {
     if (!this.aroundPlace) return null;
     const s = this.spot;
-    const spot: Spot | null = s
-      ? { name: s.name, category: s.category, lat: s.lat, lon: s.lon, distance: s.distance ?? '', mapsUrl: s.mapsUrl ?? '', imageUrl: s.imageUrl ?? null, summary: s.summary ?? '' }
-      : null;
+    const spot: Spot | null = s ? spotOf(s) : null;
     return {
       place: this.aroundPlace,
       origin: this.origin,

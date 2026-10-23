@@ -158,6 +158,26 @@ describe('going back, which used to be impossible', () => {
     expect(state.country).toBe('Niger');
   });
 
+  test.each([
+    ['Nigeria', 'Niger'], ['Papua New Guinea', 'Guinea'], ['South Sudan', 'Sudan'], ['Dominican Republic', 'Dominica'],
+    ['Northern Ireland', 'Ireland'], ['Democratic Republic of the Congo', 'Congo'], ['Democratic Republic of the Congo', 'Republic of the Congo'],
+  ])('with %s on the route, %s is somewhere new, not a way back to it', (onRoute, asked) => {
+    // Bugbot: a country's name inside another's brought the lookalike back instead of placing the new one.
+    const state = new TravelState();
+    state.setDestination({ country: onRoute, isoCode: 'XX', center: [0, 0], bbox: null, outline: null });
+    state.setDestination(PERU);
+    expect(state.revisit(asked)).toBe(false);
+    expect(state.country).toBe('Peru');
+  });
+
+  test('another name for a country on the route still finds it', () => {
+    const state = new TravelState();
+    state.setDestination({ country: 'United Kingdom', isoCode: 'GB', center: [54, -2], bbox: null, outline: null });
+    state.setDestination(PERU);
+    expect(state.revisit('the UK')).toBe(true);
+    expect(state.country).toBe('United Kingdom');
+  });
+
   test('going back somewhere you never went is refused', () => {
     expect(aJapanSession().revisit('Norway')).toBe(false);
   });

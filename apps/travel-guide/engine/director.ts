@@ -172,6 +172,8 @@ export const say = {
   countryNotTown: (country: string) => `Not done: ${country} is a whole country. Ask which town, neighbourhood or station there they would like to look around.`,
   placeNotFound: (place: string) => `Not found: could not find ${place} on the map. Ask them to name the town or the nearest city instead.`,
   lookupDown: (place: string) => `Not done: they asked what is around ${place}, but the places service is not answering right now. Say so plainly; they can try again in a moment.`,
+  alreadyMoved: (position: number, total: number, name: string) => `Already done: sight ${position} of ${total} is on screen, ${name}. Carry on from it.`,
+  superseded: (place: string) => `Not done: they asked to look around somewhere else meanwhile, so nothing changed for ${place}. Carry on from what is on screen.`,
   quiet: (place: string) => `Not found: they asked what is around ${place}, but nothing stands out there. Say so kindly; they can name another place to look around.`,
   firstSpot: (place: string, spot: Spot, total = 1) => `Done: around ${place}, the first of ${total} sight${total === 1 ? '' : 's'} worth seeing is on screen: ${spotLine(spot)}.${spot.summary ? ` About it: ${clip(spot.summary, 240)}` : ''} Describe it in one or two sentences from this alone, naming no other sight. They can tap it to open it in maps, or ask for another.`,
   anotherSpot: (spot: Spot, position = 0, total = 0) => `Done: now on screen${position && total ? `, sight ${position} of ${total}` : ''}: ${spotLine(spot)}.${spot.summary ? ` About it: ${clip(spot.summary, 240)}` : ''} Describe it in one or two sentences from this alone, naming no other sight.`,
