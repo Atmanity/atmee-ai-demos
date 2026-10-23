@@ -16,9 +16,15 @@
 //   ATMEE_API_KEY      an Avatar API key
 //   AVATAR_<USECASE>   the avatar each use case runs (LIVESTREAM, RECRUITER, TRAINING, PRESENCE, GAME)
 //   GEMINI_API_KEY     the presence use case's eyes (optional: without it the observer only diffs frames)
+//   DEMO_PASSWORD      optional: when set, every page, /api route and WebSocket asks for it (HTTP basic auth)
 //   PORT               default 3333
+//
+// Settings come from the environment: `node --env-file=.env server.js` locally,
+// the pod's env in a container.
 import express from "express";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
+import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { USECASES } from "./usecases/index.js";
 import { describeFrame } from "./usecases/observer.js";
@@ -120,11 +126,43 @@ async function endSession(h) {
 }
 
 // ---------------------------------------------------------------------------
+// Access: one shared password for a public deployment, off when unset.
+// ---------------------------------------------------------------------------
+// The browser asks for it once (HTTP basic auth, any user name); the server
+// then sets a cookie, because a browser does not reliably send basic
+// credentials with a WebSocket handshake, and every page here opens one.
+const PASSWORD = process.env.DEMO_PASSWORD || "";
+const COOKIE = "atmee_demo";
+const ticket = PASSWORD ? createHmac("sha256", PASSWORD).update("atmee-ai-demos").digest("hex") : "";
+const same = (a, b) => { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && timingSafeEqual(x, y); };
+function hasTicket(req) {
+  const m = /(?:^|;\s*)atmee_demo=([0-9a-f]+)/.exec(req.headers.cookie || "");
+  return !!m && same(m[1], ticket);
+}
+function hasPassword(req) {
+  const m = /^Basic\s+(.+)$/i.exec(req.headers.authorization || "");
+  if (!m) return false;
+  const decoded = Buffer.from(m[1], "base64").toString("utf8");
+  return same(decoded.slice(decoded.indexOf(":") + 1), PASSWORD);
+}
+function requirePassword(req, res, next) {
+  if (!PASSWORD || hasTicket(req)) return next();
+  if (hasPassword(req)) {
+    res.setHeader("Set-Cookie", `${COOKIE}=${ticket}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 3600}`);
+    return next();
+  }
+  res.setHeader("WWW-Authenticate", 'Basic realm="atmee demos", charset="UTF-8"');
+  res.status(401).send("Password required");
+}
+
+// ---------------------------------------------------------------------------
 // HTTP
 // ---------------------------------------------------------------------------
 const app = express();
+app.get("/healthz", (_req, res) => res.json({ ok: true }));
+app.use(requirePassword);
 app.use(express.json({ limit: "6mb" }));
-app.use(express.static("public"));
+app.use(express.static(fileURLToPath(new URL("./public", import.meta.url))));
 app.get("/api/usecases", (_req, res) => res.json(Object.fromEntries(Object.entries(USECASES).map(([k, v]) => [k, { title: v.title, page: v.page, avatarId: process.env[`AVATAR_${k.toUpperCase()}`] || null, conductor: !!v.conductor, tools: v.appTools ? v.appTools.tools.map((t) => t.name) : [] }]))));
 
 app.post("/api/:usecase/session", async (req, res) => {
@@ -159,7 +197,10 @@ app.post("/api/presence/frame", async (req, res) => {
 // WebSocket: /?usecase=<name>&role=host|viewer
 // ---------------------------------------------------------------------------
 const server = createServer(app);
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({
+  server,
+  verifyClient: ({ req }) => !PASSWORD || hasTicket(req) || hasPassword(req),
+});
 wss.on("connection", (ws, req) => {
   const q = new URL(req.url, "http://x").searchParams;
   const h = hub(q.get("usecase") || "livestream");
@@ -212,5 +253,8 @@ wss.on("connection", (ws, req) => {
 
 setInterval(() => { for (const h of hubs.values()) if (h.session && h.def.tick) relay(h, h.def.tick(h, (m) => broadcast(h, m))); }, 5000);
 
-process.on("SIGINT", async () => { for (const h of hubs.values()) await endSession(h).catch(() => {}); process.exit(0); });
-server.listen(PORT, () => console.log(`http://localhost:${PORT}/  (use cases: ${Object.keys(USECASES).join(", ")})`));
+// Ctrl-C locally, SIGTERM from Kubernetes on a rollout: end the live sessions first.
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.on(signal, async () => { for (const h of hubs.values()) await endSession(h).catch(() => {}); process.exit(0); });
+}
+server.listen(PORT, () => console.log(`http://localhost:${PORT}/  (use cases: ${Object.keys(USECASES).join(", ")}; password ${PASSWORD ? "on" : "off"})`));

@@ -1,0 +1,104 @@
+name: Build, Push and Deploy
+
+# Build the image, push it to Artifact Registry, then bump the tag in
+# argocd-app-config (apps/atmee-ai-demos/kustomization.yaml). Staging
+# (gcp-us-central1) tracks argocd main, so that commit deploys it at
+# https://demo-apps.staging.atmanity.us.
+#
+# Repo settings this needs (one-time, by a GCP/GitHub admin), the same ones
+# social_live and livekit_demos use:
+#   vars.GCP_WORKLOAD_IDENTITY_PROVIDER  projects/111441421656/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+#   vars.GCP_SERVICE_ACCOUNT             github-actions@gold-setup-467400-f3.iam.gserviceaccount.com
+#   vars.BOT_APP_ID, secrets.BOT_APP_PRIVATE_KEY  the bot that commits to argocd-app-config
+# and the Artifact Registry repository `atmee-ai-demos` (location us).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "server.js"
+      - "usecases/**"
+      - "public/**"
+      - "package.json"
+      - "package-lock.json"
+      - "Dockerfile"
+      - ".dockerignore"
+      - ".github/workflows/publish.yml"
+
+permissions:
+  id-token: write
+  contents: read
+
+# One build at a time, in order, so an older build never bumps argocd last.
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+env:
+  IMAGE: us-docker.pkg.dev/gold-setup-467400-f3/atmee-ai-demos/atmee-ai-demos
+
+jobs:
+  push:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          create_credentials_file: true
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Login to Artifact Registry
+        run: gcloud auth configure-docker us-docker.pkg.dev --quiet
+
+      - name: Build and push
+        run: |
+          docker build --platform linux/amd64 -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" .
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+
+      - name: Generate a token for argocd-app-config
+        if: github.ref == 'refs/heads/main'
+        id: generate-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: argocd-app-config
+
+      - name: Checkout argocd-app-config
+        if: github.ref == 'refs/heads/main'
+        uses: actions/checkout@v5
+        with:
+          repository: Atmanity/argocd-app-config
+          ref: main
+          token: ${{ steps.generate-token.outputs.token }}
+          path: argocd-app-config
+
+      - name: Bump the image tag
+        if: github.ref == 'refs/heads/main'
+        working-directory: argocd-app-config
+        run: |
+          file=apps/atmee-ai-demos/kustomization.yaml
+          if [ ! -f "$file" ]; then
+            echo "::notice::$file is not in argocd-app-config yet; image pushed, tag not bumped"
+            exit 0
+          fi
+          sed -i 's/newTag: .*/newTag: "${{ github.sha }}"/' "$file"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$file"
+          git diff --staged --quiet && exit 0
+          git commit -m "chore(atmee-ai-demos): update image tag to ${{ github.sha }}"
+          # argocd main moves often (other bots): rebase and retry.
+          for attempt in 1 2 3; do
+            git pull --rebase origin main && git push && exit 0
+            sleep $((attempt * 5))
+          done
+          exit 1
