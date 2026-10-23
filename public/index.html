@@ -19,6 +19,11 @@
   .app .art { height: 150px; display: flex; align-items: end; padding: 18px; color: #fff; position: relative; }
   .app .art .glyph { position: absolute; right: 18px; top: 14px; font-size: 52px; opacity: .9; }
   .app .art b { font-size: 22px; letter-spacing: -.01em; }
+  /* The avatar's face, when the server has one: a round portrait in the corner, the emoji becomes its badge. */
+  .app .art .face { position: absolute; right: 18px; top: 18px; width: 96px; height: 96px; border-radius: 50%; object-fit: cover; object-position: 50% 30%; border: 3px solid rgb(255 255 255 / .9); box-shadow: 0 8px 24px rgb(0 0 0 / .25); background: rgb(255 255 255 / .15); opacity: 0; transition: opacity .3s; }
+  .app .art.has-face .face { opacity: 1; }
+  .app .art.has-face .glyph { right: 12px; top: 88px; width: 34px; height: 34px; display: grid; place-items: center; font-size: 18px; line-height: 1; opacity: 1; border-radius: 50%; background: #fff; box-shadow: 0 4px 12px rgb(0 0 0 / .2); }
+  .app .art.has-face b { max-width: calc(100% - 120px); }
   .app .body { padding: 18px; display: grid; gap: 10px; flex: 1; }
   .app .body p { margin: 0; color: var(--muted); }
   .app .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
@@ -37,28 +42,37 @@
   </header>
   <section class="grid">
     <a class="app" href="training.html">
-      <div class="art" style="background:linear-gradient(150deg,#2c2463,#4b3fd1)"><span class="glyph">🎓</span><b>Ledger Academy</b></div>
+      <div class="art" style="background:linear-gradient(150deg,#2c2463,#4b3fd1)"><img class="face" data-usecase="training" alt="" hidden><span class="glyph">🎓</span><b>Ledger Academy</b></div>
       <div class="body"><p>A live trainer teaches a short incident-response course, takes your questions, and quizzes you at the end.</p><div class="tags"><span class="chip">Training</span><span class="chip">Lesson plan</span><span class="chip">Quiz</span></div><span class="open">Start the course →</span></div>
     </a>
     <a class="app" href="recruiter.html">
-      <div class="art" style="background:linear-gradient(150deg,#0b4f43,#0d7c66)"><span class="glyph">💼</span><b>Northwind Talent</b></div>
+      <div class="art" style="background:linear-gradient(150deg,#0b4f43,#0d7c66)"><img class="face" data-usecase="recruiter" alt="" hidden><span class="glyph">💼</span><b>Northwind Talent</b></div>
       <div class="body"><p>A first-round screening call with a recruiter who follows a structured agenda and answers your questions.</p><div class="tags"><span class="chip">Hiring</span><span class="chip">Interview</span></div><span class="open">Join the call →</span></div>
     </a>
     <a class="app" href="presence.html">
-      <div class="art" style="background:linear-gradient(150deg,#f7a072,#e2643f)"><span class="glyph">🫶</span><b>Kin</b></div>
+      <div class="art" style="background:linear-gradient(150deg,#f7a072,#e2643f)"><img class="face" data-usecase="presence" alt="" hidden><span class="glyph">🫶</span><b>Kin</b></div>
       <div class="body"><p>A companion that keeps you company while you work, and speaks up when something on your screen deserves a word.</p><div class="tags"><span class="chip">Companion</span><span class="chip">Screen aware</span></div><span class="open">Work with Kin →</span></div>
     </a>
     <a class="app" href="game.html">
-      <div class="art" style="background:linear-gradient(150deg,#1b2a3a,#3a2a12)"><span class="glyph">🏝️</span><b style="font-family:Georgia,serif;letter-spacing:.04em">Isle of Whispers</b></div>
+      <div class="art" style="background:linear-gradient(150deg,#1b2a3a,#3a2a12)"><img class="face" data-usecase="game" alt="" hidden><span class="glyph">🏝️</span><b style="font-family:Georgia,serif;letter-spacing:.04em">Isle of Whispers</b></div>
       <div class="body"><p>A treasure hunt told by a narrator who reacts to every step, and an oracle who answers only at the shrine.</p><div class="tags"><span class="chip">Game</span><span class="chip">Story</span></div><span class="open">Begin the tale →</span></div>
     </a>
     <a class="app" href="livestream-host.html">
-      <div class="art" style="background:linear-gradient(150deg,#1a0f1f,#ff3d81)"><span class="glyph">🌙</span><b>Nightcap Live</b></div>
+      <div class="art" style="background:linear-gradient(150deg,#1a0f1f,#ff3d81)"><img class="face" data-usecase="livestream" alt="" hidden><span class="glyph">🌙</span><b>Nightcap Live</b></div>
       <div class="body"><p>An AI co-host runs a live show and talks with the chat, answering questions by name.</p><div class="tags"><span class="chip">Live stream</span><span class="chip">Chat</span></div><span class="open">Open the studio →</span></div>
     </a>
   </section>
   <p class="extra" style="margin-top:16px">Viewers of Nightcap Live chat from the <a href="livestream-viewer.html">chat page</a>.</p>
   <footer>Add <code>?debug</code> to any app's address to see what it sends the avatar.</footer>
 </div>
+<script>
+  // Each card's avatar face, from the server (it keeps the API key and the image); without one the emoji stays.
+  for (const img of document.querySelectorAll(".app .face")) {
+    img.addEventListener("load", () => img.parentElement.classList.add("has-face"));
+    img.addEventListener("error", () => img.remove());
+    img.hidden = false;
+    img.src = `/api/avatars/${img.dataset.usecase}/portrait`;
+  }
+</script>
 </body>
 </html>
