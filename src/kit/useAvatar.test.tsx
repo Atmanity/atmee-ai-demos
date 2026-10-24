@@ -15,6 +15,11 @@ vi.mock('../avatar/room.ts', async (real) => ({
       state: async (t: string) => { session.sent.push(`state:${t}`); },
       event: async (t: string) => { session.sent.push(`event:${t}`); },
       say: async () => {}, send: async () => {}, setMicMuted: async () => {},
+      acceptsFiles: () => true,
+      sendFiles: async (files: File[], o?: { caption?: string }) => {
+        session.sent.push(`files:${files.map((f) => f.name).join(',')}:${o?.caption ?? ''}`);
+        return files.map((f) => ({ name: f.name, status: 'ready' }));
+      },
       end: async () => { session.ended = true; opts.onEnd?.('ended by the app'); },
     } as unknown as AvatarSession & { sent: string[]; ended: boolean };
     joins.push({ opts, session });
@@ -61,4 +66,30 @@ test('an event said while a call is being placed reaches it', async () => {
     await starting;
   });
   expect(joins[0].session.sent).toContain('event:Opening: round 1 is on the screen.');
+});
+
+test("files go to the call with their caption, show as the user's line, and only while there is a call", async () => {
+  const { result } = renderHook(() => useAvatar('demo'));
+  await expect(result.current.sendFiles([new File(['x'], 'cv.pdf')])).rejects.toMatchObject({ code: 'no_call' });
+  await act(async () => { await result.current.start(); });
+  const seen: unknown[] = [];
+  const listen = (e: Event) => seen.push((e as CustomEvent).detail);
+  addEventListener('atmee:files', listen);
+  let outcome: unknown;
+  await act(async () => { outcome = await result.current.sendFiles([new File(['x'], 'cv.pdf'), new File(['y'], 'photo.png')], { caption: 'my CV' }); });
+  removeEventListener('atmee:files', listen);
+  expect(joins[0].session.sent).toContain('files:cv.pdf,photo.png:my CV');
+  expect(outcome).toEqual([{ name: 'cv.pdf', status: 'ready' }, { name: 'photo.png', status: 'ready' }]);
+  expect(result.current.lines.at(-1)).toMatchObject({ who: 'user', text: 'Shared cv.pdf and photo.png', files: ['cv.pdf', 'photo.png'] });
+  expect(seen).toEqual([{ names: ['cv.pdf', 'photo.png'], caption: 'my CV' }]);
+});
+
+test('whether the host takes files follows its agent, and ends with the call', async () => {
+  const { result } = renderHook(() => useAvatar('demo'));
+  await act(async () => { await result.current.start(); });
+  expect(result.current.filesAccepted).toBe(false);
+  act(() => { joins[0].opts.onFilesAccepted?.(true); });
+  expect(result.current.filesAccepted).toBe(true);
+  await act(async () => { await result.current.end(); });
+  expect(result.current.filesAccepted).toBe(false);
 });

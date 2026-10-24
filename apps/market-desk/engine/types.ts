@@ -66,6 +66,8 @@ export interface AddReport {
   pending: string[];
   /** Names nobody could turn into a ticker. */
   unresolved: string[];
+  /** Named past what one call takes (a whole positions list): never tried. */
+  untried?: string[];
 }
 
 export type RefreshReport =

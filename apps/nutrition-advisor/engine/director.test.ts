@@ -1,13 +1,14 @@
 // What the host is told: the instructions and the standing note (the rules the
 // original agent learned live, kept), the tools against the API's limits, the
-// board (what is on screen, every figure, never over its limit) and the tool
-// results (the card's real figures, so the first reply is grounded).
+// board (what is on screen, every figure, never over its limit), the tool
+// results (the card's real figures, so the first reply is grounded) and what
+// the host is told about the photos it was shared (once per drop).
 import { describe, expect, it } from 'vitest';
 import { Advisor, MAX_SHELF } from './advisor.ts';
 import { started, unstarted } from './cook.ts';
-import { boardState, INSTRUCTIONS, MAX_INSTRUCTIONS, MAX_NOTE, MAX_STATE, NO_SCREEN, NOTES, PHOTO_FAILED, pressed, said, SAMPLE_FAILED, SERVER_TOOLS, TOOLS } from './director.ts';
+import { boardState, INSTRUCTIONS, MAX_EVENT, MAX_INSTRUCTIONS, MAX_NOTE, MAX_STATE, NO_SCREEN, NOTES, PHOTO_FAILED, photosTold, pressed, said, SAMPLE_FAILED, SERVER_TOOLS, TOOLS } from './director.ts';
 import { shelfRow } from './advisor.ts';
-import type { NutritionData, RecipeDetails } from './types.ts';
+import type { NutritionData, Outcome, RecipeDetails } from './types.ts';
 
 const ALL = [INSTRUCTIONS, ...NOTES].join('\n');
 
@@ -98,12 +99,22 @@ describe('the instructions and the standing note', () => {
     expect(INSTRUCTIONS).toMatch(/answer from the live board, no tool needed/);
   });
 
-  it('naming a food is enough; a camera is never asked for, and photos are not refused', () => {
+  it('naming a food is enough; a camera is never asked for', () => {
     // "What's in a banana?" got "Please show me a banana through the camera", twice.
     expect(INSTRUCTIONS).toMatch(/Naming a food is enough/);
     expect(INSTRUCTIONS).toMatch(/never ask them to hold anything up to a camera/);
-    expect(INSTRUCTIONS).toMatch(/photo button/);
-    expect(INSTRUCTIONS).toMatch(/never say you cannot look at photos/);
+  });
+
+  it('she sees what they share, but every figure is still the app’s', () => {
+    expect(INSTRUCTIONS).toMatch(/Photos and files they share with you \([^)]*food labels, a menu, a food log\) you see yourself/);
+    expect(INSTRUCTIONS).toMatch(/The app also reads each photo of a food or label into its card and tells you its figures/);
+    // Until the card is up she has no figure, and a lookup would put up an estimate over the label's own.
+    expect(INSTRUCTIONS).toMatch(/until then \(the board says it is reading\), react to what you see with no figure, and do not look that food up/);
+    expect(INSTRUCTIONS).toMatch(/Every figure and score comes from a card, the board or a tool's result, never read off a photo or file yourself/);
+    expect(INSTRUCTIONS).toMatch(/for a dish on a menu or a food in their log, call look_up_food \(compare_foods for several\)/);
+    // What she cannot see is the screen, not the photos.
+    expect(INSTRUCTIONS).toMatch(/You cannot see the screen\./);
+    expect(INSTRUCTIONS).not.toMatch(/cannot (?:see|look at|read) (?:it|photos|the photo|their photo)\b/i);
   });
 
   it('the takeaway, not the figures read back', () => {
@@ -393,5 +404,46 @@ describe('what a tool returns: the real outcome, to speak from', () => {
   it('an emergency is one instruction: call for help, first', () => {
     expect(said.emergency()).toMatch(/^Tell them to call their local emergency number right now/);
     expect(said.emergency()).toMatch(/and nothing about food/);
+  });
+});
+
+describe('the photos of a drop, told once', () => {
+  const card = (name: string, more: Partial<Outcome> = {}): Outcome => ({ view: new Advisor().view(), kind: 'photo', card: true, food: name, text: said.photo(food(name), 'a box', false, []), ...more });
+  const notFood: Outcome = { view: new Advisor().view(), kind: 'failed', text: said.notFood('a cat') };
+
+  it('one photo she saw: the card’s figures, after her own reaction, never that a photo came first', () => {
+    const told = photosTold([card('Oat milk')], 1, true)!;
+    expect(told).toMatch(/^You saw this photo yourself when they shared it and have already reacted: do not describe it again or repeat what you said\. /);
+    expect(told).toContain('105 calories');
+    expect(told.length).toBeLessThanOrEqual(MAX_EVENT);
+  });
+
+  it('one photo she did not see is told as the app always told it', () => {
+    expect(photosTold([card('Oat milk')], 1, false)).toBe(card('Oat milk').text);
+  });
+
+  it('several cards: one message naming them for compare_foods, whose result carries the figures', () => {
+    const told = photosTold([card('Oat milk'), card('Corn flakes'), notFood], 3, true)!;
+    expect(told).toMatch(/^You saw these photos yourself/);
+    expect(told).toContain('put 2 cards side by side in the comparison table on screen: "Oat milk" and "Corn flakes".');
+    expect(told).toContain('No card came of one of the photos.');
+    expect(told).toContain('Call compare_foods with "Oat milk" and "Corn flakes", then give a one-line verdict from its figures.');
+    expect(told).not.toMatch(/added a photo|105 calories/);
+  });
+
+  it('more than compare_foods takes: she asks which, and ten long names still fit an event', () => {
+    const long = (i: number) => `${'Organic whole grain breakfast cereal with honey and almonds '.slice(0, 76)} ${i}`;
+    const told = photosTold(Array.from({ length: 10 }, (_, i) => card(long(i))), 10, true)!;
+    expect(told).toContain('Ask which two or three they would like compared, then call compare_foods with those.');
+    expect(told.length).toBeLessThanOrEqual(MAX_EVENT);
+  });
+
+  it('one card of several photos says the rest gave none; no card says why, or that none is coming', () => {
+    expect(photosTold([card('Oat milk'), notFood], 2, true)).toMatch(/105 calories[^]*No card came of one of the photos\.$/);
+    expect(photosTold([notFood], 1, true)).toMatch(/do not describe it again[^]*does not show a food/);
+    // Seen and talked about, then never read (it could not be opened): she is told no card is coming.
+    expect(photosTold([], 1, true)).toContain(PHOTO_FAILED);
+    expect(photosTold([], 1, false)).toBeNull();
+    expect(photosTold([], 0, true)).toBeNull();
   });
 });

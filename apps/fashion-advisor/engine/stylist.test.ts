@@ -11,6 +11,8 @@ import { MAX_TRACKED_SUGGESTIONS, Stylist, type Models, type ReadInput } from '.
 import type { Img, Outcome, SayEvent, Zone } from './types.ts';
 
 const PHOTO = Buffer.alloc(400, 7).toString('base64');
+/** Another picture: a photo is its bytes, so the same bytes again are the same picture. */
+const OTHER = Buffer.alloc(400, 8).toString('base64');
 const WIDE = 'とても長い商品名の説明';
 
 class FakeModels implements Models {
@@ -432,11 +434,24 @@ describe('the read and the pieces', () => {
   test('a new photo is a new look: the try-ons and the read were for the old one', async () => {
     const { stylist } = await styled();
     await settle(stylist, stylist.act({ type: 'tryOn', item: 'Camel Wool Topcoat' }));
-    const out = stylist.act({ type: 'photo', mime: 'image/png', data: PHOTO, source: 'upload' });
+    const out = stylist.act({ type: 'photo', mime: 'image/png', data: OTHER, source: 'upload' });
     expect(out.view.analysis).toBeNull();
     expect(out.view.image?.kind).toBe('look');
     const [, done] = await settle(stylist, out);
     expect(done.view.analysis?.tried_items).toEqual([]);
+  });
+
+  test('the same picture added again keeps its verdict, with no second read; another picture is read', async () => {
+    const models = new FakeModels();
+    models.scores = [7, 4, 9];
+    const { stylist } = await styled(models);
+    await settle(stylist, stylist.act({ type: 'photo', mime: 'image/jpeg', data: OTHER, source: 'upload' }));
+    expect(stylist.view().analysis?.style_score).toBe(4);
+    // The first look back in the mirror (one of a few they are choosing between): its own verdict, as it was.
+    const [, back] = await settle(stylist, stylist.act({ type: 'photo', mime: 'image/jpeg', data: PHOTO, source: 'upload' }));
+    expect(back.view.analysis?.style_score).toBe(7);
+    expect(back.events[0].text).toMatch(/^Done: the verdict is 7 out of 10 for smart casual/);   // a verdict, not "the same as before": the mirror changed
+    expect(models.reads).toHaveLength(2);
   });
 
   test('a file that is not a usable photo is refused with a reason', () => {
@@ -460,7 +475,7 @@ describe('late work never lands on a newer look', () => {
     const tryOn = stylist.act({ type: 'tryOn', item: 'Camel Wool Topcoat' });
     await tick();
     expect(stylist.view().jobs.tryOn).toBe('Camel Wool Topcoat');
-    const photo = stylist.act({ type: 'photo', mime: 'image/png', data: PHOTO, source: 'upload' });
+    const photo = stylist.act({ type: 'photo', mime: 'image/png', data: OTHER, source: 'upload' });
     const newLook = photo.view.image!.url;
     models.release();
     const [image, done] = await settle(stylist, tryOn);
@@ -493,7 +508,7 @@ describe('late work never lands on a newer look', () => {
     models.holdReads = true;
     const reread = stylist.act({ type: 'retarget', style: 'wedding' });   // the old photo, read for a wedding
     await tick();
-    const photo = stylist.act({ type: 'photo', mime: 'image/png', data: PHOTO, source: 'upload' });
+    const photo = stylist.act({ type: 'photo', mime: 'image/png', data: OTHER, source: 'upload' });
     models.readFails = true;    // the new photo's own read does not come through
     models.releaseReads();
     const [stale] = await settle(stylist, reread);

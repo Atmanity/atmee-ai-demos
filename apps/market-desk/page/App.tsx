@@ -3,9 +3,11 @@
 // refresh, remove, clear) and speaks from their results; the page answers
 // those calls through the server, draws the board, keeps Reese's picture of
 // it current, and tells Reese about button presses and the desk's own news.
+// A file dropped by the board (a positions list, an earnings release) goes to
+// Reese, who reads it and fills the board from it with add_symbols.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CallControls, callCopy, CallStatus, ChatPanel, clock, HostVideo, useAvatar, useCaptionToggle, useToolNet, BackToApps, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
-import { boardState, netNote, say } from '../engine/director.ts';
+import { CallControls, callCopy, CallStatus, ChatPanel, clock, FileDrop, HostVideo, useAvatar, useCaptionToggle, useToolNet, BackToApps, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
+import { boardState, FILES_NOTE, netNote, say } from '../engine/director.ts';
 import { mustDo } from '../engine/judge.ts';
 import type { Board, Kind } from '../engine/types.ts';
 import { DeskBoard, type IntentResult } from './Board.tsx';
@@ -17,6 +19,8 @@ import { useDesk } from './useDesk.ts';
 import './outcry.css';
 
 const HOST = 'Reese';
+/** What the drop offers: a positions list or watchlist (a CSV, a screenshot of a brokerage page) or an earnings release. */
+const FILES = '.csv,.txt,image/*,.pdf';
 
 export function App() {
   const [entered, setEntered] = useState(false);
@@ -106,6 +110,11 @@ export function App() {
     avatar.state(text);
   }, [desk.board, now]);
 
+  // What to do with a shared positions list or release is a standing rule, for a host that takes files.
+  useEffect(() => {
+    if (avatar.filesAccepted) avatar.note(FILES_NOTE);
+  }, [avatar.filesAccepted]);
+
   // A refusal from a tool call fades like the board's own.
   useEffect(() => {
     if (!notice) return;
@@ -134,7 +143,16 @@ export function App() {
 
         <div className="oc-desk">
           {avatar.phase === 'ended' && <Closing board={desk.board} now={now} host={HOST} onAgain={() => void avatar.start({ mic: wantMic })} />}
-          <DeskBoard board={desk.board} onIntent={press} notice={desk.lost ? 'Reconnecting to your board…' : notice} now={now} host={HOST} />
+          <DeskBoard
+            board={desk.board} onIntent={press} notice={desk.lost ? 'Reconnecting to your board…' : notice} now={now} host={HOST}
+            files={
+              // No event of the page's own: Reese reacts to a drop once by himself, and an event too would have him speak twice.
+              <FileDrop
+                avatar={avatar} name={HOST} accept={FILES} label="Share a file" className="oc-files"
+                hint={`Drop your positions or a watchlist (a CSV or a screenshot) and ${HOST} puts up what fits; drop an earnings release and ${HOST} reads it with you.`}
+              />
+            }
+          />
         </div>
 
         <ChatPanel

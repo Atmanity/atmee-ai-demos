@@ -4,7 +4,7 @@
 // original's state.py cases (test_table.py) and its persona test (test_persona.py).
 import { expect, test } from 'vitest';
 import * as board from './board.ts';
-import { agePhrase, boardState, formatWatchlist, INSTRUCTIONS, netNote, pressed, said, say, STANDING_LINE, TOOLS } from './director.ts';
+import { agePhrase, boardState, FILES_NOTE, formatWatchlist, INSTRUCTIONS, netNote, pressed, said, say, STANDING_LINE, TOOLS } from './director.ts';
 import { entry, quote } from './test-helpers.ts';
 import type { AddReport, Board, Quote } from './types.ts';
 
@@ -171,6 +171,22 @@ test('a full board asks which one goes, and never removes one on its own', () =>
   expect(text).toContain('take one off only when they say which');
 });
 
+test('a list that overflows the board says so in one line, and names what one call never tried', () => {
+  // A shared positions list can run to dozens of rows: one board sentence for all that did not fit, not one each.
+  const full = ['AMD', 'INTC', 'QCOM'].map((symbol) => ({ symbol, reason: board.fullMessage() }));
+  const text = said.added(report({
+    landed: [{ quote: quote() }],
+    failed: [...full, { symbol: 'SPAXX', reason: board.unknownMessage('SPAXX') }],
+    untried: ['ORCL', 'CRM'],
+  }), boardOf([quote()]));
+  expect(text).toMatch(/^Partly done:/);
+  expect(text).toContain("Did NOT go up: SPAXX: I couldn't find a listing for SPAXX");
+  expect(text).toContain('No room, so these did NOT go up: AMD, INTC, QCOM. The board only holds six — drop one first. Say what did not fit;');
+  expect(text.match(/only holds/g)).toHaveLength(1);
+  expect(text).toContain('Not tried, past what one call takes: ORCL, CRM.');
+  expect(said.added(report({ untried: ['ORCL'] }), boardOf([quote()]))).toMatch(/^Not done:/);
+});
+
 test('a quote still in flight is said to be coming, with no price', () => {
   const text = said.added(report({ pending: ['GOOGL'] }), boardOf([]));
   expect(text).toContain('Still on the way: GOOGL');
@@ -206,6 +222,32 @@ test('removing, clearing and a button press are said plainly', () => {
   expect(said.removed({ removed: [], refused: [board.NOT_ON_BOARD_MESSAGE], board: boardOf([]) })).toContain('do not claim anything was removed');
   expect(said.cleared({ cleared: false, reason: board.ALREADY_CLEAR_MESSAGE })).toContain("The board's already clear.");
   expect(pressed('Remove TSLA', 'TSLA is off.')).toBe('The user pressed "Remove TSLA" on screen. TSLA is off.');
+});
+
+// ─── files the user shares ───────────────────────────────────────────────
+
+test('the files note fits the API and calls the tool by its name', () => {
+  expect(FILES_NOTE.length).toBeLessThanOrEqual(2000);
+  expect(FILES_NOTE).toContain('add_symbols');
+  expect(TOOLS.map((t) => t.name)).toContain('add_symbols');
+});
+
+test('a shared positions list goes up in one add, read from the file itself, only as many as fit', () => {
+  // The runtime's summary of a forty-row CSV can leave rows out: the full list comes from the file.
+  expect(FILES_NOTE).toContain('their positions or a watchlist (a CSV, or a screenshot of a brokerage page)');
+  expect(FILES_NOTE).toContain('put it on the board on your own as you react to it, in one add_symbols call');
+  expect(FILES_NOTE).toContain('First look at the file itself for the full list: the summary can leave rows out.');
+  expect(FILES_NOTE).toContain(`no more than the live board's open slots (it holds ${board.MAX_SYMBOLS})`);
+  expect(FILES_NOTE).toContain('say what went up and how many did not fit');
+  expect(FILES_NOTE).toContain('If the board is already full, call nothing: say so and ask which stock should come off.');
+});
+
+test('a release, a position and a price in a file all stay under the hard rule', () => {
+  expect(FILES_NOTE).toContain('never judge a position or say what to do with it');
+  expect(FILES_NOTE).toContain("A price in a file (a screenshot's last price, a cost basis) is not a quote: the live board is still the only source of a price.");
+  expect(FILES_NOTE).toContain('never say whether the quarter is good or bad for the stock, what the stock will do because of it, or what to do about it');
+  expect(FILES_NOTE).toContain("guidance is the company's forecast, never yours");
+  expect(FILES_NOTE).toContain('a rating or a price target in one is never repeated as a view');
 });
 
 // ─── the desk's own lines ────────────────────────────────────────────────

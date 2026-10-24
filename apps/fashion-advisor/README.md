@@ -1,9 +1,11 @@
 # Notch
 
 A personal stylist on call. Tell Emery what you're dressing for (a job
-interview, a summer wedding, a first date) and share one photo of your outfit:
-upload it, drag it onto the mirror, or borrow the example outfit. Notch scores
-it out of 10 for that occasion, says what works and the one fix, and hangs the
+interview, a summer wedding, a first date) and share a photo of your outfit,
+or a few you're torn between: upload them, drag them onto the mirror, or borrow
+the example outfit. In the call Emery sees the photos you share and reads an
+invitation or a dress code you show her. Notch scores the outfit in the mirror
+out of 10 for that occasion, says what works and the one fix, and hangs the
 pieces that would finish it on a rail, each with a shop link. Ask for the same
 outfit rated for another occasion, for more pieces, or (with an image model) to
 see a piece on your own photo. The fitting ends with notes to download. Rebuilt
@@ -32,13 +34,14 @@ The repo's `.env` (see the root README) plus, for this app:
 | The models | `models.ts`: Gemini (`structured()`) for the verdict, the zones and the pieces, with the original's prompts and clamps (`engine/prompts.ts`); xAI for the try-on and the catalogue shots (`engine/thumbnails.ts`). |
 | Emery's actions | Tools (`engine/director.ts`), all `await`, with lenient schemas (no closed objects, enums or tight lengths: the platform rejects a call that does not fit before the page sees it); `engine/fitting.ts` reads the arguments loosely ("A Summer Wedding, please" is "summer wedding", "dressier" leans formal, "the second one" is the second piece). Each result starts with its outcome ("Done:", "Not yet:", "Refused:") so the platform's filler cannot pre-judge it: `rate_outfit(occasion?)` (25 s), `suggest_pieces(direction?)` (25 s), and with an image model `try_on(piece)` (10 s) and `restore_photo` (25 s). `engine/fitting.ts` turns a call into the stylist's action; the page answers the `atmee.tool` call with the result, so her first reply carries the verdict. |
 | Slow work | A read takes a few seconds: the page waits up to 20 s for it, else answers "still working" and passes the verdict on as an event when it lands. A try-on is accepted or refused at once (that is `try_on`'s result); the picture (~20 s) and its new score follow as events. |
-| Emery's rules | The session's tool `instructions`: she cannot see the photo, acts only through the tools, never gives a score herself, never says a piece is on before Notch says so; her voice. Without an image model the try-on rules are left out. |
-| What Emery sees | `state`: the occasion, what is in the mirror, the verdict, the rail in order (for "the second one"), the next piece, work in progress. Never an image URL or a link. |
+| Emery's rules | The session's tool `instructions`: she sees what is shared with her in the call (never the user live, never a try-on) and may describe and compare it, but a score is Notch's alone, for the look in the mirror; an invitation or dress code is the occasion (`rate_outfit`); she acts only through the tools, never says a piece is on before Notch says so; her voice. Without an image model the try-on rules are left out. |
+| What Emery sees | `state`: the occasion, what is in the mirror and whether she has seen it, the looks being chosen between (each one's score so far, which she has not seen), the verdict, the rail in order (for "the second one"), the next piece, work in progress. Never an image URL or a link. In a call that takes files, also the photos and the invitation themselves (below). |
+| Photos and files in the call | When Emery takes files (`avatar.filesAccepted`), what the user adds goes to her too, in one drop (`avatar.sendFiles`) with a caption in their words ("3 outfits I'm choosing between for dinner out."): each photo as the mirror shows it (the 1280 px JPEG Notch reads), the example outfit, and anything dropped beside them. The invitation picker beside the occasions ("Show it to Emery") sends to her alone, never the mirror. Several photos: the first goes in the mirror and is scored; the others wait under it as looks to tap in, each scored there in turn (a verdict is kept per picture and occasion, so a look put back keeps its score); a look she has not seen in this call is shown to her as it goes in. Under her name: on its way, seen, or what did not reach her. Outside a call, or when she takes no files, the mirror works as before and nothing goes to her. |
 | Buttons | Upload, the example outfit, an occasion, Rate it again, More pieces, Try it on, Back to my photo: they act at once (`POST /act`, the same actions as the tools) and Emery is told by an event: what was pressed, then what came of it. |
 | The safety net | `useToolNet` (kit) with `engine/judge.ts` `mustDo`: when the user clearly asks to be rated ("rate me for a wedding instead", "rate it again") or to go back to their own photo, and Emery calls no tool within 7 s, the page does it and tells her. More pieces and try-ons are left out (a duplicate grows the rail or pays for a render twice). It also stands down when she called any other tool for those words. |
 | The opening | An event when Emery arrives, from where the fitting stands (the room opens while she connects, so the user may already have added a photo or picked an occasion). Her own greeting already introduced her and asked where they're headed, so the opening starts "You have just greeted them; do not greet or introduce yourself again.", and an empty room gets no opening at all. |
-| A photo | Emery is told at once that it is in the mirror (and being read, or that she must ask the occasion); the verdict follows as a second event. |
-| The screens | A front door (`page/Lobby.tsx`); the fitting room (`page/Fitting.tsx`: the mirror, the verdict on a tape measure, the occasion picker, the rail) with Emery framed beside it; the fitting notes with a download (`page/Notes.tsx`); styled in `page/notch.css`. On a phone Emery stays at the top of the screen. |
+| A photo | Emery is told at once that it is in the mirror (and being read, or that she must ask the occasion); the verdict follows as a second event. A photo shared with her in the same drop is the exception: the platform has her react to the drop once by herself, so nothing is told at once (a second reaction), and the verdict event is Notch's read of it ("Notch has read look 1 of 3…"), not news of a photo. A look she saw earlier, tapped back in, is told as that look ("you saw it when they shared it, but never guess its score"). |
+| The screens | A front door (`page/Lobby.tsx`); the fitting room (`page/Fitting.tsx`: the mirror with the looks under it, the verdict on a tape measure, the occasion picker, the rail) with Emery framed beside it; the fitting notes with a download (`page/Notes.tsx`); styled in `page/notch.css`. On a phone Emery stays at the top of the screen. |
 
 What changed from the first port: no name step and no onboarding steps (an
 occasion and a photo, in either order, are a fitting); the old speech judge
@@ -73,10 +76,16 @@ live. **Expected**: not observed yet.
    on the same photo for the same occasion went from 7 to 5, with another
    fix. Fixed in the app: each picture's verdict is kept per occasion, and
    the read runs at temperature 0.
-5. **The host cannot see the outfit.** *Expected* (known). The original ran with
-   video: "how do I look now?" was answered from the camera. Here Emery knows
-   the look only as Notch's verdict, and a change in front of the camera needs
-   a new photo.
+5. **The host sees shared photos, not the user live.** *Expected* (built
+   2026-10-24, not yet run live). The original ran with video: "how do I look
+   now?" was answered from the camera. Now Emery sees the photos shared with
+   her in the call (a few at once, an invitation too) and describes and
+   compares them, while the score stays Notch's, one look at a time. She never
+   sees a try-on (the render is not shared), and a photo added before she takes
+   files (while she connects, or in an earlier call) is not shown to her: the
+   board tells her she has not seen it. Her persona in `avatar.json` says the
+   same; the live host's persona is set on the platform and has to be updated
+   to match.
 6. **Slow work outlives a tool call.** *Expected.* An `await` holds at most
    28 s. A verdict usually lands in a few seconds, but with Gemini's retries it
    can take longer: then her first reply is "it's coming" and the verdict is an
@@ -96,6 +105,13 @@ live. **Expected**: not observed yet.
 12. **No speech hints.** *Expected.* Occasions and garment names are passed as
    heard; `try_on` resolves loose names ("the navy tie", "the second one")
    against the rail.
+13. **A drop's reaction and the verdict can land together.** *Expected.* Emery
+   reacts to a drop by herself once it is read; Notch's verdict on the photo in
+   the mirror is an event sent when it lands, which can be the same moment
+   (gap 8: one may win). The verdict is on the board either way.
+14. **An invitation dropped on the mirror as an image is read as an outfit.**
+   *Expected.* The page cannot tell an invitation from an outfit photo; the
+   invitation picker beside the occasions sends to Emery alone.
 
 Fixed by tools, compared with the first port: the host no longer answers a
 spoken request before the app acts ("ooh, let's see it!" before the score: the
@@ -106,7 +122,7 @@ try-on tool at all.
 
 ## Tested
 
-- `npx vitest run apps/fashion-advisor`: 171 tests. The engine as ported (body
+- `npx vitest run apps/fashion-advisor`: 211 tests. The engine as ported (body
   zones and item matching, refused try-ons, the refusal that stays refused,
   the suggestion cap, the thumbnail pool, the prompts and clamps, retries); the
   fitting (`engine/fitting.test.ts`: every tool and button, results versus
@@ -118,6 +134,11 @@ try-on tool at all.
   plumbing words on screen; and the page's wiring with the call faked and a
   real fitting behind a fake server (tool results, button events, a try-on's
   follow-up events, the notes at the end, the safety net acting and standing
-  down).
+  down). Files in the call: several photos go to Emery in one drop and only
+  the first to Notch, the others wait under the mirror and keep their scores
+  when put back (no second read of the same picture), only the verdict is told
+  for a shared photo, nothing goes to her when she takes no files, more than
+  ten is refused, the invitation goes to her alone; the rules no longer say
+  she cannot see, and the board says which photos she has seen.
 - Live on staging, round 1, 2026-10-23 (own host, no xAI key): the verdict, a re-rate for a summer wedding (new score in the first reply), more pieces, a typed re-rate for a job interview and the fitting notes all worked; the misses are gaps 1 to 3 above.
 - Live on staging, round 2, 2026-10-23 (Emery's new host `deb43da1`, no xAI key): her face on the front door and in the frame while connecting; one greeting; "I'm dressing for a dinner out with friends tonight." called `rate_outfit` (4.0 s); the example outfit was noticed at once ("I see the example outfit is up on the mirror now!") and scored 7/10; "Rate it again." called `rate_outfit` (3.2 s); "More streetwear." called `suggest_pieces{direction}` (3.2 s) and the rail changed; "So how do I look?" was answered from the board; the fitting notes opened at hang-up. Misses, fixed since: the occasion question twice in a row (gap 3), the re-rate moving 7 to 5 (gap 4), and bare icons on the rail without images (now swatch cards). Still open: a reply can lag a turn when the user speaks right after a tool call (the 7/10 verdict landed while "Rate it again" was being handled).

@@ -530,6 +530,17 @@ describe('photos', () => {
     expect(fake.calls[0].images).toEqual([image]);
   });
 
+  it('a photo’s outcome names the food it became, so a drop of several is told as one', async () => {
+    const { act } = await open();
+    expect((await act('photo', { image })).body.food).toBe('Oat milk');
+    photoJson = { ...photoJson, ...cardJson('cereal', { product_name: 'Corn flakes', serving_size: '30 g' }) };
+    const [a, b] = await Promise.all([act('photo', { image }), act('photo', { image })]);
+    expect([a.body.food, b.body.food]).toEqual(['Corn flakes', 'Corn flakes']);
+    expect(b.body.view.shelf.items.map((r) => r.product_name)).toEqual(['Oat milk', 'Corn flakes']);
+    photoJson = { ...photoJson, is_food: false, seen: 'a cat on a sofa' };
+    expect((await act('photo', { image })).body.food).toBeUndefined();
+  });
+
   it('a photo that is not food is said kindly, with a notice', async () => {
     const { act } = await open();
     photoJson = { ...photoJson, is_food: false, seen: 'a cat on a sofa' };

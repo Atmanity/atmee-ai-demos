@@ -1,11 +1,13 @@
 // A photo of a room, or of one piece, becomes furniture on the plan.
 //
 // The original showed the photo to the avatar's model, which then called
-// add_furniture per piece. On the API the avatar cannot see an upload, so the
-// app's own model reads it (server.ts, with the image) into kit TYPES and a
-// room, never measurements: a photo cannot say how big a room is, and
-// centimetres invented from perspective would be wrong in a way the plan draws
-// confidently. The kit supplies the real sizes, and the planner finds the spot.
+// add_furniture per piece. Here the app's own model reads it (server.ts, with
+// the image) into kit TYPES and a room, never measurements: a photo cannot say
+// how big a room is, and centimetres invented from perspective would be wrong
+// in a way the plan draws confidently. The kit supplies the real sizes, and the
+// planner finds the spot. The architect does not see these photos; one the
+// client shares with her in the call goes to her host instead, to look at and
+// talk about, and is not read into furniture here.
 import { CATALOG, KIT_FAMILIES, USUAL_ROOMS } from './catalog.ts';
 import type { Intent } from './types.ts';
 

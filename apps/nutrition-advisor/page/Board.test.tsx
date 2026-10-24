@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 // The screens, rendered: the front door, the empty table, a lookup in flight,
 // the label and its recipe ideas, the foods side by side, a recipe being
-// cooked, the notices the page puts up itself, and the notes at the end. The
+// cooked, files on their way to Rachel, the notices the page puts up itself,
+// and the notes at the end. The
 // rules the original panel learned still hold (a table only from two foods, a
 // visible state while a lookup is in flight), and no screen speaks the
 // plumbing's words.
@@ -38,12 +39,12 @@ const BANNED = /\b(?:session|avatar|api|atmee|demo|sample|mini-app|state|event|t
 
 const handlers = () => ({
   onQuickPick: vi.fn(), onIdea: vi.fn(), onOpenKept: vi.fn(), onBack: vi.fn(), onNext: vi.fn(), onPickStep: vi.fn(), onRetryRecipe: vi.fn(),
-  onChoosePhoto: vi.fn(), onPhoto: vi.fn(), onSample: vi.fn(), onClear: vi.fn(), onDismissNotice: vi.fn(), onDismissConcern: vi.fn(),
+  onChoosePhoto: vi.fn(), onFiles: vi.fn(), onSample: vi.fn(), onClear: vi.fn(), onDismissNotice: vi.fn(), onDismissConcern: vi.fn(),
 });
 function board(props: Partial<BoardProps> = {}) {
   const h = handlers();
   const utils = render(
-    <Board host="Rachel" ready connecting={false} view={new Advisor().view()} recipeView={initialRecipeView} cook={unstarted()} working={[]} notice={null} concern={null} {...h} {...props} />,
+    <Board host="Rachel" ready connecting={false} takesFiles={false} files={[]} view={new Advisor().view()} recipeView={initialRecipeView} cook={unstarted()} working={[]} notice={null} concern={null} {...h} {...props} />,
   );
   return { ...utils, h };
 }
@@ -102,6 +103,44 @@ describe('the empty table', () => {
     board({ working: [{ id: 1, label: 'reading your photo', preview: 'data:image/jpeg;base64,AAAA' }] });
     expect(screen.getByText(/Reading your photo…/)).toBeTruthy();
     expect(screen.getByAltText('The photo being read')).toBeTruthy();
+  });
+});
+
+describe('photos and files', () => {
+  const photo = (name: string) => new File(['x'], name, { type: 'image/jpeg' });
+  const dropOn = (files: File[]) => fireEvent.drop(screen.getByRole('region', { name: 'Your table' }), { dataTransfer: { files, types: ['Files'] } });
+
+  it('everything dropped on the table is handed over, several at once; the page decides what reads it', () => {
+    const { h } = board({ takesFiles: true });
+    const files = [photo('oats.jpg'), photo('cereal.jpg'), new File(['m'], 'menu.pdf', { type: 'application/pdf' })];
+    dropOn(files);
+    expect(h.onFiles).toHaveBeenCalledWith(files);
+    cleanup();
+    const closed = board({ ready: false, connecting: true });
+    dropOn([photo('oats.jpg')]);
+    expect(closed.h.onFiles).not.toHaveBeenCalled();
+  });
+
+  it('while Rachel takes files the table offers a menu and a food log too; otherwise a photo, as before', () => {
+    const { container } = board({ takesFiles: true });
+    expect(screen.getByText(/Add a photo, a menu or your food log/)).toBeTruthy();
+    expect(screen.getByText(/several labels at once to compare them/)).toBeTruthy();
+    expect(container.textContent?.toLowerCase()).not.toContain('camera');
+    expect(container.textContent).not.toMatch(BANNED);
+    cleanup();
+    board();
+    expect(screen.getByText(/Add a photo of a food or its label/)).toBeTruthy();
+    expect(screen.getByText('You can also drop a photo anywhere on this table.')).toBeTruthy();
+  });
+
+  it('each file on its way to Rachel shows how far it got, in plain words', () => {
+    const { container } = board({
+      takesFiles: true, view: withFoods('Medium banana'),
+      files: [{ name: 'menu.pdf', status: 'reading' }, { name: 'plate.jpg', status: 'ready' }, { name: 'huge.png', status: 'refused', reason: 'too_large' }],
+    });
+    const list = screen.getByRole('list', { name: 'On their way to Rachel' });
+    expect([...list.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['menu.pdfReading…', 'plate.jpgRead', 'huge.pngNot read: too large to read']);
+    expect(container.textContent).not.toMatch(BANNED);
   });
 });
 

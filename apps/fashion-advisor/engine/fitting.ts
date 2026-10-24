@@ -2,7 +2,9 @@
 // calls a tool, or the user presses a button; both become the same intent,
 // the stylist acts, and what it reports becomes words. For Emery's call they
 // are the tool's result; for a button they are an event saying what the user
-// pressed and what came of it (she cannot see the screen).
+// pressed and what came of it (she cannot see the screen). A photo the user
+// also shared with her in the call is the exception: she reacts to that drop
+// herself, so only Notch's verdict on it is told.
 //
 // Slow work (a read, a try-on) runs as a job with milestones. A request says
 // which milestone carries its outcome (`result`); the page waits for it (a
@@ -19,10 +21,33 @@ export type Intent =
   | { kind: 'pieces'; direction?: string }
   | { kind: 'tryOn'; piece: string; why?: string }
   | { kind: 'restore' }
-  | { kind: 'photo'; mime: string; data: string; example?: boolean };
+  | { kind: 'photo'; mime: string; data: string; example?: boolean; shared?: Shared; which?: string };
 
-/** Who asked: Emery through a tool, or the user through a button (what they pressed, for her). */
+/**
+ * How Emery has a photo too: shared with her in the drop that brings it to the mirror ('now': she
+ * reacts to that drop herself), or earlier in the call ('before': one of the looks the user is
+ * choosing between, put back in the mirror).
+ */
+export type Shared = 'now' | 'before';
+
+/**
+ * Who asked: Emery through a tool, or the user through a button (what they pressed, for her; empty
+ * when there is nothing to tell, a photo in a drop she reacts to herself).
+ */
 export type Asker = { by: 'host' } | { by: 'user'; pressed: string };
+
+/** A drop holds at most ten files, so a choice of looks has at most ten. */
+const MAX_LOOKS = 10;
+
+/** Which of the looks the user is choosing between a photo is (two or more): its place, its file's name, picked from the others or not. */
+function lookOf(raw: unknown): { n: number; of: number; name: string; picked: boolean } | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const l = raw as Record<string, unknown>;
+  const n = Number(l.n);
+  const of = Number(l.of);
+  if (!Number.isInteger(n) || !Number.isInteger(of) || of < 2 || of > MAX_LOOKS || n < 1 || n > of) return null;
+  return { n, of, name: typeof l.name === 'string' ? cleanSingleLine(l.name.replace(/"/g, ''), 60) : '', picked: l.picked === true };
+}
 
 export interface Ran {
   view: View;
@@ -74,9 +99,19 @@ export function intentOfButton(body: unknown): { intent: Intent; pressed: string
   const b = body as Record<string, unknown>;
   const str = (key: string, max: number) => (typeof b[key] === 'string' ? cleanSingleLine(b[key] as string, max) : '');
   switch (b.button) {
-    case 'photo':
+    case 'photo': {
       if (typeof b.mime !== 'string' || typeof b.data !== 'string') return null;
-      return { intent: { kind: 'photo', mime: b.mime, data: b.data, example: b.example === true }, pressed: b.example === true ? 'chose the example outfit' : 'added a new photo of their outfit' };
+      const example = b.example === true;
+      const look = lookOf(b.look);
+      const shared = b.shared === 'now' || b.shared === 'before' ? b.shared : undefined;
+      const which = example ? 'the example outfit' : look ? `look ${look.n} of ${look.of}${look.name ? ` ("${look.name}")` : ''}` : 'their outfit photo';
+      // In a drop Emery reacts to herself, the photo is not told again as a press.
+      const pressed = shared === 'now' ? ''
+        : example ? 'chose the example outfit'
+          : look?.picked ? `put ${which} in the mirror`
+            : look ? `added ${look.of} outfit photos to choose between` : 'added a new photo of their outfit';
+      return { intent: { kind: 'photo', mime: b.mime, data: b.data, example, ...(shared ? { shared } : {}), which }, pressed };
+    }
     case 'occasion': {
       const occasion = str('occasion', 80);
       return occasion ? { intent: { kind: 'rate', occasion }, pressed: `picked "${occasion}" as what they're dressing for` } : null;
@@ -107,7 +142,7 @@ export class Fitting {
   do(intent: Intent, asker: Asker): Ran {
     this.at = Date.now();
     const ran = this.run(intent);
-    if (asker.by === 'user') {
+    if (asker.by === 'user' && asker.pressed) {
       const frame = (text: string) => said.pressed(asker.pressed, text);
       // What was pressed is said once: with the outcome now, else with the outcome that follows.
       if (ran.text) ran.text = frame(ran.text);
@@ -137,15 +172,20 @@ export class Fitting {
         const out = this.reads(this.stylist.act({ type: 'photo', mime: intent.mime, data: intent.data, source: intent.example ? 'sample' : 'upload' }));
         // A file that could not be used is refused on screen (the notice); nothing for Emery to say.
         if (!out.job) return { view: out.view, text: null };
+        const photo = intent.which ?? (intent.example ? 'the example outfit' : 'their outfit photo');
         // Emery hears at once that the photo is in the mirror; the verdict follows. If she was
         // told to ask for the occasion, "it can't be rated yet" is not said twice.
         const askedOccasion = !this.stylist.target;
         const ran = this.awaiting(out, 'done', (o) => {
           const outcome = words(o.events);
           if (!outcome || (askedOccasion && !o.view.target)) return null;
-          return o.view.analysis ? said.photoRead(outcome) : outcome;
+          if (!o.view.analysis) return outcome;
+          return intent.shared === 'now' ? said.sharedRead(photo, outcome) : said.photoRead(outcome);
         });
-        return { ...ran, text: said.photoIn(out.view, Boolean(intent.example)) };
+        // Shared with her in the drop that brought it: she reacts to the drop herself, and a line
+        // that the photo is in would be a second reaction. Only the verdict follows.
+        if (intent.shared === 'now') return ran;
+        return { ...ran, text: said.photoIn(out.view, photo, intent.shared === 'before') };
       }
     }
   }

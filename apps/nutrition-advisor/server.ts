@@ -232,12 +232,13 @@ function photo(v: Visit, image: Image, sample: boolean): Promise<Outcome> {
     if (!advisor.current(ticket)) return { view: advisor.view(), kind: 'failed', text: said.clearedMeanwhile('the photo') };
     if ('card' in reading) {
       const placed = advisor.place(reading.card, ticket);
+      const food = advisor.label(placed.card);
       if (!placed.front) {
         const shown = advisor.nutrition;
         const text = shown && keyOf(placed.card) === keyOf(shown) ? said.cards(spoken(advisor, [shown]), [], true) : said.filed(spoken(advisor, [placed.card]), shown ? advisor.label(shown) : '');
-        return { view: advisor.view(), kind: 'photo', card: false, text };
+        return { view: advisor.view(), kind: 'photo', card: false, text, food };
       }
-      return { view: advisor.view(), kind: 'photo', card: true, text: said.photo(spoken(advisor, [placed.card])[0], reading.seen, sample, placed.others) };
+      return { view: advisor.view(), kind: 'photo', card: true, text: said.photo(spoken(advisor, [placed.card])[0], reading.seen, sample, placed.others), food };
     }
     if ('notFood' in reading) return { view: advisor.view(), kind: 'failed', text: said.notFood(reading.notFood), notice: "That photo doesn't look like a food or a food label. Try another, or just name the food." };
     if ('noVision' in reading) return { view: advisor.view(), kind: 'failed', text: said.noVision(), notice: "Photo reading isn't available right now. Name the food instead and its card comes up." };

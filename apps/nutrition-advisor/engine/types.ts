@@ -82,6 +82,8 @@ export interface Outcome {
   card?: boolean;
   /** The recipe this action put on screen. */
   recipe?: RecipeDetails;
+  /** The food a photo became a card of, as the host says it. */
+  food?: string;
   /** A tool's result, or for a button the event the host is told. */
   text: string;
   /** A line for the board itself (a photo it could not read, a food it could not find). */

@@ -135,6 +135,14 @@ describe('the board', () => {
     expect(screen.getByRole('status').textContent).toBe('The board only holds six — drop one first.');
   });
 
+  it("lays the page's drop for files under the add box, above the slots", () => {
+    render(<DeskBoard board={snapshot()} onIntent={async () => ({ applied: true })} files={<div data-testid="drop" />} />);
+    const drop = screen.getByTestId('drop');
+    const after = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(after(screen.getByLabelText('Ticker or company to add'), drop)).toBe(true);
+    expect(after(drop, document.querySelector('.oc-slots')!)).toBe(true);
+  });
+
   it('a stock still being fetched shows no price — never a provisional one', async () => {
     fakeDesk(snapshot({ watchlist: [], focus: null, fetching: ['NVDA'] })).render();
     await screen.findByText('pulling a quote…');

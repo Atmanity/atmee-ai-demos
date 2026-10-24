@@ -1,10 +1,14 @@
 // Joining an app's avatar session from the page: start it through our own
 // server (the API key never reaches the browser), join the LiveKit room as the
 // user, wait until the avatar is on screen, then talk to it, tell it what the
-// app knows, and hear both sides of the conversation.
+// app knows, hand it files to read, and hear both sides of the conversation.
 //
 // Framework-free; src/kit/useAvatar.ts wraps it for React.
 import { Room, RoomEvent, Track } from 'livekit-client';
+import {
+  FILE, FILE_STATUS, FILES_ATTRIBUTE, MAX_FILES, FileError, agentIn, createDrops, cutCaption, openDrop,
+  type Drop, type FileAnswer, type FileOutcome, type FileProgress,
+} from './files.ts';
 import { createFloor } from './floor.ts';
 
 const CHAT = 'lk.chat';                 // a typed user turn; the avatar answers it
@@ -46,7 +50,12 @@ export interface JoinOptions {
    * avatar; a `notify` tool's is ignored. A throw becomes "error: …".
    */
   onToolCall?: (call: ToolCall) => unknown | Promise<unknown>;
+  /** Whether the host takes files now (its agent's atmee.files), each time that changes. */
+  onFilesAccepted?: (accepted: boolean) => void;
 }
+
+/** A drop's options: what the user said with it, and each file's progress as the host's agent answers it. */
+export interface SendFilesOptions { caption?: string; onStatus?: (progress: FileProgress) => void }
 
 export interface ToolCall { id: string; name: string; arguments: Record<string, unknown> }
 
@@ -60,6 +69,15 @@ export interface AvatarSession {
   note(text: string): Promise<void>;
   event(text: string, ttlS?: number): Promise<void>;
   setMicMuted(muted: boolean): Promise<void>;
+  /** Whether the host takes files (its runtime reads them): offer a drop only then. */
+  acceptsFiles(): boolean;
+  /**
+   * Drops 1 to MAX_FILES files into the call for the host to read and talk
+   * about. Resolves once every file is ready or refused, one outcome per file
+   * in order. Rejects, sending nothing, with too_many_files, or with
+   * files_unsupported when the host takes no files.
+   */
+  sendFiles(files: FileList | File[], options?: SendFilesOptions): Promise<FileOutcome[]>;
   end(): Promise<void>;
 }
 
@@ -138,11 +156,13 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
     await room.localParticipant.sendText(text, { topic });
   };
   const floor = createFloor((text) => sendText(CHAT, text));
+  const drops = createDrops();
   const endOnServer = () => fetch(endUrl, { method: 'POST', keepalive: true }).catch(() => {});
   const release = () => {
     ended = true;
     removeEventListener('pagehide', onPageHide);
     floor.close();
+    drops.refuse('unreadable');
     stopMic();
     void silence?.ctx.close();
   };
@@ -176,6 +196,47 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
     else opts.onAvatarSpeech?.(text, true);
   });
 
+  // The agent's answers about the files the user dropped, one per file and
+  // status, taken from the agent alone.
+  room.registerTextStreamHandler(FILE_STATUS, async (reader, participant) => {
+    const agent = agentIn(room);
+    if (!agent || participant?.identity !== agent.identity) return;
+    let answer: FileAnswer;
+    try {
+      answer = JSON.parse(await reader.readAll());
+    } catch {
+      return;
+    }
+    if (typeof answer?.batchId === 'string') drops.answer(answer);
+  });
+  const acceptsFiles = () => agentIn(room)?.attributes[FILES_ATTRIBUTE] === '1';
+  // The agent says it takes files once its runtime agrees, a moment after it joins.
+  let accepting = false;
+  const checkFiles = () => {
+    const now = acceptsFiles();
+    if (now === accepting) return;
+    accepting = now;
+    opts.onFilesAccepted?.(now);
+  };
+  room.on(RoomEvent.ParticipantAttributesChanged, checkFiles);
+  room.on(RoomEvent.ParticipantConnected, checkFiles);
+  room.on(RoomEvent.ParticipantDisconnected, checkFiles);
+  // A drop to the agent alone, the caption as text and each file as its own
+  // stream on the same topic. sendText resolves once every file is out; its id
+  // is the drop's batchId.
+  const sendDrop = async (drop: Drop, caption?: string) => {
+    const agent = agentIn(room);
+    if (!agent || !acceptsFiles()) {
+      drop.fail(agent ? new FileError('files_unsupported', 'This host does not take files') : new FileError('no_agent', 'The host is not in the call'));
+      return;
+    }
+    const info = await room.localParticipant.sendText(JSON.stringify({ caption: cutCaption(caption) }), {
+      topic: FILE, attachments: drop.files, destinationIdentities: [agent.identity],
+    }).catch(() => null);
+    if (info) drops.sent(drop, info.id);
+    else drop.refuse('failed');
+  };
+
   let arrived!: () => void;
   const arrival = new Promise<void>((resolve) => { arrived = resolve; });
   room.on(RoomEvent.TrackSubscribed, (track) => {
@@ -197,7 +258,11 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
     if (floor.speaking(now)) opts.onSpeaking?.(now);
   });
   room.on(RoomEvent.AudioPlaybackStatusChanged, () => opts.onAudioBlocked?.(!room.canPlaybackAudio, () => room.startAudio()));
-  room.on(RoomEvent.Reconnecting, () => debug('reconnecting'));
+  room.on(RoomEvent.Reconnecting, () => {
+    debug('reconnecting');
+    // A reconnect cuts the streams still going out: their drops cannot finish.
+    drops.refuseUploading('unreadable');
+  });
   room.on(RoomEvent.Reconnected, () => debug('reconnected'));
   room.on(RoomEvent.SignalReconnecting, () => debug('signal reconnecting'));
   room.on(RoomEvent.ConnectionStateChanged, (state) => debug('connection', state));
@@ -234,6 +299,7 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
 
   await sleep(LINK_DELAY_MS);
   linked = true;
+  checkFiles();
   while (outbox.length) await sendText(...outbox.shift()!);
   opts.onPhase?.('live', { maxSeconds: session.maxSeconds });
 
@@ -258,6 +324,17 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
     state: (text) => send({ type: 'state', text }),
     note: (text) => send({ type: 'note', text }),
     event: (text, ttlS) => send({ type: 'event', text, ...(ttlS ? { ttl_s: ttlS } : {}) }),
+    acceptsFiles,
+    async sendFiles(files, { caption, onStatus } = {}) {
+      const list = [...(files ?? [])];
+      if (list.length > MAX_FILES) throw new FileError('too_many_files', `At most ${MAX_FILES} files in one drop`);
+      if (!list.length) return [];
+      const drop = openDrop(list, onStatus);
+      drops.add(drop);
+      if (ended) drop.refuse('unreadable');
+      else void sendDrop(drop, caption);
+      return drop.done;
+    },
     async setMicMuted(muted) {
       if (!micTrack && !muted) {
         // A typing-only session turning the mic on: a real microphone in place of the silence.

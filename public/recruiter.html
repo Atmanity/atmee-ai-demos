@@ -53,6 +53,23 @@
   .selfie small { position: absolute; bottom: 6px; left: 8px; font-size: 11px; font-weight: 500; opacity: .8; }
   .controls { display: flex; justify-content: center; gap: 12px; }
   .controls .icon-btn { width: 52px; height: 52px; }
+  /* The CV the candidate shares in the call, under the controls; it lights up while a file is dragged over the page. */
+  .cv { padding: 12px 16px; display: grid; gap: 8px; flex: none; transition: background .15s, box-shadow .15s; }
+  .cv.over { background: var(--accent-soft); box-shadow: var(--shadow), inset 0 0 0 2px var(--accent); }
+  .cv .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .cv .what { flex: 1 1 240px; min-width: 0; display: grid; gap: 2px; font-size: 14px; }
+  .cv .hint, .cv .problem { margin: 0; font-size: 13px; color: var(--muted); }
+  .cv .problem { color: var(--danger); }
+  .cv .row input { flex: 1 1 150px; min-width: 0; padding: 9px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); outline: none; font-size: 14px; }
+  .cv .row input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .cv .row input:disabled { opacity: .6; }
+  .cv .row .btn { padding: 9px 16px; font-size: 14px; }
+  .cv ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 92px; overflow: auto; }
+  .cv ul:empty { display: none; }
+  .cv li { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+  .cv li .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .cv li .status { flex: none; color: var(--muted); }
+  .cv li.ready .status { color: var(--ok); } .cv li.refused .status { color: var(--danger); }
   .panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
   .agenda { padding: 18px 18px 14px; border-bottom: 1px solid var(--line); }
   .agenda h2 { font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
@@ -122,6 +139,16 @@
     <div class="controls">
       <button class="icon-btn" id="mic" type="button" hidden></button>
       <button class="icon-btn end" id="hangup" type="button" title="Leave the call" aria-label="Leave the call"></button>
+    </div>
+    <div class="card cv" id="cv" hidden>
+      <div class="row">
+        <div class="what"><b>Your CV</b><p class="hint" id="cvHint"></p></div>
+        <input id="cvCaption" placeholder="Add a line with it (optional)" aria-label="A line to go with your CV (optional)" maxlength="500" autocomplete="off">
+        <button class="btn primary" id="cvPick" type="button"></button>
+      </div>
+      <input id="cvFile" type="file" accept="application/pdf,.pdf,image/*,text/plain,.txt,.md" multiple hidden>
+      <ul id="cvFiles" aria-label="Shared files"></ul>
+      <p class="problem" id="cvProblem" role="alert" hidden></p>
     </div>
   </section>
   <aside class="card panel">
@@ -207,6 +234,69 @@
     arriving: ['Waiting for your recruiter to join…', 'They will greet you in a moment.'],
   });
 
+  // The candidate's CV: dropped on the call or chosen, it goes to the
+  // recruiter, who reads it, says what stands out once on its own and asks
+  // about it from then on (the note in usecases/index.js says how). Offered
+  // only while the call is live and the recruiter takes files; every file
+  // shared in the call stays listed with how far it got.
+  const MAX_FILES = 10;
+  const FILE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3-3 3 3"/></svg>';
+  const STATUS_WORDS = { sending: 'Sending…', received: 'Received', reading: 'Reading…', ready: 'Read', refused: 'Not read' };
+  const REFUSED_WORDS = { too_large: 'too large to read', unsupported_type: "a kind of file that can't be read", too_many_files: 'one file too many', unreadable: "couldn't be read", failed: "couldn't be read" };
+  // "Read", "Reading…", "Not read: too large to read"; a file held back for its content is just "Not read".
+  const fileWords = (f) => (f.status !== 'refused' ? STATUS_WORDS[f.status] : f.reason === 'unsafe' ? STATUS_WORDS.refused : `${STATUS_WORDS.refused}: ${REFUSED_WORDS[f.reason] || REFUSED_WORDS.failed}`);
+  const listNames = (n) => (n.length < 2 ? n[0] || '' : `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`);
+  const shared = []; // every file shared in this call: { name, status, reason }
+  let cvShown = false;
+  const cvOpen = () => !!s && s.isLive() && s.acceptsFiles();
+  // Once offered, the box stays: if the recruiter stops taking files, it says so and keeps the list.
+  function paintCv() {
+    const open = cvOpen();
+    if (open) cvShown = true;
+    $('cv').hidden = !cvShown;
+    $('cvPick').disabled = $('cvCaption').disabled = !open;
+    $('cvPick').innerHTML = `${FILE_ICON}${shared.length ? 'Share another file' : 'Share your CV'}`;
+    $('cvHint').textContent = open ? 'Drop it here or choose it: a PDF, an image or a text file. Your recruiter reads it and asks you about it.' : "Your recruiter can't take files right now.";
+    $('cvFiles').innerHTML = shared.map((f) => `<li class="${f.status}"><span class="name">${UI.esc(f.name)}</span><span class="status">${UI.esc(fileWords(f))}</span></li>`).join('');
+  }
+  function cvProblem(text) { $('cvProblem').textContent = text; $('cvProblem').hidden = !text; }
+  async function shareCv(picked) {
+    const files = [...picked];
+    if (!cvOpen() || !files.length) return;
+    if (files.length > MAX_FILES) return cvProblem(`At most ${MAX_FILES} files at a time.`);
+    cvProblem('');
+    const caption = $('cvCaption').value.trim();
+    $('cvCaption').value = '';
+    const rows = files.map((file) => ({ name: file.name, status: 'sending' }));
+    shared.push(...rows); paintCv();
+    tr.user(`Shared ${listNames(rows.map((r) => r.name))}${caption ? `: “${caption}”` : ''}`);
+    try {
+      const outcome = await s.sendFiles(files, { caption: caption || undefined, onStatus: ({ index, status, reason }) => { Object.assign(rows[index], { status, reason }); paintCv(); } });
+      // A Word CV is the usual one the recruiter can't read.
+      if (outcome.some((f) => f.reason === 'unsupported_type')) cvProblem('Save it as a PDF and share it again.');
+    } catch (e) {
+      // Nothing went: the drop comes off the list, and what was typed with it goes back in the box.
+      rows.forEach((r) => shared.splice(shared.indexOf(r), 1)); paintCv();
+      if (!$('cvCaption').value) $('cvCaption').value = caption;
+      cvProblem(e.code === 'files_unsupported' ? "Your recruiter can't take files right now." : "The files couldn't be sent. Try again.");
+    }
+  }
+  $('cvPick').onclick = () => $('cvFile').click();
+  $('cvFile').onchange = () => { shareCv($('cvFile').files); $('cvFile').value = ''; };
+  // A file dragged over the page lights up the box and is shared wherever on
+  // the call it lands; when the drop isn't offered, it does nothing (rather
+  // than the browser opening the file in place of the call).
+  const carriesFiles = (e) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+  addEventListener('dragover', (e) => {
+    if (!carriesFiles(e)) return;
+    e.preventDefault();
+    const open = cvOpen();
+    e.dataTransfer.dropEffect = open ? 'copy' : 'none';
+    $('cv').classList.toggle('over', open);
+  });
+  addEventListener('dragleave', (e) => { if (!e.relatedTarget) $('cv').classList.remove('over'); });
+  addEventListener('drop', (e) => { if (!carriesFiles(e)) return; e.preventDefault(); $('cv').classList.remove('over'); shareCv(e.dataTransfer.files); });
+
   // A small live meter in the preview, so you can see the microphone works.
   async function meter(stream) {
     const ctx = new AudioContext(); const an = ctx.createAnalyser(); an.fftSize = 256;
@@ -232,9 +322,11 @@
         onUserCaption: tr.heard,
         onSpeaking: (v) => { $('stage').classList.toggle('talking', v); sender.speaking(v); },
         onRelay: debug,
+        onFilesAccepted: () => paintCv(),
         onEnd: () => finish(),
       });
       s.user('name', name);
+      paintCv();
       UI.micButton($('mic'), s);
       $('text').disabled = $('send').disabled = false; $('timechip').hidden = false;
       stopClock = UI.countdown($('timeleft'), s.session.maxSeconds, () => tr.note('About a minute left on this call'));

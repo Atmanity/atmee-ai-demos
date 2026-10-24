@@ -516,6 +516,36 @@ describe("photos", () => {
   });
 });
 
+// ------------------------------------------------- sharing with the architect
+
+describe("sharing a floor plan with the architect", () => {
+  const bare = () => snapshot({ level: level({ rooms: [], items: [], walls: [], openings: [] }), selected: null });
+
+  it("lays the drop beside her, between her and the conversation", () => {
+    render(<Studio state={snapshot()} send={fakePlanner().send} host={<p>Iris</p>} chat={<p>The conversation</p>} files={<p>The drop</p>} />);
+    const side = screen.getByLabelText("Iris, your architect");
+    expect([...side.children].map((child) => child.textContent)).toEqual(["Iris", "The drop", "The conversation"]);
+  });
+
+  it("the empty sheet offers the listing's floor plan only while she takes one", () => {
+    const { rerender } = render(<Studio state={bare()} send={fakePlanner().send} />);
+    expect(document.querySelector(".pw-empty")!.textContent).not.toContain("floor plan");
+    rerender(<Studio state={bare()} send={fakePlanner().send} files={<p>The drop</p>} />);
+    expect(screen.getByText(/Have the listing's floor plan\? Share it with her and she'll work from the sizes printed on it\./)).toBeTruthy();
+  });
+
+  it("bring your own stays the app's reader, and says where a photo for her eyes goes", () => {
+    const photos: Photos = { reading: null, onFile: () => {}, onSample: () => {} };
+    const { rerender } = render(<Studio state={snapshot()} send={fakePlanner().send} photos={photos} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Furniture" }));
+    const hint = () => screen.getByLabelText("Bring your own furniture").querySelector(".pw-hint")!.textContent;
+    expect(hint()).not.toContain("share it with her");
+    rerender(<Studio state={snapshot()} send={fakePlanner().send} photos={photos} files={<p>The drop</p>} />);
+    expect(hint()).toContain("never guessed from the picture. To hear what Iris makes of a photo, share it with her instead.");
+    expect(screen.getByText("Photo of a room")).toBeTruthy();
+  });
+});
+
 // --------------------------------------------------------------- the levels
 
 describe("two floors", () => {

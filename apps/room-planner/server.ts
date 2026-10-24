@@ -4,6 +4,8 @@
 // for the session and does the one thing that needs a key:
 //   POST /photo   a photo of a room or a piece  ->  add_item intents (kit types, never sizes)
 //   GET  /samples/room.jpg                         the "Try a sample room" photo
+// A floor plan or photo the client shares with the architect in the call never
+// comes here: it goes to her host, whose runtime reads it.
 import { readFile } from 'node:fs/promises';
 import type { AppServer } from '../../server/app-server.ts';
 import { llmAvailable, structured } from '../../server/llm.ts';

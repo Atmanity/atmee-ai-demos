@@ -1,9 +1,10 @@
 // Planwright: a home planner you talk to. Iris, the architect, changes the plan
 // by calling the planner's tools and speaks from what they return; the page
 // answers those calls from the planner it runs, shows the plan, keeps Iris's
-// picture of it current, and tells her what the client does by hand.
+// picture of it current, tells her what the client does by hand, and hands her
+// the floor plans and photos the client shares.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CallControls, CallStatus, ChatPanel, clock, HostVideo, useAvatar, useToolNet, BackToApps, useCaptionToggle, type ToolCall } from '../../../src/kit/index.ts';
+import { CallControls, CallStatus, ChatPanel, clock, FileDrop, HostVideo, PageDropGuard, useAvatar, useToolNet, BackToApps, useCaptionToggle, type ToolCall } from '../../../src/kit/index.ts';
 import { MAX_SIDE_CM, MIN_SIDE_CM, snap as toGrid } from '../engine/home.ts';
 import { contextOf, mustDo, roomSideCm } from '../engine/judge.ts';
 import type { PlanSnapshot } from '../engine/types.ts';
@@ -171,6 +172,18 @@ export function App() {
     </section>
   );
 
+  // A listing's floor plan or photos of the rooms, for Iris herself. Her host
+  // reads every file and speaks of the drop once, so the app adds no word of
+  // its own; she lays a plan out through her tools, from the sizes printed on
+  // it. A photo shared here is not read into furniture: that is Bring your own.
+  const files = avatar.filesAccepted ? (
+    <FileDrop
+      avatar={avatar} name={HOST} accept="image/*,.pdf" className="pw-files"
+      label="Share a floor plan or photos"
+      hint={`The listing's floor plan (PDF or picture) or photos of your rooms: ${HOST} works from the sizes printed on the plan.`}
+    />
+  ) : null;
+
   const chat = (
     <ChatPanel
       avatar={avatar} name={HOST} className="pw-chat" placeholder={`Ask ${HOST} for a change…`}
@@ -180,13 +193,15 @@ export function App() {
 
   return (
     <div className="pw-app">
+      {/* Until the drop is offered, a file dropped on the page is ignored: opened in the tab, it would end the call. */}
+      {!files && <PageDropGuard />}
       <header className="pw-top">
         <BackToApps avatar={avatar} name={HOST} /><Logo />
         <CallControls avatar={avatar} className="pw-controls" />
       </header>
       <Studio
         state={snap} send={(intent) => session.panel(intent)} photos={photos} notice={notice} sheetSignal={sheetSignal}
-        host={host} chat={chat} hostName={HOST}
+        host={host} chat={chat} files={files} hostName={HOST}
       />
     </div>
   );

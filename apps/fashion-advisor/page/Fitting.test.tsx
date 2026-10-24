@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { ALL_BODY_ZONES } from '../engine/items.ts';
 import type { Analysis, View } from '../engine/types.ts';
-import { Mirror, Rail, Verdict } from './Fitting.tsx';
+import { Lineup, Mirror, Rail, Verdict } from './Fitting.tsx';
 import { Lobby } from './Lobby.tsx';
 import { Notes, notesText, type Rating } from './Notes.tsx';
 
@@ -49,7 +49,7 @@ test('the front door says what Notch is and has a way in by voice and by typing'
 });
 
 describe('the mirror', () => {
-  const handlers = () => ({ onFile: vi.fn(), onExample: vi.fn(), onRestore: vi.fn() });
+  const handlers = () => ({ onFiles: vi.fn(), onExample: vi.fn(), onRestore: vi.fn() });
 
   test('empty: add a photo, or use the example outfit', () => {
     const h = handlers();
@@ -59,6 +59,19 @@ describe('the mirror', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Use an example outfit' }));
     expect(h.onExample).toHaveBeenCalled();
     expect(shown()).not.toMatch(BANNED);
+  });
+
+  test('a few photos at once, picked or dropped on the mirror, all come through to choose between', () => {
+    const h = handlers();
+    const { container } = render(<Mirror view={view({ image: null, photo: 'none', analysis: null })} preview={null} ready notice="" {...h} />);
+    expect(screen.getByText(/Torn between a few\? Drag them all onto the mirror/)).toBeTruthy();
+    const files = [new File(['a'], 'navy.jpg', { type: 'image/jpeg' }), new File(['b'], 'camel.jpg', { type: 'image/jpeg' })];
+    fireEvent.drop(container.querySelector('.nt-mirror-frame')!, { dataTransfer: { files } });
+    expect(h.onFiles).toHaveBeenLastCalledWith(files);
+    const picker = screen.getByLabelText('Choose a photo of your outfit') as HTMLInputElement;
+    expect(picker.multiple).toBe(true);
+    fireEvent.change(picker, { target: { files } });
+    expect(h.onFiles).toHaveBeenLastCalledWith(files);
   });
 
   test('before the room is open, the controls wait', () => {
@@ -87,6 +100,32 @@ describe('the mirror', () => {
   });
 });
 
+describe('the looks under the mirror', () => {
+  const looks = [{ id: 1, preview: 'blob:navy', score: 7 }, { id: 2, preview: 'blob:camel' }, { id: 3, preview: 'blob:black', score: 5 }];
+
+  test('each look, the one in the mirror, the score each has had; a tap puts another in', () => {
+    const onPick = vi.fn();
+    render(<Lineup looks={looks} inMirror={0} ready onPick={onPick} />);
+    const inMirror = screen.getByRole('button', { name: /^Look 1/ });
+    expect(inMirror.getAttribute('aria-pressed')).toBe('true');
+    expect(inMirror.textContent).toContain('7/10');
+    expect(inMirror.textContent).toContain('In the mirror');
+    expect(screen.getByRole('button', { name: /^Look 2/ }).textContent).not.toMatch(/\/10/);   // not scored yet
+    fireEvent.click(screen.getByRole('button', { name: /^Look 3/ }));
+    expect(onPick).toHaveBeenCalledWith(2);
+    fireEvent.click(inMirror);
+    expect(onPick).toHaveBeenCalledTimes(1);   // the one in the mirror is already there
+    expect(shown()).not.toMatch(BANNED);
+  });
+
+  test('while a photo goes up the looks wait; one photo is no choice, so nothing shows', () => {
+    const { rerender, container } = render(<Lineup looks={looks} inMirror={0} ready={false} onPick={vi.fn()} />);
+    expect((screen.getByRole('button', { name: /^Look 2/ }) as HTMLButtonElement).disabled).toBe(true);
+    rerender(<Lineup looks={looks.slice(0, 1)} inMirror={0} ready onPick={vi.fn()} />);
+    expect(container.textContent).toBe('');
+  });
+});
+
 describe('the verdict', () => {
   const handlers = () => ({ onRerate: vi.fn(), onOccasion: vi.fn(), onChangeOccasion: vi.fn() });
 
@@ -100,6 +139,19 @@ describe('the verdict', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Set' }));
     expect(h.onOccasion).toHaveBeenLastCalledWith('a rooftop birthday');
     expect(shown()).not.toMatch(BANNED);
+  });
+
+  test('in a call where Emery takes files, the invitation can be shown to her; otherwise it is not offered', () => {
+    const onInvitation = vi.fn();
+    const { rerender } = render(<Verdict view={view({ target: '', analysis: null, image: null })} failed={false} delta={null} ready {...handlers()} onInvitation={onInvitation} />);
+    expect(screen.getByText(/Got an invitation or a dress code\?/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Show it to Emery' })).toBeTruthy();
+    const invite = new File(['%PDF'], 'invite.pdf', { type: 'application/pdf' });
+    fireEvent.change(screen.getByLabelText('Share the invitation'), { target: { files: [invite] } });
+    expect(onInvitation).toHaveBeenCalledWith([invite]);
+    expect(shown()).not.toMatch(BANNED);
+    rerender(<Verdict view={view({ target: '', analysis: null, image: null })} failed={false} delta={null} ready {...handlers()} />);
+    expect(screen.queryByRole('button', { name: 'Show it to Emery' })).toBeNull();
   });
 
   test('an occasion and no photo: the outfit is next', () => {
