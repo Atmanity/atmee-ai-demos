@@ -74,15 +74,22 @@ export class RenderError extends Error {
 /**
  * The pieces sent and not yet played, oldest first: the avatar plays them in
  * order and reports each one's end, so its reports settle them in order too.
+ * A piece is given up on only once it is the one playing and runs past its
+ * deadline: one queued behind a long recording waits its turn.
  */
 export function createPlayback() {
-  const waiting: { resolve: (p: Played) => void; timer: ReturnType<typeof setTimeout> }[] = [];
+  type Entry = { resolve: (p: Played) => void; deadlineMs: number; timer?: ReturnType<typeof setTimeout> };
+  const waiting: Entry[] = [];
+  const armHead = () => {
+    const head = waiting[0];
+    if (head && !head.timer) head.timer = setTimeout(() => settle(head, { interrupted: true, position: 0 }), head.deadlineMs);
+  };
   return {
-    /** A piece is out; give up on it after `deadlineMs` (the avatar never said it played). */
+    /** A piece is out; give up on it `deadlineMs` after its turn comes (the avatar never said it played). */
     add(deadlineMs: number): Promise<Played> {
       return new Promise<Played>((resolve) => {
-        const entry = { resolve, timer: setTimeout(() => settle(entry, { interrupted: true, position: 0 }), deadlineMs) };
-        waiting.push(entry);
+        waiting.push({ resolve, deadlineMs });
+        armHead();
       });
     },
     /** The avatar's lk.playback_finished: it settles the oldest piece; a cut one takes the rest with it. */
@@ -101,12 +108,13 @@ export function createPlayback() {
     },
     get pending() { return waiting.length; },
   };
-  function settle(entry: (typeof waiting)[number], played: Played) {
+  function settle(entry: Entry, played: Played) {
     const at = waiting.indexOf(entry);
     if (at < 0) return;
     waiting.splice(at, 1);
     clearTimeout(entry.timer);
     entry.resolve(played);
+    armHead();
   }
 }
 
@@ -165,7 +173,8 @@ export async function renderAvatar(opts: RenderOptions): Promise<RenderedAvatar>
   // The avatar's tracks: its voice first (its video is published once someone listens), then its face.
   let videoPlaying = false;
   let resolveArrival: () => void = () => {};
-  const arrival = new Promise<void>((resolve) => { resolveArrival = resolve; });
+  let failArrival: (err: RenderError) => void = () => {};
+  const arrival = new Promise<void>((resolve, reject) => { resolveArrival = resolve; failArrival = reject; });
   room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack, _pub, participant: RemoteParticipant) => {
     if (participant.identity !== info.avatarIdentity) return;
     if (track.kind === Track.Kind.Audio) {
@@ -194,6 +203,8 @@ export async function renderAvatar(opts: RenderOptions): Promise<RenderedAvatar>
   async function finish(reason: string) {
     if (ended) return;
     ended = true;
+    // Gone before the face appeared: the start fails now, not at the arrival timeout.
+    failArrival(new RenderError(reason));
     removeEventListener('pagehide', onHide);
     playback.cutAll();
     setSpeaking(false);
@@ -211,12 +222,15 @@ export async function renderAvatar(opts: RenderOptions): Promise<RenderedAvatar>
     throw new RenderError('connect_failed', (err as Error).message);
   }
   opts.onPhase?.('arriving');
-  const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new RenderError('arrival_timeout')), ARRIVAL_TIMEOUT_MS));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new RenderError('arrival_timeout')), ARRIVAL_TIMEOUT_MS); });
   try {
     await Promise.race([arrival, timeout]);
   } catch (err) {
-    await finish('arrival_timeout');
+    await finish((err as RenderError).code ?? 'arrival_timeout');
     throw err;
+  } finally {
+    clearTimeout(timer);
   }
   opts.onPhase?.('live');
 
@@ -244,7 +258,7 @@ export async function renderAvatar(opts: RenderOptions): Promise<RenderedAvatar>
       async end() {
         if (closed) return { interrupted: true, position: 0 };
         closed = true;
-        // Given up on a while after it should have played: the avatar plays in real time, behind any earlier piece.
+        // Given up on a while after it should have played, counted from its turn: the avatar plays in real time.
         const done = playback.add((samples / SAMPLE_RATE + 30) * 1000);
         await writer.close();
         return done;

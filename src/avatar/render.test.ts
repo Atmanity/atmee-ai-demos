@@ -60,6 +60,22 @@ describe("the avatar's reports settle the pieces sent, in order", () => {
     expect(playback.pending).toBe(0);
   });
 
+  test("a piece's deadline runs from its turn: one behind a long piece is not given up on early", async () => {
+    const playback = createPlayback();
+    const long = playback.add(40_000);
+    const next = playback.add(40_000);
+    let settled = false;
+    void next.then(() => { settled = true; });
+    vi.advanceTimersByTime(35_000);
+    playback.finished({ interrupted: false, position: 35 });
+    expect(await long).toEqual({ interrupted: false, position: 35 });
+    vi.advanceTimersByTime(30_000);           // 65 s after it was sent, 30 s into its turn
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    vi.advanceTimersByTime(10_000);
+    expect(await next).toEqual({ interrupted: true, position: 0 });
+  });
+
   test('a report with nothing waiting is ignored', () => {
     const playback = createPlayback();
     expect(() => playback.finished({ interrupted: false, position: 1 })).not.toThrow();

@@ -38,6 +38,8 @@ const ERRORS: Record<string, string> = {
   insufficient_credits: 'Paused right now. Please try again later.',
   api_key_spend_cap_reached: 'Paused right now. Please try again later.',
   arrival_timeout: 'The face did not appear in time. A second try usually works.',
+  avatar_left: 'The face left before it appeared. Try again.',
+  disconnected: 'The connection dropped before the face appeared. Try again.',
   connect_failed: 'We could not join the room. Check your connection and try again.',
   backend_unreachable: 'We could not reach the server. Check your connection and try again.',
 };

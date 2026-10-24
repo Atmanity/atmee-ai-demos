@@ -11,6 +11,7 @@ export interface MicTap {
   level: number;
   /** Why the microphone could not start, in the user's words, or ''. */
   error: string;
+  /** Starts the tap; false when it could not, or when stop() came first (the button was let go). */
   begin(onPcm: (pcm: Int16Array) => void): Promise<boolean>;
   stop(): Promise<void>;
 }
@@ -23,13 +24,20 @@ export function useMicTap(): MicTap {
   const [error, setError] = useState('');
   const stream = useRef<MediaStream | null>(null);
   const untap = useRef<(() => Promise<void>) | null>(null);
+  // Each begin and each stop takes a number: a begin that finds a newer one when its awaits
+  // return was let go meanwhile (a permission prompt, the worklet loading) and does not start.
+  const turn = useRef(0);
 
   const begin = useCallback(async (onPcm: (pcm: Int16Array) => void) => {
     if (untap.current) return true;
+    const mine = ++turn.current;
     setError('');
     try {
       stream.current ??= await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } });
-      untap.current = await tapMicrophone(stream.current, (pcm) => { setLevel(Math.min(1, rms(pcm) * 4)); onPcm(pcm); });
+      if (mine !== turn.current) return false;
+      const stopTap = await tapMicrophone(stream.current, (pcm) => { setLevel(Math.min(1, rms(pcm) * 4)); onPcm(pcm); });
+      if (mine !== turn.current) { await stopTap(); return false; }
+      untap.current = stopTap;
       setOn(true);
       return true;
     } catch (err) {
@@ -40,6 +48,7 @@ export function useMicTap(): MicTap {
   }, []);
 
   const stop = useCallback(async () => {
+    turn.current++;
     const done = untap.current;
     untap.current = null;
     setOn(false);

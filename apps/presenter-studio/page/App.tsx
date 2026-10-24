@@ -40,6 +40,8 @@ export function App() {
   const [onAir, setOnAir] = useState('');
   const writer = useRef<SpeechWriter | null>(null);
   const liveSamples = useRef(0);
+  // Whether the talk button is down now: a press let go while the piece or the microphone was still opening ends there.
+  const holding = useRef(false);
 
   useEffect(() => {
     void fetch(`${API}/voices`).then((r) => r.json()).then((d) => { setVoices(d.voices ?? []); setStyles(d.styles ?? []); }).catch(() => {});
@@ -101,21 +103,24 @@ export function App() {
   }
 
   async function liveStart() {
-    if (!live || writer.current) return;
+    if (!live || writer.current || holding.current) return;
+    holding.current = true;
     setProblem('');
     const opened = await face.open();
-    if (!opened) return;
+    if (!opened) { holding.current = false; return; }
     writer.current = opened;
     liveSamples.current = 0;
+    if (!holding.current) { await liveEnd(); return; }
     setOnAir('Live · your voice');
     const ok = await mic.begin((pcm) => { liveSamples.current += pcm.length; void writer.current?.write(pcm); });
-    if (!ok) { await liveEnd(); }
+    if (!ok) await liveEnd();
   }
   async function liveEnd() {
+    holding.current = false;
+    await mic.stop();
     const open = writer.current;
     if (!open) return;
     writer.current = null;
-    await mic.stop();
     const seconds = liveSamples.current / SAMPLE_RATE;
     const played = await open.end();
     if (seconds > 0.2) note({ source: 'Live · your voice', seconds, outcome: played.interrupted ? 'cut' : 'played' });

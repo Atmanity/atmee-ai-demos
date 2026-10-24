@@ -122,10 +122,11 @@ export function App() {
     await mic.begin((pcm) => recording.current.push(pcm));
   }
   async function holdEnd() {
-    if (!mic.on) return;
+    // Always stopped: a press let go while the microphone was still starting must not start it.
     await mic.stop();
     const pcm = joinPcm(recording.current);
     recording.current = [];
+    if (!pcm.length) return;
     if (pcm.length < 16_000 * 0.4) { setProblem('Hold the button while you speak, then let go.'); return; }
     await ask({ audio: toBase64(wavFile(pcm)) });
   }

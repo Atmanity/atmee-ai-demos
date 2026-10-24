@@ -29,5 +29,5 @@ Routes, under `/api/apps/presenter-studio`: `GET /voices` (the voices and styles
 
 ## Staging, 2026-10-24
 
-All three sources went on air and played through: a 21 s script in Kore read calmly, an 8 s
-recording, 6 s of live microphone (Remy's own audio muted meanwhile).
+All three sources went on air and played through: a 22 s script in Kore read calmly, a 33 s
+recording sent as four pieces, 6 s of live microphone (Remy's own audio muted meanwhile).
