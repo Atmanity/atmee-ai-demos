@@ -7,7 +7,7 @@
 // Photos and files the user shares she sees herself; the app's own reader
 // still makes every photo's card.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CallControls, CallStatus, ChatPanel, FileError, HostVideo, MAX_FILES, REFUSED_WORDS, useAvatar, useToolNet, BackToApps, useCaptionToggle, type FileOutcome, type FileProgress, type SharedFile, type ToolCall } from '../../../src/kit/index.ts';
+import { CallControls, CallStatus, ChatPanel, FileError, HostVideo, MAX_FILES, REFUSED_WORDS, useAvatar, usePageDrop, useToolNet, BackToApps, useCaptionToggle, type FileOutcome, type FileProgress, type SharedFile, type ToolCall } from '../../../src/kit/index.ts';
 import { recipeKey } from '../engine/advisor.ts';
 import { nextBatch, pick, started, unstarted, type Cook } from '../engine/cook.ts';
 import { boardState, NOTES, photosTold, pressed, said, SERVER_TOOLS, type Screen } from '../engine/director.ts';
@@ -382,6 +382,9 @@ export function App() {
   /** The words for a drop's files Rachel could not read. */
   const refusedWords = (refused: FileOutcome[]) =>
     `Not read by ${HOST}: ${refused.map((file) => `${file.name} (${REFUSED_WORDS[file.reason ?? ''] ?? REFUSED_WORDS.failed})`).join(', ')}.`;
+
+  // Files dropped anywhere else on the page go where a drop on the table does; the browser never opens them.
+  usePageDrop((files) => void addFiles(files));
 
   /**
    * Photos and files the user adds or drops. While Rachel takes files, every

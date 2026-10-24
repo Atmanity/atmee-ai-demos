@@ -86,6 +86,13 @@ async function liveCall(id: string, first: View = empty()) {
   phase('live');
 }
 
+const strayDrop = (files: File[]) => {
+  const event = new Event('drop', { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', { value: { types: ['Files'], files } });
+  document.body.dispatchEvent(event);
+  return event;
+};
+
 test('a table set for a failed call never replaces the one set for the call placed after it', async () => {
   fake.phase = 'starting';
   Object.assign(page, render(<App />));
@@ -254,6 +261,16 @@ describe('what the user shares', () => {
     expect(reads()).toEqual([]);
     await act(async () => { fake.drops[0].resolve(readAll(fake.drops[0].files)); });
     expect(since(told)).toEqual([]);
+  });
+
+  test('files dropped anywhere on the page go where the table takes them, and the browser never opens them', async () => {
+    fake.filesAccepted = true;
+    Object.assign(page, render(<App />));
+    await liveCall('v1');
+    let event!: Event;
+    await act(async () => { event = strayDrop([pdf('menu.pdf')]); });
+    expect(event.defaultPrevented).toBe(true);
+    expect(fake.drops.map((d) => d.files.map((f) => f.name))).toEqual([['menu.pdf']]);
   });
 
   test('when Rachel takes no files, nothing goes to her: the app reads the first photo and tells her, as before', async () => {

@@ -34,6 +34,34 @@ export function fileWords(file: SharedFile): string {
   return `${STATUS_WORDS.refused}: ${REFUSED_WORDS[file.reason ?? ''] ?? REFUSED_WORDS.failed}`;
 }
 
+/**
+ * Files dropped anywhere on the page. The browser would open them in the tab, and the call would be
+ * gone: while this is mounted, such a drop goes to `onFiles` instead. One a drop area took is not
+ * taken again. An app that takes files its own way (a mirror, a board) uses it for the rest of the page.
+ */
+export function usePageDrop(onFiles: (files: File[]) => void) {
+  const handler = useRef(onFiles);
+  handler.current = onFiles;
+  useEffect(() => {
+    const carriesFiles = (event: globalThis.DragEvent) => [...(event.dataTransfer?.types ?? [])].includes('Files');
+    const onDragOver = (event: globalThis.DragEvent) => { if (carriesFiles(event)) event.preventDefault(); };
+    const onDrop = (event: globalThis.DragEvent) => {
+      if (!carriesFiles(event) || event.defaultPrevented) return;
+      event.preventDefault();
+      handler.current([...(event.dataTransfer?.files ?? [])]);
+    };
+    addEventListener('dragover', onDragOver);
+    addEventListener('drop', onDrop);
+    return () => { removeEventListener('dragover', onDragOver); removeEventListener('drop', onDrop); };
+  }, []);
+}
+
+/** While mounted, files dropped on the page are ignored instead of opened (a page offering no drop yet). */
+export function PageDropGuard() {
+  usePageDrop(() => {});
+  return null;
+}
+
 export function FileDrop({ avatar, name = 'your host', accept, label = 'Share files', hint, caption, onFiles, onShared, className = '', children }: {
   avatar: Avatar;
   /** The host's name, for the words around the drop. */
@@ -95,22 +123,8 @@ export function FileDrop({ avatar, name = 'your host', accept, label = 'Share fi
     void share([...event.dataTransfer.files]);
   };
 
-  // A drop elsewhere on the page: shared while the drop is offered, ignored
-  // otherwise, and never opened by the browser. One here has been taken already.
-  const shareRef = useRef(share);
-  shareRef.current = share;
-  useEffect(() => {
-    const carriesFiles = (event: globalThis.DragEvent) => [...(event.dataTransfer?.types ?? [])].includes('Files');
-    const onDragOver = (event: globalThis.DragEvent) => { if (carriesFiles(event)) event.preventDefault(); };
-    const onDrop = (event: globalThis.DragEvent) => {
-      if (!carriesFiles(event) || event.defaultPrevented) return;
-      event.preventDefault();
-      void shareRef.current([...(event.dataTransfer?.files ?? [])]);
-    };
-    addEventListener('dragover', onDragOver);
-    addEventListener('drop', onDrop);
-    return () => { removeEventListener('dragover', onDragOver); removeEventListener('drop', onDrop); };
-  }, []);
+  // A drop elsewhere on the page: shared while the drop is offered, ignored otherwise.
+  usePageDrop((files) => void share(files));
 
   return (
     <div

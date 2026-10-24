@@ -189,6 +189,24 @@ describe('a floor plan shared with Iris', () => {
     expect(document.body.textContent).not.toMatch(/\b(avatar|session|demo|sample|mini-app|Atmee|API|tools?|state|events?)\b/i);
   });
 
+  it('a file dropped on the page before the drop is offered is ignored, not opened; once offered, it goes to her', async () => {
+    await onTheCall();
+    const strayDrop = () => {
+      const event = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'dataTransfer', { value: { types: ['Files'], files: [new File(['%PDF'], 'plan.pdf', { type: 'application/pdf' })] } });
+      document.body.dispatchEvent(event);
+      return event;
+    };
+    let event!: Event;
+    await act(async () => { event = strayDrop(); });
+    expect(event.defaultPrevented).toBe(true);
+    expect(fake.shared).toEqual([]);
+    act(() => fake.setFiles!(true));
+    await act(async () => { event = strayDrop(); });
+    expect(event.defaultPrevented).toBe(true);
+    expect(fake.shared.map((d) => d.names)).toEqual([['plan.pdf']]);
+  });
+
   it('goes to her alone: no word from the app (her host speaks of it once) and nothing read into furniture', async () => {
     // The app's photo reader would work here (as Bring your own uses it), so a drop sent to it would show.
     const reads = vi.fn(async () => new Response('{}'));

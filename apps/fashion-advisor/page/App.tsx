@@ -12,7 +12,7 @@
 // page tells her only Notch's verdict.
 import { useEffect, useRef, useState } from 'react';
 import {
-  CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, BackToApps, useCaptionToggle, FileError, MAX_FILES, REFUSED_WORDS,
+  CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, BackToApps, useCaptionToggle, FileError, MAX_FILES, REFUSED_WORDS, usePageDrop,
   type FileOutcome, type ToolCall,
 } from '../../../src/kit/index.ts';
 import { boardState, dropCaption, HOST, said, type Sight } from '../engine/director.ts';
@@ -92,6 +92,7 @@ export function App() {
   looksRef.current = looks;
   const lookIds = useRef(0);
   const drops = useRef(0);   // the drop on show: a later one, a new fitting or the call ending replaces it
+  const shows = useRef(0);   // the look last sent to the mirror: an earlier one's late answer is let go
   const studio = useRef<string | null>(null);
   const opening = useRef(false);        // a fitting room is being opened
   const openingOwed = useRef(false);    // Emery arrived before the room was open
@@ -257,14 +258,15 @@ export function App() {
 
   // A button acts at once; Emery cannot see the screen, so she is told what was pressed and what came of it
   // (a photo shared with her in its own drop needs no telling: she reacts to the drop herself).
-  async function press(body: Button): Promise<Ran | null> {
+  // `current` says whether its answer still matters when it comes (a look tapped since has taken its place).
+  async function press(body: Button, current: () => boolean = () => true): Promise<Ran | null> {
     const id = studio.current;
     const gen = callGen.current;
     if (!id) return null;
     setTrouble('');
     try {
       const ran = await request<Ran>(`/studios/${id}/act`, body);
-      if (id !== studio.current) return null;
+      if (id !== studio.current || !current()) return null;
       apply(ran.view);
       if (ran.text) tell(ran.text, 30, gen);
       if (ran.job) {
@@ -315,19 +317,23 @@ export function App() {
     setMirrorLook(null);
   }
 
-  /** A look into the mirror through Notch's own photo path, where it is scored. */
+  /**
+   * A look into the mirror through Notch's own photo path, where it is scored. The last look sent
+   * is the one shown: an earlier one whose answer comes after it is let go, verdict and all.
+   */
   async function showLook(list: Look[], index: number, { shared, picked }: { shared?: Shared; picked: boolean }) {
     const look = list[index];
+    const show = ++shows.current;
     setPreview(look.photo.preview);
     try {
       const ran = await press({
         button: 'photo', mime: look.photo.mime, data: look.photo.data, example: look.example,
         ...(list.length > 1 ? { look: { n: index + 1, of: list.length, name: look.name, picked } } : {}),
         ...(shared ? { shared } : {}),
-      });
+      }, () => show === shows.current);
       if (ran?.job && looksRef.current[index]?.id === look.id) setMirrorLook(index);
     } finally {
-      setPreview(null);
+      if (show === shows.current) setPreview(null);
     }
   }
 
@@ -405,6 +411,10 @@ export function App() {
 
   // The looks' pictures are let go with the page (a new set lets the old go as it comes in).
   useEffect(() => () => looksRef.current.forEach((look) => URL.revokeObjectURL(look.photo.preview)), []);
+
+  // Photos dropped anywhere else on the page go to the mirror as they would on it, once the fitting
+  // room is open; never opened by the browser, which would end the call.
+  usePageDrop((files) => { if (viewRef.current) void addPhotos(files); });
 
   // "Emery has seen them" fades; what did not reach her stays until the next drop.
   useEffect(() => {

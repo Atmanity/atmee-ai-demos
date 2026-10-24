@@ -4,7 +4,7 @@
 // picture of it current, tells her what the client does by hand, and hands her
 // the floor plans and photos the client shares.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CallControls, CallStatus, ChatPanel, clock, FileDrop, HostVideo, useAvatar, useToolNet, BackToApps, useCaptionToggle, type ToolCall } from '../../../src/kit/index.ts';
+import { CallControls, CallStatus, ChatPanel, clock, FileDrop, HostVideo, PageDropGuard, useAvatar, useToolNet, BackToApps, useCaptionToggle, type ToolCall } from '../../../src/kit/index.ts';
 import { MAX_SIDE_CM, MIN_SIDE_CM, snap as toGrid } from '../engine/home.ts';
 import { contextOf, mustDo, roomSideCm } from '../engine/judge.ts';
 import type { PlanSnapshot } from '../engine/types.ts';
@@ -193,6 +193,8 @@ export function App() {
 
   return (
     <div className="pw-app">
+      {/* Until the drop is offered, a file dropped on the page is ignored: opened in the tab, it would end the call. */}
+      {!files && <PageDropGuard />}
       <header className="pw-top">
         <BackToApps avatar={avatar} name={HOST} /><Logo />
         <CallControls avatar={avatar} className="pw-controls" />

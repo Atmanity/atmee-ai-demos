@@ -36,7 +36,7 @@ vi.mock('../../../src/kit/index.ts', async () => {
   return {
     ...(await vi.importActual<typeof import('../../../src/kit/nav.tsx')>('../../../src/kit/nav.tsx')),
     ...(await vi.importActual<typeof import('../../../src/avatar/files.ts')>('../../../src/avatar/files.ts')),
-    REFUSED_WORDS: (await vi.importActual<typeof import('../../../src/kit/files.tsx')>('../../../src/kit/files.tsx')).REFUSED_WORDS,
+    ...(({ REFUSED_WORDS, usePageDrop }) => ({ REFUSED_WORDS, usePageDrop }))(await vi.importActual<typeof import('../../../src/kit/files.tsx')>('../../../src/kit/files.tsx')),
     useToolNet,
     useAvatar: (_app: string, handlers: typeof fake.handlers) => {
       const [phase, setPhase] = useState('idle');
@@ -94,6 +94,8 @@ let models: FakeModels;
 let fitting: Fitting;
 let toolsSeen: string[];
 let pressed: Record<string, unknown>[];   // the button presses that reached the server
+// A look whose answer the network holds back (the server has done it, in order): released by the test.
+let holdLook: { n: number; until: Promise<void> } | null;
 async function server(input: unknown, init?: RequestInit) {
   const url = String(input);
   const reply = (data: unknown, status = 200) => ({ ok: status < 300, status, json: async () => data, blob: async () => new Blob([new Uint8Array(400)], { type: 'image/jpeg' }) });
@@ -107,7 +109,13 @@ async function server(input: unknown, init?: RequestInit) {
     return reply({ id: 's1', view: fitting.view() });
   }
   if (path === '/studios/s1/tool') { toolsSeen.push(body.name); return reply(fitting.do(intentOfTool(body.name, body.arguments)!, { by: 'host' })); }
-  if (path === '/studios/s1/act') { pressed.push(body); const b = intentOfButton(body)!; return reply(fitting.do(b.intent, { by: 'user', pressed: b.pressed })); }
+  if (path === '/studios/s1/act') {
+    pressed.push(body);
+    const b = intentOfButton(body)!;
+    const done = fitting.do(b.intent, { by: 'user', pressed: b.pressed });
+    if (holdLook && body.look?.n === holdLook.n) await holdLook.until;
+    return reply(done);
+  }
   const job = /^\/studios\/s1\/jobs\/([^/]+)\/([^/]+)$/.exec(path);
   if (job) return reply(await fitting.step(job[1], job[2] as Milestone));
   if (path === '/studios/s1') return reply({ view: fitting.view() });
@@ -137,6 +145,7 @@ beforeEach(() => {
   models = new FakeModels();
   toolsSeen = [];
   pressed = [];
+  holdLook = null;
   vi.stubGlobal('fetch', vi.fn(server));
   URL.revokeObjectURL = vi.fn();
 });
@@ -283,6 +292,39 @@ describe('photos Emery sees', () => {
     await waitFor(() => expect(screen.getByRole('img', { name: '6 out of 10' })).toBeTruthy());
     expect(models.reads).toHaveLength(reads);
     await waitFor(() => expect(lastState()).toContain('1. "navy.jpg" (in the mirror): 6/10; 2. "camel.jpg": 8/10.'));
+  });
+
+  test('a new set dropped while a look is on its way: the late answer for the old look is let go, never shown or told', async () => {
+    fake.filesAccepted = true;
+    models.scores = [6, 8, 7];
+    await inTheRoom();
+    await tool('rate_outfit', { occasion: 'dinner out' });
+    await dropOnMirror([photo('navy.jpg'), photo('camel.jpg')]);
+    await waitFor(() => expect(screen.getByRole('img', { name: '6 out of 10' })).toBeTruthy());
+    let release!: () => void;
+    holdLook = { n: 2, until: new Promise<void>((resolve) => { release = resolve; }) };
+    fireEvent.click(look(2));
+    await waitFor(() => expect(pressed.at(-1)).toMatchObject({ look: { n: 2, name: 'camel.jpg' } }));
+    holdLook = { n: 99, until: holdLook.until };   // only that one answer is held
+    await dropOnMirror([photo('linen.jpg'), photo('denim.jpg')]);
+    await waitFor(() => expect(look(1).textContent).toContain('In the mirror'));
+    await act(async () => { release(); await new Promise((resolve) => setTimeout(resolve, 50)); });
+    expect(look(1).textContent).toContain('In the mirror');
+    expect(fake.events.join('\n')).not.toMatch(/camel\.jpg/);
+  });
+
+  test('photos dropped anywhere on the page go to the mirror as on it, and the browser never opens them', async () => {
+    fake.filesAccepted = true;
+    models.scores = [7];
+    await inTheRoom();
+    await tool('rate_outfit', { occasion: 'dinner out' });
+    const drop = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, 'dataTransfer', { value: { types: ['Files'], files: [photo('navy.jpg')] } });
+    await act(async () => { document.querySelector('.nt-looks, .nt-verdict, main')!.dispatchEvent(drop); });
+    expect(drop.defaultPrevented).toBe(true);
+    await waitFor(() => expect(screen.getByRole('img', { name: '7 out of 10' })).toBeTruthy());
+    expect(pressed.some((body) => body.button === 'photo')).toBe(true);
+    expect(fake.drops).toHaveLength(1);
   });
 
   test('the example outfit is shown to her too, and only its verdict is told', async () => {
