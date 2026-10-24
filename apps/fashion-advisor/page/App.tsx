@@ -123,12 +123,14 @@ export function App() {
   }
 
   /** Follow a job's milestones: each brings a newer board. The result milestone's words are returned; the others are told (in call `gen` only). */
-  function follow(id: string, job: NonNullable<Ran['job']>, result: Milestone | null, gen: number): Promise<string | null> {
+  function follow(id: string, job: NonNullable<Ran['job']>, result: Milestone | null, gen: number,
+    current: () => boolean = () => true): Promise<string | null> {
     return new Promise((resolve) => {
       void (async () => {
         for (const m of job.milestones) {
           const step = await request<Step>(`/studios/${id}/jobs/${job.id}/${m}`).catch(() => null);
-          if (id !== studio.current) break;
+          // A fitting closed since, or a look replaced since (its reading is of no use now).
+          if (id !== studio.current || !current()) break;
           if (!step) continue;
           apply(step.view);
           if (m === result) resolve(step.text);
@@ -258,7 +260,7 @@ export function App() {
 
   // A button acts at once; Emery cannot see the screen, so she is told what was pressed and what came of it
   // (a photo shared with her in its own drop needs no telling: she reacts to the drop herself).
-  // `current` says whether its answer still matters when it comes (a look tapped since has taken its place).
+  // `current` says whether its answer, and the work it starts, still matter (a look sent since has taken its place).
   async function press(body: Button, current: () => boolean = () => true): Promise<Ran | null> {
     const id = studio.current;
     const gen = callGen.current;
@@ -270,8 +272,8 @@ export function App() {
       apply(ran.view);
       if (ran.text) tell(ran.text, 30, gen);
       if (ran.job) {
-        const outcome = follow(id, ran.job, ran.result ?? null, gen);
-        if (ran.result) void outcome.then((text) => { if (text && id === studio.current) tell(text, 60, gen); });
+        const outcome = follow(id, ran.job, ran.result ?? null, gen, current);
+        if (ran.result) void outcome.then((text) => { if (text && id === studio.current && current()) tell(text, 60, gen); });
       }
       return ran;
     } catch (err) {

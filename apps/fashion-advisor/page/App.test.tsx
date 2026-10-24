@@ -96,6 +96,8 @@ let toolsSeen: string[];
 let pressed: Record<string, unknown>[];   // the button presses that reached the server
 // A look whose answer the network holds back (the server has done it, in order): released by the test.
 let holdLook: { n: number; until: Promise<void> } | null;
+// A look whose reading the network holds back once its photo is in: its job's steps wait for the test.
+let holdReading: { n: number; until: Promise<void>; job?: string } | null;
 async function server(input: unknown, init?: RequestInit) {
   const url = String(input);
   const reply = (data: unknown, status = 200) => ({ ok: status < 300, status, json: async () => data, blob: async () => new Blob([new Uint8Array(400)], { type: 'image/jpeg' }) });
@@ -113,11 +115,16 @@ async function server(input: unknown, init?: RequestInit) {
     pressed.push(body);
     const b = intentOfButton(body)!;
     const done = fitting.do(b.intent, { by: 'user', pressed: b.pressed });
+    if (holdReading && body.look?.n === holdReading.n) holdReading.job = done.job?.id;
     if (holdLook && body.look?.n === holdLook.n) await holdLook.until;
     return reply(done);
   }
   const job = /^\/studios\/s1\/jobs\/([^/]+)\/([^/]+)$/.exec(path);
-  if (job) return reply(await fitting.step(job[1], job[2] as Milestone));
+  if (job) {
+    const step = await fitting.step(job[1], job[2] as Milestone);
+    if (holdReading && job[1] === holdReading.job) await holdReading.until;
+    return reply(step);
+  }
   if (path === '/studios/s1') return reply({ view: fitting.view() });
   return reply({ error: 'not_found' }, 404);
 }
@@ -146,6 +153,7 @@ beforeEach(() => {
   toolsSeen = [];
   pressed = [];
   holdLook = null;
+  holdReading = null;
   vi.stubGlobal('fetch', vi.fn(server));
   URL.revokeObjectURL = vi.fn();
 });
@@ -311,6 +319,26 @@ describe('photos Emery sees', () => {
     await act(async () => { release(); await new Promise((resolve) => setTimeout(resolve, 50)); });
     expect(look(1).textContent).toContain('In the mirror');
     expect(fake.events.join('\n')).not.toMatch(/camel\.jpg/);
+  });
+
+  test('a new set dropped while a look is being read: that reading is never shown or told when it comes', async () => {
+    fake.filesAccepted = true;
+    models.scores = [6, 8, 7];
+    await inTheRoom();
+    await tool('rate_outfit', { occasion: 'dinner out' });
+    await dropOnMirror([photo('navy.jpg'), photo('camel.jpg')]);
+    await waitFor(() => expect(screen.getByRole('img', { name: '6 out of 10' })).toBeTruthy());
+    let release!: () => void;
+    holdReading = { n: 2, until: new Promise<void>((resolve) => { release = resolve; }) };
+    fireEvent.click(look(2));
+    await waitFor(() => expect(holdReading!.job).toBeTruthy());
+    await dropOnMirror([photo('linen.jpg'), photo('denim.jpg')]);
+    await waitFor(() => expect(screen.getByRole('img', { name: '7 out of 10' })).toBeTruthy());
+    const told = fake.events.length;
+    await act(async () => { release(); await new Promise((resolve) => setTimeout(resolve, 50)); });
+    expect(screen.getByRole('img', { name: '7 out of 10' })).toBeTruthy();
+    expect(screen.queryByRole('img', { name: '8 out of 10' })).toBeNull();
+    expect(fake.events.slice(told).join('\n')).not.toMatch(/8 out of 10/);
   });
 
   test('photos dropped anywhere on the page go to the mirror as on it, and the browser never opens them', async () => {
