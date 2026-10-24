@@ -54,6 +54,8 @@
   .mode a:hover { color: var(--text); }
   .mode a[aria-current] { background: var(--accent); color: var(--accent-ink); }
   @media (max-width: 900px) { .studio { grid-template-columns: 1fr; height: auto; } .chatcol { height: 70vh; border-left: 0; border-top: 1px solid var(--line); } .stats { grid-template-columns: 1fr 1fr 1fr; } }
+  /* A phone: the bar keeps the brand, the switch and the state, and wraps rather than widening the page. */
+  @media (max-width: 560px) { .topbar { flex-wrap: wrap; gap: 8px 10px; } .brand { font-size: 16px; } .brand small { display: none; } .mode a { padding: 6px 11px; } }
 </style>
 </head>
 <body>

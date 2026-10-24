@@ -56,7 +56,7 @@ vi.mock('../../../src/kit/index.ts', async (importOriginal) => {
   };
 });
 
-import { App } from './App.tsx';
+import { App, lastWords } from './App.tsx';
 
 // jsdom lays nothing out, so the conversation has nothing to scroll.
 Element.prototype.scrollTo ??= function scrollTo() {};
@@ -264,5 +264,18 @@ describe('after the call', () => {
     expect(screen.getByText('Your plan')).toBeTruthy();
     fireEvent.click(screen.getByText('Get the drawing sheet'));
     await waitFor(() => expect(screen.getByAltText('Drawing sheet')).toBeTruthy());
+  });
+});
+
+describe('what Iris is saying, beside her on a phone', () => {
+  it('is the newest words, from a whole word, marked as cut', () => {
+    expect(lastWords('Two bedrooms then.')).toBe('Two bedrooms then.');
+    const long = 'I have spent twenty years designing real homes, and I think in square metres to make sure every layout actually functions. How big is the space?';
+    const shown = lastWords(long);
+    expect(shown.startsWith('…')).toBe(true);
+    expect(shown.endsWith('How big is the space?')).toBe(true);
+    expect(shown.length).toBeLessThanOrEqual(73);
+    expect(long.includes(shown.slice(1))).toBe(true);
+    expect(long.split(' ')).toContain(shown.slice(1).split(' ')[0]);
   });
 });

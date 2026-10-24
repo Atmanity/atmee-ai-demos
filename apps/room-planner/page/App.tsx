@@ -55,6 +55,14 @@ function startingSize(): { w_cm: number; h_cm: number } {
   return { w_cm: side('w', 900), h_cm: side('h', 700) };
 }
 
+/** The end of what Iris is saying, from a whole word: the newest words, as many as fit the three lines beside her on a phone. */
+export function lastWords(text: string, max = 72): string {
+  if (text.length <= max) return text;
+  const tail = text.slice(-max);
+  const space = tail.indexOf(' ');
+  return `…${space >= 0 ? tail.slice(space + 1) : tail}`;
+}
+
 export function App() {
   const [snap, setSnap] = useState<PlanSnapshot | null>(null);
   const [notice, setNotice] = useState<{ text: string; at: number } | null>(null);
@@ -151,7 +159,7 @@ export function App() {
         {live && <span className="pw-onair">On the call{avatar.secondsLeft !== null && avatar.secondsLeft <= 120 ? ` · ${clock(avatar.secondsLeft)} left` : ''}</span>}
       </div>
       {/* On a phone the video is small: what she is saying rides beside it. */}
-      {live && avatar.caption && <p className="pw-host-line" aria-hidden="true">{avatar.caption.slice(-160)}</p>}
+      {live && avatar.caption && <p className="pw-host-line" aria-hidden="true">{lastWords(avatar.caption)}</p>}
       {avatar.phase === 'ended' && snap && (
         <div className="pw-done" role="status">
           <p className="pw-eyebrow">Your plan</p>

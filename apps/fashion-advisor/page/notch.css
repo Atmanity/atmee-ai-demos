@@ -299,7 +299,8 @@ img { max-width: 100%; }
   .nt-logo { font-size: 26px; }
   .nt-pill { order: 3; width: 100%; justify-content: center; }
   /* A flex column, not a grid: a sticky grid item can only stick inside its own grid area. */
-  .nt-room { display: flex; flex-direction: column; gap: 20px; }
+  /* Stretched, not sized to their content: the rail's pieces scroll inside it rather than widening the page. */
+  .nt-room { display: flex; flex-direction: column; align-items: stretch; gap: 20px; }
   .nt-host { order: -1; position: sticky; top: 0; z-index: 20; grid-template-columns: 92px minmax(0, 1fr); margin: 0 -20px; padding: 8px 20px; background: var(--nt-blush); border-bottom: 1px solid var(--nt-line); }
   .nt-host-video { width: 92px; box-shadow: none; }
   .nt-host-video .call-status strong { font-size: 11.5px; }
