@@ -75,8 +75,28 @@ test('files dragged onto the area go like picked ones', async () => {
   const sendFiles = vi.fn(async (_files: File[]) => []);
   const { container } = render(<FileDrop avatar={fakeAvatar({ sendFiles } as never)} />);
   const area = container.querySelector('.call-files')!;
-  await act(async () => { fireEvent.drop(area, { dataTransfer: { files: [file('plan.pdf')] } }); });
+  await act(async () => { fireEvent.drop(area, { dataTransfer: { types: ['Files'], files: [file('plan.pdf')] } }); });
   expect(sendFiles.mock.calls[0][0]).toEqual([expect.objectContaining({ name: 'plan.pdf' })]);
+  expect(sendFiles).toHaveBeenCalledTimes(1);   // once, not again by the page's own catch
+});
+
+test('files dropped elsewhere on the page are shared, or ignored, but never opened by the browser', async () => {
+  const sendFiles = vi.fn(async (_files: File[]) => []);
+  const { rerender } = render(<FileDrop avatar={fakeAvatar({ sendFiles } as never)} />);
+  const dropOnPage = () => {
+    const event = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'dataTransfer', { value: { types: ['Files'], files: [file('plan.pdf')] } });
+    document.body.dispatchEvent(event);
+    return event;
+  };
+  let event!: Event;
+  await act(async () => { event = dropOnPage(); });
+  expect(event.defaultPrevented).toBe(true);
+  expect(sendFiles.mock.calls[0][0]).toEqual([expect.objectContaining({ name: 'plan.pdf' })]);
+  rerender(<FileDrop avatar={fakeAvatar({ sendFiles, filesAccepted: false } as never)} />);
+  await act(async () => { event = dropOnPage(); });
+  expect(event.defaultPrevented).toBe(true);
+  expect(sendFiles).toHaveBeenCalledTimes(1);
 });
 
 test('a refusal reads as what it means', () => {

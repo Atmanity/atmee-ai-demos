@@ -5,8 +5,9 @@
 //
 // It is offered only while the host takes files (Avatar.filesAccepted). An app
 // that reads the files itself too (a scorer of its own) gets them in onFiles
-// before they go.
-import { useRef, useState, type DragEvent, type ReactNode } from 'react';
+// before they go. Files dropped anywhere else on the page are caught too: the
+// browser would otherwise open them in the tab, and the call would be gone.
+import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { FileError, MAX_FILES, type FileOutcome, type FileProgress, type FileStatus } from '../avatar/files.ts';
 import type { Avatar } from './useAvatar.ts';
 import './files.css';
@@ -93,6 +94,23 @@ export function FileDrop({ avatar, name = 'your host', accept, label = 'Share fi
     setOver(false);
     void share([...event.dataTransfer.files]);
   };
+
+  // A drop elsewhere on the page: shared while the drop is offered, ignored
+  // otherwise, and never opened by the browser. One here has been taken already.
+  const shareRef = useRef(share);
+  shareRef.current = share;
+  useEffect(() => {
+    const carriesFiles = (event: globalThis.DragEvent) => [...(event.dataTransfer?.types ?? [])].includes('Files');
+    const onDragOver = (event: globalThis.DragEvent) => { if (carriesFiles(event)) event.preventDefault(); };
+    const onDrop = (event: globalThis.DragEvent) => {
+      if (!carriesFiles(event) || event.defaultPrevented) return;
+      event.preventDefault();
+      void shareRef.current([...(event.dataTransfer?.files ?? [])]);
+    };
+    addEventListener('dragover', onDragOver);
+    addEventListener('drop', onDrop);
+    return () => { removeEventListener('dragover', onDragOver); removeEventListener('drop', onDrop); };
+  }, []);
 
   return (
     <div
