@@ -1,12 +1,14 @@
 // What Emery is told, and how she acts. Notch decides everything: the read,
 // the score, which pieces, what is on the photo. Emery styles out loud. She
-// cannot see the user or the photo; she reaches the fitting only through the
-// tools below, and every verdict, piece and try-on comes back as a result
-// she speaks from.
+// sees the photos and files the user shares with her in the call (an outfit,
+// a few to choose between, an invitation), never the user live or a try-on;
+// she reaches the fitting only through the tools below, and every verdict,
+// piece and try-on comes back as a result she speaks from.
 //
 //   instructions()  her role and the rules that came from live failures
 //   tools()         what she can do (try-ons only when an image model is set up)
-//   boardState()    what is on the user's screen, for questions without a tool
+//   boardState()    what is on the user's screen and what she has seen of it, for questions without a tool
+//   dropCaption()   what the user says with the files they share with her
 //   say.*           what the stylist engine reports, as words to speak from
 //   said.*          the fitting's own words: the opening, a button press, a late result
 import type { AppTool } from '../../../server/app-server.ts';
@@ -25,7 +27,7 @@ const NO_TRY_ON_RULES = `- Pieces cannot be put on their photo here: never offer
 
 /** The host's rules. Try-ons are named only when an image model is set up. */
 export function instructions(tryOns: boolean): string {
-  return `You are ${HOST}, the stylist on Notch, styling one person live. On their screen: a mirror with a photo of their outfit, your verdict (a score out of 10 for what they are dressing for, what works, the one fix) and a rail of pieces to add. You cannot see them or the photo. Notch reads the photo; you reach it only through these tools, and you speak from their results.
+  return `You are ${HOST}, the stylist on Notch, styling one person live. On their screen: a mirror with a photo of their outfit, your verdict (a score out of 10 for what they are dressing for, what works, the one fix) and a rail of pieces to add. You never see them live, only what they share with you in the call (outfit photos, an invitation, a dress code), never a try-on; the board says which photos you have seen. Notch reads the photo in the mirror and alone scores it; you reach the fitting only through these tools, and you speak from their results.
 - rate_outfit: the moment they say what they are dressing for ("I'm dressing for a dinner out", "a wedding", "job interview"), even before there is a photo; when they ask to be rated, or rated again ("rate it again": no occasion); when they want the outfit judged for another occasion ("what about a first date?"). Pass the occasion only when they name one. Never give, guess or hint at a score yourself.
 - suggest_pieces: when they ask for more ideas, other pieces or what else to add. When they want the pieces to lean somewhere ("make it more streetwear", "dressier"), call it with that direction.
 ${tryOns ? TRY_ON_RULES : NO_TRY_ON_RULES}
@@ -33,8 +35,9 @@ ${tryOns ? TRY_ON_RULES : NO_TRY_ON_RULES}
 - A tool's result starts with its outcome ("Done:", "Not yet:", "Refused:"): your reply follows that outcome.
 - Questions about the score, the fix, the pieces or what is on screen: answer from the live board in your context, no tool. "I look better now, right?" is reassurance: answer from the latest verdict.
 - When they press something on screen, Notch tells you what happened; carry on from that.
-- For another photo they tap Change photo under the mirror or drop one on it; you cannot open their camera or take one. No photo? They can use the example outfit, or describe what they wear and you advise in words (a score needs a photo). If they would rather not share one, never ask again. Never ask for what they already told you: the occasion is on the board.
-- Never invent a score, a colour or a detail of their outfit. Never offer a garment that is neither on the rail nor named by them. Never body-shame or comment on weight, size or fitness: talk balance, line, proportion and colour. Never name real people, shows or brands unless they do.
+- A photo they shared: say what you see (fit, colour, line) and compare the looks they are choosing between, but a score is Notch's alone, for the look in the mirror (to score another, they tap it under the mirror). An invitation or dress code says what they are dressing for: call rate_outfit with that occasion.
+- For another photo, or a few to choose between, they tap Change photo under the mirror or drop them on it; you cannot open their camera or take one. No photo? They can use the example outfit, or describe what they wear and you advise in words (a score needs a photo). If they would rather not share one, never ask again. Never ask for what they already told you: the occasion is on the board.
+- Never invent a score, or a colour or detail of a photo you have not seen. Never offer a garment that is neither on the rail nor named by them. Never body-shame or comment on weight, size or fitness: talk balance, line, proportion and colour. Never name real people, shows or brands unless they do.
 Your voice: a supermodel best friend in their corner, warm, quick and decisive; candid, never cruel. Lead with taste: one visible reason (fit, colour, proportion, texture, silhouette) and one concrete move ("swap in", "sharpen", "ground it with"). Compliments use styling language tied to a detail ("that line is doing you favours"). Use their name once you know it. One or two short spoken sentences, at most one question, no lists. Never call yourself an assistant, and never talk about apps, tools, steps or what you are collecting.`;
 }
 
@@ -111,14 +114,36 @@ export function nextPiece(v: View, wish = ''): { item: string; reason: string } 
   return untried[0] ? { item: collapse(untried[0].item), reason: untried[0].text } : null;
 }
 
-/** What is on the user's screen, for Emery to answer from. Never an image URL or a link. */
-export function boardState(v: View): string {
-  const parts: string[] = ['Notch, the live board on their screen.'];
-  parts.push(v.target ? `Dressing for: ${v.target}.` : "Dressing for: not set yet (when they say, rate_outfit records it).");
+/**
+ * What Emery has seen, which only the page knows (it shares the photos with her): whether the
+ * photo in the mirror was shared with her in this call, and the looks the user is choosing between.
+ */
+export interface Sight {
+  /** She has seen the photo in the mirror. A try-on she never sees. */
+  mirrorSeen: boolean;
+  /** Two or more looks, in order: which is in the mirror, Notch's score for this occasion once it was there, whether she has seen it. */
+  looks?: { name: string; inMirror: boolean; seen: boolean; score?: number }[];
+}
 
+/** What is on the user's screen and what Emery has seen of it, for her to answer from. Never an image URL or a link. */
+export function boardState(v: View, sight: Sight = { mirrorSeen: false }): string {
+  const parts: string[] = ['Notch, the live board on their screen.'];
+  if (v.target) parts.push(`Dressing for: ${v.target}.`);
+  else parts.push(v.image ? "Dressing for: not set yet, so the photo can't be scored: ask what they're dressing for (when they say, rate_outfit records it)." : 'Dressing for: not set yet (when they say, rate_outfit records it).');
+
+  const looks = sight.looks && sight.looks.length > 1 ? sight.looks.slice(0, 10) : [];
+  const at = looks.findIndex((l) => l.inMirror);
+  const which = at >= 0 ? ` (look ${at + 1})` : '';
   if (!v.image) parts.push(`The mirror is empty: no photo yet. They add one ${WHERE_PHOTOS_GO}.`);
-  else if (v.image.kind === 'look') parts.push('In the mirror: their own photo.');
-  else parts.push(`In the mirror: their photo with the ${v.latestItem || v.image.item} put on by Notch (a try-on).`);
+  else if (v.image.kind === 'look') parts.push(`In the mirror: their own photo${which}. ${sight.mirrorSeen ? 'You have seen it: they shared it with you.' : "You haven't seen it: don't describe it."}`);
+  else parts.push(`In the mirror: their photo${which} with the ${v.latestItem || v.image.item} put on by Notch (a try-on, which you can't see).`);
+  if (looks.length) {
+    // Bounded: each file's name is cut so ten of them still leave the board under its limit.
+    const name = (l: { name: string }) => cleanSingleLine(l.name, Math.min(40, Math.floor(120 / looks.length)));
+    const each = looks.map((l, i) => `${i + 1}. "${name(l)}"${l.inMirror ? ' (in the mirror)' : ''}${l.score === undefined ? '' : `: ${l.score}/10`}`);
+    const unseen = looks.flatMap((l, i) => (l.seen ? [] : [i + 1]));
+    parts.push(`The looks they are choosing between, with Notch's score for this occasion once in the mirror (they tap one under it to put it there): ${each.join('; ')}.${unseen.length ? ` You haven't seen ${unseen.length === 1 ? 'look' : 'looks'} ${unseen.join(', ')}.` : ''}`);
+  }
 
   const a = v.analysis;
   if (a) {
@@ -143,6 +168,19 @@ export function boardState(v: View): string {
   if (j.more) parts.push('More pieces are on their way to the rail.');
 
   return parts.join(' ');
+}
+
+// -- what the user says with the files they share -----------------------------------
+//
+// A drop's caption, read by Emery beside the files: what they are, in the user's words.
+
+/** The caption for a drop: outfit photos (with the occasion when it is set), the example outfit, or the invitation. */
+export function dropCaption({ photos = 0, example = false, invitation = false, occasion = '' }: { photos?: number; example?: boolean; invitation?: boolean; occasion?: string }): string | undefined {
+  const forIt = occasion ? ` for ${occasionOf(occasion)}` : '';
+  if (invitation) return "The invitation: it says what I'm dressing for.";
+  if (example) return `The example outfit${forIt}.`;
+  if (photos > 1) return `${photos} outfits I'm choosing between${forIt}.`;
+  return photos === 1 ? `My outfit${forIt}.` : undefined;
 }
 
 // -- what the stylist engine reports ------------------------------------------------
@@ -301,14 +339,18 @@ export const said = {
   /** A button press, told to Emery: she cannot see the screen. */
   pressed: (what: string, outcome: string) => `The user ${what} on screen. ${outcome}`,
 
-  /** A photo landed in the mirror: said at once, so Emery knows before the verdict (which follows as photoRead). */
-  photoIn: (v: View, example: boolean) => {
-    const photo = example ? 'the example outfit' : 'their outfit photo';
-    return v.target
-      ? `Done: ${photo} is in the mirror now, and Notch is reading it for ${occasionOf(v.target)}: the verdict follows in a few seconds and you'll be told. Say you've got it in a few words; don't guess anything about it.`
-      : `Done: ${photo} is in the mirror now. To score it you need what they're dressing for: ask them.`;
-  },
-  photoRead: (outcome: string) => `The photo they just added has been read. ${outcome}`,
+  /**
+   * A photo landed in the mirror: said at once, so Emery knows before the verdict (which follows as
+   * photoRead). `seen`: she saw it when they shared it earlier in the call (one of the looks they are
+   * choosing between). A photo shared in the drop that brings it gets no such line: she reacts to
+   * that drop herself.
+   */
+  photoIn: (v: View, photo = 'their outfit photo', seen = false) => v.target
+    ? `Done: ${photo} is in the mirror now, and Notch is reading it for ${occasionOf(v.target)}: the verdict follows in a few seconds and you'll be told. Say you've got it in a few words; ${seen ? 'you saw it when they shared it, but never guess its score' : "don't guess anything about it"}.`
+    : `Done: ${photo} is in the mirror now. To score it you need what they're dressing for: ask them.`,
+  photoRead: (outcome: string) => `The photo now in the mirror has been read. ${outcome}`,
+  /** The verdict on a photo shared with Emery in the drop that brought it: about the verdict alone, since she already reacted to the photo. */
+  sharedRead: (photo: string, outcome: string) => `Notch has read ${photo}, the one in the mirror. ${outcome}`,
 
   noOccasion: () => "Not yet: there's nothing to rate against. Ask what they're dressing for.",
   readRunning: (v: View) => `Not yet: their photo is being read for ${occasionOf(v.target)} right now: the verdict lands in a moment and you'll be told. Say so in a few words; don't guess it.`,

@@ -4,16 +4,26 @@
 // mirror, the verdict and the rail, keeps Emery's picture of the board
 // current, and tells her about every button press. The board works with or
 // without her: a photo, an occasion and a verdict need no call.
+//
+// The photos the user adds (one, or a few to choose between) go to the mirror
+// one at a time, where Notch scores them. In a call where Emery takes files
+// they go to her too, all in one drop with an invitation or anything else
+// dropped beside them: she sees them and reacts to the drop herself, so the
+// page tells her only Notch's verdict.
 import { useEffect, useRef, useState } from 'react';
-import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, BackToApps, useCaptionToggle, type ToolCall } from '../../../src/kit/index.ts';
-import { boardState, HOST, said } from '../engine/director.ts';
-import type { Ran, Step } from '../engine/fitting.ts';
+import {
+  CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, BackToApps, useCaptionToggle, FileError, MAX_FILES, REFUSED_WORDS,
+  type FileOutcome, type ToolCall,
+} from '../../../src/kit/index.ts';
+import { boardState, dropCaption, HOST, said, type Sight } from '../engine/director.ts';
+import type { Ran, Shared, Step } from '../engine/fitting.ts';
 import { mustDo } from '../engine/judge.ts';
+import { stylePhraseKey } from '../engine/style.ts';
 import type { Milestone, View } from '../engine/types.ts';
-import { Mirror, OccasionPicker, Rail, Verdict } from './Fitting.tsx';
+import { Lineup, Mirror, OccasionPicker, Rail, Spinner, Verdict } from './Fitting.tsx';
 import { Lobby, Logo } from './Lobby.tsx';
 import { Notes, type Rating } from './Notes.tsx';
-import { preparePhoto } from './photo.ts';
+import { jpegName, NOT_A_PHOTO, photoFile, preparePhoto, type PreparedPhoto } from './photo.ts';
 import portrait from '../host/portrait.jpg';
 import exampleOutfit from './sample-outfit.jpg';
 import './notch.css';
@@ -23,7 +33,7 @@ const API = '/api/apps/fashion-advisor';
 const TOOL_WAIT_MS = 20_000;
 
 type Button =
-  | { button: 'photo'; mime: string; data: string; example: boolean }
+  | { button: 'photo'; mime: string; data: string; example: boolean; look?: { n: number; of: number; name: string; picked: boolean }; shared?: Shared }
   | { button: 'occasion'; occasion: string }
   | { button: 'tryOn'; piece: string; why: string }
   | { button: 'rerate' | 'more' | 'restore' };
@@ -32,6 +42,29 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(API + path, body === undefined ? undefined : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error(`${path}: ${res.status}`);
   return res.json();
+}
+
+/**
+ * A photo the user added, kept on the page so it can go back in the mirror: as Notch gets it, under
+ * its file's name (as Emery and the transcript know it). A few added at once are the looks they
+ * are choosing between; one is a set of one.
+ */
+interface Look {
+  id: number;
+  name: string;
+  photo: PreparedPhoto;
+  example: boolean;
+  /** The call it was shared with Emery in (its generation), or -1: she has it in that call only. */
+  seenIn: number;
+  /** Notch's score for it in the mirror, by occasion. */
+  scores: Record<string, number>;
+}
+
+/** What went to Emery, for the line under her name: "your photo", "your 3 photos and a file". */
+function sharedWords(photos: number, files: number): string {
+  const others = files === 1 ? 'a file' : `${files} files`;
+  if (!photos) return `your ${files === 1 ? 'file' : others}`;
+  return `your ${photos === 1 ? 'photo' : `${photos} photos`}${files ? ` and ${others}` : ''}`;
 }
 
 /** The sentence being spoken, for the phone's host strip. */
@@ -51,6 +84,14 @@ export function App() {
   const [ratings, setRatings] = useState<Rating[]>([]);
   const [notes, setNotes] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [looks, setLooks] = useState<Look[]>([]);
+  const [mirrorLook, setMirrorLook] = useState<number | null>(null);   // which look is in the mirror
+  /** The latest drop to Emery, under her name: on its way, seen, or what did not reach her. */
+  const [seeing, setSeeing] = useState<{ text: string; busy: boolean; done?: boolean } | null>(null);
+  const looksRef = useRef<Look[]>([]);
+  looksRef.current = looks;
+  const lookIds = useRef(0);
+  const drops = useRef(0);   // the drop on show: a later one, a new fitting or the call ending replaces it
   const studio = useRef<string | null>(null);
   const opening = useRef(false);        // a fitting room is being opened
   const openingOwed = useRef(false);    // Emery arrived before the room was open
@@ -155,11 +196,13 @@ export function App() {
   avatarRef.current = avatar;
   const live = avatar.phase === 'live';
 
-  /** A call is over (or never connected): its waits, its pending opening and its outcomes stay with it. */
+  /** A call is over (or never connected): its waits, its pending opening, its outcomes and its drops stay with it. */
   function endCall() {
     callGen.current += 1;
     clearWaits();
     openingOwed.current = false;
+    drops.current += 1;
+    setSeeing(null);
   }
 
   // A new call starts a new generation; one that ends or fails closes its own (also on unmount).
@@ -180,6 +223,9 @@ export function App() {
     lastRating.current = '';
     setView(null);
     setRatings([]);
+    replaceLooks([]);
+    drops.current += 1;
+    setSeeing(null);
     setTrouble('');
     setRoomFailed(false);
     try {
@@ -209,40 +255,145 @@ export function App() {
     if (avatar.phase === 'starting' && !studio.current) void openFitting();
   }, [avatar.phase]);
 
-  // A button acts at once; Emery cannot see the screen, so she is told what was pressed and what came of it.
-  async function press(body: Button) {
+  // A button acts at once; Emery cannot see the screen, so she is told what was pressed and what came of it
+  // (a photo shared with her in its own drop needs no telling: she reacts to the drop herself).
+  async function press(body: Button): Promise<Ran | null> {
     const id = studio.current;
     const gen = callGen.current;
-    if (!id) return;
+    if (!id) return null;
     setTrouble('');
     try {
       const ran = await request<Ran>(`/studios/${id}/act`, body);
-      if (id !== studio.current) return;
+      if (id !== studio.current) return null;
       apply(ran.view);
       if (ran.text) tell(ran.text, 30, gen);
       if (ran.job) {
         const outcome = follow(id, ran.job, ran.result ?? null, gen);
         if (ran.result) void outcome.then((text) => { if (text && id === studio.current) tell(text, 60, gen); });
       }
+      return ran;
     } catch (err) {
       console.warn('[notch] %s failed', body.button, err);
       setTrouble("That didn't go through. Check your connection and try again.");
+      return null;
     }
   }
 
-  async function sendPhoto(file: Blob, example = false) {
-    setTrouble('');
+  /** Emery is in the call and takes files: what the user adds is shown to her too. */
+  const canShare = () => avatarRef.current.phase === 'live' && avatarRef.current.filesAccepted;
+
+  /**
+   * Show Emery files, in one drop. She reads it and reacts by herself, so nothing more is told about
+   * it; the line under her name follows it. Each file's outcome, or null when the drop could not go.
+   */
+  function share(files: File[], caption: string | undefined, what: string): Promise<FileOutcome[] | null> {
+    const drop = ++drops.current;
+    setSeeing({ text: `${HOST} is looking at ${what}…`, busy: true });
+    return avatarRef.current.sendFiles(files, { caption }).then((outcome) => {
+      const refused = outcome.find((file) => file.status === 'refused');
+      if (drop === drops.current) {
+        setSeeing(refused
+          ? { text: `${refused.name} didn't reach ${HOST}: ${REFUSED_WORDS[refused.reason ?? ''] ?? REFUSED_WORDS.failed}.`, busy: false }
+          : { text: `${HOST} has seen ${what}.`, busy: false, done: true });
+      }
+      return outcome;
+    }, (err) => {
+      const unsupported = err instanceof FileError && err.code === 'files_unsupported';
+      if (drop === drops.current) setSeeing({ text: unsupported ? `${HOST} can't take files in this call.` : `${what[0].toUpperCase()}${what.slice(1)} didn't reach ${HOST}. Try again.`, busy: false });
+      return null;
+    });
+  }
+
+  /** Which looks Emery has, as of call `gen` (-1: none; a photo she could not read she has not seen). */
+  const markSeen = (ids: number[], gen: number) => setLooks((ls) => ls.map((look) => (ids.includes(look.id) ? { ...look, seenIn: gen } : look)));
+
+  /** A new set of looks: the old ones' pictures are let go. */
+  function replaceLooks(next: Look[]) {
+    looksRef.current.forEach((look) => URL.revokeObjectURL(look.photo.preview));
+    looksRef.current = next;
+    setLooks(next);
+    setMirrorLook(null);
+  }
+
+  /** A look into the mirror through Notch's own photo path, where it is scored. */
+  async function showLook(list: Look[], index: number, { shared, picked }: { shared?: Shared; picked: boolean }) {
+    const look = list[index];
+    setPreview(look.photo.preview);
     try {
-      const photo = await preparePhoto(file);
-      setPreview(photo.preview);
-      await press({ button: 'photo', mime: photo.mime, data: photo.data, example });
-    } catch (err) {
-      setTrouble((err as Error).message);
+      const ran = await press({
+        button: 'photo', mime: look.photo.mime, data: look.photo.data, example: look.example,
+        ...(list.length > 1 ? { look: { n: index + 1, of: list.length, name: look.name, picked } } : {}),
+        ...(shared ? { shared } : {}),
+      });
+      if (ran?.job && looksRef.current[index]?.id === look.id) setMirrorLook(index);
     } finally {
       setPreview(null);
     }
   }
-  const sendExample = () => void fetch(exampleOutfit).then((r) => r.blob()).then((blob) => sendPhoto(blob, true))
+
+  /**
+   * Photos for the mirror: one, or a few to choose between (the first goes in, the others wait
+   * under it). In a call where Emery takes files they go to her too, all in one drop with whatever
+   * was dropped beside them; Notch still scores the one in the mirror.
+   */
+  async function addPhotos(picked: File[], example = false) {
+    setTrouble('');
+    if (!picked.length) return;
+    if (picked.length > MAX_FILES) return setTrouble(`At most ${MAX_FILES} photos at a time.`);
+    const images = picked.filter((file) => file.type.startsWith('image/'));
+    const others = picked.filter((file) => !file.type.startsWith('image/'));
+    const prepared = await Promise.allSettled(images.map((file) => preparePhoto(file)));
+    const lookAt = prepared.map((r, i): Look | null => (r.status === 'fulfilled'
+      ? { id: ++lookIds.current, name: jpegName(images[i].name || 'photo.jpg'), photo: r.value, example, seenIn: -1, scores: {} } : null));
+    const fresh = lookAt.filter((look): look is Look => Boolean(look));
+    const failed = prepared.flatMap((r) => (r.status === 'rejected' ? [(r.reason as Error).message] : []));
+    const sharing = canShare();
+    if (sharing) {
+      // Each photo as the mirror shows it (one it cannot take, as it is), then whatever came with them.
+      const gen = callGen.current;
+      fresh.forEach((look) => { look.seenIn = gen; });
+      const files = [...prepared.map((r, i) => (r.status === 'fulfilled' ? photoFile(r.value, images[i].name) : images[i])), ...others];
+      const caption = dropCaption({ photos: images.length, example, occasion: viewRef.current?.target });
+      void share(files, caption, example ? 'the example outfit' : sharedWords(images.length, others.length)).then((outcome) => {
+        const missed = lookAt.flatMap((look, i) => (look && outcome?.[i]?.status !== 'ready' ? [look.id] : []));
+        if (missed.length) markSeen(missed, -1);
+      });
+    }
+    if (!fresh.length) {
+      if (failed.length || !sharing) setTrouble(failed[0] ?? NOT_A_PHOTO);
+      return;
+    }
+    replaceLooks(fresh);
+    await showLook(fresh, 0, { shared: sharing ? 'now' : undefined, picked: false });
+    if (failed.length) setTrouble(`${failed.length === 1 ? 'One photo' : `${failed.length} photos`} couldn't go in the mirror: a JPEG, PNG or WebP under 25 MB works.`);
+  }
+
+  /** Another of the looks into the mirror, for its own score. Emery saw it if it was shared in this call; if not, she is shown it now. */
+  async function pickLook(index: number) {
+    const list = looksRef.current;
+    const look = list[index];
+    if (!look || index === mirrorLook) return;
+    const gen = callGen.current;
+    let shared: Shared | undefined = avatarRef.current.phase === 'live' && look.seenIn === gen ? 'before' : undefined;
+    if (!shared && canShare()) {
+      shared = 'now';
+      markSeen([look.id], gen);
+      void share([photoFile(look.photo, look.name)], dropCaption({ photos: 1, occasion: viewRef.current?.target }), `look ${index + 1}`)
+        .then((outcome) => { if (outcome?.[0]?.status !== 'ready') markSeen([look.id], -1); });
+    }
+    await showLook(list, index, { shared, picked: true });
+  }
+
+  /** The invitation or the dress code: for Emery alone, who reads the occasion from it; never the mirror. */
+  function shareInvitation(picked: File[]) {
+    setTrouble('');
+    if (!picked.length || !canShare()) return;
+    if (picked.length > MAX_FILES) return setTrouble(`At most ${MAX_FILES} files at a time.`);
+    void share(picked, dropCaption({ invitation: true }), 'the invitation');
+  }
+
+  const sendExample = () => void fetch(exampleOutfit).then((r) => r.blob())
+    .then((blob) => addPhotos([new File([blob], 'example-outfit.jpg', { type: blob.type || 'image/jpeg' })], true))
     .catch(() => setTrouble("The example outfit didn't load. Try again, or upload your own photo."));
 
   function newFitting() {
@@ -252,18 +403,47 @@ export function App() {
     if (avatar.phase === 'ended' || avatar.phase === 'failed') void avatar.start({ mic: avatar.micOn });
   }
 
-  // A photo's local preview is let go once it is replaced.
-  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+  // The looks' pictures are let go with the page (a new set lets the old go as it comes in).
+  useEffect(() => () => looksRef.current.forEach((look) => URL.revokeObjectURL(look.photo.preview)), []);
 
-  // Emery's picture of the board follows the board.
+  // "Emery has seen them" fades; what did not reach her stays until the next drop.
+  useEffect(() => {
+    if (!seeing?.done) return;
+    const timer = setTimeout(() => setSeeing(null), 6000);
+    return () => clearTimeout(timer);
+  }, [seeing]);
+
+  /** What Emery has seen of the fitting: the photos shared with her in this call, and the looks beside the mirror. */
+  function sight(v: View): Sight {
+    const seen = (look: Look) => avatar.phase === 'live' && look.seenIn === callGen.current;
+    const occasion = stylePhraseKey(v.target);
+    const inMirror = mirrorLook === null ? undefined : looks[mirrorLook];
+    return {
+      mirrorSeen: v.image?.kind === 'look' && Boolean(inMirror && seen(inMirror)),
+      ...(looks.length > 1 ? {
+        looks: looks.map((look, i) => ({ name: look.name, inMirror: i === mirrorLook, seen: seen(look), ...(occasion && look.scores[occasion] !== undefined ? { score: look.scores[occasion] } : {}) })),
+      } : {}),
+    };
+  }
+
+  // Emery's picture of the board follows the board, and what she has seen of it.
   useEffect(() => {
     if (!view) return;
-    const text = boardState(view);
+    const text = boardState(view, sight(view));
     if (text !== lastState.current) {
       lastState.current = text;
       avatar.state(text);
     }
-  }, [view]);
+  }, [view, looks, mirrorLook, avatar.phase]);
+
+  // Each look keeps the score Notch gave it in the mirror (its own photo, not a try-on), per occasion.
+  useEffect(() => {
+    const a = view?.analysis;
+    if (!view || !a || mirrorLook === null || view.image?.kind !== 'look' || view.jobs.analysing || view.jobs.photo) return;
+    const occasion = stylePhraseKey(view.target);
+    setLooks((ls) => (!ls[mirrorLook] || ls[mirrorLook].scores[occasion] === a.style_score ? ls
+      : ls.map((look, i) => (i === mirrorLook ? { ...look, scores: { ...look.scores, [occasion]: a.style_score } } : look))));
+  }, [view, mirrorLook]);
 
   // Catalogue shots land in the background: look again while some are still rendering.
   useEffect(() => {
@@ -295,6 +475,10 @@ export function App() {
   const notice = trouble || (roomFailed ? "We couldn't open your fitting room. Start a new fitting to try again." : '') || (!failed && view?.notice ? view.notice.text : '');
   const left = avatar.secondsLeft;
   const pickOccasion = (occasion: string) => { setPicking(false); void press({ button: 'occasion', occasion }); };
+  // The invitation is offered only while Emery takes files: it goes to her alone.
+  const onInvitation = live && avatar.filesAccepted ? shareInvitation : undefined;
+  const occasionKey = stylePhraseKey(view?.target ?? '');
+  const cards = looks.map((look) => ({ id: look.id, preview: look.photo.preview, ...(occasionKey && look.scores[occasionKey] !== undefined ? { score: look.scores[occasionKey] } : {}) }));
 
   return (
     <div className="nt-app">
@@ -316,18 +500,19 @@ export function App() {
       <main className="nt-room">
         <div className="nt-mirror-cell">
           <Mirror view={view} preview={preview} ready={ready} notice={notice}
-            onFile={(file) => void sendPhoto(file)} onExample={sendExample} onRestore={() => void press({ button: 'restore' })} />
+            onFiles={(files) => void addPhotos(files)} onExample={sendExample} onRestore={() => void press({ button: 'restore' })} />
+          <Lineup looks={cards} inMirror={mirrorLook} ready={ready && !preview} onPick={(i) => void pickLook(i)} />
         </div>
 
         <div className="nt-verdict-cell">
           {picking && view?.target && (
             <div className="nt-picker" role="group" aria-label="Rate it for something else">
               <p>Same outfit, another occasion. Now: <b>{view.target}</b></p>
-              <OccasionPicker current={view.target} autoFocus onPick={pickOccasion} onClose={() => setPicking(false)} />
+              <OccasionPicker current={view.target} autoFocus onPick={pickOccasion} onClose={() => setPicking(false)} onInvitation={onInvitation} />
             </div>
           )}
           <Verdict view={view} failed={failed} delta={delta} ready={ready}
-            onRerate={() => void press({ button: 'rerate' })} onOccasion={pickOccasion} onChangeOccasion={() => setPicking(true)} />
+            onRerate={() => void press({ button: 'rerate' })} onOccasion={pickOccasion} onChangeOccasion={() => setPicking(true)} onInvitation={onInvitation} />
         </div>
 
         <aside className="nt-host" aria-label={`${HOST}, your stylist`}>
@@ -338,6 +523,7 @@ export function App() {
             <p><b>{HOST}</b> <span>your stylist</span></p>
             {live && <span className="nt-oncall">On call</span>}
             {live && avatar.speaking && avatar.caption && <p className="nt-saying">{lastWords(avatar.caption)}</p>}
+            {seeing && <p className="nt-seeing" role="status">{seeing.busy && <Spinner />}{seeing.text}</p>}
           </div>
         </aside>
 

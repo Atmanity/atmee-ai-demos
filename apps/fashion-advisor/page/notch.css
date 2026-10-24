@@ -126,6 +126,19 @@ img { max-width: 100%; }
 .nt-veil.is-drop { background: rgba(240, 195, 48, .82); color: var(--nt-ink); }
 .nt-mirror-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 18px; }
 .nt-notice { margin: 0; padding: 10px 12px; border-left: 3px solid var(--nt-pin); background: var(--nt-card); font-size: 14px; line-height: 1.45; }
+/* the looks they are choosing between, under the mirror: small prints, the one in the mirror pinned */
+.nt-looks { display: grid; gap: 8px; margin-top: 14px; }
+.nt-looks-head { margin: 0; font-size: 13.5px; color: var(--nt-muted); }
+.nt-looks-head .nt-label { color: var(--nt-rose); margin-right: 6px; }
+.nt-looks ol { list-style: none; margin: 0; padding: 3px; display: flex; gap: 10px; overflow-x: auto; scrollbar-width: thin; }
+.nt-look { position: relative; display: grid; justify-items: center; gap: 4px; width: 78px; padding: 0 0 6px; border: 1.5px solid var(--nt-line); border-radius: 2px; background: var(--nt-card); color: var(--nt-ink); cursor: pointer; }
+.nt-look img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; object-position: center 25%; }
+.nt-look-n { font: 700 11px/1.1 var(--nt-label); letter-spacing: .1em; text-transform: uppercase; }
+.nt-look-score { font: 700 15px/1 var(--nt-display); }
+.nt-look-on { position: absolute; left: 4px; right: 4px; top: 4px; padding: 2px 4px; background: var(--nt-rose); color: #fff; font: 700 9.5px/1.2 var(--nt-label); letter-spacing: .08em; text-transform: uppercase; border-radius: 2px; }
+.nt-look:hover:not(:disabled) { border-color: var(--nt-rose); }
+.nt-look.is-on { border-color: var(--nt-rose); box-shadow: 0 0 0 2px var(--nt-rose); cursor: default; }
+.nt-look:disabled:not(.is-on) { opacity: .5; cursor: default; }
 
 /* the verdict */
 .nt-picker { padding: 16px; background: var(--nt-card); border: 1.5px solid var(--nt-ink); border-radius: 4px; display: grid; gap: 12px; }
@@ -136,6 +149,8 @@ img { max-width: 100%; }
 .nt-chip { padding: 8px 14px; border-radius: 999px; border: 1.5px solid var(--nt-line); background: var(--nt-card); color: var(--nt-ink); font-weight: 600; font-size: 14px; cursor: pointer; transition: border-color .15s, background .15s; }
 .nt-chip:hover { border-color: var(--nt-rose); background: #f7edeb; }
 .nt-occasion-own { display: flex; gap: 8px; }
+.nt-invite { margin: 0; font-size: 14px; color: var(--nt-muted); }
+.nt-invite .nt-link { padding: 2px; }
 .nt-verdict { display: grid; gap: 14px; align-content: start; padding-top: 14px; border-top: 3px solid var(--nt-ink); transition: opacity .2s; }
 .nt-verdict.is-stale > :not(.nt-score):not(.nt-eyebrow) { opacity: .55; }
 .nt-verdict-title { margin: 0; font: 700 clamp(30px, 3.4vw, 42px)/1.05 var(--nt-display); letter-spacing: -0.015em; }
@@ -189,6 +204,9 @@ img { max-width: 100%; }
 .nt-oncall { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
 .nt-oncall::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--nt-tape); animation: nt-blink 1.8s ease-in-out infinite; }
 .nt-saying { display: none; }
+/* what Emery is looking at: the photos and files shared with her, as they reach her */
+.nt-seeing { width: 100%; margin: 6px 0 0; display: flex; align-items: center; gap: 8px; font-size: 13.5px; line-height: 1.35; color: rgba(255, 255, 255, .88); }
+.nt-seeing .nt-spinner { flex: none; width: 12px; height: 12px; border-width: 2px; }
 .nt-controls { margin-left: 2px; }
 
 /* the rail */

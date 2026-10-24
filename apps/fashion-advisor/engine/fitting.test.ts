@@ -131,7 +131,7 @@ describe('rating the outfit', () => {
     expect(picked.text).toContain('being read for First date right now');
     const { result } = await settle(f, photo);
     expect(photo.text).toMatch(/^The user added a new photo of their outfit on screen\. Done: their outfit photo is in the mirror now/);
-    expect(result).toMatch(/^The photo they just added has been read\. Done: the verdict is 6 out of 10 for First date/);
+    expect(result).toMatch(/^The photo now in the mirror has been read\. Done: the verdict is 6 out of 10 for First date/);
     expect(models.reads).toHaveLength(1);
   });
 
@@ -142,6 +142,55 @@ describe('rating the outfit', () => {
     expect(result).toMatch(/^Done: the same verdict as before, 6 out of 10 for dinner out/);
     expect(result).toContain("the photo and the occasion haven't changed");
     expect(models.reads).toHaveLength(reads);
+  });
+});
+
+describe('photos Emery has too', () => {
+  const OTHER = Buffer.alloc(400, 8).toString('base64');
+
+  test('shared with her in the drop that brought it: nothing said at once (she reacts to the drop herself), then Notch\'s verdict on it', async () => {
+    const { f } = fitting();
+    tool(f, 'rate_outfit', { occasion: 'dinner out' });
+    const ran = press(f, { button: 'photo', mime: 'image/jpeg', data: PHOTO, look: { n: 1, of: 3, name: 'navy.jpg' }, shared: 'now' });
+    expect(ran.text).toBeNull();
+    const { result } = await settle(f, ran);
+    expect(result).toMatch(/^Notch has read look 1 of 3 \("navy\.jpg"\), the one in the mirror\. Done: the verdict is 6 out of 10 for dinner out/);
+    expect(result).not.toMatch(/The user|added|in the mirror now/);
+  });
+
+  test('one photo, or the example, shared the same way: about the verdict alone', async () => {
+    const { f } = fitting();
+    tool(f, 'rate_outfit', { occasion: 'dinner out' });
+    expect((await settle(f, press(f, { button: 'photo', mime: 'image/jpeg', data: PHOTO, shared: 'now' }))).result).toMatch(/^Notch has read their outfit photo, the one in the mirror\. Done:/);
+    expect((await settle(f, press(f, { button: 'photo', mime: 'image/jpeg', data: OTHER, example: true, shared: 'now' }))).result).toMatch(/^Notch has read the example outfit, the one in the mirror\. Done:/);
+  });
+
+  test('a look she saw earlier, put back in the mirror: said as that look, and the same picture keeps its verdict', async () => {
+    const { f, models } = fitting();
+    models.scores = [6, 8];
+    tool(f, 'rate_outfit', { occasion: 'dinner out' });
+    await settle(f, press(f, { button: 'photo', mime: 'image/jpeg', data: PHOTO, look: { n: 1, of: 2, name: 'navy.jpg' }, shared: 'now' }));
+    const second = press(f, { button: 'photo', mime: 'image/jpeg', data: OTHER, look: { n: 2, of: 2, name: 'camel.jpg', picked: true }, shared: 'before' });
+    expect(second.text).toBe('The user put look 2 of 2 ("camel.jpg") in the mirror on screen. Done: look 2 of 2 ("camel.jpg") is in the mirror now, and Notch is reading it for dinner out: the verdict follows in a few seconds and you\'ll be told. Say you\'ve got it in a few words; you saw it when they shared it, but never guess its score.');
+    // What was pressed is said once, with the line above; the verdict follows on its own.
+    expect((await settle(f, second)).result).toMatch(/^The photo now in the mirror has been read\. Done: the verdict is 8 out of 10/);
+    const back = await settle(f, press(f, { button: 'photo', mime: 'image/jpeg', data: PHOTO, look: { n: 1, of: 2, name: 'navy.jpg', picked: true }, shared: 'before' }));
+    expect(back.result).toContain('Done: the verdict is 6 out of 10');
+    expect(models.reads).toHaveLength(2);
+  });
+
+  test('not shared with her (no call, or none that takes files): the photos are told as the press, and she knows she has not seen them', () => {
+    const { f } = fitting();
+    tool(f, 'rate_outfit', { occasion: 'dinner out' });
+    const ran = press(f, { button: 'photo', mime: 'image/jpeg', data: PHOTO, look: { n: 1, of: 3, name: 'navy.jpg' } });
+    expect(ran.text).toMatch(/^The user added 3 outfit photos to choose between on screen\. Done: look 1 of 3 \("navy\.jpg"\) is in the mirror now, .*don't guess anything about it\.$/);
+  });
+
+  test('which look it is is read leniently: anything that does not add up is left out', () => {
+    const which = (look: unknown) => (intentOfButton({ button: 'photo', mime: 'image/jpeg', data: PHOTO, look })!.intent as { which: string }).which;
+    expect(which({ n: 2, of: 3, name: '  "camel".jpg  ' })).toBe('look 2 of 3 ("camel.jpg")');
+    for (const bad of [{ n: 4, of: 3 }, { n: 1, of: 1 }, { n: 1, of: 11 }, { n: 'two', of: 3 }, 'look 2', null]) expect(which(bad)).toBe('their outfit photo');
+    expect(intentOfButton({ button: 'photo', mime: 'image/jpeg', data: PHOTO, shared: 'maybe' })!.intent).not.toHaveProperty('shared');
   });
 });
 

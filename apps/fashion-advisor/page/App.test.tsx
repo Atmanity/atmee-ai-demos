@@ -2,7 +2,8 @@
 // The page's wiring, with the call faked and the server played by a real
 // fitting over fake models: Emery's tool calls come back as the words she
 // speaks from, buttons act at once and she is told, a try-on's picture and
-// new score follow as events, and the safety net acts only when she does not.
+// new score follow as events, the safety net acts only when she does not, and
+// the photos the user adds reach her too when she takes files.
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
@@ -18,6 +19,9 @@ const fake = vi.hoisted(() => ({
   states: [] as string[],
   events: [] as string[],
   starts: [] as unknown[],
+  /** Whether the host takes files in the call, and the drops the page made. */
+  filesAccepted: false,
+  drops: [] as { names: string[]; caption?: string }[],
   handlers: {} as {
     onToolCall?: (call: { id: string; name: string; arguments: Record<string, unknown> }) => Promise<unknown>;
     onUserSaid?: (text: string, how: 'spoken' | 'typed') => void;
@@ -31,6 +35,8 @@ vi.mock('../../../src/kit/index.ts', async () => {
   const { useToolNet } = await vi.importActual<typeof import('../../../src/kit/useToolNet.ts')>('../../../src/kit/useToolNet.ts');
   return {
     ...(await vi.importActual<typeof import('../../../src/kit/nav.tsx')>('../../../src/kit/nav.tsx')),
+    ...(await vi.importActual<typeof import('../../../src/avatar/files.ts')>('../../../src/avatar/files.ts')),
+    REFUSED_WORDS: (await vi.importActual<typeof import('../../../src/kit/files.tsx')>('../../../src/kit/files.tsx')).REFUSED_WORDS,
     useToolNet,
     useAvatar: (_app: string, handlers: typeof fake.handlers) => {
       const [phase, setPhase] = useState('idle');
@@ -42,6 +48,11 @@ vi.mock('../../../src/kit/index.ts', async () => {
         state: (t: string) => fake.states.push(t),
         event: (t: string) => fake.events.push(t),
         say: () => {},
+        filesAccepted: fake.filesAccepted,
+        sendFiles: (files: File[], options?: { caption?: string }) => {
+          fake.drops.push({ names: files.map((f) => f.name), caption: options?.caption });
+          return Promise.resolve(files.map((f) => ({ name: f.name, status: 'ready' })));
+        },
       };
     },
     HostVideo: ({ children }: { children?: ReactNode }) => <div className="host">{children}</div>,
@@ -52,8 +63,15 @@ vi.mock('../../../src/kit/index.ts', async () => {
   };
 });
 
-// The photo is prepared in the browser with a canvas, which jsdom has not got.
-vi.mock('./photo.ts', () => ({ preparePhoto: async () => ({ mime: 'image/jpeg', data: Buffer.alloc(400, 7).toString('base64'), preview: 'blob:preview' }) }));
+// The photo is prepared in the browser with a canvas, which jsdom has not got. Each file is its
+// own picture (its bytes from its name), so the looks are told apart.
+vi.mock('./photo.ts', async () => ({
+  ...(await vi.importActual<typeof import('./photo.ts')>('./photo.ts')),
+  preparePhoto: async (file: File) => {
+    const bytes = new Uint8Array(400).fill([...file.name].reduce((n, c) => n + c.charCodeAt(0), 0) % 256);
+    return { mime: 'image/jpeg', data: Buffer.from(bytes).toString('base64'), preview: `blob:${file.name}`, blob: new Blob([bytes], { type: 'image/jpeg' }) };
+  },
+}));
 
 class FakeModels implements Models {
   tryOnAvailable = true;
@@ -75,6 +93,7 @@ class FakeModels implements Models {
 let models: FakeModels;
 let fitting: Fitting;
 let toolsSeen: string[];
+let pressed: Record<string, unknown>[];   // the button presses that reached the server
 async function server(input: unknown, init?: RequestInit) {
   const url = String(input);
   const reply = (data: unknown, status = 200) => ({ ok: status < 300, status, json: async () => data, blob: async () => new Blob([new Uint8Array(400)], { type: 'image/jpeg' }) });
@@ -88,7 +107,7 @@ async function server(input: unknown, init?: RequestInit) {
     return reply({ id: 's1', view: fitting.view() });
   }
   if (path === '/studios/s1/tool') { toolsSeen.push(body.name); return reply(fitting.do(intentOfTool(body.name, body.arguments)!, { by: 'host' })); }
-  if (path === '/studios/s1/act') { const b = intentOfButton(body)!; return reply(fitting.do(b.intent, { by: 'user', pressed: b.pressed })); }
+  if (path === '/studios/s1/act') { pressed.push(body); const b = intentOfButton(body)!; return reply(fitting.do(b.intent, { by: 'user', pressed: b.pressed })); }
   const job = /^\/studios\/s1\/jobs\/([^/]+)\/([^/]+)$/.exec(path);
   if (job) return reply(await fitting.step(job[1], job[2] as Milestone));
   if (path === '/studios/s1') return reply({ view: fitting.view() });
@@ -113,8 +132,11 @@ beforeEach(() => {
   fake.states.length = 0;
   fake.events.length = 0;
   fake.starts.length = 0;
+  fake.drops.length = 0;
+  fake.filesAccepted = false;
   models = new FakeModels();
   toolsSeen = [];
+  pressed = [];
   vi.stubGlobal('fetch', vi.fn(server));
   URL.revokeObjectURL = vi.fn();
 });
@@ -158,7 +180,10 @@ describe('a fitting', () => {
     await waitFor(() => expect(screen.getByRole('img', { name: '6 out of 10' })).toBeTruthy());
     // At once: the photo is in the mirror. Then the verdict, once it is read.
     await waitFor(() => expect(fake.events).toContainEqual(expect.stringMatching(/^The user chose the example outfit on screen\. Done: the example outfit is in the mirror now, and Notch is reading it for dinner out/)));
-    await waitFor(() => expect(fake.events.at(-1)).toMatch(/^The photo they just added has been read\. Done: the verdict is 6 out of 10 for dinner out/));
+    await waitFor(() => expect(fake.events.at(-1)).toMatch(/^The photo now in the mirror has been read\. Done: the verdict is 6 out of 10 for dinner out/));
+    // Emery takes no files in this call: the example is not shown to her, and the board says so.
+    expect(fake.drops).toEqual([]);
+    expect(lastState()).toContain("You haven't seen it: don't describe it.");
     expect(screen.getByText('Ground it with sharper shoes.')).toBeTruthy();
     expect(lastState()).toContain('Your verdict: 6 out of 10');
   });
@@ -204,6 +229,109 @@ describe('a fitting', () => {
     act(() => { fake.setPhase!('live'); fake.handlers.onLive!(); });
     expect(fake.events.at(-1)).toMatch(/^You have just greeted them; do not greet or introduce yourself again\. They called you back to carry on the same fitting/);
     expect(screen.getByRole('img', { name: '6 out of 10' })).toBeTruthy();
+  });
+});
+
+describe('photos Emery sees', () => {
+  const photo = (name: string) => new File(['x'], name, { type: name.endsWith('.png') ? 'image/png' : 'image/jpeg' });
+  const dropOnMirror = (files: File[]) => act(async () => { fireEvent.drop(document.querySelector('.nt-mirror-frame')!, { dataTransfer: { files } }); });
+  const photoPresses = () => pressed.filter((b) => b.button === 'photo');
+  const look = (n: number) => screen.getByRole('button', { name: new RegExp(`^Look ${n}`) });
+
+  test('a few photos dropped on the mirror: all go to Emery in one drop, the first to Notch, the rest wait under the mirror; only the verdict is told', async () => {
+    fake.filesAccepted = true;
+    await inTheRoom();
+    await tool('rate_outfit', { occasion: 'dinner out' });
+    const told = fake.events.length;
+    await dropOnMirror([photo('navy.jpg'), photo('camel.png'), photo('black.jpg')]);
+    await waitFor(() => expect(screen.getByRole('img', { name: '6 out of 10' })).toBeTruthy());
+    // One drop, each photo as the mirror shows it, with what the user is after.
+    expect(fake.drops).toEqual([{ names: ['navy.jpg', 'camel.jpg', 'black.jpg'], caption: "3 outfits I'm choosing between for dinner out." }]);
+    await waitFor(() => expect(screen.getByText('Emery has seen your 3 photos.')).toBeTruthy());
+    // Notch reads the one in the mirror only.
+    expect(photoPresses()).toEqual([expect.objectContaining({ look: { n: 1, of: 3, name: 'navy.jpg', picked: false }, shared: 'now' })]);
+    expect(models.reads).toHaveLength(1);
+    // She reacts to the drop herself: the page tells her the verdict alone, never that a photo came in.
+    await waitFor(() => expect(fake.events).toHaveLength(told + 1));
+    expect(fake.events.at(-1)).toMatch(/^Notch has read look 1 of 3 \("navy\.jpg"\), the one in the mirror\. Done: the verdict is 6 out of 10 for dinner out/);
+    // The others wait under the mirror, and the board says what she has seen.
+    expect(look(1).getAttribute('aria-pressed')).toBe('true');
+    expect(look(1).textContent).toContain('6/10');
+    expect(look(3)).toBeTruthy();
+    expect(lastState()).toContain('In the mirror: their own photo (look 1). You have seen it');
+    expect(lastState()).toContain('1. "navy.jpg" (in the mirror): 6/10; 2. "camel.jpg"; 3. "black.jpg".');
+    expect(lastState()).not.toContain("You haven't seen");
+  });
+
+  test('another look into the mirror: Notch scores it, she is not shown it twice, and each look keeps its score', async () => {
+    fake.filesAccepted = true;
+    models.scores = [6, 8];
+    await inTheRoom();
+    await tool('rate_outfit', { occasion: 'dinner out' });
+    await dropOnMirror([photo('navy.jpg'), photo('camel.jpg')]);
+    await waitFor(() => expect(screen.getByRole('img', { name: '6 out of 10' })).toBeTruthy());
+    fireEvent.click(look(2));
+    await waitFor(() => expect(screen.getByRole('img', { name: '8 out of 10' })).toBeTruthy());
+    expect(fake.drops).toHaveLength(1);
+    // She saw it in the drop: told it is in, then its verdict.
+    expect(fake.events).toContainEqual(expect.stringMatching(/^The user put look 2 of 2 \("camel\.jpg"\) in the mirror on screen\. Done: .*you saw it when they shared it, but never guess its score/));
+    await waitFor(() => expect(fake.events.at(-1)).toMatch(/^The photo now in the mirror has been read\. Done: the verdict is 8 out of 10 for dinner out/));
+    expect(look(1).textContent).toContain('6/10');
+    // Back to the first: the same picture keeps its verdict, with no second read.
+    const reads = models.reads.length;
+    fireEvent.click(look(1));
+    await waitFor(() => expect(screen.getByRole('img', { name: '6 out of 10' })).toBeTruthy());
+    expect(models.reads).toHaveLength(reads);
+    await waitFor(() => expect(lastState()).toContain('1. "navy.jpg" (in the mirror): 6/10; 2. "camel.jpg": 8/10.'));
+  });
+
+  test('the example outfit is shown to her too, and only its verdict is told', async () => {
+    fake.filesAccepted = true;
+    await inTheRoom();
+    await tool('rate_outfit', { occasion: 'dinner out' });
+    const told = fake.events.length;
+    fireEvent.click(screen.getByRole('button', { name: 'Use an example outfit' }));
+    await waitFor(() => expect(fake.events).toHaveLength(told + 1));
+    expect(fake.drops).toEqual([{ names: ['example-outfit.jpg'], caption: 'The example outfit for dinner out.' }]);
+    expect(fake.events.at(-1)).toMatch(/^Notch has read the example outfit, the one in the mirror\. Done: the verdict is 6 out of 10/);
+    expect(screen.queryByRole('region', { name: 'Your looks' })).toBeNull();   // one photo is no choice
+  });
+
+  test('when Emery takes no files: nothing goes to her; the photos still go to the mirror, told as what was pressed', async () => {
+    await inTheRoom();
+    await tool('rate_outfit', { occasion: 'dinner out' });
+    await dropOnMirror([photo('navy.jpg'), photo('camel.jpg')]);
+    await waitFor(() => expect(screen.getByRole('img', { name: '6 out of 10' })).toBeTruthy());
+    expect(fake.drops).toEqual([]);
+    expect(fake.events).toContainEqual(expect.stringMatching(/^The user added 2 outfit photos to choose between on screen\. Done: look 1 of 2 \("navy\.jpg"\) is in the mirror now.*don't guess anything about it/));
+    expect(lastState()).toContain("You haven't seen it: don't describe it.");
+    expect(lastState()).toContain("You haven't seen looks 1, 2.");
+    expect(screen.queryByRole('button', { name: 'Show it to Emery' })).toBeNull();
+    // The looks still change places, through Notch alone.
+    fireEvent.click(look(2));
+    await waitFor(() => expect(photoPresses()).toHaveLength(2));
+    expect(photoPresses()[1]).not.toHaveProperty('shared');
+    expect(fake.drops).toEqual([]);
+  });
+
+  test('more than a drop holds: nothing goes anywhere, and the user is told', async () => {
+    fake.filesAccepted = true;
+    await inTheRoom();
+    await dropOnMirror(Array.from({ length: 11 }, (_, i) => photo(`look${i}.jpg`)));
+    expect(screen.getByText('At most 10 photos at a time.')).toBeTruthy();
+    expect(fake.drops).toEqual([]);
+    expect(photoPresses()).toEqual([]);
+  });
+
+  test('the invitation goes to Emery alone: never to the mirror or to Notch', async () => {
+    fake.filesAccepted = true;
+    await inTheRoom();
+    fireEvent.change(screen.getByLabelText('Share the invitation'), { target: { files: [new File(['%PDF'], 'invite.pdf', { type: 'application/pdf' })] } });
+    await waitFor(() => expect(screen.getByText('Emery has seen the invitation.')).toBeTruthy());
+    expect(fake.drops).toEqual([{ names: ['invite.pdf'], caption: "The invitation: it says what I'm dressing for." }]);
+    expect(pressed).toEqual([]);
+    expect(screen.getByText('Add a photo of your outfit')).toBeTruthy();
+    expect(fake.events).toEqual([]);
   });
 });
 

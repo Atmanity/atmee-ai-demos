@@ -1,7 +1,8 @@
-// The fitting room: the mirror (the outfit photo, or a try-on of it), the
-// verdict (the score on a tape measure, what works, the one fix), the
-// occasion picker, and the rail of pieces. Each shows only what the view
-// holds; every control is a button press the page passes to the server.
+// The fitting room: the mirror (the outfit photo, or a try-on of it) with the
+// looks the user is choosing between under it, the verdict (the score on a
+// tape measure, what works, the one fix), the occasion picker, and the rail of
+// pieces. Each shows only what the view holds; every control is a button press
+// the page passes to the server.
 import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { HOST } from '../engine/director.ts';
 import { extractColorFromItem, inferItemBodyZone, inferItemCategory, itemsMatch } from '../engine/items.ts';
@@ -10,7 +11,7 @@ import { useRetryableImageSrc } from './useRetryableImageSrc.ts';
 
 export const OCCASIONS = ['Work day', 'Job interview', 'First date', 'Wedding guest', 'Dinner out', 'Night out', 'Weekend plans', 'Big presentation'];
 
-const Spinner = () => <span className="nt-spinner" aria-hidden="true" />;
+export const Spinner = () => <span className="nt-spinner" aria-hidden="true" />;
 export const ArrowIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9" /></svg>;
 
 function HangerIcon() {
@@ -86,14 +87,15 @@ function MirrorImage({ url, alt, dim }: { url: string; alt: string; dim: boolean
   );
 }
 
-export function Mirror({ view, preview, ready, notice, onFile, onExample, onRestore }: {
+export function Mirror({ view, preview, ready, notice, onFiles, onExample, onRestore }: {
   view: View | null;
   /** The photo being uploaded, shown at once. */
   preview: string | null;
   /** The fitting room is open: its controls work. */
   ready: boolean;
   notice: string;
-  onFile: (file: File) => void;
+  /** Photos picked or dropped: one, or a few to choose between (and in a call, anything else for Emery). */
+  onFiles: (files: File[]) => void;
   onExample: () => void;
   onRestore: () => void;
 }) {
@@ -113,7 +115,7 @@ export function Mirror({ view, preview, ready, notice, onFile, onExample, onRest
       <div className="nt-mirror-empty">
         <HangerIcon />
         <p className="nt-mirror-ask">Add a photo of your outfit</p>
-        <p className="nt-mirror-hint">Head to toe works best. Drag it onto the mirror, or</p>
+        <p className="nt-mirror-hint">Head to toe works best. Torn between a few? Drag them all onto the mirror, or</p>
         <button type="button" className="nt-primary" onClick={pick} disabled={!ready}>Upload a photo</button>
         <button type="button" className="nt-link" onClick={onExample} disabled={!ready}>Use an example outfit</button>
       </div>
@@ -136,7 +138,7 @@ export function Mirror({ view, preview, ready, notice, onFile, onExample, onRest
         className={`nt-mirror-frame${over ? ' is-over' : ''}`}
         onDragOver={(e) => { e.preventDefault(); if (ready) setOver(true); }}
         onDragLeave={() => setOver(false)}
-        onDrop={(e) => { e.preventDefault(); setOver(false); const file = e.dataTransfer.files?.[0]; if (file && ready) onFile(file); }}
+        onDrop={(e) => { e.preventDefault(); setOver(false); const files = [...(e.dataTransfer.files ?? [])]; if (files.length && ready) onFiles(files); }}
       >
         {body}
         {over && <div className="nt-veil is-drop"><p>Drop it on the mirror</p></div>}
@@ -154,10 +156,46 @@ export function Mirror({ view, preview, ready, notice, onFile, onExample, onRest
       )}
       {notice && <p className="nt-notice" role="status">{notice}</p>}
       <input
-        ref={input} type="file" accept="image/jpeg,image/png,image/webp" hidden aria-label="Choose a photo of your outfit"
-        onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ''; if (file) onFile(file); }}
+        ref={input} type="file" accept="image/jpeg,image/png,image/webp" multiple hidden aria-label="Choose a photo of your outfit"
+        onChange={(e) => { const files = [...(e.target.files ?? [])]; e.target.value = ''; if (files.length) onFiles(files); }}
       />
     </div>
+  );
+}
+
+/** A look the user added, as the lineup shows it: its picture, and Notch's score for the occasion once it has been in the mirror. */
+export interface LookCard { id: number; preview: string; score?: number }
+
+/**
+ * The looks the user is choosing between (a few photos added at once), under the mirror: which one is
+ * in it, the score each has had there for this occasion, and a tap to put another in for its own.
+ */
+export function Lineup({ looks, inMirror, ready, onPick }: {
+  looks: LookCard[];
+  inMirror: number | null;
+  ready: boolean;
+  onPick: (index: number) => void;
+}) {
+  if (looks.length < 2) return null;
+  return (
+    <section className="nt-looks" aria-label="Your looks">
+      <p className="nt-looks-head"><span className="nt-label">Your looks</span> Tap one to put it in the mirror for its score.</p>
+      <ol>
+        {looks.map((look, i) => {
+          const on = i === inMirror;
+          return (
+            <li key={look.id}>
+              <button type="button" className={`nt-look${on ? ' is-on' : ''}`} onClick={() => onPick(i)} disabled={!ready || on} aria-pressed={on}>
+                <img src={look.preview} alt="" />
+                <span className="nt-look-n">Look {i + 1}</span>
+                {look.score !== undefined && <b className="nt-look-score">{look.score}/10</b>}
+                {on && <span className="nt-look-on">In the mirror</span>}
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
   );
 }
 
@@ -183,10 +221,26 @@ function swatch(name: string): string | undefined {
   return [words.join(''), words[words.length - 1]].find((c) => c && supports('color', c));
 }
 
-export function OccasionPicker({ current, onPick, onClose, autoFocus = false }: {
+/** The invitation or the dress code, for Emery to read in the call: it never goes in the mirror. */
+function Invitation({ onFiles }: { onFiles: (files: File[]) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <p className="nt-invite">
+      Got an invitation or a dress code? <button type="button" className="nt-link" onClick={() => input.current?.click()}>Show it to {HOST}</button>
+      <input
+        ref={input} type="file" accept="application/pdf,image/*,text/plain" multiple hidden aria-label="Share the invitation"
+        onChange={(e) => { const files = [...(e.target.files ?? [])]; e.target.value = ''; if (files.length) onFiles(files); }}
+      />
+    </p>
+  );
+}
+
+export function OccasionPicker({ current, onPick, onClose, onInvitation, autoFocus = false }: {
   current?: string;
   onPick: (occasion: string) => void;
   onClose?: () => void;
+  /** In a call where Emery takes files: the invitation, for her to read the occasion from. */
+  onInvitation?: (files: File[]) => void;
   autoFocus?: boolean;
 }) {
   const [value, setValue] = useState('');
@@ -205,11 +259,12 @@ export function OccasionPicker({ current, onPick, onClose, autoFocus = false }: 
         />
         <button type="submit" className="nt-primary" disabled={!value.trim()}>Set</button>
       </form>
+      {onInvitation && <Invitation onFiles={onInvitation} />}
     </div>
   );
 }
 
-export function Verdict({ view, failed, delta, ready, onRerate, onOccasion, onChangeOccasion }: {
+export function Verdict({ view, failed, delta, ready, onRerate, onOccasion, onChangeOccasion, onInvitation }: {
   view: View | null;
   /** The last read did not come through. */
   failed: boolean;
@@ -219,6 +274,8 @@ export function Verdict({ view, failed, delta, ready, onRerate, onOccasion, onCh
   onRerate: () => void;
   onOccasion: (occasion: string) => void;
   onChangeOccasion: () => void;
+  /** In a call where Emery takes files: the invitation, for her to read the occasion from. */
+  onInvitation?: (files: File[]) => void;
 }) {
   const a: Analysis | null = view?.analysis ?? null;
   if (!view?.target) {
@@ -227,7 +284,7 @@ export function Verdict({ view, failed, delta, ready, onRerate, onOccasion, onCh
         <p className="nt-eyebrow">{view?.image ? 'Got the photo' : 'Step one'}</p>
         <h2 className="nt-verdict-title">What are you dressing for?</h2>
         <p className="nt-verdict-lede">Pick one, type your own, or just tell {HOST}. The same outfit can be a 9 for brunch and a 4 for an interview.</p>
-        {ready ? <OccasionPicker onPick={onOccasion} /> : <p className="nt-verdict-lede is-quiet">Opening your fitting room…</p>}
+        {ready ? <OccasionPicker onPick={onOccasion} onInvitation={onInvitation} /> : <p className="nt-verdict-lede is-quiet">Opening your fitting room…</p>}
       </section>
     );
   }

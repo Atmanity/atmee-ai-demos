@@ -1,8 +1,8 @@
-// What Emery is told: the API's limits, the board she answers from, and that
-// nothing she is told lets her claim a try-on or a score Notch has not
-// produced, or act on her own.
+// What Emery is told: the API's limits, the board she answers from, what she
+// has seen of it, and that nothing she is told lets her claim a try-on or a
+// score Notch has not produced, or act on her own.
 import { describe, expect, test } from 'vitest';
-import { boardState, instructions, said, say, tools, TRY_ON_ACK_LINES, TRY_ON_INTRO_LINES } from './director.ts';
+import { boardState, dropCaption, instructions, said, say, tools, TRY_ON_ACK_LINES, TRY_ON_INTRO_LINES, type Sight } from './director.ts';
 import { ALL_BODY_ZONES } from './items.ts';
 import type { Analysis, View } from './types.ts';
 
@@ -82,6 +82,9 @@ describe('the API limits', () => {
       tryOnAvailable: false, notice: { kind: 'error', text: long(120) },
     });
     expect(boardState(v).length).toBeLessThan(3858);
+    // And ten looks to choose between (a drop's most), each with a long name, a score and unseen.
+    const looks: Sight['looks'] = Array.from({ length: 10 }, (_, i) => ({ name: long(80), inMirror: i === 9, seen: false, score: 10 }));
+    expect(boardState(v, { mirrorSeen: false, looks }).length).toBeLessThan(3858);
   });
 });
 
@@ -125,6 +128,54 @@ describe('the board never says what Emery must not have', () => {
 
   test('with try-ons off, Emery is told never to offer one', () => {
     expect(boardState(viewOf({ analysis: analysis(), tryOnAvailable: false }))).toContain('never offer a try-on');
+  });
+});
+
+describe('what Emery sees', () => {
+  test.each([true, false])("the rules say what she sees now, and that a score is Notch's alone (try-ons %s)", (tryOns) => {
+    const text = instructions(tryOns);
+    expect(text).not.toMatch(/cannot see (?:them|the photo)|can't see (?:them|the photo)/i);
+    for (const rule of ['You never see them live, only what they share with you in the call', 'never a try-on', 'the board says which photos you have seen',
+      'Notch reads the photo in the mirror and alone scores it', "a score is Notch's alone, for the look in the mirror", 'they tap it under the mirror',
+      'An invitation or dress code says what they are dressing for: call rate_outfit with that occasion', 'or a colour or detail of a photo you have not seen']) expect(text).toContain(rule);
+  });
+
+  test('the board says whether she has seen the photo in the mirror; a try-on she never sees', () => {
+    expect(boardState(viewOf())).toContain("In the mirror: their own photo. You haven't seen it: don't describe it.");
+    expect(boardState(viewOf(), { mirrorSeen: true })).toContain('In the mirror: their own photo. You have seen it: they shared it with you.');
+    const tryOn = boardState(viewOf({ image: { url: '/x', item: 'Camel Wool Topcoat', kind: 'tryon' }, latestItem: 'Camel Wool Topcoat' }), { mirrorSeen: true });
+    expect(tryOn).toContain("with the Camel Wool Topcoat put on by Notch (a try-on, which you can't see)");
+    expect(tryOn).not.toContain('You have seen it');
+  });
+
+  test("the looks they are choosing between: which is in the mirror, Notch's score for each so far, and which she has not seen", () => {
+    const state = boardState(viewOf({ analysis: analysis({ style_score: 7 }) }), {
+      mirrorSeen: true,
+      looks: [{ name: 'navy.jpg', inMirror: false, seen: true, score: 5 }, { name: 'camel.jpg', inMirror: true, seen: true, score: 7 }, { name: 'black.jpg', inMirror: false, seen: false }],
+    });
+    expect(state).toContain('In the mirror: their own photo (look 2). You have seen it');
+    expect(state).toContain("The looks they are choosing between, with Notch's score for this occasion once in the mirror (they tap one under it to put it there): 1. \"navy.jpg\": 5/10; 2. \"camel.jpg\" (in the mirror): 7/10; 3. \"black.jpg\". You haven't seen look 3.");
+    // One photo is no choice.
+    expect(boardState(viewOf(), { mirrorSeen: true, looks: [{ name: 'navy.jpg', inMirror: true, seen: true }] })).not.toContain('choosing between');
+  });
+
+  test('a photo and no occasion yet: the board says it cannot be scored, so she asks', () => {
+    expect(boardState(viewOf({ target: '' }))).toContain("Dressing for: not set yet, so the photo can't be scored: ask what they're dressing for");
+    expect(boardState(viewOf({ target: '', image: null, photo: 'none' }))).not.toContain("can't be scored");
+  });
+
+  test('what the user says with the files they share', () => {
+    expect(dropCaption({ photos: 3, occasion: 'dinner out' })).toBe("3 outfits I'm choosing between for dinner out.");
+    expect(dropCaption({ photos: 1 })).toBe('My outfit.');
+    expect(dropCaption({ photos: 1, example: true, occasion: 'dinner out' })).toBe('The example outfit for dinner out.');
+    expect(dropCaption({ invitation: true })).toBe("The invitation: it says what I'm dressing for.");
+    expect(dropCaption({})).toBeUndefined();
+  });
+
+  test("a photo in its own drop: only Notch's verdict is said, never that a photo came in; a look she saw earlier is said to be in, with no score", () => {
+    expect(said.sharedRead('look 1 of 3 ("navy.jpg")', 'Done: the verdict is 6 out of 10.')).toBe('Notch has read look 1 of 3 ("navy.jpg"), the one in the mirror. Done: the verdict is 6 out of 10.');
+    expect(said.photoIn(viewOf(), 'look 2 of 3', true)).toMatch(/^Done: look 2 of 3 is in the mirror now, .*you saw it when they shared it, but never guess its score\.$/);
+    expect(said.photoIn(viewOf())).toContain("don't guess anything about it");
   });
 });
 
@@ -209,7 +260,7 @@ describe('the words Emery speaks from', () => {
       say.moreReady(['a'], false, true), say.moreReady([], false, true), say.moreReady(['a', 'b'], false, false, true), say.lookChanged(), say.tryOnStale('x'), say.moreStale(), say.moreCapped(18), say.needsRead('x'), say.reset(),
     ].map((e) => e.text).concat([
       said.noOccasion(), said.readRunning(v), said.noVerdictYet(), said.tryOnRunning('x'), said.alreadyOwn(), said.alreadyGoing('x'), said.moreOnTheWay(),
-      said.whichPiece(), said.notAPiece('x'), said.steered(v, 'streetwear'), said.stillWorking(), said.lost(), said.photoIn(v, true), said.photoIn(viewOf({ target: '' }), false),
+      said.whichPiece(), said.notAPiece('x'), said.steered(v, 'streetwear'), said.stillWorking(), said.lost(), said.photoIn(v, 'the example outfit'), said.photoIn(viewOf({ target: '' })), said.photoIn(v, 'look 2 of 3', true),
     ]);
     for (const text of results) expect(text, text).toMatch(/^(Done|Not yet|Not yet rated|Not added|Not applied|Refused|Failed|Started|Queued|Nothing new|Nothing to add|Nothing to do|Already started|Not clear):/);
   });

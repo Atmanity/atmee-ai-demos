@@ -6,6 +6,7 @@
 // Framework-free: the model calls come in through `Models` (server.ts wires
 // Gemini and xAI; the tests wire fakes), and everything it says goes out as
 // texts from director.ts (fitting.ts turns them into tool results and events).
+import { createHash } from 'node:crypto';
 import { say } from './director.ts';
 import {
   ALL_BODY_ZONES, buildAmazonSearchUrl, buildAmazonShopLinks, buildItemAttributes, CURRENT_LOOK_LABEL, cleanSingleLine, inferItemBodyZone,
@@ -111,9 +112,12 @@ export class Stylist {
    * Each picture's verdict per occasion. The same outfit for the same occasion
    * always gets the same score: live, "rate it again" on an unchanged photo
    * moved it from 7 to 5 with a different fix. A new photo, a piece put on or
-   * another occasion is a new reading; a pieces direction is not.
+   * another occasion is a new reading; a pieces direction is not. A picture is
+   * its bytes, not its upload: a look put back in the mirror (one of a few the
+   * user is choosing between) keeps the score it had.
    */
   private readings = new Map<string, CleanAnalysis>();
+  private pictures = new WeakMap<Img, string>();
   /** Which picture and occasion the verdict on screen is for. */
   private readOf = '';
   /**
@@ -487,7 +491,7 @@ export class Stylist {
     this.touch();
     try {
       // The read and the pieces are independent calls: run together, as the original did.
-      const key = `${shown.token}\0${stylePhraseKey(this.target)}`;
+      const key = `${this.pictureOf(shown.img)}\0${stylePhraseKey(this.target)}`;
       const known = this.readings.get(key);
       const [read, dynamic] = await Promise.all([
         known ?? this.models.analyze(shown.img, { userName: this.name, target: this.targetBrief(), context: opts.context }).catch(() => null),
@@ -531,6 +535,16 @@ export class Stylist {
       this.jobs.analysing = false;
       this.touch();
     }
+  }
+
+  /** Which picture an image is, by its bytes: the same photo added again is the same picture. */
+  private pictureOf(img: Img): string {
+    let key = this.pictures.get(img);
+    if (!key) {
+      key = createHash('sha256').update(img.bytes).digest('hex');
+      this.pictures.set(img, key);
+    }
+    return key;
   }
 
   /** What a rail is picked for: the own photo, the occasion, the direction. */
