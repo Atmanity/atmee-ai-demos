@@ -96,6 +96,13 @@
     .panel { height: 460px; }
     .selfie { width: 92px; }
   }
+  /* A phone: the conversation first, right under the recruiter, with room to read it; the agenda and the notes after. */
+  @media (max-width: 640px) {
+    .panel { height: auto; }
+    .panel .transcript { order: -2; flex: none; height: 46vh; min-height: 260px; }
+    .panel form { order: -1; border-bottom: 1px solid var(--line); }
+    .notes { max-height: none; }
+  }
 </style>
 </head>
 <body>
