@@ -5,7 +5,8 @@ import { readFile } from 'node:fs/promises';
 import sharp from 'sharp';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import type { AppServer } from './app-server.ts';
-import { endSession, setConductor, startSession } from './atmee.ts';
+import { avatarApi, endSession, setConductor, startSession } from './atmee.ts';
+import { endRender, renderConfigured, startRender } from './render.ts';
 import { avatarEnvName, avatarFor, hostNameOf } from './hosts.js';
 
 const apps = new Map<string, AppServer>();
@@ -44,8 +45,8 @@ export const api = caught(Router());
 
 api.get('/apps', (_req, res) => {
   // tools and agenda: what the home page counts (the functions each host may call, and whether it keeps to a conductor).
-  res.json([...apps.values()].map(({ id, title, tagline, brand, appTools, conductor }) => ({
-    id, title, tagline, brand, host: hostNameOf(id), avatar: Boolean(avatarFor(id)),
+  res.json([...apps.values()].map(({ id, title, tagline, brand, way, appTools, conductor }) => ({
+    id, title, tagline, brand, way: way ?? 'full-stack', host: hostNameOf(id), avatar: Boolean(avatarFor(id)),
     tools: appTools?.tools.length ?? 0, agenda: Boolean(conductor?.graph),
   })));
 });
@@ -96,11 +97,49 @@ api.post('/apps/:app/session', async (req, res) => {
   res.status(201).json(r.session);
 });
 
-/** Ends every session this server started and has not seen end: on shutdown, so a rollout leaves no room running. */
+// The avatar-only apps: the avatar rendered into this server's own LiveKit room, for the page's own agent.
+const rendering = new Map<string, string>(); // avatar session id -> app id
+
+api.post('/apps/:app/render', async (req, res) => {
+  const app = apps.get(req.params.app);
+  if (!app || app.way !== 'avatar-only') return void res.status(404).json({ error: 'unknown_app' });
+  if (!renderConfigured()) return void res.status(503).json({ error: 'livekit_not_configured', message: 'Set LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET' });
+  const avatarId = avatarFor(app.id);
+  if (!avatarId) return void res.status(500).json({ error: 'no_avatar', message: `Set avatarId in apps/${app.id}/avatar.json, ${avatarEnvName(app.id)} or AVATAR_DEFAULT` });
+  const maxSeconds = Number(process.env.MAX_SECONDS) || app.maxSeconds || 600;
+  const r = await startRender(avatarId, maxSeconds, { app: 'atmee-usecase-demos', usecase: app.id });
+  if (!r.ok) {
+    console.warn('[%s] POST /v1/avatars/{id}/avatar_sessions -> %d %s %s', app.id, r.status, r.json?.error ?? '', r.json?.message ?? '');
+    return void res.status(r.status).json({ error: r.json?.error || `http_${r.status}`, retryAfter: r.retryAfter });
+  }
+  rendering.set(r.render.sessionId, app.id);
+  setTimeout(() => rendering.delete(r.render.sessionId), (r.render.maxSeconds + 120) * 1000).unref();
+  console.log('[%s] render %s of avatar %s', app.id, r.render.sessionId, avatarId.slice(0, 8));
+  res.status(201).json(r.render);
+});
+
+// Whether the render is running, and why it ended: the page asks when the avatar is slow to appear.
+api.get('/apps/:app/render/:id', async (req, res) => {
+  if (rendering.get(req.params.id) !== req.params.app) return void res.status(404).json({ error: 'not_found' });
+  const r = await avatarApi('GET', `/v1/avatar_sessions/${req.params.id}`);
+  const { status, endReason, failureCode } = r.json ?? {};
+  res.status(r.status).json({ status, endReason, failureCode });
+});
+
+api.post('/apps/:app/render/:id/end', async (req, res) => {
+  if (rendering.get(req.params.id) !== req.params.app) return void res.status(404).json({ error: 'not_found' });
+  const r = await endRender(req.params.id);
+  if (r.status === 200) rendering.delete(req.params.id);
+  res.status(r.status).json(r.json);
+});
+
+/** Ends every session and render this server started and has not seen end: on shutdown, so a rollout leaves nothing billing. */
 export async function endLiveSessions() {
   const ids = [...started.keys()];
+  const renders = [...rendering.keys()];
   started.clear();
-  await Promise.allSettled(ids.map((id) => endSession(id)));
+  rendering.clear();
+  await Promise.allSettled([...ids.map((id) => endSession(id)), ...renders.map((id) => endRender(id))]);
 }
 
 api.post('/apps/:app/session/:id/end', async (req, res) => {

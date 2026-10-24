@@ -2,6 +2,9 @@ export { useAvatar, listNames, type Avatar, type AvatarHandlers, type Line } fro
 export type { SendFilesOptions, ToolCall } from '../avatar/room.ts';
 export { FileError, MAX_FILES, type FileOutcome, type FileProgress } from '../avatar/files.ts';
 export { useToolNet } from './useToolNet.ts';
+export { useAvatarOnly, type AvatarOnly, type Played, type SpeechWriter } from './useAvatarOnly.ts';
+export { useMicTap, type MicTap } from './useMicTap.ts';
+export { SAMPLE_RATE, decodeTo16k, fromBase64, joinPcm, tapMicrophone, toBase64, wavFile } from '../avatar/pcm.ts';
 export { AvatarStage, Composer, Transcript, clock } from './components.tsx';
 export { CallControls, CallStatus, ChatPanel, HostVideo, callCopy, HangUpIcon, MicIcon, MicOffIcon, SendIcon } from './parts.tsx';
 export { BackToApps, CaptionsButton, useCaptionToggle, captionsKey, APPS_HOME, type CaptionToggle } from './nav.tsx';

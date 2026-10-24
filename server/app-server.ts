@@ -1,5 +1,5 @@
-// What an app gives the server: its id, the agenda its avatar runs (if any),
-// and its own routes under /api/apps/<id>/ (model calls, data, media).
+// What an app gives the server: its id, how it is built, the agenda its avatar
+// runs (if any), and its own routes under /api/apps/<id>/ (model calls, data, media).
 import type { Router } from 'express';
 
 export interface AppServer {
@@ -8,6 +8,12 @@ export interface AppServer {
   tagline: string;
   /** The product's brand colour and the ink that reads on it, for the index page. */
   brand?: { color: string; ink: string };
+  /**
+   * How the app uses the avatar. `full-stack` (default): Atmee runs the whole conversation
+   * (POST /v1/session). `avatar-only`: the app's own agent speaks and the avatar is its face,
+   * rendered into the app's own LiveKit room (POST /v1/avatars/{id}/avatar_sessions).
+   */
+  way?: 'full-stack' | 'avatar-only';
   /** A conductor graph, or null to make sure the avatar runs none. */
   conductor?: { graph: unknown; speakAfterS?: number } | null;
   /** Longest session to ask for. */
