@@ -82,6 +82,9 @@
     .rules { grid-template-columns: 1fr; }
     .board { max-height: none; }
   }
+  /* A touch screen has no arrow keys: the legend says tap. */
+  .hint-touch { display: none; }
+  @media (hover: none) and (pointer: coarse) { .hint-pointer { display: none; } .hint-touch { display: inline; } }
 </style>
 </head>
 <body>
@@ -104,7 +107,7 @@
   <section>
     <div class="head"><div class="head-l" id="playBack"><h2>The island</h2></div><span class="muted" id="where">Washed ashore</span></div>
     <div class="board" id="board"></div>
-    <div class="legend"><span>Click a glowing tile, or use <kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd></span><span id="steps">0 steps</span></div>
+    <div class="legend"><span class="hint-pointer">Click a glowing tile, or use <kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd></span><span class="hint-touch">Tap a glowing tile.</span><span id="steps">0 steps</span></div>
   </section>
   <aside class="side">
     <div class="frame"><div class="stage narrator" id="narrator">
