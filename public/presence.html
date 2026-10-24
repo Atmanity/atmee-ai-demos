@@ -55,6 +55,9 @@
   .dock .composer { flex: 1; }
   .dock .icon-btn { flex: none; }
   .dock .btn { padding: 10px 16px; }
+  .dock .btn svg { width: 18px; height: 18px; }
+  /* A file dragged over the page: it goes to Kin when dropped. */
+  body.dragging .dock { box-shadow: 0 0 0 3px var(--accent); }
 
   /* Kin, floating */
   .kin { position: fixed; right: 360px; bottom: 100px; z-index: 10; display: flex; align-items: end; gap: 12px; }
@@ -69,7 +72,8 @@
 
   @media (max-width: 960px) {
     .welcome { grid-template-columns: 1fr; }
-    .work { grid-template-columns: 1fr; grid-template-rows: auto; height: auto; }
+    /* Room under the dock, so it scrolls clear of Kin floating in the corner. */
+    .work { grid-template-columns: 1fr; grid-template-rows: auto; height: auto; padding-bottom: 168px; }
     .monitor { aspect-ratio: 16 / 11; }
     .feed { height: 260px; }
     .dock { border-radius: 20px; flex-wrap: wrap; }
@@ -100,7 +104,7 @@
     <label class="opt"><input type="checkbox" id="useMic" checked><div><b>Use my microphone</b><span>Talk to Kin out loud. Untick to type instead.</span></div></label>
     <button class="btn primary lg" id="start" type="button">Start working with Kin</button>
     <div class="notice warn" id="startError" hidden></div>
-    <div class="privacy">🔒 <span>Kin gets a short written description of what changed on your screen, made by a vision model, never the recording itself. Nothing is kept after the session.</span></div>
+    <div class="privacy">🔒 <span>Kin gets a short written description of what changed on your screen, made by a vision model, never the recording itself. It sees a picture of your screen only when you press Show Kin this, and a file only when you share it. Nothing is kept after the session.</span></div>
   </section>
 </main>
 
@@ -116,6 +120,9 @@
   <div class="card dock">
     <button class="icon-btn" id="mic" type="button" hidden></button>
     <button class="btn ghost" id="shareBtn" type="button"></button>
+    <button class="btn ghost" id="showBtn" type="button" hidden title="Kin sees your screen as it is now; a question typed below goes with it"></button>
+    <button class="btn ghost" id="fileBtn" type="button" hidden title="A stack trace, a log, code or a screenshot: or drop it anywhere on the page"></button>
+    <input type="file" id="fileInput" multiple hidden aria-label="Share a file with Kin">
     <form class="composer" id="composer"><input id="text" placeholder="Say something to Kin…" maxlength="500" autocomplete="off" disabled><button class="icon-btn" id="send" type="submit" aria-label="Send" disabled></button></form>
     <button class="icon-btn end" id="stop" type="button" title="End the session" aria-label="End the session"></button>
   </div>
@@ -131,9 +138,12 @@
 <script src="kit.js"></script>
 <script>
   const { $, icon, esc } = UI;
+  const clip = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg>';
   $('send').innerHTML = icon.send; $('stop').innerHTML = icon.end;
+  const eye = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  $('showBtn').innerHTML = `${eye}Show Kin this`; $('fileBtn').innerHTML = `${clip}Share a file`;
   const canvas = $('screen'), ctx = canvas.getContext('2d');
-  let s, source = null, lastSent = null, timer = null, mode = 'screen', stopClock = () => {};
+  let s, source = null, screenVideo = null, onScreen = false, lastSent = null, timer = null, mode = 'screen', stopClock = () => {};
   const debug = UI.debugLog();
   const sender = UI.politeSender(() => s);
   UI.backLink(document.querySelector('.topbar'), { getSession: () => s, what: 'session' });
@@ -177,6 +187,7 @@
     try { source = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 2 }, audio: false }); }
     catch (e) { noticed('Screen sharing was cancelled. You can try again, or run the sample session.'); return false; }
     const v = document.createElement('video'); v.srcObject = source; v.muted = true; await v.play();
+    screenVideo = v; onScreen = true;
     source.getVideoTracks()[0].onended = () => { clearInterval(timer); $('seeing').hidden = true; paintIdle(); setShareButton(); };
     clearInterval(timer); timer = setInterval(() => { ctx.drawImage(v, 0, 0, canvas.width, canvas.height); observe(); }, 5000);
     $('seeing').hidden = false; setShareButton(); return true;
@@ -198,10 +209,11 @@
     if (source) source.getTracks().forEach((t) => t.stop());
     let i = 0; clearInterval(timer); $('seeing').hidden = false;
     const step = () => { const sc = SCENES[i % SCENES.length]; sc.draw(); observe(sc.hint); i++; };
-    step(); timer = setInterval(step, 25000); setShareButton();
+    onScreen = true; step(); timer = setInterval(step, 25000); setShareButton();
   }
-  function paintIdle() { ctx.fillStyle = '#fffdf9'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = '#b3a597'; ctx.font = '600 24px Nunito, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('Share a screen so Kin can keep you company', canvas.width / 2, canvas.height / 2); ctx.textAlign = 'start'; }
+  function paintIdle() { onScreen = false; ctx.fillStyle = '#fffdf9'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = '#b3a597'; ctx.font = '600 24px Nunito, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('Share a screen so Kin can keep you company', canvas.width / 2, canvas.height / 2); ctx.textAlign = 'start'; }
   function setShareButton() {
+    $('showBtn').disabled = !onScreen;
     if (!$('shareBtn')) return;
     const sharing = source && source.active;
     $('shareBtn').innerHTML = `${icon.screen}${sharing ? 'Stop sharing' : mode === 'sample' ? 'Share my real screen' : 'Share screen'}`;
@@ -210,6 +222,69 @@
       mode = 'screen'; await shareScreen();
     };
   }
+
+  // What the user hands Kin: a picture of the screen as it is now (Show Kin this), or
+  // files (a stack trace, a log, code, a screenshot). Kin's host reads each, speaks of it
+  // once by itself (so the app says nothing of its own), and answers from it after;
+  // the observer's short descriptions go on as before.
+  const FILE_WORDS = { sending: 'Sending to Kin…', received: 'Kin has it', reading: 'Kin is reading it…', ready: 'Kin has read it' };
+  const REFUSED = { too_large: 'too large to read', unsupported_type: "a kind of file Kin can't read", unsafe: 'held back for safety', too_many_files: 'one file too many', unreadable: "couldn't be read", failed: "couldn't be read" };
+  // Kin can say it takes files while the call is still connecting, before the session is
+  // the page's: only a live session of its own is offered them.
+  const takesFiles = () => !!s && s.isLive() && s.acceptsFiles();
+  const filesOffered = (on) => { $('showBtn').hidden = $('fileBtn').hidden = !(on && takesFiles()); };
+  async function hand(files, labels) {
+    if (!takesFiles() || !files.length) return;
+    if (files.length > 10) { noticed('At most 10 files at a time.'); return; }
+    // A question typed first goes with what is shown.
+    const caption = $('text').value.trim();
+    if (caption) { $('text').value = ''; speak(''); noticed(`You: ${caption}`); }
+    const at = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    const rows = files.map(() => { const d = document.createElement('div'); d.className = 'obs'; $('feed').prepend(d); return d; });
+    const show = (i, status, reason) => {
+      rows[i].innerHTML = `<time>${at} · you shared ${esc(labels[i])}</time>${esc(status === 'refused' ? `Not read: ${REFUSED[reason] || REFUSED.failed}` : FILE_WORDS[status] || '')}`;
+    };
+    files.forEach((_, i) => show(i, 'sending'));
+    try {
+      await s.sendFiles(files, { caption: caption || undefined, onStatus: ({ index, status, reason }) => show(index, status, reason) });
+    } catch (e) {
+      rows.forEach((row) => row.remove());
+      noticed(e.code === 'files_unsupported' ? "Kin can't take files in this session." : "That didn't reach Kin. Try again.");
+    }
+  }
+  // The screen as it is now: a fresh frame of the shared screen at up to 1920 px across
+  // (the preview is too small to read code from), or the sample's scene.
+  function screenPicture() {
+    if (screenVideo && source && source.active && screenVideo.videoWidth) {
+      const scale = Math.min(1, 1920 / screenVideo.videoWidth);
+      const c = document.createElement('canvas');
+      c.width = Math.round(screenVideo.videoWidth * scale); c.height = Math.round(screenVideo.videoHeight * scale);
+      c.getContext('2d').drawImage(screenVideo, 0, 0, c.width, c.height);
+      return c;
+    }
+    return canvas;
+  }
+  async function showScreen() {
+    if (!onScreen) return;
+    const blob = await new Promise((resolve) => screenPicture().toBlob(resolve, 'image/jpeg', 0.9));
+    if (!blob) return;
+    const stamp = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
+    hand([new File([blob], `screen-${stamp}.jpg`, { type: 'image/jpeg' })], ['your screen']);
+  }
+  $('showBtn').onclick = showScreen;
+  $('fileBtn').onclick = () => $('fileInput').click();
+  $('fileInput').onchange = () => { const picked = [...$('fileInput').files]; $('fileInput').value = ''; hand(picked, picked.map((f) => f.name)); };
+  // A file dropped anywhere on the page goes to Kin; with no session to take it, it is
+  // ignored (the browser would otherwise open it and end the session).
+  const carriesFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+  addEventListener('dragover', (e) => { if (!carriesFiles(e)) return; e.preventDefault(); document.body.classList.toggle('dragging', takesFiles()); });
+  addEventListener('dragleave', (e) => { if (!e.relatedTarget) document.body.classList.remove('dragging'); });
+  addEventListener('drop', (e) => {
+    if (!carriesFiles(e)) return;
+    e.preventDefault(); document.body.classList.remove('dragging');
+    const dropped = [...e.dataTransfer.files];
+    hand(dropped, dropped.map((f) => f.name));
+  });
 
   async function start() {
     $('startError').hidden = true;
@@ -230,8 +305,10 @@
         onCaption: speak,
         onSpeaking: (v) => { $('kin').classList.toggle('talking', v); sender.speaking(v); },
         onRelay: debug,
+        onFilesAccepted: filesOffered,
         onEnd: () => end('Kin had to go. The session reached its time limit.'),
       });
+      filesOffered(s.acceptsFiles());
       UI.micButton($('mic'), s);
       $('text').disabled = $('send').disabled = false; $('timechip').hidden = false;
       stopClock = UI.countdown($('timeleft'), s.session.maxSeconds);
@@ -243,6 +320,7 @@
   function end(message) {
     clearInterval(timer); stopClock(); if (source) source.getTracks().forEach((t) => t.stop());
     $('kin').hidden = true; $('text').disabled = $('send').disabled = true; $('timechip').hidden = true; $('seeing').hidden = true;
+    filesOffered(false);
     noticed(message || 'Session ended. See you next time!');
     $('shareBtn').outerHTML = '<button class="btn primary" onclick="location.reload()">Start a new session</button>';
   }

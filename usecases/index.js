@@ -222,11 +222,15 @@ function trainingState(h) {
 //    (state and events); the companion has nothing to make the app do.
 // ---------------------------------------------------------------------------
 const COMPANION = "You are a quiet companion sitting next to the user while they work. You see their screen through short descriptions the app sends you. Speak only when something noteworthy happens or when spoken to; keep it to one or two sentences; never narrate routine activity.";
+// The user can also hand the companion their screen as a picture (Show Kin this) or a
+// file. The host's runtime reads each, speaks of it once by itself and is told of it on
+// every later reply, so the app sends no event about it: only this note, kept all session.
+const SHOWN_NOTE = "The user can also show you their screen as a picture (Show Kin this) or share a file with you (a stack trace, a log, code, a screenshot). Then you see it yourself, beyond the short descriptions: react to it once, briefly, in your own words, and when they ask about it, answer from what it actually shows, quoting the exact line, name or number that matters; look at the file itself for a detail your first look missed. Never say it shows anything it does not.";
 const presence = {
   title: "Presence / companion (screen observer)",
   page: "presence.html",
   // A state replaces the one before, so each one carries the companion's role.
-  onLinked(h) { return [state(COMPANION)]; },
+  onLinked(h) { return [state(COMPANION), note(SHOWN_NOTE)]; },
   onObservation(h, seen) {
     const out = [state(`${COMPANION} What the user's screen shows now: ${seen.description}`)];
     if (seen.noteworthy) out.push(event(`Something changed on the user's screen: ${seen.noteworthy}. React briefly if it deserves a word; otherwise stay quiet.`, 15));
