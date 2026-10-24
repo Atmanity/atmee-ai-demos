@@ -11,6 +11,7 @@ for (const dir of readdirSync("apps")) {
     HOSTS.set(dir, {
       avatarId: typeof host.avatarId === "string" ? host.avatarId : "",
       name: typeof host.name === "string" ? host.name : "",
+      fishVoiceId: typeof host.fishVoiceId === "string" ? host.fishVoiceId : "",
     });
   } catch {
     // no avatar.json: the app has no host of its own
@@ -22,6 +23,9 @@ export const avatarEnvName = (id) => `AVATAR_${id.toUpperCase().replace(/-/g, "_
 
 /** The avatar an app runs, or "" when it has none. */
 export const avatarFor = (id) => process.env[avatarEnvName(id)] || HOSTS.get(id)?.avatarId || process.env.AVATAR_DEFAULT || "";
+
+/** The host's own voice in Fish Audio (cloned from the sample the host was made with), or "". */
+export const fishVoiceOf = (id) => HOSTS.get(id)?.fishVoiceId || "";
 
 /** The host's first name, for the home page, or null. */
 export const hostNameOf = (id) => HOSTS.get(id)?.name.split(" ")[0] || null;

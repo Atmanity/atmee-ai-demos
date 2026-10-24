@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { asWav, sentences, wav } from './speech.ts';
+import { sentences, ttsRequest, wav } from './speech.ts';
 
 describe('an answer voiced a sentence at a time', () => {
   test('sentences in order; a short one rides with the next', () => {
@@ -12,15 +12,14 @@ describe('an answer voiced a sentence at a time', () => {
   });
 });
 
-describe("Gemini's audio as a WAV", () => {
-  test('raw PCM gets a header with its rate', () => {
-    const out = asWav(Buffer.alloc(480), 'audio/L16;codec=pcm;rate=24000');
-    expect(out.subarray(0, 4).toString()).toBe('RIFF');
-    expect(out.readUInt32LE(24)).toBe(24000);
-    expect(out.length).toBe(44 + 480);
+describe("the host's own voice, from Fish", () => {
+  test('only the text is sent to be spoken: no instruction rides along to be read out', () => {
+    expect(ttsRequest('Good evening.', 'voice-1')).toEqual({ text: 'Good evening.', reference_id: 'voice-1', format: 'pcm', sample_rate: 16000, latency: 'balanced' });
   });
-  test('a WAV is passed through, not wrapped twice', () => {
-    const file = wav(Buffer.alloc(100), 16000);
-    expect(asWav(file, 'audio/wav')).toBe(file);
+  test("the 16 kHz PCM comes back as a WAV with its rate, the avatar's own", () => {
+    const out = wav(Buffer.alloc(320), 16000);
+    expect(out.subarray(0, 4).toString()).toBe('RIFF');
+    expect(out.readUInt32LE(24)).toBe(16000);
+    expect(out.length).toBe(44 + 320);
   });
 });
