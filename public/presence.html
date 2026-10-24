@@ -163,6 +163,7 @@
     const d = document.createElement('div'); d.className = 'obs' + (flag ? ' flag' : '');
     d.innerHTML = `<time>${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}${flag ? ' · worth a word' : ''}</time>${esc(text)}`;
     $('feed').prepend(d);
+    return d;
   }
 
   // The observer's input: a frame every few seconds, sent only when it changed.
@@ -238,8 +239,9 @@
     if (files.length > 10) { noticed('At most 10 files at a time.'); return; }
     // A question typed first goes with what is shown.
     const caption = $('text').value.trim();
-    if (caption) { $('text').value = ''; speak(''); noticed(`You: ${caption}`); }
+    if (caption) { $('text').value = ''; speak(''); }
     const at = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    const asked = caption ? noticed(`You: ${caption}`) : null;
     const rows = files.map(() => { const d = document.createElement('div'); d.className = 'obs'; $('feed').prepend(d); return d; });
     const show = (i, status, reason) => {
       rows[i].innerHTML = `<time>${at} · you shared ${esc(labels[i])}</time>${esc(status === 'refused' ? `Not read: ${REFUSED[reason] || REFUSED.failed}` : FILE_WORDS[status] || '')}`;
@@ -248,7 +250,9 @@
     try {
       await s.sendFiles(files, { caption: caption || undefined, onStatus: ({ index, status, reason }) => show(index, status, reason) });
     } catch (e) {
-      rows.forEach((row) => row.remove());
+      // Nothing reached Kin: the question goes back in the composer, unless something new is there.
+      rows.forEach((row) => row.remove()); if (asked) asked.remove();
+      if (caption && !$('text').value) $('text').value = caption;
       noticed(e.code === 'files_unsupported' ? "Kin can't take files in this session." : "That didn't reach Kin. Try again.");
     }
   }
