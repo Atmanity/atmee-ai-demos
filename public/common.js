@@ -7,7 +7,8 @@
 //   const mic = await Atmee.requestMic();          // in the lobby, or null for typing only
 //   const s = await Atmee.join({ usecase, video, audio, mic, tools,
 //     onPhase(phase, detail), onCaption(text, final), onUserCaption(text, final, segmentId, seq),
-//     onSpeaking(bool), onVideo(bool), onMessage(msg), onRelay(topic, text), onEnd() });
+//     onSpeaking(bool), onVideo(bool), onMessage(msg), onRelay(topic, text), onEnd(),
+//     onFilesAccepted(bool) });
 //
 // onCaption carries the avatar's words; onUserCaption the user's spoken words
 // as recognised (interims of one utterance share a segment id, then a final).
@@ -16,6 +17,13 @@
 //   s.user(kind, text)  tell the server what the user did (the use case decides)
 //   s.setMuted(bool)    mute or unmute the user's microphone
 //   s.isLive()          false once the session has ended (by the page, the room or its time limit)
+//   s.acceptsFiles()    whether the avatar takes files in this call (onFilesAccepted follows it)
+//   s.sendFiles(files, { caption, onStatus })  drop 1 to 10 files (a FileList or File[])
+//                       into the call for the avatar to read and talk about; resolves
+//                       with one { name, status, reason } per file once each is ready or
+//                       refused; onStatus({ index, name, status, reason }) follows each
+//                       (received, reading, ready, refused). Rejects, sending nothing, with
+//                       .code too_many_files, or files_unsupported when the avatar takes none.
 //   s.end()
 //
 // tools: one function per app tool the use case declares (usecases/index.js),
@@ -35,6 +43,11 @@
   const { Room, RoomEvent, RpcError, Track } = LivekitClient;
   const CHAT_TOPIC = 'lk.chat', APP_TOPIC = 'atmee.app', TRANSCRIPTION_TOPIC = 'lk.transcription';
   const TOOL_METHOD = 'atmee.tool'; // an app tool call, as an RPC; the reply is its result
+  // Files the user drops: one message on atmee.file to the agent alone (never
+  // lk.chat, which drops attachments), each file attached; the agent answers each
+  // on atmee.file.status, and says it takes files with its atmee.files attribute.
+  const FILE_TOPIC = 'atmee.file', FILE_STATUS_TOPIC = 'atmee.file.status', FILES_ATTRIBUTE = 'atmee.files';
+  const MAX_FILES = 10, MAX_CAPTION = 500, FILE_WAIT_MS = 120000;
   const ARRIVAL_TIMEOUT_MS = 90000, WARMING_LIMIT_MS = 6 * 60000;
   // What the app relays waits for the avatar's turn to end: it is between turns
   // once it has stopped speaking, no caption is streaming, and that has lasted
@@ -50,6 +63,8 @@
   // short acknowledgement, with a tag in front of its text.
   const cleanUserText = (text) => text.replace(/^\s*\[(?:interruption|backchannel)\]\s*/i, '').trim();
   function failure(message, friendly) { const e = new Error(message); e.friendly = friendly; return e; }
+  const fileFailure = (code, message) => Object.assign(new Error(message || code), { code });
+  const withReason = (fields, reason) => (reason ? Object.assign({}, fields, { reason }) : fields);
 
   async function requestMic() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw failure('no getUserMedia', 'This browser cannot use a microphone here.');
@@ -93,6 +108,7 @@
 
     const room = new Room({ adaptiveStream: true, dynacast: true });
     let linked = false, ended = false, micTrack = null;
+    const drops = createDrops();
     const stamp = () => new Date().toISOString().slice(11, 23);
 
     const floor = createFloor({
@@ -120,8 +136,55 @@
       setMuted: async (muted) => { if (micTrack) { if (muted) await micTrack.mute(); else await micTrack.unmute(); } },
       hasMic: () => !!micTrack,
       isLive: () => !ended,
-      end: async () => { ended = true; floor.close(); clearInterval(floorTimer); releaseMic(); await endOnServer(); ws.close(); room.disconnect(); },
+      acceptsFiles: () => acceptsFiles(),
+      async sendFiles(files, { caption, onStatus = () => {} } = {}) {
+        const list = Array.from(files || []);
+        if (list.length > MAX_FILES) throw fileFailure('too_many_files', `At most ${MAX_FILES} files in one drop`);
+        if (!list.length) return [];
+        const drop = openDrop(list, onStatus);
+        drops.add(drop);
+        if (ended) drop.refuse('unreadable');
+        else sendDrop(drop, caption);
+        return drop.done;
+      },
+      end: async () => { ended = true; drops.refuse('unreadable'); floor.close(); clearInterval(floorTimer); releaseMic(); await endOnServer(); ws.close(); room.disconnect(); },
     };
+
+    // The agent's answers about the files the user dropped, from the agent alone.
+    room.registerTextStreamHandler(FILE_STATUS_TOPIC, async (reader, participant) => {
+      const agent = agentIn(room);
+      if (!agent || !participant || participant.identity !== agent.identity) return;
+      let answer;
+      try { answer = JSON.parse(await reader.readAll()); } catch { return; }
+      if (answer && typeof answer.batchId === 'string') drops.answer(answer);
+    });
+    const acceptsFiles = () => { const agent = agentIn(room); return !!agent && agent.attributes[FILES_ATTRIBUTE] === '1'; };
+    let accepting = false;
+    const checkFiles = () => {
+      const now = acceptsFiles();
+      if (now === accepting) return;
+      accepting = now;
+      opts.onFilesAccepted && opts.onFilesAccepted(now);
+    };
+    room.on(RoomEvent.ParticipantConnected, checkFiles);
+    room.on(RoomEvent.ParticipantDisconnected, checkFiles);
+    // A reconnect cuts the streams still going out: their drops cannot finish.
+    room.on(RoomEvent.Reconnecting, () => drops.refuseUploading('unreadable'));
+    // The caption as text and each file as its own stream, to the agent alone;
+    // sendText resolves once every file is out, and its id is the drop's batchId.
+    async function sendDrop(drop, caption) {
+      const agent = agentIn(room);
+      if (!agent || !acceptsFiles()) {
+        drop.fail(agent ? fileFailure('files_unsupported', 'This avatar does not take files') : fileFailure('no_agent', 'The avatar is not in the room'));
+        return;
+      }
+      const cut = caption == null ? undefined : Array.from(String(caption)).slice(0, MAX_CAPTION).join('');
+      const info = await room.localParticipant.sendText(JSON.stringify({ caption: cut }), {
+        topic: FILE_TOPIC, attachments: drop.files, destinationIdentities: [agent.identity],
+      }).catch(() => null);
+      if (info) drops.sent(drop, info.id);
+      else drop.refuse('failed');
+    }
 
     ws.onmessage = async (ev) => {
       const msg = JSON.parse(ev.data);
@@ -223,13 +286,14 @@
     });
     // The agent's own turn state (LiveKit agents: listening / thinking / speaking).
     room.on(RoomEvent.ParticipantAttributesChanged, (_changed, participant) => {
+      checkFiles();
       if (!participant || participant.identity === room.localParticipant.identity) return;
       const st = participant.attributes && participant.attributes['lk.agent.state'];
       if (st !== undefined && floor.agentState(st) && debug) console.log(`[atmee] ${stamp()} agent ${st}`);
     });
     // Out of the room (the session ended, its time ran out, the network dropped):
     // the server releases this visitor's session too, so the avatar is free.
-    room.on(RoomEvent.Disconnected, () => { linked = false; floor.close(); clearInterval(floorTimer); if (!ended) { ended = true; releaseMic(); endOnServer(); ws.close(); opts.onEnd && opts.onEnd(); } });
+    room.on(RoomEvent.Disconnected, () => { linked = false; drops.refuse('unreadable'); floor.close(); clearInterval(floorTimer); if (!ended) { ended = true; releaseMic(); endOnServer(); ws.close(); opts.onEnd && opts.onEnd(); } });
 
     try {
       await room.connect(s.serverUrl, s.userToken);
@@ -254,6 +318,7 @@
     await sleep(2500);
     linked = true;
     floor.link();
+    checkFiles();
     const sendLinked = () => ws.send(JSON.stringify({ type: 'linked' }));
     if (ws.readyState === 1) sendLinked(); else ws.addEventListener('open', sendLinked, { once: true });
     phase('live', { maxSeconds: s.maxSeconds, video: !!faceOn });
@@ -337,6 +402,66 @@
       flush,
       snapshot: () => ({ speaking, agent, agentLive, captions, quietMs: now() - lastActivity, headWaitMs: now() - headSince, queued: queue.length }),
     };
+  }
+
+  // One drop of files, each answered once: answer() takes the agent's status
+  // messages, refuse() answers every file still open on the page's behalf. done
+  // resolves when every file is ready or refused, and rejects (fail) when the
+  // drop could not go at all.
+  function openDrop(files, onStatus) {
+    const outcome = files.map(() => null);
+    let resolve, reject, timer;
+    const done = new Promise((res, rej) => { resolve = res; reject = rej; });
+    const close = () => { drop.over = true; clearTimeout(timer); };
+    // The agent reads files in turn: a drop fails only after FILE_WAIT_MS without any answer.
+    const wait = () => { clearTimeout(timer); timer = setTimeout(() => drop.refuse('failed'), FILE_WAIT_MS); };
+    const drop = {
+      files, done, batchId: null, over: false,
+      answer({ index, name, status, reason }) {
+        if (drop.over || !Number.isInteger(index) || !files[index] || outcome[index]) return;
+        name = name || files[index].name;
+        onStatus(withReason({ index, name, status }, reason));
+        if (status === 'ready' || status === 'refused') outcome[index] = withReason({ name, status }, reason);
+        if (outcome.every(Boolean)) { close(); resolve(outcome); } else if (drop.batchId) wait();
+      },
+      refuse(reason) { files.forEach((file, index) => drop.answer({ index, name: file.name, status: 'refused', reason })); },
+      fail(err) { close(); reject(err); },
+      sent(batchId) { drop.batchId = batchId; if (!drop.over) wait(); },
+    };
+    return drop;
+  }
+
+  // The drops not yet answered in full. sendText tells the page a drop's batchId
+  // only once every file is out, so the agent's first answers can come before
+  // it: they wait while a drop is still uploading.
+  function createDrops() {
+    const open = new Set();
+    let early = [];
+    const uploading = () => [...open].some((drop) => !drop.batchId);
+    return {
+      add(drop) { open.add(drop); drop.done.finally(() => open.delete(drop)).catch(() => {}); },
+      answer(answer) {
+        const drop = [...open].find((d) => d.batchId === answer.batchId);
+        if (drop) drop.answer(answer); else if (uploading()) early.push(answer);
+      },
+      sent(drop, batchId) {
+        drop.sent(batchId);
+        const mine = early.filter((a) => a.batchId === batchId);
+        early = early.filter((a) => a.batchId !== batchId);
+        if (!uploading()) early = [];
+        mine.forEach((a) => drop.answer(a));
+      },
+      refuse(reason) { open.forEach((drop) => drop.refuse(reason)); },
+      refuseUploading(reason) { open.forEach((drop) => { if (!drop.batchId) drop.refuse(reason); }); },
+    };
+  }
+
+  // The conversation's agent: the one the renderer publishes for
+  // (lk.publish_on_behalf), else the agent publishing for nobody.
+  function agentIn(room) {
+    const others = [...room.remoteParticipants.values()];
+    const named = others.map((p) => p.attributes && p.attributes['lk.publish_on_behalf']).find(Boolean);
+    return (named && room.remoteParticipants.get(named)) || others.find((p) => p.isAgent && !(p.attributes && p.attributes['lk.publish_on_behalf']));
   }
 
   async function publishSilence(room) {

@@ -2,10 +2,17 @@
 // time; what it says before the avatar is live is kept and delivered once the
 // avatar can hear it (the latest state, every note, recent events).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AvatarError, joinAvatar, type AvatarSession, type Phase, type ToolCall } from '../avatar/room.ts';
+import { FileError, type FileOutcome } from '../avatar/files.ts';
+import { AvatarError, joinAvatar, type AvatarSession, type Phase, type SendFilesOptions, type ToolCall } from '../avatar/room.ts';
 
 export type AvatarPhase = 'idle' | Phase | 'ended' | 'failed';
-export interface Line { id: number; who: 'avatar' | 'user'; text: string; typed?: boolean }
+/** A finished line of the conversation; `files` on the user's line for a drop of files. */
+export interface Line { id: number; who: 'avatar' | 'user'; text: string; typed?: boolean; files?: string[] }
+
+/** "a.pdf", "a.pdf and b.png", "a.pdf, b.png and c.csv". */
+export function listNames(names: string[]): string {
+  return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
 
 export interface AvatarHandlers {
   /** A finished utterance of the user (spoken, as recognised; or typed). */
@@ -30,6 +37,8 @@ export interface Avatar {
   secondsLeft: number | null;
   micOn: boolean;
   audioBlocked: boolean;
+  /** The host takes files in this call: offer a drop only then. */
+  filesAccepted: boolean;
   videoRef: React.RefObject<HTMLVideoElement | null>;
   audioRef: React.RefObject<HTMLAudioElement | null>;
   start(opts?: { mic?: boolean }): Promise<void>;
@@ -45,6 +54,12 @@ export interface Avatar {
   unmute(): void;
   setMic(on: boolean): void;
   resumeAudio(): void;
+  /**
+   * Drop files into the call for the host to read and talk about (at most 10).
+   * It shows in the transcript as the user's line; resolves with each file's
+   * outcome once every one is ready or refused.
+   */
+  sendFiles(files: FileList | File[], options?: SendFilesOptions): Promise<FileOutcome[]>;
 }
 
 const ERRORS: Record<string, string> = {
@@ -70,6 +85,7 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [micOn, setMicOn] = useState(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
+  const [filesAccepted, setFilesAccepted] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const sessionRef = useRef<AvatarSession | null>(null);
@@ -105,7 +121,7 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
     if (sessionRef.current || starting.current) return;
     starting.current = true;
     betweenCalls.current = false;
-    setErrorCode(undefined); setDetail(''); setLines([]); setCaption(''); setHeard('');
+    setErrorCode(undefined); setDetail(''); setLines([]); setCaption(''); setHeard(''); setFilesAccepted(false);
     sentNotes.current.clear();
     let stream: MediaStream | null = null;
     if (mic) {
@@ -150,8 +166,10 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
           return handle(call);
         },
         onAudioBlocked: (blocked, resume) => { setAudioBlocked(blocked); resumeRef.current = resume; },
+        onFilesAccepted: setFilesAccepted,
         onEnd: () => {
           sessionRef.current = null;
+          setFilesAccepted(false);
           betweenCalls.current = true;
           pending.current.events = [];
           setPhase((p) => (p === 'failed' ? p : 'ended'));
@@ -200,7 +218,7 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
   }, [phase, secondsLeft === null]);
 
   return useMemo<Avatar>(() => ({
-    phase, detail, errorCode, speaking, caption, heard, lines, secondsLeft, micOn, audioBlocked, videoRef, audioRef,
+    phase, detail, errorCode, speaking, caption, heard, lines, secondsLeft, micOn, audioBlocked, filesAccepted, videoRef, audioRef,
     start, end,
     say(text) {
       lastTyped.current = { text, at: Date.now() };
@@ -232,5 +250,18 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
       session.setMicMuted(!on).then(() => setMicOn(on), () => setDetail('No microphone: you can type instead.'));
     },
     resumeAudio() { void resumeRef.current?.().then(() => setAudioBlocked(false)); },
-  }), [phase, detail, errorCode, speaking, caption, heard, lines, secondsLeft, micOn, audioBlocked, start, end, addLine]);
+    async sendFiles(files, options) {
+      const session = sessionRef.current;
+      if (!session) throw new FileError('no_call', 'There is no call to share files in');
+      const list = [...files];
+      const outcome = session.sendFiles(list, options);
+      if (list.length) {
+        const names = list.map((file) => file.name);
+        addLine({ who: 'user', text: `Shared ${listNames(names)}`, typed: true, files: names });
+        // For tests and analytics, whatever the app: every drop the user makes, as a window event.
+        dispatchEvent(new CustomEvent('atmee:files', { detail: { names, caption: options?.caption } }));
+      }
+      return outcome;
+    },
+  }), [phase, detail, errorCode, speaking, caption, heard, lines, secondsLeft, micOn, audioBlocked, filesAccepted, start, end, addLine]);
 }

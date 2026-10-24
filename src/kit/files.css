@@ -1,0 +1,14 @@
+/* Handing the host files (files.tsx). Themed with the --call-* variables (parts.css). */
+.call-files { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1.5px dashed var(--call-line); border-radius: 14px; font-family: var(--call-font); color: var(--call-ink); transition: border-color .15s, background .15s; }
+.call-files.is-over { border-color: var(--call-accent); background: color-mix(in srgb, var(--call-accent) 8%, transparent); }
+.call-files-button { align-self: flex-start; border: 0; border-radius: 999px; padding: 9px 16px; background: var(--call-accent); color: var(--call-accent-ink); font: 600 14px var(--call-font); cursor: pointer; }
+.call-files-button:disabled { opacity: .45; cursor: default; }
+.call-files-button:focus-visible { outline: 2px solid var(--call-accent); outline-offset: 2px; }
+.call-files-hint { font-size: 13px; color: var(--call-muted); }
+.call-files-problem { margin: 0; font-size: 13px; color: #b42332; }
+.call-files-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.call-file { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.call-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.call-file-status { flex: none; color: var(--call-muted); }
+.call-file.is-ready .call-file-status { color: #1f7a45; }
+.call-file.is-refused .call-file-status { color: #b42332; }
