@@ -4,7 +4,7 @@
 // that says it (useAvatarOnly). Held-down speech is recorded here and heard by
 // the app's own model. The page shows what each part took.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BackToApps, decodeTo16k, fromBase64, joinPcm, toBase64, useAvatarOnly, useMicTap, wavFile } from '../../../src/kit/index.ts';
+import { BackToApps, PageDropGuard, decodeTo16k, fromBase64, joinPcm, toBase64, useAvatarOnly, useMicTap, wavFile } from '../../../src/kit/index.ts';
 import tess from '../host/portrait.jpg';
 import './waybill.css';
 
@@ -73,7 +73,8 @@ export function App() {
     const opened = post<{ id: string; greeting: string; audio: string[]; samples: typeof samples; timings: Timings }>('/desks').catch((err) => err as Error);
     await face.start();
     const d = await opened;
-    if (d instanceof Error) { setProblem(d.message); return; }
+    // No desk, no agent: end the face too, so it stops billing and the page offers to start again.
+    if (d instanceof Error) { setProblem(d.message); await face.end(); return; }
     greeting.current = { text: d.greeting, audio: d.audio, timings: d.timings };
     setDesk(d.id);
     setSamples(d.samples);
@@ -137,6 +138,7 @@ export function App() {
 
   return (
     <div className="wb">
+      <PageDropGuard />
       <header className="wb-top">
         <BackToApps avatar={face} name={HOST} />
         <a className="wb-logo" href="#"><span className="wb-mark" aria-hidden="true" />Waybill<small>Help desk</small></a>

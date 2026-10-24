@@ -4,7 +4,7 @@
 // drops in (decoded here), or the user's own microphone, streamed to Remy as
 // they speak. Nothing decides what he says but the user.
 import { useEffect, useRef, useState } from 'react';
-import { BackToApps, decodeTo16k, fromBase64, useAvatarOnly, useMicTap, SAMPLE_RATE, type Played, type SpeechWriter } from '../../../src/kit/index.ts';
+import { BackToApps, decodeTo16k, fromBase64, useAvatarOnly, useMicTap, usePageDrop, SAMPLE_RATE, type Played, type SpeechWriter } from '../../../src/kit/index.ts';
 import remy from '../host/portrait.jpg';
 import './facecast.css';
 
@@ -51,6 +51,14 @@ export function App() {
     const el = face.audioRef.current;
     if (el) el.muted = source === 'live' && !hearBack;
   }, [source, hearBack, face.audioRef, live]);
+
+  // A recording dropped anywhere on the page is the recording (the browser would otherwise open the
+  // file in the tab and end the studio); not while the microphone is live.
+  usePageDrop((files) => {
+    if (writer.current || !files.length) return;
+    setSource('recording');
+    void pick(files[0]);
+  });
 
   const note = (entry: LogEntry) => setLog((l) => [entry, ...l].slice(0, 8));
   async function air(label: string, pieces: Int16Array[]) {
