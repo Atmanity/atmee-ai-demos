@@ -282,7 +282,8 @@ select.pw-input { flex: 1 1 140px; cursor: pointer; }
   .pw-host-video { width: 104px; grid-row: span 2; }
   .pw-host-video .call-caption, .pw-host-video .call-cc { display: none; }
   .pw-nameplate { border-bottom: 0; padding-bottom: 0; }
-  .pw-host-line { display: block; margin: 0; font-size: 13.5px; line-height: 1.4; color: #323a46; max-height: 3.9em; overflow: hidden; }
+  /* The newest words stay in view: should they run past three lines, the oldest go. */
+  .pw-host-line { display: flex; flex-direction: column; justify-content: flex-end; margin: 0; font-size: 13.5px; line-height: 1.4; color: #323a46; max-height: 3.9em; overflow: hidden; }
   .pw-host > .pw-done, .pw-host > .pw-hint { grid-column: 1 / -1; }
   .pw-chat { grid-area: chat; max-height: 380px; min-height: 200px; }
   .pw-files { grid-area: files; }
