@@ -15,7 +15,7 @@ import './files.css';
 export const REFUSED_WORDS: Record<string, string> = {
   too_large: 'too large to read',
   unsupported_type: "a kind of file that can't be read",
-  unsafe: 'not read',
+  unsafe: 'held back for safety',
   too_many_files: 'one file too many',
   unreadable: "couldn't be read",
   failed: "couldn't be read",

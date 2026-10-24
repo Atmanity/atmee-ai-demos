@@ -82,5 +82,6 @@ test('files dragged onto the area go like picked ones', async () => {
 test('a refusal reads as what it means', () => {
   expect(fileWords({ name: 'a', status: 'refused', reason: 'too_large' })).toBe('Not read: too large to read');
   expect(fileWords({ name: 'a', status: 'refused', reason: 'something new' })).toBe("Not read: couldn't be read");
+  expect(fileWords({ name: 'a', status: 'refused', reason: 'unsafe' })).toBe('Not read: held back for safety');
   expect(fileWords({ name: 'a', status: 'ready' })).toBe('Read');
 });
