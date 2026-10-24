@@ -36,6 +36,20 @@ The hard rule: you never give investment advice. Never say buy, sell, hold, take
 
 If asked whether you are real: you are an AI analyst.`;
 
+/**
+ * What to do with a file the user shares by the board: a standing note, sent
+ * only to a host that takes files (the instructions have no room left). The
+ * runtime reads each file into a short summary and Reese reacts to a drop once
+ * on its own, with the tools at hand. A summary of a forty-row positions list
+ * can leave rows out, so the full list comes from the file itself, then one
+ * add: the board holds six, and what did not fit is said, not guessed at.
+ */
+export const FILES_NOTE = `Files the user shares. They can drop a file by the board: their positions or a watchlist (a CSV, or a screenshot of a brokerage page), or a company's earnings release.
+A positions list or watchlist: put it on the board on your own as you react to it, in one add_symbols call. First look at the file itself for the full list: the summary can leave rows out. Pass the tickers of holdings not already up, in the file's order, skipping cash, totals and option contracts, and no more than the live board's open slots (it holds ${MAX_SYMBOLS}). Then, in a sentence or two, say what went up and how many did not fit (name them if three or fewer), and offer to swap one in. If the board is already full, call nothing: say so and ask which stock should come off.
+Their shares, cost and gains are theirs: read one back only when asked, and never judge a position or say what to do with it. A price in a file (a screenshot's last price, a cost basis) is not a quote: the live board is still the only source of a price.
+An earnings release: say what the company reported (revenue, earnings per share, margins, its guidance) as the company's own figures, with the comparison the release gives. The hard rule holds: never say whether the quarter is good or bad for the stock, what the stock will do because of it, or what to do about it; guidance is the company's forecast, never yours. If the company is not on the board, offer to put it up.
+Every file is under the hard rule: a rating or a price target in one is never repeated as a view.`;
+
 // Lenient on purpose: the platform checks a call against its schema before
 // the page sees it, and a call that does not fit never arrives (the host is
 // told "invalid arguments" and often says the action happened anyway). So no
@@ -176,22 +190,33 @@ const forSaid = (q: Quote, said?: string) => (said && said.toUpperCase() !== q.s
 const slots = (board: Board) => `${board.watchlist.length} of ${board.max_symbols} slots used`;
 const nowS = () => Date.now() / 1000;
 
+/** What an add had no room for (the board was full), apart from the rest of what did not go up. */
+export function noRoom(r: AddReport): { full: AddReport['failed']; other: AddReport['failed'] } {
+  const full = r.failed.filter((f) => /only holds/.test(f.reason));
+  return { full, other: r.failed.filter((f) => !full.includes(f)) };
+}
+
+/** "NTDOY (the user said "Nintendo")": a refused stock, with what the user called it when that is not its ticker. */
+const refusedAs = (f: AddReport['failed'][number]) => `${f.symbol}${f.said && f.said.toUpperCase() !== f.symbol ? ` (the user said "${f.said}")` : ''}`;
+
 // ─── what a tool call (or a button) did, in words the host speaks from ───
 
 export const said = {
   added(r: AddReport, board: Board, now = nowS(), also = ''): string {
     const parts: string[] = [];
-    const missed = r.failed.length + r.unresolved.length > 0;
+    const { full, other } = noRoom(r);
+    const untried = r.untried ?? [];
+    const missed = r.failed.length + r.unresolved.length + untried.length > 0;
     // The plain outcome first: the platform's filler speaks before the result, and must not be what decides it.
     parts.push(r.landed.length || r.already.length ? (missed ? 'Partly done:' : 'Done:') : r.pending.length && !missed ? 'Not yet:' : 'Not done:');
     if (r.landed.length) parts.push(`on the board now: ${r.landed.map(({ quote, said: s }) => `${read(quote, now)}${forSaid(quote, s)}`).join('; ')}.`);
     if (also) parts.push(also);
     if (r.already.length) parts.push(`Already on the board: ${r.already.map((q) => read(q, now)).join('; ')}.`);
     if (r.pending.length) parts.push(`Still on the way: ${r.pending.join(', ')}. Say ${r.pending.length === 1 ? 'it is' : 'they are'} coming up, with no price; the desk tells you when ${r.pending.length === 1 ? 'it lands' : 'they land'}.`);
-    if (r.failed.length) {
-      parts.push(`Did NOT go up: ${r.failed.map((f) => `${f.symbol}${f.said && f.said.toUpperCase() !== f.symbol ? ` (the user said "${f.said}")` : ''}: ${f.reason}`).join(' ')}`);
-      if (r.failed.some((f) => /only holds/.test(f.reason))) parts.push('Ask which stock should come off; take one off only when they say which.');
-    }
+    if (other.length) parts.push(`Did NOT go up: ${other.map((f) => `${refusedAs(f)}: ${f.reason}`).join(' ')}`);
+    // One line for everything the board had no room for: a shared positions list can overflow it by dozens.
+    if (full.length) parts.push(`No room, so these did NOT go up: ${full.map(refusedAs).join(', ')}. ${full[0].reason} Say what did not fit; to put one up, a stock has to come off: ask which, and take one off only when they say which.`);
+    if (untried.length) parts.push(`Not tried, past what one call takes: ${untried.join(', ')}. Say so, and put any up only if they ask.`);
     if (r.unresolved.length) parts.push(`No listing matched ${r.unresolved.map((n) => `"${n}"`).join(', ')}: ask for the ticker or the company's full name, and never guess one.`);
     if (parts.length === 1) return 'Not done: no stock was named. Ask which one they want on the board.';
     parts.push(`(${slots(board)}.) Read what landed in one short line, the move and nothing else, and say plainly what did not go up and why. No advice.`);

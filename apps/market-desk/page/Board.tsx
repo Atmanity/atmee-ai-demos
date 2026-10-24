@@ -3,7 +3,7 @@
 // with the board or a refusal, and a refusal is printed as the sentence it is
 // (the same one Reese is told). It draws only what the board holds, so it
 // never shows a price for a quote that has not arrived.
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { Board, Kind, Quote } from '../engine/types.ts';
 import { AddSymbol } from './AddSymbol.tsx';
 import { ARROW, formatAsOf, formatMove, formatPrice, formatPrintTime, formatSeriesSpan, moveDirection, rangePosition, sortQuotes, type SortOrder } from './format.ts';
@@ -19,11 +19,13 @@ const icon = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke
 const RefreshIcon = () => <svg {...icon}><path d="M20 11a8 8 0 1 0-2.3 5.7" /><path d="M20 4v7h-7" /></svg>;
 const RemoveIcon = () => <svg {...icon}><path d="M6 6l12 12M18 6L6 18" /></svg>;
 
-export function DeskBoard({ board, onIntent, notice = null, now = Date.now(), host = 'Reese' }: {
+export function DeskBoard({ board, onIntent, notice = null, now = Date.now(), host = 'Reese', files = null }: {
   board: Board | null;
   onIntent: OnIntent;
   /** A refusal or failure from elsewhere (a tool call), printed like the board's own. */
   notice?: string | null;
+  /** The drop for a positions list or a release, laid under the add box. The page's: only the call takes files. */
+  files?: ReactNode;
   /** For the ages ("4m ago"); re-rendered by the page as time passes. */
   now?: number;
   host?: string;
@@ -96,6 +98,8 @@ export function DeskBoard({ board, onIntent, notice = null, now = Date.now(), ho
           </button>
         </div>
       </div>
+
+      {files}
 
       {message && <p className="oc-notice" role="status">{message}</p>}
 

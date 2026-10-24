@@ -5,8 +5,11 @@ up") and Reese, your analyst, puts it on a six-slot board with its real last
 sale, today's move, the 52-week range and how old the print is, and reads it
 to you. The stock on watch refreshes every minute and Reese speaks up when it
 moves a point. Ask what to buy and Reese says it straight: "I read the tape,
-I don't give advice." Rebuilt from the `market-desk` mini-app as a standalone
-product on the Avatar API.
+I don't give advice." Drop your positions or a watchlist (a CSV, or a
+screenshot of your brokerage page) and Reese puts up what fits and says what
+did not; drop an earnings release and Reese reads you its numbers, still with
+no advice. Rebuilt from the `market-desk` mini-app as a standalone product on
+the Avatar API.
 
 Open it at `/apps/market-desk/`.
 
@@ -24,9 +27,10 @@ Open it at `/apps/market-desk/`.
 | The no-advice rule | in the tool `instructions`, with the standing line and a board fact to offer instead; the decline is Reese's own words. No tool hands out advice and no result stages a decline. |
 | What Reese sees | `state`: one line per stock with its 52-week position worked out and its age or "stale", the names, what is arriving, the last refusal |
 | Buttons | the add box, the starters, a slot (put it on watch), refresh, remove, clear (asks first): they act at once (`POST /desks/:id/act`) and Reese is told by an event, while on the line |
+| Shared files | the kit's `FileDrop` under the add box (CSV, text, images, PDF), offered only while Reese takes files. The runtime reads each file into a summary and Reese reacts to a drop once on his own, so the page sends no event of its own. What he does with it is a standing note, `FILES_NOTE` in `engine/director.ts`, sent once the host takes files (the instructions have no room left): for a positions list or watchlist, look at the file itself for the full list (a summary of forty rows can leave some out), then one `add_symbols` with only as many tickers as the board has open slots, and say what did not fit; for an earnings release, the company's own figures and no verdict; a price in a file is never a quote. |
 | The desk's own lines | a 1% move on the stock on watch, a quote that outlived Reese's wait: server-sent events to the page, then `event`s to Reese (only the page holds the call) |
 | The safety net | `useToolNet` (kit) with `mustDo` (`engine/judge.ts`): "clear the board", "check it again", "drop Tesla", "pull up Tesla" (when Tesla is already on the board) are done by the page if Reese does not call the tool within 7 s. Actions safe to repeat only: never an add, nor a focus that would add; never on an advice question ("should I dump Tesla?") or a question about a stock ("what's Tesla doing?"). |
-| Tool arguments | Lenient schemas (no required fields, no tight lengths, no extra-field ban: a call that fails the schema never reaches the page); the app reads an array or a string under `stocks`, `stock`, `symbols` or `tickers`, ignores extra fields, and answers an unusable call with a question for Reese. |
+| Tool arguments | Lenient schemas (no required fields, no tight lengths, no extra-field ban: a call that fails the schema never reaches the page); the app reads an array or a string under `stocks`, `stock`, `symbols` or `tickers`, ignores extra fields, and answers an unusable call with a question for Reese. One call acts on twelve stocks at most; a whole list passed at once is read to the end and the rest is named as not tried. Everything the board had no room for is one line for Reese and one sentence on the panel, however long the list. |
 | Results | Each begins with the plain outcome ("Done:", "Partly done:", "Not done:", "Not yet:", "Failed:"), so the platform's filler before it cannot pre-judge it. |
 | The opening | an event when Reese arrives, from the board as it is then (the user can add while the call connects); it does not greet again, since Reese's own greeting already introduced Outcry |
 | The screens | the front door (`page/Lobby.tsx`); the desk: Reese's booth, the tape, the stock on watch and the six slots (`page/Board.tsx`, `page/Tape.tsx`); the closing sheet with a CSV download when the call ends (`page/Closing.tsx`); styled in `page/outcry.css` |
@@ -83,6 +87,15 @@ Status after the live run of 2026-10-23 on staging (Outcry's own host).
 9. **The await window is shorter than a bad feed day.** *Expected.* Nasdaq's
    6 s timeout and then Yahoo can outlast the 16 s budget; the result then
    says "on its way" and the landing comes later as an event (gap 5).
+10. **A shared file is read by the runtime, not the app.** *Expected.* The
+    page never sees what a file says, so it cannot check that the tickers
+    Reese passes are the file's, or that a screenshot was read right. Whether
+    Reese looks at the file for the full list before the add, and calls
+    `add_symbols` in his one reaction to the drop rather than only talking
+    about it, is the note's to win and not yet seen live; the safety net never
+    redoes an add. A positions file's shares and cost basis go to the
+    runtime's model with the rest of it. On a host whose runtime takes no
+    files the drop stays shut ("Reese can't take files in this call").
 
 Fixed by tools, compared with the earlier port: Reese no longer answers "add
 Nvidia" before the app has acted ("putting Z Q X W Q up" before the failed
@@ -92,7 +105,7 @@ longer need a judge in the page.
 
 ## Tested
 
-- `npx vitest run apps/market-desk`: 263 tests. The board's rules and the
+- `npx vitest run apps/market-desk`: 301 tests. The board's rules and the
   feed's parsing (ported from the original's Python tests); the pump, the
   timer, the announcer and the awaitable actions with a fake feed and clock
   (a quote slower than the wait, a pull joined by a second caller, one voice
@@ -103,8 +116,13 @@ longer need a judge in the page.
   tape and closing sheet rendered; and the page's wiring with the call faked
   (a tool call returns the server's words, a button tells Reese only on the
   line, the opening, the closing sheet, the safety net doing a clear Reese
-  only talked about and staying out when Reese called the tool). Key guards
-  were checked by mutation.
+  only talked about and staying out when Reese called the tool; the file drop
+  offered only while Reese takes files, the files note sent only then, the
+  files going to Reese with no event of the page's own); the files note
+  spelled out (the full list from the file, one add, only the open slots,
+  what did not fit; a release and a price in a file under the hard rule); a
+  list longer than the board, and longer than one call takes, said once. Key
+  guards were checked by mutation.
 - The server's routes in-process against the real Nasdaq feed, no model, two
   runs on 2026-10-23: "Nvidia, Tesla" (NVDA landed in one reply; TSLA came
   back "the feed is rate-limiting me", said as such), "rocket lab" (Nasdaq's

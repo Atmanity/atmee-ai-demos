@@ -3,14 +3,15 @@
  * The page's wiring, with the call faked (no room, no microphone) and the
  * server scripted: Reese's tool calls reach the desk and come back as its
  * words; a button acts and Reese is told; the opening, Reese's picture of the
- * board, the screens for each phase of the call; and the safety net doing a
- * clear Reese only talked about.
+ * board, the screens for each phase of the call; the safety net doing a
+ * clear Reese only talked about; and a file shared by the board.
  */
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { FileProgress } from '../../../src/avatar/files.ts';
 import type { AvatarHandlers, AvatarPhase } from '../../../src/kit/useAvatar.ts';
-import { say } from '../engine/director.ts';
+import { FILES_NOTE, say } from '../engine/director.ts';
 import type { ActReply, Board, Quote } from '../engine/types.ts';
 
 // ─── the fake call ───────────────────────────────────────────────────────
@@ -18,8 +19,11 @@ import type { ActReply, Board, Quote } from '../engine/types.ts';
 const call = vi.hoisted(() => ({
   handlers: {} as AvatarHandlers,
   setPhase: (_: string) => {},
+  setFilesAccepted: (_: boolean) => {},
   events: [] as string[],
   states: [] as string[],
+  notes: [] as string[],
+  drops: [] as { names: string[]; caption?: string }[],
   starts: [] as unknown[],
 }));
 
@@ -29,13 +33,22 @@ vi.mock('../../../src/kit/index.ts', async (importOriginal) => {
     ...kit,
     useAvatar: (_app: string, handlers: AvatarHandlers) => {
       const [phase, setPhase] = useState<AvatarPhase>('idle');
+      const [filesAccepted, setFilesAccepted] = useState(false);
       call.handlers = handlers;
       call.setPhase = (p) => setPhase(p as AvatarPhase);
+      call.setFilesAccepted = setFilesAccepted;
       return {
-        phase, detail: '', speaking: false, caption: '', heard: '', lines: [], secondsLeft: 600, micOn: false, audioBlocked: false,
+        phase, detail: '', speaking: false, caption: '', heard: '', lines: [], secondsLeft: 600, micOn: false, audioBlocked: false, filesAccepted,
         videoRef: { current: null }, audioRef: { current: null },
         start: async (opts: unknown) => { call.starts.push(opts); },
-        end: async () => {}, say: () => {}, record: () => {}, note: () => {},
+        end: async () => {}, say: () => {}, record: () => {},
+        note: (text: string) => { call.notes.push(text); },
+        // The host reads each file: every one is read here.
+        sendFiles: async (files: File[], options?: { caption?: string; onStatus?: (p: FileProgress) => void }) => {
+          call.drops.push({ names: files.map((f) => f.name), caption: options?.caption });
+          files.forEach((f, index) => options?.onStatus?.({ index, name: f.name, status: 'ready' }));
+          return files.map((f) => ({ name: f.name, status: 'ready' }));
+        },
         state: (text: string) => { call.states.push(text); },
         event: (text: string) => { call.events.push(text); },
         mute: () => {}, unmute: () => {}, setMic: () => {}, resumeAudio: () => {},
@@ -85,6 +98,8 @@ beforeEach(() => {
   posts = [];
   call.events = [];
   call.states = [];
+  call.notes = [];
+  call.drops = [];
   call.starts = [];
   answer = () => ({ seq: 1, board: empty, text: 'ok' });
   vi.stubGlobal('EventSource', FakeEventSource);
@@ -195,6 +210,30 @@ describe('the page', () => {
     const before = posts.length;
     await act(async () => { await vi.advanceTimersByTimeAsync(7100); });
     expect(posts.length).toBe(before);
+  });
+
+  // ─── a file shared by the board ──────────────────────────────────────
+
+  it('a file is offered only while Reese takes files, with the rule for it, and goes to Reese with no line of the page\'s own', async () => {
+    await enter();
+    const share = () => screen.getByRole('button', { name: 'Share a file' }) as HTMLButtonElement;
+    expect(share().disabled).toBe(true);
+    expect(screen.getByText("Once you're in the call with Reese.")).toBeTruthy();
+    act(() => call.setPhase('live'));
+    expect(share().disabled).toBe(true);
+    expect(screen.getByText("Reese can't take files in this call.")).toBeTruthy();
+    expect(call.notes).not.toContain(FILES_NOTE);
+    act(() => call.setFilesAccepted(true));
+    expect(share().disabled).toBe(false);
+    expect(screen.getByText(/^Drop your positions or a watchlist \(a CSV or a screenshot\) and Reese puts up what fits/)).toBeTruthy();
+    expect(call.notes).toEqual([FILES_NOTE]);
+    const positions = new File(['Symbol,Quantity\nAAPL,10\nMSFT,4\n'], 'positions.csv', { type: 'text/csv' });
+    await act(async () => { fireEvent.change(screen.getByLabelText('Share a file'), { target: { files: [positions] } }); });
+    expect(call.drops).toEqual([{ names: ['positions.csv'], caption: undefined }]);
+    expect(screen.getByText('Read')).toBeTruthy();
+    // Reese reacts to the drop once by himself (and fills the board through add_symbols): an event too would have him speak twice.
+    expect(call.events).toEqual([]);
+    expect(posts.filter((p) => p.path !== '/desks')).toEqual([]);
   });
 
   // ─── nothing started in one call acts on another ──────────────────────

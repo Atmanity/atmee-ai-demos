@@ -4,7 +4,7 @@
 // both routes with `run`; the tests drive it with a fake feed.
 import * as board from './board.ts';
 import { WAIT_MS, type DeskSession } from './desk.ts';
-import { pressed, said, TOOLS } from './director.ts';
+import { noRoom, pressed, said, TOOLS } from './director.ts';
 import { resolveStocks, type SymbolSearch, type TickerLookup } from './judge.ts';
 import type { AddReport, Kind, RefreshReport } from './types.ts';
 
@@ -42,18 +42,31 @@ function within<A extends unknown[], R>(fn: ((...args: A) => Promise<R>) | null 
   });
 }
 
+/**
+ * The most stocks one call acts on: each may cost a lookup, and the board
+ * holds six anyway. A longer list (a whole positions file passed at once) is
+ * still read to the end, so the result can say what was never tried.
+ */
+export const MAX_NAMES = 12;
+
 /** The stocks a call names, however it names them: an array or one string, under "stocks", "stock", "symbols" or "tickers". Extra fields are ignored. */
 function names(args: Record<string, unknown>, ...keys: string[]): string[] {
   const value = keys.map((k) => args[k]).find((v) => v !== undefined && v !== null && v !== '');
   const list = Array.isArray(value) ? value : typeof value === 'string' ? [value] : [];
-  return list.map((v) => String(typeof v === 'object' && v ? (v as Record<string, unknown>).symbol ?? (v as Record<string, unknown>).name ?? '' : v ?? '').trim().slice(0, 60)).filter(Boolean).slice(0, 12);
+  return list.map((v) => String(typeof v === 'object' && v ? (v as Record<string, unknown>).symbol ?? (v as Record<string, unknown>).name ?? '' : v ?? '').trim().slice(0, 60)).filter(Boolean).slice(0, 100);
 }
 const ALL = ['stocks', 'stock', 'symbols', 'symbol', 'tickers', 'ticker', 'names', 'name'];
 const ONE = ['stock', 'symbol', 'ticker', 'name', 'stocks', 'symbols', 'tickers'];
 
+/** "AMD, INTC, QCOM, AVGO, TXN and 3 more". */
+const few = (symbols: string[], most = 5) => (symbols.length <= most ? symbols.join(', ') : `${symbols.slice(0, most).join(', ')} and ${symbols.length - most} more`);
+
 /** What the panel prints for an add that did not fully go up. */
 function addRefusal(r: AddReport): string | undefined {
-  const lines = r.failed.map((f) => (r.failed.length > 1 ? `${f.symbol}: ${f.reason}` : f.reason));
+  const { full, other } = noRoom(r);
+  const lines = other.map((f) => (r.failed.length > 1 ? `${f.symbol}: ${f.reason}` : f.reason));
+  // The board's sentence once, however many a list brought that did not fit.
+  if (full.length) lines.push(r.failed.length > 1 ? `${full[0].reason} No room for ${few(full.map((f) => f.symbol))}.` : full[0].reason);
   if (r.unresolved.length) lines.push(`No listing matched ${r.unresolved.map((n) => `“${n}”`).join(', ')}. Try the ticker.`);
   return lines.join(' ') || undefined;
 }
@@ -74,10 +87,12 @@ export async function run(session: DeskSession, name: string, args: Record<strin
 
   switch (name) {
     case 'add_symbols': {
-      const asked = names(args, ...ALL);
+      const listed = names(args, ...ALL);
+      const asked = listed.slice(0, MAX_NAMES);
       if (!asked.length) return { text: 'Not done: no stock was named. Ask which one they want on the board.' };
       const r = await resolveStocks(asked, session.board(), lookups);
       const report = await session.add(r.symbols, { by, said: r.said, unresolved: r.unresolved, waitMs: waitMs(), call: deps.call });
+      if (listed.length > asked.length) report.untried = listed.slice(asked.length);
       return { text: said.added(report, session.board()), refused: addRefusal(report) };
     }
     case 'focus_symbol': {
@@ -100,7 +115,7 @@ export async function run(session: DeskSession, name: string, args: Record<strin
       return { text: said.refreshed(report), refused: refreshRefusal(report) };
     }
     case 'remove_symbols': {
-      const asked = names(args, ...ALL);
+      const asked = names(args, ...ALL).slice(0, MAX_NAMES);
       if (!asked.length) return { text: 'Not done: no stock was named. Ask which one should come off.' };
       // What comes off is on the board: no lookups. A name that matched
       // nothing goes to the board as said, which refuses it in its own words.

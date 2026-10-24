@@ -52,6 +52,27 @@ describe('the host\'s tools', () => {
     expect(s.board().watchlist).toEqual([]);
   });
 
+  test('add_symbols: a positions list longer than the board fills it, and what did not fit is said once', async () => {
+    const { s } = desk();
+    const list = ['AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META', 'TSLA', 'AVGO'];
+    const done = await run(s, 'add_symbols', { stocks: list }, 'tool');
+    expect(s.board().watchlist.map((q) => q.symbol)).toEqual(list.slice(0, 6));
+    expect(done.text).toMatch(/^Partly done: on the board now: AAPL/);
+    expect(done.text).toContain('No room, so these did NOT go up: TSLA, AVGO.');
+    expect(done.refused).toBe('The board only holds six — drop one first. No room for TSLA, AVGO.');
+  });
+
+  test('add_symbols: a whole list passed at once is read to the end; what one call does not take is never tried, and said so', async () => {
+    const fetch = vi.fn(async (symbol: string) => fresh(symbol));
+    const { s } = desk(fetch);
+    const list = ['AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META', 'TSLA', 'AVGO', 'AMD', 'INTC', 'QCOM', 'TXN', 'ORCL', 'CRM', 'ADBE'];
+    const done = await run(s, 'add_symbols', { stocks: list }, 'tool');
+    expect(fetch.mock.calls.map(([symbol]) => symbol)).toEqual(list.slice(0, 6));
+    expect(done.text).toContain('No room, so these did NOT go up: TSLA, AVGO, AMD, INTC, QCOM, TXN.');
+    expect(done.text).toContain('Not tried, past what one call takes: ORCL, CRM, ADBE.');
+    expect(done.refused).toBe('The board only holds six — drop one first. No room for TSLA, AVGO, AMD, INTC, QCOM and 1 more.');
+  });
+
   test('add_symbols: the model reads a description; the feed has the last word', async () => {
     const { s } = desk(async (symbol) => { if (symbol === 'GOOGL') return fresh(symbol); throw new board.UnknownSymbol(board.unknownMessage(symbol)); });
     const lookup = vi.fn(async (names: string[]) => names.map((said) => ({ said, ticker: said.includes('search') ? 'GOOGL' : 'ZQXWQ' })));
