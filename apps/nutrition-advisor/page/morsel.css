@@ -125,6 +125,11 @@ q { quotes: "“" "”"; font-weight: 600; }
 .ms-status img { width: 44px; height: 44px; object-fit: cover; border-radius: 4px; }
 .ms-notice { display: flex; align-items: center; gap: 10px; margin: 0; padding: 10px 6px 10px 14px; background: var(--ms-paper); border-left: 6px solid var(--ms-tomato); }
 .ms-notice > :first-child { flex: 1; }
+.ms-files { list-style: none; display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 10px 14px; background: var(--ms-paper); border-left: 6px solid var(--ms-ink); font-size: 14px; }
+.ms-files li { display: flex; justify-content: space-between; gap: 12px; }
+.ms-files li > :first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
+.ms-files li > :last-child { flex: none; color: var(--ms-muted); }
+.ms-files li.is-refused > :last-child { color: var(--ms-tomato); }
 .ms-alert { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 16px 12px 16px 18px; background: var(--ms-tomato); color: #fff; border-radius: 6px; }
 .ms-alert strong { font: 850 22px/1.1 var(--ms-display); font-stretch: 80%; }
 .ms-alert span { grid-column: 1; }

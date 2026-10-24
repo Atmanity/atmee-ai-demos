@@ -1,8 +1,10 @@
 // The table: everything the user sees besides Rachel. An empty table that says
 // what to ask, a label being looked up, the card with its recipe ideas, the
-// foods side by side, a recipe being cooked, and the two notices the page puts
-// up on its own (an emergency; a question about the user's own health).
+// foods side by side, a recipe being cooked, the files on their way to Rachel,
+// and the two notices the page puts up on its own (an emergency; a question
+// about the user's own health).
 import { useState, type DragEvent, type ReactNode } from 'react';
+import { fileWords, type SharedFile } from '../../../src/kit/index.ts';
 import type { Cook } from '../engine/cook.ts';
 import type { RecipeIdea, View } from '../engine/types.ts';
 import { Ideas, Label } from './Label.tsx';
@@ -27,6 +29,10 @@ export interface BoardProps {
   ready: boolean;
   /** The call is on its way. */
   connecting: boolean;
+  /** Rachel takes files in this call: a drop is photos, a menu, a food log, not one photo. */
+  takesFiles: boolean;
+  /** The files of the drop on its way to Rachel, each with its progress. */
+  files: SharedFile[];
   view: View | null;
   recipeView: RecipeView;
   cook: Cook;
@@ -41,7 +47,8 @@ export interface BoardProps {
   onPickStep: (step: number) => void;
   onRetryRecipe: () => void;
   onChoosePhoto: () => void;
-  onPhoto: (file: File) => void;
+  /** Everything dropped on the table; the app decides what reads it. */
+  onFiles: (files: File[]) => void;
   onSample: () => void;
   onClear: () => void;
   onDismissNotice: () => void;
@@ -51,13 +58,13 @@ export interface BoardProps {
 const sentence = (label: string) => `${label.charAt(0).toUpperCase()}${label.slice(1)}…`;
 
 export function Board(props: BoardProps) {
-  const { host, ready, view, recipeView, working, notice, concern } = props;
+  const { host, ready, takesFiles, files, view, recipeView, working, notice, concern } = props;
   const card = view?.nutrition ?? null;
   const shelf = view?.shelf;
   const [dragging, setDragging] = useState(false);
   const busyPhoto = working.some((w) => w.preview);
 
-  // A photo dropped anywhere on the table is read like an added one.
+  // Whatever is dropped anywhere on the table goes the way an added photo or file does.
   const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
   const drop = {
     onDragOver: (e: DragEvent) => {
@@ -72,8 +79,8 @@ export function Board(props: BoardProps) {
       if (!hasFiles(e)) return;
       e.preventDefault();
       setDragging(false);
-      const file = Array.from(e.dataTransfer.files)[0];
-      if (ready && file) props.onPhoto(file);
+      const dropped = Array.from(e.dataTransfer.files);
+      if (ready && dropped.length) props.onFiles(dropped);
     },
   };
 
@@ -137,10 +144,10 @@ export function Board(props: BoardProps) {
         </div>
         <div className="ms-photo-door">
           <button type="button" className="ms-secondary" onClick={props.onChoosePhoto} disabled={!ready || busyPhoto}>
-            <CameraIcon /> Add a photo of a food or its label
+            <CameraIcon /> {takesFiles ? 'Add a photo, a menu or your food log' : 'Add a photo of a food or its label'}
           </button>
           <button type="button" className="ms-link" onClick={props.onSample} disabled={!ready || busyPhoto}>No food handy? Use our salmon plate photo</button>
-          <p className="ms-hint">You can also drop a photo anywhere on this table.</p>
+          <p className="ms-hint">{takesFiles ? 'You can also drop them anywhere on this table, several labels at once to compare them.' : 'You can also drop a photo anywhere on this table.'}</p>
         </div>
       </div>
     );
@@ -163,6 +170,13 @@ export function Board(props: BoardProps) {
         </aside>
       )}
       {status}
+      {files.length > 0 && (
+        <ul className="ms-files" aria-label={`On their way to ${host}`} aria-live="polite">
+          {files.map((file, i) => (
+            <li key={i} className={`is-${file.status}`}><span>{file.name}</span><span>{fileWords(file)}</span></li>
+          ))}
+        </ul>
+      )}
       {notice && (
         <p className="ms-notice" role="status">
           {notice}
@@ -170,7 +184,7 @@ export function Board(props: BoardProps) {
         </p>
       )}
       {body}
-      {dragging && <div className="ms-drop" aria-hidden="true">Drop a photo of a food or its label</div>}
+      {dragging && <div className="ms-drop" aria-hidden="true">{takesFiles ? 'Drop photos, a menu or your food log' : 'Drop a photo of a food or its label'}</div>}
     </section>
   );
 }

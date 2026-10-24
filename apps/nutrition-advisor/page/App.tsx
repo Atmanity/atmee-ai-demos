@@ -4,11 +4,13 @@
 // recipe, next steps); the page answers each call (the server for anything
 // that needs a model, itself for the recipe's place), updates the table and
 // returns the words she speaks from. Buttons act at once and she is told.
+// Photos and files the user shares she sees herself; the app's own reader
+// still makes every photo's card.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useToolNet, BackToApps, useCaptionToggle, type ToolCall } from '../../../src/kit/index.ts';
+import { CallControls, CallStatus, ChatPanel, FileError, HostVideo, MAX_FILES, REFUSED_WORDS, useAvatar, useToolNet, BackToApps, useCaptionToggle, type FileOutcome, type FileProgress, type SharedFile, type ToolCall } from '../../../src/kit/index.ts';
 import { recipeKey } from '../engine/advisor.ts';
 import { nextBatch, pick, started, unstarted, type Cook } from '../engine/cook.ts';
-import { boardState, NOTES, pressed, said, SERVER_TOOLS, type Screen } from '../engine/director.ts';
+import { boardState, NOTES, photosTold, pressed, said, SERVER_TOOLS, type Screen } from '../engine/director.ts';
 import { concernIn, mustDo } from '../engine/judge.ts';
 import { hasNotes } from '../engine/notes.ts';
 import { reasonFrom } from '../engine/nutrition.ts';
@@ -18,7 +20,7 @@ import portrait from '../host/portrait.jpg';
 import { Board, CameraIcon, type Work } from './Board.tsx';
 import { Lobby, Logo } from './Lobby.tsx';
 import { downloadNotes, Notes } from './Notes.tsx';
-import { imageFrom } from './photo.ts';
+import { imageFrom, type Picked } from './photo.ts';
 import { arrived, closed, failed, initialRecipeView, requested, timedOut, type Chosen, type RecipeView } from './recipeView.ts';
 import './morsel.css';
 
@@ -31,6 +33,9 @@ const HOST = 'Rachel';
  * and offers "Try again". Longer than a healthy recipe, far shorter than forever.
  */
 const RECIPE_WAIT_MS = 20_000;
+
+/** What the picker offers while Rachel takes files: photos, a menu, a food log. */
+const FILE_TYPES = 'image/*,.pdf,.csv,.txt';
 
 async function post<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) });
@@ -66,6 +71,9 @@ export function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const [concern, setConcernState] = useState<'emergency' | 'medical' | null>(null);
   const [opened, setOpened] = useState<RecipeDetails[]>([]);
+  // The drop on its way to Rachel: a later one replaces it on the table.
+  const [shared, setShared] = useState<SharedFile[]>([]);
+  const drops = useRef(0);
   const visit = useRef<string | null>(null);
   // Which call the table belongs to. Bumped when a call is placed and when it
   // ends, so anything started for one call (its table, a lookup, a button)
@@ -220,6 +228,7 @@ export function App() {
   avatarRef.current = avatar;
   const live = avatar.phase === 'live';
   const ready = live && Boolean(view);
+  const takesFiles = live && avatar.filesAccepted;
 
   // Every call sets a fresh table, while Rachel is on her way. A call that
   // ends or fails takes its pending work with it: what it started is dropped
@@ -228,6 +237,7 @@ export function App() {
     if (avatar.phase === 'ended' || avatar.phase === 'failed') {
       generation.current += 1;
       setWorking([]);
+      setShared([]);
       if (recipeViewRef.current.loading) setRecipeView(failed(recipeViewRef.current, recipeViewRef.current.requestId));
       return;
     }
@@ -240,6 +250,7 @@ export function App() {
     setRecipeView(closed(recipeViewRef.current));
     setCook(unstarted());
     setWorking([]);
+    setShared([]);
     setNotice(null);
     setConcern(null);
     setOpened([]);
@@ -328,24 +339,94 @@ export function App() {
     avatar.event(pressed(label, stepOn()), 30);
   }
 
+  /**
+   * Photos read by the app's own reader, all at once (the server reads them in
+   * turn), each card on the table as it comes. One line on the table for them
+   * all, showing the first. The outcomes that came back, in the order they did.
+   */
+  async function readPhotos(files: File[], mine: number): Promise<Outcome[]> {
+    const pictures = await Promise.all(files.map((file) => imageFrom(file).catch((err): null => {
+      if (mine === generation.current) setNotice(`That photo couldn't be opened: ${reasonFrom(err, 'try a JPEG or PNG')}.`);
+      return null;
+    })));
+    const images = pictures.filter((image): image is Picked => image !== null);
+    if (!images.length || mine !== generation.current) return [];
+    const label = images.length > 1 ? `reading your ${images.length} photos` : 'reading your photo';
+    const work = { id: ++workId.current, label, preview: images[0].preview };
+    setWorking((w) => [...w, work]);
+    const read: Outcome[] = [];
+    try {
+      await Promise.all(images.map(async (image) => {
+        try {
+          const done = await call('/act', { command: 'photo', image: { mimeType: image.mimeType, base64: image.base64 } }, null, undefined, mine);
+          apply(done, 'button');
+          read.push(done);
+        } catch (err) {
+          didNotGoThrough(err);
+        }
+      }));
+    } finally {
+      if (mine === generation.current) setWorking((w) => w.filter((x) => x.id !== work.id));
+    }
+    return read;
+  }
+
+  /** One photo, read by the app alone, and Rachel told what it found. */
   async function addPhoto(file: File) {
     if (!visit.current) return;
-    const mine = generation.current;
     setNotice(null);
-    let image: Awaited<ReturnType<typeof imageFrom>>;
-    try {
-      image = await imageFrom(file);
-    } catch (err) {
-      if (mine === generation.current) setNotice(`That photo couldn't be opened: ${reasonFrom(err, 'try a JPEG or PNG')}.`);
-      return;
-    }
-    try {
-      const done = await call('/act', { command: 'photo', image: { mimeType: image.mimeType, base64: image.base64 } }, 'reading your photo', image.preview, mine);
-      apply(done, 'button');
-      if (done.text) avatar.event(done.text, 45);
-    } catch (err) {
-      didNotGoThrough(err);
-    }
+    const [done] = await readPhotos([file], generation.current);
+    if (done?.text) avatar.event(done.text, 45);
+  }
+
+  /** The words for a drop's files Rachel could not read. */
+  const refusedWords = (refused: FileOutcome[]) =>
+    `Not read by ${HOST}: ${refused.map((file) => `${file.name} (${REFUSED_WORDS[file.reason ?? ''] ?? REFUSED_WORDS.failed})`).join(', ')}.`;
+
+  /**
+   * Photos and files the user adds or drops. While Rachel takes files, every
+   * one goes to her in one drop: she sees them, and reacts to the drop once
+   * on her own. The photos go to the app's own reader as well, which makes
+   * their cards; once both are done she is told what the app made of them, in
+   * one event and after her own reaction. A menu or a food log goes to her
+   * alone. When she takes no files, the first photo is read as it always was.
+   */
+  async function addFiles(files: File[]) {
+    if (!visit.current || !files.length) return;
+    if (!(avatar.phase === 'live' && avatar.filesAccepted)) return void addPhoto(files[0]);
+    if (files.length > MAX_FILES) return void setNotice(`At most ${MAX_FILES} files at a time.`);
+    const mine = generation.current;
+    const drop = ++drops.current;
+    // Still this call's newest drop: only it shows on the table.
+    const showing = () => mine === generation.current && drop === drops.current;
+    const photos = files.filter((file) => file.type.startsWith('image/'));
+    setNotice(null);
+    setShared(files.map((file) => ({ name: file.name, status: 'sending' })));
+    const onStatus = ({ index, status, reason }: FileProgress) => {
+      if (showing()) setShared((now) => now.map((file, i) => (i === index ? { ...file, status, ...(reason ? { reason } : {}) } : file)));
+    };
+    const sent = avatar.sendFiles(files, { onStatus }).then(
+      (outcome) => {
+        if (!showing()) return outcome;
+        setShared([]);
+        const refused = outcome.filter((file) => file.status === 'refused');
+        if (refused.length) setNotice(refusedWords(refused));
+        return outcome;
+      },
+      (err): null => {
+        if (showing()) {
+          setShared([]);
+          setNotice(err instanceof FileError && err.code === 'files_unsupported' ? `${HOST} can't take files in this call.` : "The files couldn't be sent. Try again.");
+        }
+        return null;
+      },
+    );
+    const [read, outcome] = await Promise.all([readPhotos(photos, mine), sent]);
+    if (mine !== generation.current) return;
+    // Whether she saw the photos herself decides what she is told: their cards, not their arrival.
+    const seen = Boolean(outcome?.some((file, i) => file.status === 'ready' && files[i].type.startsWith('image/')));
+    const told = photosTold(read, photos.length, seen);
+    if (told) avatar.event(told, 45);
   }
 
   async function tryPlate() {
@@ -384,18 +465,18 @@ export function App() {
         <BackToApps avatar={avatar} name={HOST} /><Logo />
         <div className="ms-top-actions">
           <button type="button" className="ms-tool" onClick={() => picker.current?.click()} disabled={!ready}>
-            <CameraIcon /><span>Add a photo</span>
+            <CameraIcon /><span>{takesFiles ? 'Add a photo or file' : 'Add a photo'}</span>
           </button>
           <button type="button" className="ms-tool" onClick={() => downloadNotes(shelf, opened, HOST)} disabled={!anything}>
             <DownloadIcon /><span>Save notes</span>
           </button>
         </div>
         <input
-          ref={picker} type="file" accept="image/*" hidden
+          ref={picker} type="file" accept={takesFiles ? FILE_TYPES : 'image/*'} multiple={takesFiles} hidden
           onChange={(e) => {
-            const file = e.target.files?.[0];
+            const files = [...(e.target.files ?? [])];
             e.target.value = '';
-            if (file) void addPhoto(file);
+            void addFiles(files);
           }}
         />
       </header>
@@ -426,7 +507,7 @@ export function App() {
             <Notes shelf={shelf} recipes={opened} host={HOST} failed={avatar.phase === 'failed' && !anything} onAgain={again} />
           ) : (
             <Board
-              host={HOST} ready={ready} connecting={!live} view={view} recipeView={recipeView} cook={cook}
+              host={HOST} ready={ready} connecting={!live} takesFiles={takesFiles} files={shared} view={view} recipeView={recipeView} cook={cook}
               working={working} notice={notice} concern={concern}
               onQuickPick={(food) => void quickPick(food)}
               onIdea={(idea: RecipeIdea) => void tapRecipe(idea)}
@@ -436,7 +517,7 @@ export function App() {
               onPickStep={(step) => setCook(pick(step, recipeViewRef.current.details?.preparation_steps.length ?? 0))}
               onRetryRecipe={() => { const chosen = recipeViewRef.current.selected; if (chosen) void tapRecipe(chosen); }}
               onChoosePhoto={() => picker.current?.click()}
-              onPhoto={(file) => void addPhoto(file)}
+              onFiles={(files) => void addFiles(files)}
               onSample={() => void tryPlate()}
               onClear={() => void clearTable()}
               onDismissNotice={() => setNotice(null)}

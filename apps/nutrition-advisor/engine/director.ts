@@ -10,11 +10,12 @@
 // * the board (`boardState`): what is on the user's screen, every figure the
 //   host may quote, re-sent whenever the screen changes.
 // * `said`: what each action did, in words the host speaks from.
+// * `photosTold`: what the app made of a drop's photos, told once for the drop.
 import type { AppTool } from '../../../server/app-server.ts';
 import { stepsLabel, type Cook } from './cook.ts';
 import { DAILY_VALUES, dailyValue } from './nutrition.ts';
 import { isCurrent } from './shelf.ts';
-import type { Nutrients, NutritionData, RecipeDetails, ShelfRow, View } from './types.ts';
+import type { Nutrients, NutritionData, Outcome, RecipeDetails, ShelfRow, View } from './types.ts';
 
 /** The board's limit (the API's `state`). */
 export const MAX_STATE = 3858;
@@ -22,15 +23,17 @@ export const MAX_STATE = 3858;
 export const MAX_NOTE = 2000;
 /** The instructions' limit. */
 export const MAX_INSTRUCTIONS = 4000;
+/** An event's limit. */
+export const MAX_EVENT = 2000;
 
-export const INSTRUCTIONS = `You are the nutritionist in Morsel, a food app, talking with one person. Their screen shows what the app puts there: a nutrition card for one food (serving, calories, macros with % daily value, a 1-10 score, a summary, three recipe ideas), a comparison table of every food looked at, and recipe cards. You cannot see it. The screen changes only when you call a tool, and every figure comes from a tool's result or the live board in your context.
+export const INSTRUCTIONS = `You are the nutritionist in Morsel, a food app, talking with one person. Their screen shows what the app puts there: a nutrition card for one food (serving, calories, macros with % daily value, a 1-10 score, a summary, three recipe ideas), a comparison table of every food looked at, and recipe cards. You cannot see the screen. The screen changes only when you call a tool, and every figure comes from a tool's result or the live board in your context.
 - When they name a food, drink or product they want to know about ("what's in a banana?", "protein in 200 g of chicken"), call look_up_food before saying anything about it, and answer from its result. Never give a figure of your own, even when you think you know it.
 - "Compare it with an apple", "which has more sugar, a banana or an apple?": call compare_foods, then give a one-line verdict from its figures.
 - "How do I make the smoothie?", "walk me through the first one": call open_recipe with the name as the card lists it. Talk a recipe through one or two steps at a time; when they are ready for more ("done", "what's next?"), call next_steps. "Back to the card": call close_recipe. "Start over", "clear everything": call start_over, and only then.
 - Questions about what is already on screen (a figure on the card, the score, which food in the table has more fiber, the step they are on): answer from the live board, no tool needed.
 - Every request that changes the screen is a tool call, even a one-word answer to your own question ("yes", "the second one", a food's name). Saying "let me pull that up" or "here it is" without the call changes nothing and misleads them. Never say an action happened, or that something is on screen, unless a tool's result or the board says so.
 - Speak only of what is on the card: its figures (calories, protein, carbs, fat, fiber, sugar, sodium), its score and its summary. Never add a nutrient, vitamin, mineral or claim from memory (no potassium, vitamins or glycemic index); asked about one, say that isn't on this card.
-- Photos: they add a photo of a food or its label with the photo button; the app reads it and tells you what it found. Naming a food is enough: never ask them to hold anything up to a camera, and never say you cannot look at photos.
+- Photos and files they share with you (a plate, food labels, a menu, a food log) you see yourself. The app also reads each photo of a food or label into its card and tells you its figures: until then (the board says it is reading), react to what you see with no figure, and do not look that food up. Every figure and score comes from a card, the board or a tool's result, never read off a photo or file yourself: for a dish on a menu or a food in their log, call look_up_food (compare_foods for several). Naming a food is enough: never ask them to hold anything up to a camera.
 - If they press a button, the app tells you what happened; carry on from that.
 Voice: one or two short spoken sentences, friendly and never preachy ("high in sugar for a snack", never "you shouldn't eat this"). Give the takeaway, not the figures read back; say a number when they ask for it. No markdown, lists, asterisks or headings: everything is read aloud, and steps are said as sentences. A walkthrough they asked for may take the words it needs, never all at once. At most one question per turn; ask about quantity only when it would change the numbers a lot. "Label" figures were read from a nutrition label in their photo; everything else is an estimate, and an assumed portion is an assumption: say so when it matters.
 The advice line, in your standing note: you say what is in a food and what a nutrient does in general, never what this person should eat for their health. If they mention a condition, a medicine, a pregnancy or an allergy of their own, or ask whether a food is safe or right for them, decline kindly, say you are not their doctor or dietitian, and offer to read the numbers instead. If they describe an emergency (trouble breathing, a swelling throat or tongue, a severe allergic reaction, choking), tell them to call their local emergency number right now, and nothing else.`;
@@ -323,8 +326,43 @@ export const said = {
 
   noVision: () => 'The app cannot read photos right now, and nothing new is on screen. Say so in one short line and ask them to name the food instead; do not mention an error or a system.',
 
+  /** Before what the app made of photos the host saw itself: it reacted to them when they were shared. */
+  seen: (photos: number) => photos > 1
+    ? 'You saw these photos yourself when they shared them and have already reacted: do not describe them again or repeat what you said.'
+    : 'You saw this photo yourself when they shared it and have already reacted: do not describe it again or repeat what you said.',
+
+  /** Several photos of one drop read into cards, side by side in the table. `foods`: the cards' foods. */
+  photos: (foods: string[], photos: number) => {
+    const missed = photos - foods.length;
+    const next = foods.length <= 3
+      ? `Call compare_foods with ${list(foods)}, then give a one-line verdict from its figures.`
+      : 'Ask which two or three they would like compared, then call compare_foods with those.';
+    return `The app read the ${photos} photos they shared and put ${foods.length} cards side by side in the comparison table on screen: ${list(foods)}.${missed ? ` ${noCard(missed)}` : ''} ${next}`;
+  },
+
   emergency: () => 'Tell them to call their local emergency number right now (911 in the US, 112 in Europe, 999 in the UK). The user may be describing a medical emergency, and an emergency notice is now at the top of their screen. Say it in one or two calm sentences, and nothing about food.',
 };
+
+const noCard = (photos: number) => `No card came of ${photos === 1 ? 'one of the photos' : `${photos} of the photos`}.`;
+
+/**
+ * What the host is told once the app has read the photos of one drop: one
+ * message for the drop, never one per photo. `read`: each photo's outcome (a
+ * photo that never reached the reader has none); `photos`: how many the drop
+ * held. `seen`: the host saw them itself and has reacted to the drop, so it is
+ * told what the app made of them (one card's figures, or the cards to
+ * compare), never that a photo came. Null when there is nothing to tell.
+ */
+export function photosTold(read: Outcome[], photos: number, seen: boolean): string | null {
+  const cards = read.filter((done) => done.kind === 'photo' && done.food);
+  let text: string | null = null;
+  if (cards.length > 1) text = said.photos(cards.map((done) => done.food!), photos);
+  else if (cards.length === 1) text = `${cards[0].text}${photos > 1 ? ` ${noCard(photos - 1)}` : ''}`;
+  else if (read.some((done) => done.text)) text = read.filter((done) => done.text).at(-1)!.text;
+  // Seen, so it may have promised a card: none is coming.
+  else if (photos && seen) text = said.photoFailed();
+  return text && seen ? `${said.seen(photos)} ${text}` : text;
+}
 
 /** A button press, told to the host: it cannot see the screen. */
 export const pressed = (button: string, outcome: string) => `The user pressed "${button}" on screen. ${outcome}`;
