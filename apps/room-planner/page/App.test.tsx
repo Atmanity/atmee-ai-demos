@@ -3,7 +3,7 @@
  * The whole page with the real planner and the kit's real parts, the call
  * faked: the front door, the call connecting, the architect's tool calls
  * changing the plan and answering with its numbers, a typed line going to her,
- * the safety net, and the end of the call.
+ * the safety net, a floor plan shared with her, and the end of the call.
  */
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,11 +13,13 @@ const fake = vi.hoisted(() => ({
   events: [] as string[],
   said: [] as string[],
   started: [] as unknown[],
+  shared: [] as { names: string[]; caption?: string }[],
   handlers: undefined as undefined | {
     onToolCall?: (call: { id: string; name: string; arguments: Record<string, unknown> }) => unknown;
     onUserSaid?: (text: string, how: 'spoken' | 'typed') => void;
   },
   setPhase: undefined as undefined | ((phase: string) => void),
+  setFiles: undefined as undefined | ((accepted: boolean) => void),
 }));
 
 vi.mock('../../../src/kit/index.ts', async (importOriginal) => {
@@ -27,13 +29,15 @@ vi.mock('../../../src/kit/index.ts', async (importOriginal) => {
     ...actual,
     useAvatar: (_app: string, handlers: typeof fake.handlers) => {
       const [phase, setPhase] = useState('idle');
+      const [filesAccepted, setFiles] = useState(false);
       fake.setPhase = setPhase;
+      fake.setFiles = setFiles;
       fake.handlers = handlers;
       const videoRef = useRef<HTMLVideoElement>(null);
       const audioRef = useRef<HTMLAudioElement>(null);
       return {
         phase, detail: '', speaking: false, caption: '', heard: '', lines: [], secondsLeft: null, micOn: false, audioBlocked: false,
-        videoRef, audioRef,
+        filesAccepted, videoRef, audioRef,
         start: async (opts: unknown) => { fake.started.push(opts); setPhase('starting'); },
         end: async () => setPhase('ended'),
         say: (text: string) => { fake.said.push(text); handlers?.onUserSaid?.(text, 'typed'); },
@@ -41,6 +45,12 @@ vi.mock('../../../src/kit/index.ts', async (importOriginal) => {
         state: (text: string) => fake.states.push(text),
         event: (text: string) => fake.events.push(text),
         mute() {}, unmute() {}, setMic() {}, resumeAudio() {},
+        // The host reads every file it is handed.
+        sendFiles: async (files: File[], options?: { caption?: string; onStatus?: (p: { index: number; name: string; status: string }) => void }) => {
+          fake.shared.push({ names: files.map((f) => f.name), caption: options?.caption });
+          files.forEach((f, index) => options?.onStatus?.({ index, name: f.name, status: 'ready' }));
+          return files.map((f) => ({ name: f.name, status: 'ready' }));
+        },
       };
     },
   };
@@ -66,7 +76,7 @@ async function onTheCall() {
 }
 
 beforeEach(() => {
-  for (const list of [fake.states, fake.events, fake.said, fake.started]) list.length = 0;
+  for (const list of [fake.states, fake.events, fake.said, fake.started, fake.shared]) list.length = 0;
 });
 afterEach(() => {
   cleanup();
@@ -160,6 +170,45 @@ describe('the safety net', () => {
     await tool('switch_units', { unit: 'ft2' });
     await act(async () => { await vi.advanceTimersByTimeAsync(7100); });
     expect(fake.events.some((e) => e.startsWith('You did not call'))).toBe(false);
+  });
+});
+
+describe('a floor plan shared with Iris', () => {
+  const share = (files: File[]) => fireEvent.change(screen.getByLabelText('Share a floor plan or photos'), { target: { files } });
+
+  it('is offered only while her host takes files, and the empty sheet says so', async () => {
+    await onTheCall();
+    expect(screen.queryByRole('button', { name: 'Share a floor plan or photos' })).toBeNull();
+    expect(document.querySelector('.pw-empty')!.textContent).not.toContain('floor plan');
+    act(() => fake.setFiles!(true));
+    expect(screen.getByRole('button', { name: 'Share a floor plan or photos' })).toHaveProperty('disabled', false);
+    expect(screen.getByText(/works from the sizes printed on the plan/)).toBeTruthy();
+    expect(document.querySelector('.pw-empty')!.textContent).toContain("Have the listing's floor plan? Share it with her");
+    // It sits beside her, not in a tab of the tray that a tap on the plan swaps out.
+    expect(screen.getByLabelText('Iris, your architect').querySelector('.pw-files')).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/\b(avatar|session|demo|sample|mini-app|Atmee|API|tools?|state|events?)\b/i);
+  });
+
+  it('goes to her alone: no word from the app (her host speaks of it once) and nothing read into furniture', async () => {
+    // The app's photo reader would work here (as Bring your own uses it), so a drop sent to it would show.
+    const reads = vi.fn(async () => new Response('{}'));
+    vi.stubGlobal('fetch', reads);
+    vi.stubGlobal('createImageBitmap', async () => ({ width: 800, height: 600 }));
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage() {} } as never);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/jpeg;base64,eA==');
+    try {
+      await onTheCall();
+      act(() => fake.setFiles!(true));
+      const said = fake.events.length;
+      await act(async () => { share([new File(['%PDF'], 'listing-plan.pdf', { type: 'application/pdf' }), new File(['x'], 'living-room.jpg', { type: 'image/jpeg' })]); });
+      expect(fake.shared).toEqual([{ names: ['listing-plan.pdf', 'living-room.jpg'], caption: undefined }]);
+      await waitFor(() => expect(screen.getAllByText('Read')).toHaveLength(2));
+      expect(fake.events.length).toBe(said);
+      expect(reads).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    }
   });
 });
 

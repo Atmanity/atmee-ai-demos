@@ -28,7 +28,8 @@ type Tab = "layout" | "selected" | "furniture";
 
 /**
  * The studio: the drawing sheet, the tools a hand can use on it, and what it
- * adds up to, with the architect beside it (`host`, `chat`).
+ * adds up to, with the architect beside it (`host`, `chat`) and, while she
+ * takes them, a place to share a floor plan or photos with her (`files`).
  *
  * Everything rendered is the planner's snapshot. The studio decides nothing:
  * it cannot say whether a room may shrink, and it does not try; a drop is one
@@ -49,6 +50,7 @@ export function Studio({
   sheetSignal = 0,
   host,
   chat,
+  files,
   hostName = "Iris",
 }: {
   state: PlanSnapshot | null;
@@ -60,6 +62,8 @@ export function Studio({
   sheetSignal?: number;
   host?: ReactNode;
   chat?: ReactNode;
+  /** Sharing files with the architect, laid between her and the conversation; given only while she takes them. */
+  files?: ReactNode;
   hostName?: string;
 }) {
   const [message, setMessage] = useState("");
@@ -208,7 +212,7 @@ export function Studio({
               <p>
                 {upstairs
                   ? `Tell ${hostName} how many bedrooms go up here, or lay it out yourself.`
-                  : `Tell ${hostName} roughly how big your place is and how many bedrooms, and she'll sketch a whole floor to argue with. Or lay it out yourself.`}
+                  : `Tell ${hostName} roughly how big your place is and how many bedrooms, and she'll sketch a whole floor to argue with.${files ? " Have the listing's floor plan? Share it with her and she'll work from the sizes printed on it." : ""} Or lay it out yourself.`}
               </p>
               <button type="button" className="pw-secondary" onClick={openLayout}>Lay it out by hand</button>
             </div>
@@ -263,7 +267,7 @@ export function Studio({
         </footer>
       </section>
 
-      {(host || chat) && <aside className="pw-side" aria-label={`${hostName}, your architect`}>{host}{chat}</aside>}
+      {(host || chat) && <aside className="pw-side" aria-label={`${hostName}, your architect`}>{host}{files}{chat}</aside>}
 
       <section className="pw-tray" ref={trayRef} aria-label="Work on the plan">
         <div className="pw-tabs" role="tablist" aria-label="Ways to change the plan">
@@ -324,7 +328,7 @@ export function Studio({
                 catalog={state.catalog ?? []} rooms={level.rooms} activeRoom={selectedRoom?.id ?? null} busy={false}
                 onAdd={(type, room, near) => void intend({ kind: "add_item", type, room, near })}
               />
-              {photos && <BringYourOwn photos={photos} disabled={empty} />}
+              {photos && <BringYourOwn photos={photos} disabled={empty} shareWith={files ? hostName : null} />}
             </>
           )}
         </div>
@@ -400,8 +404,14 @@ export function Studio({
   );
 }
 
-/** Photos of furniture the client already owns, read into kit pieces at real sizes. */
-function BringYourOwn({ photos, disabled }: { photos: Photos; disabled: boolean }) {
+/**
+ * Photos of furniture the client already owns, read into kit pieces at real
+ * sizes by the app's own reader. The architect never sees these: a photo for
+ * her eyes is shared with her (`shareWith` names her while she takes files),
+ * and one photo is never both, or she would hear of it twice and the pieces
+ * would go in while she was still asking about them.
+ */
+function BringYourOwn({ photos, disabled, shareWith }: { photos: Photos; disabled: boolean; shareWith: string | null }) {
   const roomPhoto = useUpload("room", photos);
   const piecePhoto = useUpload("piece", photos);
   const busy = photos.reading !== null || disabled;
@@ -410,7 +420,10 @@ function BringYourOwn({ photos, disabled }: { photos: Photos; disabled: boolean 
       {roomPhoto.input}
       {piecePhoto.input}
       <h3 className="pw-label">Bring your own</h3>
-      <p className="pw-hint">A photo of a room or a piece you own: what it shows goes in at the kit's real sizes, never guessed from the picture.</p>
+      <p className="pw-hint">
+        A photo of a room or a piece you own: what it shows goes in at the kit's real sizes, never guessed from the picture.
+        {shareWith && ` To hear what ${shareWith} makes of a photo, share it with her instead.`}
+      </p>
       <div className="pw-actions">
         <button type="button" className="pw-chip" disabled={busy} onClick={roomPhoto.choose}>
           {photos.reading === "room" ? "Reading the room…" : "Photo of a room"}

@@ -189,6 +189,12 @@ select.pw-input { flex: 1 1 140px; cursor: pointer; }
 .pw-done-total { margin: 0; font: 800 22px/1.15 var(--pw-display); font-stretch: 108%; }
 .pw-done .pw-primary { justify-self: start; }
 .pw-chat { flex: 1; min-height: 220px; }
+/* Sharing a floor plan or photos with Iris: the kit's drop, traced like the empty sheet. */
+.call-files.pw-files { border: 1.5px dashed var(--pw-blue); border-radius: 0; background: rgba(251, 251, 248, .94); }
+.call-files.pw-files.is-over { border-color: var(--pw-blueprint); background: #fff; }
+.pw-files .call-files-button { border-radius: 6px; }
+/* Ten files must not push the conversation out of Iris's column. */
+.pw-files .call-files-list { max-height: 7.5em; overflow-y: auto; }
 
 .pw-tray { grid-area: tray; background: #fff; border: 1px solid var(--pw-rule); min-width: 0; scroll-margin-top: 120px; }
 .pw-tray > .pw-tabs { padding: 0 10px; }
@@ -269,7 +275,7 @@ select.pw-input { flex: 1 1 140px; cursor: pointer; }
   .pw-hero-talk { right: 8px; }
 }
 @media (max-width: 860px) {
-  .pw-studio { grid-template-columns: minmax(0, 1fr); grid-template-areas: "host" "bar" "sheet" "tray" "chat" "details"; gap: 12px; }
+  .pw-studio { grid-template-columns: minmax(0, 1fr); grid-template-areas: "host" "bar" "sheet" "files" "tray" "chat" "details"; gap: 12px; }
   .pw-side { display: contents; }
   .pw-host { grid-area: host; grid-template-columns: 104px minmax(0, 1fr); align-items: center; gap: 4px 12px; padding: 8px 0; background: var(--pw-board); }
   html[data-call="live"] .pw-host { position: sticky; top: 0; z-index: 5; box-shadow: 0 10px 14px -14px rgba(10, 22, 44, .6); }
@@ -279,6 +285,7 @@ select.pw-input { flex: 1 1 140px; cursor: pointer; }
   .pw-host-line { display: block; margin: 0; font-size: 13.5px; line-height: 1.4; color: #323a46; max-height: 3.9em; overflow: hidden; }
   .pw-host > .pw-done, .pw-host > .pw-hint { grid-column: 1 / -1; }
   .pw-chat { grid-area: chat; max-height: 380px; min-height: 200px; }
+  .pw-files { grid-area: files; }
   .pw-sheet-frame { height: auto; min-height: 0; }
   .pw-plan { height: auto; }
   .pw-empty { position: static; margin-top: 10px; padding: 18px; }

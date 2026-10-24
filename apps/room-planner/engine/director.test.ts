@@ -54,6 +54,21 @@ describe('the instructions', () => {
     expect(INSTRUCTIONS).toContain('take_from gets SMALLER, give_to gets BIGGER');
   });
 
+  test('a size printed on a plan the client shared may be used, read off the file first; any other size is still never invented', () => {
+    // A listing's floor plan prints the rooms' sizes, and drawing the client's
+    // own place from them is the point; a file's summary may round or drop them.
+    expect(INSTRUCTIONS).toContain('A size printed on a floor plan or document the client shared, or worked out from printed ones (sides to an area, feet to metres), is not invented: use it, saying it is from their plan.');
+    expect(INSTRUCTIONS).toContain('Before a tool call that uses one, look at the file itself for the exact figure: its summary may round or drop it.');
+    // The exception is printed figures only: a photo or the drawing's look gives none.
+    expect(INSTRUCTIONS).toContain('Any size not printed (a room with no figure, one judged from a photo or by eye) you still never invent or estimate: ask the client.');
+    expect(INSTRUCTIONS).toContain('Never invent or estimate a size or an outcome');
+    const tool = (name: string) => TOOLS.find((t) => t.name === name)!;
+    const prop = (name: string, field: string) => (tool(name).parameters.properties as Record<string, { description: string }>)[field].description;
+    expect(tool('lay_out_floor').description).toContain('From a floor plan they shared: its printed outside size and rooms, checked in the file itself; then bring each room to its printed size with trade_area or move_wall.');
+    expect(prop('lay_out_floor', 'width_m')).toContain('as the client said it or their floor plan prints it');
+    expect(prop('add_room', 'size_m2')).toBe('Its size, only if the client gave one or their floor plan prints it (two sides multiplied out).');
+  });
+
   test('destructive changes and suggestions wait for the client', () => {
     // Live, a host offered a new game in a result and then started one on its own.
     expect(INSTRUCTIONS).toContain('Only when the client asks: lay_out_floor over a floor that has rooms, clear_floor, remove_room');
