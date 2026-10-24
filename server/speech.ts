@@ -1,19 +1,11 @@
-// The avatar-only apps' own voice: text to speech with Gemini, as a WAV file the
-// page decodes to 16 kHz PCM and hands the avatar. In the avatar-only way the
-// app speaks and the avatar is only the face, so the voice is the app's choice.
-const KEY = process.env.GEMINI_API_KEY;
-// The lite model: about a second faster a sentence, which a conversation feels.
-const MODEL = process.env.GEMINI_TTS_MODEL || 'gemini-3.8-flash-lite-tts';
-
-/** Gemini's prebuilt voices the apps offer, with how each sounds. */
-export const VOICES = [
-  { id: 'Charon', label: 'Charon', sound: 'Informative, even' },
-  { id: 'Kore', label: 'Kore', sound: 'Firm, clear' },
-  { id: 'Puck', label: 'Puck', sound: 'Upbeat' },
-  { id: 'Aoede', label: 'Aoede', sound: 'Breezy' },
-  { id: 'Fenrir', label: 'Fenrir', sound: 'Excitable' },
-  { id: 'Leda', label: 'Leda', sound: 'Youthful' },
-] as const;
+// The avatar-only apps' own voice: text to speech with Fish Audio, in the host's
+// own voice (a Fish voice cloned from the sample the host was made with: its
+// avatar.json `fishVoiceId`). A v2 avatar's take is captured with its own voice,
+// and its lips follow that voice; another voice can leave them still. The WAV
+// comes back at 16 kHz, the rate the avatar takes.
+const KEY = process.env.FISH_API_KEY;
+const MODEL = process.env.FISH_TTS_MODEL || 's2.1-pro';
+export const SPEECH_RATE = 16_000;
 
 export const speechAvailable = () => Boolean(KEY);
 
@@ -36,12 +28,6 @@ export function wav(pcm: Buffer, rate: number): Buffer {
   return Buffer.concat([header, pcm]);
 }
 
-/** Gemini's audio as a WAV: it answers with a WAV file or with raw PCM (`audio/L16;rate=24000`). */
-export function asWav(data: Buffer, mimeType: string): Buffer {
-  if (data.subarray(0, 4).toString('latin1') === 'RIFF') return data;
-  return wav(data, Number(/rate=(\d+)/.exec(mimeType)?.[1]) || 24000);
-}
-
 /**
  * Text cut into sentences to voice side by side: a short one rides with the next,
  * so no clip is a word long. The order is kept.
@@ -60,23 +46,23 @@ export function sentences(text: string, min = 40): string[] {
   return out;
 }
 
-/** `text` voiced a sentence at a time, all at once: the clips in order, sooner than one long clip. */
-export const speakSentences = (text: string, voice: string, style?: string) => Promise.all(sentences(text).map((s) => speak(s, voice, style)));
+/** The body Fish's /v1/tts takes for one utterance: the text alone is spoken, nothing else. */
+export const ttsRequest = (text: string, voiceId: string) => ({
+  text, reference_id: voiceId, format: 'pcm', sample_rate: SPEECH_RATE, latency: 'balanced',
+});
 
-/** `text` spoken in `voice`, as a WAV file. `style` is how to say it ("calmly", "like a news anchor"). */
-export async function speak(text: string, voice: string, style?: string): Promise<Buffer> {
-  if (!KEY) throw new Error('GEMINI_API_KEY is not set');
-  const prompt = style ? `Say ${style}: ${text}` : text;
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${KEY}`, {
+/** `text` spoken in the Fish voice `voiceId`, as a 16 kHz WAV file. */
+export async function speak(text: string, voiceId: string): Promise<Buffer> {
+  if (!KEY) throw new Error('FISH_API_KEY is not set');
+  if (!voiceId) throw new Error('This host has no fishVoiceId in its avatar.json');
+  const res = await fetch('https://api.fish.audio/v1/tts', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } },
-    }),
+    headers: { Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json', model: MODEL },
+    body: JSON.stringify(ttsRequest(text, voiceId)),
   });
-  const json: any = await res.json();
-  const audio = json.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData)?.inlineData;
-  if (!audio?.data) throw new Error(`${MODEL}: ${res.status} ${JSON.stringify(json).slice(0, 300)}`);
-  return asWav(Buffer.from(audio.data, 'base64'), String(audio.mimeType || ''));
+  if (!res.ok) throw new Error(`Fish Audio ${MODEL}: ${res.status} ${(await res.text()).slice(0, 300)}`);
+  return wav(Buffer.from(await res.arrayBuffer()), SPEECH_RATE);
 }
+
+/** `text` voiced a sentence at a time, all at once: the clips in order, sooner than one long clip. */
+export const speakSentences = (text: string, voiceId: string) => Promise.all(sentences(text).map((s) => speak(s, voiceId)));

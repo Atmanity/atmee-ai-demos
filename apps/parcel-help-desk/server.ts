@@ -9,12 +9,13 @@
 //                            (a WAV a sentence, voiced side by side, to say in order)
 import { randomUUID } from 'node:crypto';
 import type { AppServer } from '../../server/app-server.ts';
+import { fishVoiceOf } from '../../server/hosts.js';
 import { speakSentences, speechAvailable } from '../../server/speech.ts';
 import { GREETING, answer, transcribe, type History } from './engine/agent.ts';
 import { createDesk, statusWords, type Desk, type Parcel } from './engine/parcels.ts';
 
-export const VOICE = 'Kore';
-const STYLE = 'warmly and clearly, like a helpful customer service agent';
+// Tess speaks in her own voice (her avatar.json's Fish voice), the one her face was captured with.
+const VOICE = fishVoiceOf('parcel-help-desk');
 const DESK_TTL_MS = 30 * 60_000;
 const MAX_TEXT = 500;
 const MAX_AUDIO_B64 = 2_000_000;   // about a minute of 16 kHz speech
@@ -48,11 +49,11 @@ const app: AppServer = {
   maxSeconds: 600,
   routes(router) {
     router.post('/desks', async (_req, res) => {
-      if (!speechAvailable()) return void res.status(503).json({ error: 'no_model', message: 'Set GEMINI_API_KEY: the agent and its voice are Gemini' });
+      if (!speechAvailable() || !process.env.GEMINI_API_KEY) return void res.status(503).json({ error: 'no_model', message: 'Set GEMINI_API_KEY (the agent and its ears) and FISH_API_KEY (its voice)' });
       const id = randomUUID();
       const desk = createDesk();
       visits.set(id, { desk, history: [{ role: 'model', parts: [{ text: GREETING }] }], at: Date.now() });
-      const [audio, voiceMs] = await timed(() => speakSentences(GREETING, VOICE, STYLE));
+      const [audio, voiceMs] = await timed(() => speakSentences(GREETING, VOICE));
       res.status(201).json({
         id, greeting: GREETING, audio: audio.map((clip) => clip.toString('base64')), timings: { voice: voiceMs },
         samples: desk.parcels.map((p) => ({ tracking: p.tracking, hint: p.issue ? 'a problem' : statusWords(p.status).toLowerCase() })),
@@ -75,7 +76,7 @@ const app: AppServer = {
       if (!words) return void res.status(400).json({ error: 'nothing_said' });
       const [turn, thinkMs] = await timed(() => answer(visit.desk, visit.history, words));
       trim(visit.history);
-      const [speech, voiceMs] = await timed(() => speakSentences(turn.reply, VOICE, STYLE));
+      const [speech, voiceMs] = await timed(() => speakSentences(turn.reply, VOICE));
       res.json({
         heard, reply: turn.reply, steps: turn.steps, parcel: turn.parcel ? parcelView(turn.parcel) : null,
         audio: speech.map((clip) => clip.toString('base64')), timings: { hear: hearMs, think: thinkMs, voice: voiceMs },

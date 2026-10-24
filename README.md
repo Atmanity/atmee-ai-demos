@@ -20,7 +20,7 @@ the same process, on one port, and the home page lists every app, says which of 
 | way | Atmee runs | the app brings | API | here |
 |---|---|---|---|---|
 | **Full-stack** | listening, thinking (persona, knowledge, agenda), the voice and the face | what is on screen, events and its tools | `POST /v1/session` | nineteen apps |
-| **Speech-to-speech** (coming soon) | one realtime voice model that hears and answers; voice only for now | the client that streams audio over a WebSocket | `POST /v1/live/sessions` | none yet |
+| **Speech-to-speech** (coming soon) | one realtime voice model that hears and answers in the avatar's voice; voice only for now (a face today by handing its audio to an avatar-only render) | its own agent over a WebSocket: the instructions, the tools (the client runs them), the audio | `POST /v1/live/sessions` | none yet |
 | **Avatar-only** | the face only | the whole agent (its model, tools and voice) or any audio, and its own LiveKit room | `POST /v1/avatars/{id}/avatar_sessions` | Waybill, Facecast |
 
 Every app has its folder in `apps/<app>/` with its README.

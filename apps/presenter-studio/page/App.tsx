@@ -13,7 +13,6 @@ const HOST = 'Remy';
 const MAX_RECORDING_S = 120;
 
 type Source = 'script' | 'recording' | 'live';
-interface Voice { id: string; label: string; sound: string }
 interface LogEntry { source: string; seconds: number; outcome: 'on air' | 'played' | 'cut' }
 
 export const SAMPLES = [
@@ -27,10 +26,6 @@ export function App() {
   const mic = useMicTap();
   const live = face.phase === 'live';
   const [source, setSource] = useState<Source>('script');
-  const [voices, setVoices] = useState<Voice[]>([]);
-  const [styles, setStyles] = useState<{ id: string; label: string }[]>([]);
-  const [voice, setVoice] = useState('Charon');
-  const [style, setStyle] = useState('anchor');
   const [script, setScript] = useState(SAMPLES[0].text);
   const [file, setFile] = useState<{ name: string; pcm: Int16Array } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -43,9 +38,6 @@ export function App() {
   // Whether the talk button is down now: a press let go while the piece or the microphone was still opening ends there.
   const holding = useRef(false);
 
-  useEffect(() => {
-    void fetch(`${API}/voices`).then((r) => r.json()).then((d) => { setVoices(d.voices ?? []); setStyles(d.styles ?? []); }).catch(() => {});
-  }, []);
   // Live from the microphone, Remy's voice is yours: heard back only when asked (headphones), or it feeds back.
   useEffect(() => {
     const el = face.audioRef.current;
@@ -74,12 +66,12 @@ export function App() {
     if (!text || busy) return;
     setBusy(true); setProblem('');
     try {
-      const res = await fetch(`${API}/read`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, voice, style }) });
+      const res = await fetch(`${API}/read`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
       const json = await res.json();
       if (!res.ok) throw new Error(json.message || (json.error === 'too_long' ? `Keep the script under ${json.max} characters.` : 'The voice could not read that.'));
       const pieces = await Promise.all((json.clips as string[]).map((b64) => decodeTo16k(fromBase64(b64))));
       setBusy(false);
-      await air(`Script · ${voice}`, pieces);
+      await air('Script · Remy’s voice', pieces);
     } catch (err) {
       setProblem((err as Error).message);
     } finally {
@@ -158,7 +150,7 @@ export function App() {
             {face.phase === 'idle' && (
               <div className="fc-lobby">
                 <h1>Any audio. A face that says it.</h1>
-                <p>Write a script for a voice to read, drop in a recording, or talk live into your microphone: Remy says it to camera, lips in time. The audio is all this app's; Atmee renders only the face.</p>
+                <p>Write a script for Remy to read in his own voice, drop in a recording, or talk live into your microphone: he says it to camera, lips in time. The audio is all this app's; Atmee renders only the face.</p>
                 <button type="button" className="fc-go" onClick={() => void face.start()}>Open the studio</button>
               </div>
             )}
@@ -195,14 +187,7 @@ export function App() {
                 <textarea value={script} onChange={(e) => setScript(e.target.value)} maxLength={1200} rows={6} />
                 <small>{script.length} / 1200</small>
               </label>
-              <div className="fc-field"><span>Voice</span>
-                <div className="fc-voices">{(voices.length ? voices : [{ id: 'Charon', label: 'Charon', sound: 'Informative, even' }]).map((v) => (
-                  <button key={v.id} type="button" className={voice === v.id ? 'is-on' : ''} aria-pressed={voice === v.id} onClick={() => setVoice(v.id)}><b>{v.label}</b><span>{v.sound}</span></button>
-                ))}</div>
-              </div>
-              <label className="fc-field"><span>Read it</span>
-                <select value={style} onChange={(e) => setStyle(e.target.value)}>{(styles.length ? styles : [{ id: 'anchor', label: 'News anchor' }]).map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select>
-              </label>
+              <p className="fc-help">Remy reads it in his own voice: his face was captured with it, so his lips follow it word for word.</p>
               <button type="button" className="fc-go" disabled={!live || busy || !script.trim()} onClick={() => void readScript()}>{busy ? 'Voicing the script…' : 'Read it on air'}</button>
             </div>
           )}
@@ -237,7 +222,7 @@ export function App() {
 
           {face.speaking && <button type="button" className="fc-cut" onClick={() => void face.interrupt()}>Cut</button>}
           {(problem || mic.error) && <p className="fc-problem" role="alert">{problem || mic.error}</p>}
-          <p className="fc-note">Avatar-only: the audio is this app's (a voice it chose, your file, your microphone). Atmee renders only the face, in the app's own LiveKit room.</p>
+          <p className="fc-note">Avatar-only: the audio is this app's (Remy's own voice, your file, your microphone). Atmee renders only the face, in the app's own LiveKit room.</p>
         </section>
       </main>
     </div>
