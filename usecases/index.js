@@ -109,6 +109,11 @@ function streamState(h) {
 const JOB = "Senior backend engineer (Go), remote, payments team. Must-haves: 5+ years, production Go, PostgreSQL, on-call experience. Nice: Kubernetes, LiveKit/WebRTC.";
 const AGENDA_STEPS = ["greet", "background", "fit", "logistics", "questions", "wrap"];
 const NOTE_TOPICS = ["current_role", "project", "years_experience", "production_go", "postgresql", "on_call", "notice_period", "location", "salary", "candidate_questions", "other"];
+// The candidate can drop their CV into the call. The host's runtime reads each
+// file once, reacts to the drop on its own and is told the file's summary on
+// every later reply, so the app sends no event about it (the recruiter would
+// speak of it twice): only this note, kept all call, on how a screening uses a CV.
+const CV_NOTE = "The candidate can share their CV with you during the call (a PDF, a photo of it or a text file). When it arrives, react as a recruiter would: thank them, name one or two things you read that matter for this job (their current role, their experience with Go), and carry on with the part of the call you are in. From then on, fit your questions to it: ask about the roles and projects it names, by name, the one closest to this job first; where it already speaks to a must-have, ask about what it says instead of asking from scratch (it lists Go at a company: was that in production, and for how long?). Say so when something comes from the CV (\"I see on your CV that…\"). Never say the CV shows anything it does not; for a must-have it does not mention, just ask. The screening notes are what the candidate tells you: confirm a detail from the CV with them before you record it. Until they share one, interview as usual and do not ask for it.";
 const recruiter = {
   title: "Recruiter screening call",
   page: "recruiter.html",
@@ -134,7 +139,7 @@ const recruiter = {
       }, ["topic", "summary"]),
     ],
   },
-  onLinked(h) { return [state(`Job you are screening for: ${JOB} Candidate name: ${h.memo.candidate || "unknown"}.`)]; },
+  onLinked(h) { return [state(`Job you are screening for: ${JOB} Candidate name: ${h.memo.candidate || "unknown"}.`), note(CV_NOTE)]; },
   onUser(h, msg) {
     if (msg.kind === "name") { h.memo.candidate = msg.text; return [state(`Job you are screening for: ${JOB} Candidate name: ${msg.text}.`)]; }
     if (msg.kind === "typed") return [say(msg.text)];
