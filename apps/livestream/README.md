@@ -60,7 +60,7 @@ forwards what it receives to them:
 
 ```http
 POST /v1/session
-{ "avatarId": "<AVATAR_LIVESTREAM>", "maxDurationSeconds": 900,
+{ "avatarId": "<avatarId from apps/livestream/avatar.json>", "maxDurationSeconds": 900,
   "appTools": { "instructions": "You run this stream's chat as its host, and the chat only shows what your tools put there. … When a viewer asks for a poll … call start_poll right away in that turn … A pin or a poll exists only once its tool is called, so call it before you speak of it. …",
     "tools": [
       { "type": "function", "name": "pin_message", "parameters": { "type": "object", "properties": { "text": { "type": "string", "maxLength": 140 } }, "required": ["text"] }, "x-atmee": { "mode": "notify" } },
@@ -96,8 +96,7 @@ event, not as a tool answer.
 ```
 ATMEE_BASE_URL=https://staging.atmanity.us
 ATMEE_API_KEY=…            # scope: sessions
-AVATAR_LIVESTREAM=…        # an avatar whose persona is a stream host
-node --env-file=.env server.js
+node --env-file=.env server.js   # the host: apps/livestream/avatar.json (AVATAR_LIVESTREAM overrides it)
 open http://localhost:3333/livestream-host.html     # Go live; "Copy chat link" opens the viewer page
 ```
 

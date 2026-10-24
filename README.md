@@ -29,7 +29,7 @@ is: pages in `public/`, behaviour in `usecases/index.js`, shared server code in 
 ## Setup
 
 ```
-cp .env.example .env     # ATMEE_BASE_URL, ATMEE_API_KEY, one AVATAR_<APP> per app, GEMINI_API_KEY for Kin
+cp .env.example .env     # ATMEE_BASE_URL, ATMEE_API_KEY, GEMINI_API_KEY for Kin and the avatar-only apps
 npm install
 npm run dev              # every app: http://localhost:5190/
 ```
@@ -194,9 +194,9 @@ npm run typecheck
 ```
 
 Node 22.9+ (for `--env-file-if-exists`). `npm run dev` and `npm start` read `.env`, then
-`.env.local` if it exists, so a value there wins. Each app's host is the `avatarId` in
-`apps/<app>/avatar.json`, an avatar of the same account as the five apps' avatars, so one key
-serves all. `AVATAR_<APP_ID>` (for example `AVATAR_CHESS_OPPONENT`) overrides one app's host,
+`.env.local` if it exists, so a value there wins. Each app's host, the five's as much as the others', is the
+`avatarId` in `apps/<app>/avatar.json` (`server/hosts.js` reads them for both servers), all in
+one account, so one key serves all. `AVATAR_<APP_ID>` (for example `AVATAR_CHESS_OPPONENT`) overrides one app's host,
 and `AVATAR_DEFAULT` serves an app with neither. The site runs on `SITE_PORT` (default 5190),
 so `PORT` stays the five apps' own (3333) when `server.js` runs alone. The mini-apps own
 `/apps/…` and `/api/apps/…`; every other path is `server.js`'s.

@@ -1,11 +1,12 @@
 // /api: the apps (discovered from apps/<id>/server.ts), their sessions, and
 // each app's own routes under /api/apps/<id>/.
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import sharp from 'sharp';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import type { AppServer } from './app-server.ts';
 import { endSession, setConductor, startSession } from './atmee.ts';
+import { avatarEnvName, avatarFor, hostNameOf } from './hosts.js';
 
 const apps = new Map<string, AppServer>();
 for (const dir of readdirSync('apps').sort()) {
@@ -18,22 +19,6 @@ for (const dir of readdirSync('apps').sort()) {
     console.error('[%s] not loaded: %s', dir, (err as Error).message);
   }
 }
-
-// Each app's host: AVATAR_<APP_ID> in the environment, else the dedicated
-// avatar in the app's avatar.json (`avatarId`), else AVATAR_DEFAULT.
-const ownAvatar = new Map<string, string>();
-const hostName = new Map<string, string>();
-for (const dir of readdirSync('apps')) {
-  try {
-    const host = JSON.parse(readFileSync(`apps/${dir}/avatar.json`, 'utf8'));
-    if (typeof host.avatarId === 'string' && host.avatarId) ownAvatar.set(dir, host.avatarId);
-    if (typeof host.name === 'string') hostName.set(dir, host.name.split(' ')[0]);
-  } catch {
-    // no avatar.json, or no dedicated host yet
-  }
-}
-const avatarFor = (id: string) =>
-  process.env[`AVATAR_${id.toUpperCase().replace(/-/g, '_')}`] || ownAvatar.get(id) || process.env.AVATAR_DEFAULT || '';
 
 // Which app's agenda each avatar carries now, so a shared avatar is switched
 // only when the app changes.
@@ -60,7 +45,7 @@ export const api = caught(Router());
 api.get('/apps', (_req, res) => {
   // tools and agenda: what the home page counts (the functions each host may call, and whether it keeps to a conductor).
   res.json([...apps.values()].map(({ id, title, tagline, brand, appTools, conductor }) => ({
-    id, title, tagline, brand, host: hostName.get(id) ?? null, avatar: Boolean(avatarFor(id)),
+    id, title, tagline, brand, host: hostNameOf(id), avatar: Boolean(avatarFor(id)),
     tools: appTools?.tools.length ?? 0, agenda: Boolean(conductor?.graph),
   })));
 });
@@ -86,7 +71,7 @@ api.post('/apps/:app/session', async (req, res) => {
   const app = apps.get(req.params.app);
   if (!app) return void res.status(404).json({ error: 'unknown_app' });
   const avatarId = avatarFor(app.id);
-  if (!avatarId) return void res.status(500).json({ error: 'no_avatar', message: `Set AVATAR_DEFAULT or AVATAR_${app.id.toUpperCase().replace(/-/g, '_')}` });
+  if (!avatarId) return void res.status(500).json({ error: 'no_avatar', message: `Set avatarId in apps/${app.id}/avatar.json, ${avatarEnvName(app.id)} or AVATAR_DEFAULT` });
 
   if (conductorOf.get(avatarId) !== app.id) {
     const graph = app.conductor ?? null;

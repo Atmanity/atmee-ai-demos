@@ -43,7 +43,7 @@ flowchart LR
 moves on a judged condition and otherwise stays:
 
 ```http
-PUT /v1/avatars/{AVATAR_RECRUITER}/conductor
+PUT /v1/avatars/{avatarId}/conductor
 { "speakAfterS": 1.0, "graph": { "start": "greet", "nodes": [
   { "id": "greet",      "instructions": "Mark this step with set_agenda_step greet. Greet the candidate by name …",
     "edges": [{ "to": "background", "when": "The candidate has introduced themselves." }, { "to": "greet" }] },
@@ -63,7 +63,7 @@ page's agenda moves only through that tool.
 
 ```http
 POST /v1/session
-{ "avatarId": "<AVATAR_RECRUITER>", "maxDurationSeconds": 900,
+{ "avatarId": "<avatarId from apps/recruiter/avatar.json>", "maxDurationSeconds": 900,
   "appTools": { "instructions": "You keep the hiring team's screening notes in the call app while you talk. The candidate's agenda moves only when you mark it … always mark wrap before you thank the candidate and say goodbye. … never mention the agenda, the notes or marking them.",
     "tools": [
       { "type": "function", "name": "set_agenda_step", "parameters": { "type": "object", "properties": { "step": { "type": "string", "enum": ["greet","background","fit","logistics","questions","wrap"] } }, "required": ["step"] }, "x-atmee": { "mode": "notify" } },
@@ -132,8 +132,7 @@ call.
 ```
 ATMEE_BASE_URL=https://staging.atmanity.us
 ATMEE_API_KEY=…            # scopes: sessions, and avatars:write (to set the conductor)
-AVATAR_RECRUITER=…         # an avatar whose persona is a recruiter
-node --env-file=.env server.js
+node --env-file=.env server.js   # the host: apps/recruiter/avatar.json (AVATAR_RECRUITER overrides it)
 open http://localhost:3333/recruiter.html   # ?debug shows relays, held times and tool calls
 ```
 
