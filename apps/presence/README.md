@@ -42,7 +42,7 @@ frames into text and sends that text as context.
 
 ```http
 POST /v1/session
-{ "avatarId": "<AVATAR_PRESENCE>", "maxDurationSeconds": 900,
+{ "avatarId": "<avatarId from apps/presence/avatar.json>", "maxDurationSeconds": 900,
   "metadata": { "app": "atmee-usecase-demos", "usecase": "presence" } }
 ```
 
@@ -72,10 +72,9 @@ example a `get_recent_activity` (await) to fetch a longer history on request.
 ```
 ATMEE_BASE_URL=https://staging.atmanity.us
 ATMEE_API_KEY=…            # scope: sessions
-AVATAR_PRESENCE=…          # an avatar whose persona is a calm companion
 GEMINI_API_KEY=…           # optional; without it the observer only reports "the screen changed"
 GEMINI_MODEL=…             # optional, overrides the default model
-node --env-file=.env server.js
+node --env-file=.env server.js   # the host: apps/presence/avatar.json (AVATAR_PRESENCE overrides it)
 open http://localhost:3333/presence.html    # ?debug shows relays and held times
 ```
 

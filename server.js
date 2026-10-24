@@ -19,7 +19,7 @@
 //
 //   ATMEE_BASE_URL     https://staging.atmanity.us
 //   ATMEE_API_KEY      an Avatar API key
-//   AVATAR_<USECASE>   the avatar each use case runs (LIVESTREAM, RECRUITER, TRAINING, PRESENCE, GAME)
+//   AVATAR_<USECASE>   optional: overrides the avatar a use case runs (its apps/<usecase>/avatar.json `avatarId`)
 //   GEMINI_API_KEY     the presence use case's eyes (optional: without it the observer only diffs frames)
 //   DEMO_PASSWORD      optional: when set, every page, /api route and WebSocket asks for it (HTTP basic auth)
 //   PORT               default 3333
@@ -27,6 +27,7 @@
 // Settings come from the environment: `node --env-file=.env server.js` locally,
 // the pod's env in a container.
 import express from "express";
+import { avatarEnvName, avatarFor } from "./server/hosts.js";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
@@ -72,7 +73,7 @@ async function api(method, path, body) {
 const rooms = new Map(); // key -> the hub of a live (or starting) session
 const sharedHubs = new Map(); // use case -> its one shared hub
 const JOIN_GRACE_MS = 30000; // a started session whose page never connects is ended
-const avatarIdOf = (name) => process.env[`AVATAR_${name.toUpperCase()}`] || process.env.AVATAR_ID;
+const avatarIdOf = avatarFor;
 function newHub(name, def) {
   return {
     name, def, avatarId: avatarIdOf(name),
@@ -139,7 +140,7 @@ async function ensureConductor(h) {
 }
 
 async function startSession(h) {
-  if (!h.avatarId) throw Object.assign(new Error(`AVATAR_${h.name.toUpperCase()} is not set`), { status: 500 });
+  if (!h.avatarId) throw Object.assign(new Error(`No host: set avatarId in apps/${h.name}/avatar.json or ${avatarEnvName(h.name)}`), { status: 500 });
   await ensureConductor(h);
   const r = await api("POST", "/v1/session", {
     avatarId: h.avatarId, maxDurationSeconds: Number(process.env.MAX_SECONDS || 900),
@@ -208,7 +209,7 @@ app.get("/healthz", (_req, res) => res.json({ ok: true }));
 app.use(requirePassword);
 app.use(express.json({ limit: "6mb" }));
 app.use(express.static(fileURLToPath(new URL("./public", import.meta.url))));
-app.get("/api/usecases", (_req, res) => res.json(Object.fromEntries(Object.entries(USECASES).map(([k, v]) => [k, { title: v.title, page: v.page, avatarId: process.env[`AVATAR_${k.toUpperCase()}`] || null, conductor: !!v.conductor, tools: v.appTools ? v.appTools.tools.map((t) => t.name) : [] }]))));
+app.get("/api/usecases", (_req, res) => res.json(Object.fromEntries(Object.entries(USECASES).map(([k, v]) => [k, { title: v.title, page: v.page, avatarId: avatarFor(k) || null, conductor: !!v.conductor, tools: v.appTools ? v.appTools.tools.map((t) => t.name) : [] }]))));
 
 // Each app's avatar face for the home page cards. The API hands out the
 // portrait (thumbnailUrl) as a presigned link that expires within the hour, so

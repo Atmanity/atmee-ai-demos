@@ -42,7 +42,7 @@ over LiveKit RPC.
 **1. Conductor (agenda), set before each session** ([`server.js`](../../server.js) `ensureConductor`, about line 81):
 
 ```http
-PUT /v1/avatars/{AVATAR_TRAINING}/conductor
+PUT /v1/avatars/{avatarId}/conductor
 { "speakAfterS": 1.5, "graph": { "start": "intro", "nodes": [
   { "id": "intro",     "instructions": "Welcome the trainee … Slide 1 is already on their screen: go straight into it.", "edges": [{ "to": "slide1", "speak": true }] },
   { "id": "slide1",    "instructions": "Teach slide 1 (already on the screen) …",                  "edges": [{ "to": "slide2", "speak": true }] },
@@ -62,7 +62,7 @@ call.
 
 ```http
 POST /v1/session
-{ "avatarId": "<AVATAR_TRAINING>", "maxDurationSeconds": 900,
+{ "avatarId": "<avatarId from apps/training/avatar.json>", "maxDurationSeconds": 900,
   "metadata": { "app": "atmee-usecase-demos", "usecase": "training" },
   "appTools": { "instructions": "You teach from the course app's slide deck … Put slide 2 and slide 3 up with show_slide … When the quiz starts, call ask_quiz_question … record it with grade_answer … and follow its result.",
     "tools": [ { "type": "function", "name": "show_slide", "description": "…", "parameters": { "type": "object", "properties": { "n": { "type": "integer", "minimum": 1, "maximum": 4 } }, "required": ["n"] }, "x-atmee": { "mode": "notify" } },
@@ -106,8 +106,7 @@ persona outweighs generic tool instructions.
 # .env (see .env.example)
 ATMEE_BASE_URL=https://staging.atmanity.us
 ATMEE_API_KEY=…            # scopes: sessions, and avatars:write (to set the conductor)
-AVATAR_TRAINING=…          # an avatar whose persona is a trainer
-node --env-file=.env server.js
+node --env-file=.env server.js   # the host: apps/training/avatar.json (AVATAR_TRAINING overrides it)
 open http://localhost:3333/training.html    # add ?debug to see relays, held times and tool calls
 ```
 

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>Atmee Showcase</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Nineteen apps, each run by a live conversational avatar, all on one avatar platform: the Atmee Avatar API.">
+<meta name="description" content="Apps run by live avatars, built three ways on the Atmee Avatar API: full-stack, speech-to-speech (coming soon) and avatar-only.">
 <meta name="color-scheme" content="light dark">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -90,7 +90,8 @@
 
   /* The apps */
   .apps-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
-  .apps-head h2, .how h2 { font-size: 28px; font-weight: 750; letter-spacing: -.02em; }
+  .apps-head h2, .ways-head h2 { font-size: 28px; font-weight: 750; letter-spacing: -.02em; }
+  .filter-rows { display: grid; gap: 8px; justify-items: end; }
   .filters { display: flex; flex-wrap: wrap; gap: 8px; min-height: 38px; }
   .filters button { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer; }
   .filters button span { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -99,7 +100,19 @@
   .filters button[aria-pressed="true"] span { color: inherit; opacity: .7; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
   .app { display: flex; flex-direction: column; border-radius: 20px; overflow: hidden; background: var(--surface); border: 1px solid var(--line); text-decoration: none; color: inherit; transition: transform .15s, box-shadow .15s; }
-  .app:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); }
+  /* A card and its code link side by side in one cell (a link may not hold another): the cell lifts as one. */
+  .cell { position: relative; display: flex; min-width: 0; transition: transform .15s; }
+  .cell[hidden] { display: none; }
+  .cell > .app { flex: 1; min-width: 0; }
+  .cell:hover { transform: translateY(-3px); }
+  .cell:hover > .app { box-shadow: var(--shadow-lift); }
+  .cell .code { position: absolute; right: 16px; bottom: 15px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font-size: 13px; font-weight: 600; text-decoration: none; }
+  .cell .code:hover { color: var(--text); border-color: var(--text); }
+  .cell .code svg { width: 14px; height: 14px; fill: currentColor; }
+  /* Which way the app is built, on its art. */
+  .app .art .way { position: absolute; left: 14px; top: 14px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .02em; background: rgb(255 255 255 / .92); color: #16151a; }
+  .app .art .way.is-avatar-only { background: rgb(10 10 14 / .78); color: #fff; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .55); }
+  .app .body { padding-bottom: 20px; }
   .app:focus-visible { outline-offset: 4px; border-radius: 20px; }
   .app .art { height: 150px; display: flex; align-items: end; padding: 18px; color: #fff; position: relative; }
   .app .art .glyph { position: absolute; right: 18px; top: 14px; font-size: 52px; opacity: .9; }
@@ -116,21 +129,39 @@
   .extra { font-size: 14px; color: var(--muted); margin: 16px 0 0; }
   .extra a { color: inherit; }
 
-  /* How it works: a real order, so numbered. */
-  .how { padding-block: 72px 8px; display: grid; gap: 24px; }
-  .how ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; counter-reset: step; }
-  .how li { counter-increment: step; display: grid; gap: 8px; align-content: start; padding: 22px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); min-width: 0; }
-  .how li::before { content: counter(step); width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 14px; }
-  .how h3 { font-size: 17px; font-weight: 700; }
-  .how p { margin: 0; color: var(--muted); }
-  .how code { font: 13px/1.4 ui-monospace, Menlo, monospace; background: var(--surface-2); padding: 1px 6px; border-radius: 6px; overflow-wrap: anywhere; }
+  /* Three ways to build: what each is, who does what, when to use it, how it works. */
+  .ways { padding-block: 72px 8px; display: grid; gap: 24px; }
+  .ways-head { display: grid; gap: 8px; max-width: 46em; }
+  .ways-head p { margin: 0; color: var(--muted); }
+  .ways-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+  .way-card { display: grid; gap: 12px; align-content: start; padding: 22px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); min-width: 0; }
+  .way-card.soon { border-style: dashed; }
+  .way-card header { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .way-card h3 { font-size: 19px; font-weight: 750; letter-spacing: -.01em; }
+  .way-card .badge { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+  .way-card.soon .badge { background: var(--surface-2); color: var(--muted); }
+  .way-card .lede { margin: 0; font-weight: 500; }
+  .way-card h4 { margin: 4px 0 0; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .way-card p, .way-card ol { margin: 0; color: var(--muted); }
+  .way-card ol { padding-left: 20px; display: grid; gap: 6px; }
+  .way-card code { font: 13px/1.4 ui-monospace, Menlo, monospace; background: var(--surface-2); padding: 1px 6px; border-radius: 6px; overflow-wrap: anywhere; }
+  .way-card a { color: var(--text); font-weight: 600; }
+  .way-card .show { justify-self: start; margin-top: 4px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer; }
+  .way-card .show:hover { background: var(--surface-2); }
+  /* Who does what: the parts of a conversation, Atmee's filled, the app's own dashed. */
+  .who { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .who li { display: grid; gap: 1px; padding: 8px 4px; border-radius: 10px; font-size: 12px; text-align: center; }
+  .who b { font-size: 13px; }
+  .who .atmee { background: var(--accent); color: var(--accent-ink); }
+  .who .yours { background: transparent; border: 1.5px dashed var(--muted); color: var(--text); }
+  .who .later { background: var(--surface-2); color: var(--muted); }
   footer { padding-block: 40px 64px; color: var(--muted); font-size: 14px; }
   footer code { overflow-wrap: anywhere; }
 
   @media (max-width: 960px) {
     .hero { grid-template-columns: minmax(0, 1fr); gap: 36px; padding-block: 44px 40px; }
     .wall-wrap { max-width: 560px; }
-    .how ol { grid-template-columns: minmax(0, 1fr); }
+    .ways-grid { grid-template-columns: minmax(0, 1fr); }
   }
   @media (max-width: 720px) {
     .bar nav a.optional { display: none; }
@@ -172,7 +203,7 @@
     </a>
     <nav aria-label="Page">
       <a href="#apps">Apps</a>
-      <a href="#how" class="optional">How it works</a>
+      <a href="#ways" class="optional">Ways to build</a>
       <a href="https://atmee.ai" class="optional" rel="noopener">atmee.ai<svg class="ext" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2h6v6M10 2 3 9" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></a>
     </nav>
     <a class="btn primary cta" href="#apps">Try an app</a>
@@ -183,21 +214,21 @@
   <section class="gutter hero" aria-labelledby="headline">
     <div class="pitch">
       <span class="live-note"><i aria-hidden="true"></i>Built on the Atmee Avatar API</span>
-      <h1 id="headline"><span id="count-word">Nineteen</span> real apps, <em>one avatar platform.</em></h1>
-      <p class="sub">Each app has its own brand and flow, and a live avatar runs it: it talks with you, reacts to what is on screen, works the app through its tools and keeps to an agenda. Every one is built on the same API.</p>
+      <h1 id="headline"><span id="count-word">Twenty-one</span> real apps, <em>one avatar platform.</em></h1>
+      <p class="sub">Each app has its own brand and flow, and a live avatar runs it. Most hand Atmee the whole conversation: the avatar talks with you, reacts to the screen, works the app through its tools and keeps to an agenda. Two bring their own agent, and the avatar is its face. Every one is built on the same API.</p>
       <div class="actions">
-        <a class="btn primary lg" href="#apps" id="browse">Browse the 19 apps</a>
-        <a class="btn ghost lg" href="#how">How it works</a>
+        <a class="btn primary lg" href="#apps" id="browse">Browse the 21 apps</a>
+        <a class="btn ghost lg" href="#ways">Three ways to build</a>
       </div>
       <dl class="proof" aria-live="polite">
-        <div><dt>apps, each with a host</dt><dd id="stat-apps">19</dd></div>
+        <div><dt>apps, each with a host</dt><dd id="stat-apps">21</dd></div>
         <div><dt>tools the hosts call</dt><dd id="stat-tools">–</dd></div>
         <div><dt>API behind them all</dt><dd>1</dd></div>
       </dl>
     </div>
     <div class="wall-wrap">
-      <!-- Twenty empty tiles hold the wall's size until the list arrives (nineteen hosts and yours). -->
-      <ul class="wall" id="wall" aria-label="The hosts: open an app by its host"><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li></ul>
+      <!-- Twenty-two empty tiles hold the wall's size until the list arrives (twenty-one hosts and yours). -->
+      <ul class="wall" id="wall" aria-label="The hosts: open an app by its host"><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li></ul>
       <p class="wall-note">Pick a face to open its app.</p>
     </div>
   </section>
@@ -205,7 +236,10 @@
   <section class="gutter" id="apps" aria-labelledby="apps-title">
     <div class="apps-head">
       <h2 id="apps-title">The apps</h2>
-      <div class="filters" id="filters" role="group" aria-label="Show apps by kind"></div>
+      <div class="filter-rows">
+        <div class="filters" id="filters" role="group" aria-label="Show apps by kind"></div>
+        <div class="filters" id="way-filters" role="group" aria-label="Show apps by how they are built"></div>
+      </div>
     </div>
     <div class="grid" id="grid">
       <a class="app" href="training.html" data-id="training" data-kind="learn">
@@ -232,13 +266,60 @@
     <p class="extra">Viewers of Nightcap Live chat from the <a href="livestream-viewer.html">chat page</a>.</p>
   </section>
 
-  <section class="gutter how" id="how" aria-labelledby="how-title">
-    <h2 id="how-title">How it works</h2>
-    <ol>
-      <li><h3>The app starts a session</h3><p>Its server makes one call, <code>POST /v1/session</code>, naming the avatar, a time limit and the tools the avatar may use. The API key never reaches the browser.</p></li>
-      <li><h3>The avatar joins the page</h3><p>It arrives as live video and voice in the app's own room: it listens, answers in its own voice, and hears what the app tells it about the screen.</p></li>
-      <li><h3>The app and the avatar steer each other</h3><p>The app sends state and events; the avatar calls the app's tools to move the board, pin a poll or grade an answer. An agenda keeps a lesson or an interview on track.</p></li>
-    </ol>
+  <section class="gutter ways" id="ways" aria-labelledby="ways-title">
+    <div class="ways-head">
+      <h2 id="ways-title">Three ways to build</h2>
+      <p>Every app here uses the same avatars and the same API. What differs is how much of the conversation Atmee runs, and how much the app brings itself.</p>
+    </div>
+    <div class="ways-grid">
+      <article class="way-card" aria-labelledby="way-full">
+        <header><h3 id="way-full">Full-stack</h3><span class="badge" data-way-count="full-stack">Most apps here</span></header>
+        <p class="lede">Atmee runs the whole conversation: it hears the user, thinks with the avatar's persona and knowledge, answers in the avatar's voice and shows its face.</p>
+        <ul class="who" aria-label="Who does what: Atmee listens, thinks, speaks and shows the face">
+          <li class="atmee"><b>Listen</b>Atmee</li><li class="atmee"><b>Think</b>Atmee</li><li class="atmee"><b>Speak</b>Atmee</li><li class="atmee"><b>Face</b>Atmee</li>
+        </ul>
+        <h4>When to use it</h4>
+        <p>You want a talking character in your product without building a voice agent: a tutor, a host, an advisor, an interviewer. Your app steers it with what is on screen, events, its own tools and an agenda.</p>
+        <h4>How it works</h4>
+        <ol>
+          <li>Your server calls <code>POST /v1/session</code> with the avatar, a time limit and the tools it may use. The API key never reaches the browser.</li>
+          <li>Your page joins the room it returns; the avatar arrives as live video and voice.</li>
+          <li>Your page sends state and events; the avatar calls your tools and keeps to its agenda.</li>
+        </ol>
+        <button type="button" class="show" data-show-way="full-stack">Show the full-stack apps</button>
+      </article>
+      <article class="way-card soon" aria-labelledby="way-speech">
+        <header><h3 id="way-speech">Speech-to-speech</h3><span class="badge">Coming soon</span></header>
+        <p class="lede">One realtime voice model hears and answers in a single step, with the avatar's persona and voice, for the quickest back-and-forth.</p>
+        <ul class="who" aria-label="Who does what: Atmee listens, thinks and speaks in one model; the face comes next">
+          <li class="atmee"><b>Listen</b>Atmee</li><li class="atmee"><b>Think</b>Atmee</li><li class="atmee"><b>Speak</b>Atmee</li><li class="later"><b>Face</b>Next</li>
+        </ul>
+        <h4>When to use it</h4>
+        <p>Voice-first products where speed matters most: phone-style assistants, quick questions, live interpreting. It is voice only for now; the face joins it next.</p>
+        <h4>How it works</h4>
+        <ol>
+          <li>Your server calls <code>POST /v1/live/sessions</code> and gets a WebSocket address and a token good for one minute.</li>
+          <li>Your client connects with the token and streams the user's audio.</li>
+          <li>The answers stream back as audio in the avatar's voice while the user talks.</li>
+        </ol>
+      </article>
+      <article class="way-card" aria-labelledby="way-face">
+        <header><h3 id="way-face">Avatar-only</h3><span class="badge" data-way-count="avatar-only">Two apps here</span></header>
+        <p class="lede">You bring the agent; Atmee brings the face. Whatever your app says, the avatar says it, lips in time, live in your own LiveKit room.</p>
+        <ul class="who" aria-label="Who does what: your app listens, thinks and speaks; Atmee shows the face">
+          <li class="yours"><b>Listen</b>Yours</li><li class="yours"><b>Think</b>Yours</li><li class="yours"><b>Speak</b>Yours</li><li class="atmee"><b>Face</b>Atmee</li>
+        </ul>
+        <h4>When to use it</h4>
+        <p>You already have a voice agent (your own model, tools and text-to-speech), or audio from anywhere (a script, a recording, a live voice), and want a face on it. <a href="/apps/parcel-help-desk/">Waybill</a> brings its whole agent; <a href="/apps/presenter-studio/">Facecast</a> brings only audio.</p>
+        <h4>How it works</h4>
+        <ol>
+          <li>Your server mints a LiveKit token for the avatar in your own room, set to publish on behalf of your agent.</li>
+          <li>It calls <code>POST /v1/avatars/{id}/avatar_sessions</code> with that token; the avatar joins your room.</li>
+          <li>Your agent streams its speech to the avatar as 16 kHz audio, and the avatar publishes the face and the voice in sync. With LiveKit Agents, <code>livekit-plugins-atmee</code> does this part.</li>
+        </ol>
+        <button type="button" class="show" data-show-way="avatar-only">Show the avatar-only apps</button>
+      </article>
+    </div>
   </section>
 </main>
 
@@ -263,13 +344,39 @@
     "market-desk": ["📈", ["Markets", "Live quotes"], "Call Reese", "advice"],
     "travel-guide": ["🗺️", ["Travel", "Live map"], "Plan with Lumi", "advice"],
     "room-planner": ["🏠", ["Home", "Floor plan"], "Draw with Iris", "advice"],
+    "parcel-help-desk": ["📦", ["Support", "Own agent"], "Talk to Tess", "work"],
+    "presenter-studio": ["🎙️", ["Studio", "Any audio"], "Put Remy on air", "work"],
   };
   const KINDS = [["all", "All"], ["learn", "Learn"], ["play", "Play"], ["advice", "Advice"], ["work", "Work and live"]];
-  const NUMBER = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen", "Twenty"];
+  // How each app is built: the five above are full-stack; the list says for the others.
+  const WAYS = [["any", "Any way"], ["full-stack", "Full-stack"], ["avatar-only", "Avatar-only"]];
+  const WAY_LABEL = { "full-stack": "Full-stack", "avatar-only": "Avatar-only" };
+  // Every app's code is its folder in the repository (the five's folders point to their files).
+  const CODE = "https://github.com/Atmanity/atmee-ai-demos/tree/main/apps/";
+  const GITHUB = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>';
+  const NUMBER = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen", "Twenty", "Twenty-one", "Twenty-two", "Twenty-three", "Twenty-four", "Twenty-five"];
   const darker = (hex, k) => "#" + hex.slice(1).match(/../g).map((c) => Math.round(parseInt(c, 16) * k).toString(16).padStart(2, "0")).join("");
   const light = (hex) => { const [r, g, b] = hex.slice(1).match(/../g).map((c) => parseInt(c, 16) / 255); return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.5; };
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
   const grid = document.getElementById("grid");
+  // Each card in its cell, with how it is built on its art and a link to its code beside it.
+  function place(card, way) {
+    const cell = el("div", "cell");
+    cell.dataset.kind = card.dataset.kind;
+    cell.dataset.way = way;
+    card.dataset.way = way;
+    card.before(cell);
+    cell.append(card);
+    card.querySelector(".art").append(el("span", `way is-${way}`, WAY_LABEL[way]));
+    const code = el("a", "code");
+    code.href = CODE + card.dataset.id;
+    code.target = "_blank";
+    code.rel = "noopener";
+    code.setAttribute("aria-label", `The code of ${card.querySelector(".art b").textContent} on GitHub`);
+    code.innerHTML = `${GITHUB}<span>Code</span>`;
+    cell.append(code);
+  }
+  for (const card of grid.querySelectorAll(".app")) place(card, "full-stack");
 
   // A card's face: shown once it loads; without one the emoji stays.
   const face = (img, art, src) => {
@@ -314,27 +421,37 @@
     wall.append(li);
   }
 
-  // The filter: one button per kind that has apps, with its count.
+  // The filters: one button per kind, and per way of building, that has apps, with its count.
   let kind = "all";
-  function buildFilters() {
-    const box = document.getElementById("filters");
+  let way = "any";
+  function filterRow(id, choices, field, all, current, choose) {
+    const box = document.getElementById(id);
     box.replaceChildren();
     const cards = [...grid.querySelectorAll(".app")];
-    for (const [k, label] of KINDS) {
-      const n = k === "all" ? cards.length : cards.filter((c) => c.dataset.kind === k).length;
+    for (const [k, label] of choices) {
+      const n = k === all ? cards.length : cards.filter((c) => c.dataset[field] === k).length;
       if (!n) continue;
       const b = el("button");
       b.type = "button";
-      b.dataset.kind = k;
-      b.setAttribute("aria-pressed", String(k === kind));
+      b.dataset.value = k;
+      b.setAttribute("aria-pressed", String(k === current));
       b.append(label, el("span", "", String(n)));
-      b.addEventListener("click", () => { kind = k; apply(); });
+      b.addEventListener("click", () => choose(k));
       box.append(b);
     }
   }
+  function buildFilters() {
+    filterRow("filters", KINDS, "kind", "all", kind, (k) => { kind = k; apply(); });
+    filterRow("way-filters", WAYS, "way", "any", way, (w) => { way = w; apply(); });
+  }
   function apply() {
-    for (const c of grid.querySelectorAll(".app")) c.hidden = kind !== "all" && c.dataset.kind !== kind;
-    for (const b of document.querySelectorAll("#filters button")) b.setAttribute("aria-pressed", String(b.dataset.kind === kind));
+    for (const c of grid.querySelectorAll(".cell")) c.hidden = (kind !== "all" && c.dataset.kind !== kind) || (way !== "any" && c.dataset.way !== way);
+    for (const b of document.querySelectorAll("#filters button")) b.setAttribute("aria-pressed", String(b.dataset.value === kind));
+    for (const b of document.querySelectorAll("#way-filters button")) b.setAttribute("aria-pressed", String(b.dataset.value === way));
+  }
+  // "Show the full-stack apps" in the section below: the way's filter, then the apps.
+  for (const b of document.querySelectorAll("[data-show-way]")) {
+    b.addEventListener("click", () => { kind = "all"; way = b.dataset.showWay; apply(); document.getElementById("apps").scrollIntoView(); });
   }
 
   function setCounts(apps, tools) {
@@ -378,10 +495,16 @@
         body.append(el("p", "", a.tagline), tagRow, el("span", "open", `${open} →`));
         card.append(art, body);
         grid.append(card);
+        place(card, a.way === "avatar-only" ? "avatar-only" : "full-stack");
         if (tools != null) tools += Number(a.tools) || 0;
       }
     }
     setCounts(grid.querySelectorAll(".app").length, tools);
+    // How many apps each way has, on its card below.
+    for (const badge of document.querySelectorAll("[data-way-count]")) {
+      const n = grid.querySelectorAll(`.app[data-way="${badge.dataset.wayCount}"]`).length;
+      if (n) badge.textContent = `${NUMBER[n] || n} app${n === 1 ? "" : "s"} here`;
+    }
     buildWall();
     buildFilters();
     apply();

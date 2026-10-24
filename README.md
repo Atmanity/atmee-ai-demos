@@ -8,9 +8,20 @@ Sample apps built purely on the Atmee Avatar API (v2), with no changes to the pl
 - **Fourteen mini-apps** from `Atmanity/apps` (games, tutors, advisors, a planetarium, a room
   planner), rebuilt as products (`server/`, `src/`). See
   [The fourteen mini-apps](#the-fourteen-mini-apps).
+- **Two avatar-only apps** whose own agent speaks while the avatar is only its face, rendered
+  into the site's own LiveKit room. See [Avatar-only apps](#avatar-only-apps).
 
-One site serves all nineteen: `server/index.ts` runs the fourteen and mounts `server.js` in the
-same process, on one port, and the home page lists every app.
+One site serves all twenty-one: `server/index.ts` runs the mini-apps and mounts `server.js` in
+the same process, on one port, and the home page lists every app, says which of the
+[three ways](#three-ways-to-build) each is built, and links to its code.
+
+## Three ways to build
+
+| way | Atmee runs | the app brings | API | here |
+|---|---|---|---|---|
+| **Full-stack** | listening, thinking (persona, knowledge, agenda), the voice and the face | what is on screen, events and its tools | `POST /v1/session` | nineteen apps |
+| **Speech-to-speech** (coming soon) | one realtime voice model that hears and answers; voice only for now | the client that streams audio over a WebSocket | `POST /v1/live/sessions` | none yet |
+| **Avatar-only** | the face only | the whole agent (its model, tools and voice) or any audio, and its own LiveKit room | `POST /v1/avatars/{id}/avatar_sessions` | Waybill, Facecast |
 
 Every app has its folder in `apps/<app>/` with its README.
 
@@ -29,7 +40,7 @@ is: pages in `public/`, behaviour in `usecases/index.js`, shared server code in 
 ## Setup
 
 ```
-cp .env.example .env     # ATMEE_BASE_URL, ATMEE_API_KEY, one AVATAR_<APP> per app, GEMINI_API_KEY for Kin
+cp .env.example .env     # ATMEE_BASE_URL, ATMEE_API_KEY, GEMINI_API_KEY for Kin and the avatar-only apps
 npm install
 npm run dev              # every app: http://localhost:5190/
 ```
@@ -183,6 +194,22 @@ Each was run live on staging; its README has the runs and what the API could not
 | travel-guide | **Yonder** | dream up a trip on a live map with Lumi | [apps/travel-guide](apps/travel-guide/README.md) |
 | room-planner | **Planwright** | talk your home into shape with Iris, an architect who draws as you talk | [apps/room-planner](apps/room-planner/README.md) |
 
+## Avatar-only apps
+
+The app brings the speech; the avatar is the face that says it. The site's server mints two
+LiveKit tokens with its own project (`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`):
+one for the page, which joins as the agent, and one for the avatar, which publishes on the
+page's behalf. It starts the render with `POST /v1/avatars/{id}/avatar_sessions`
+(`server/render.ts`, routes `/api/apps/<app>/render`). The page streams 16 kHz PCM to the
+avatar on `lk.audio_stream`, answers `lk.playback_started` and `lk.playback_finished`, cuts with
+`lk.clear_buffer`, and plays the avatar's synced video and voice (`src/avatar/render.ts`,
+`useAvatarOnly` in the kit). A LiveKit Agents worker does the same with `livekit-plugins-atmee`.
+
+| app | product | what it is | README |
+|---|---|---|---|
+| parcel-help-desk | **Waybill** | a parcel help desk: the app's own model, tools, voice and ears; Tess is the face | [apps/parcel-help-desk](apps/parcel-help-desk/README.md) |
+| presenter-studio | **Facecast** | a script, a recording or your live voice, said to camera by Remy | [apps/presenter-studio](apps/presenter-studio/README.md) |
+
 ### Run them
 
 ```
@@ -194,9 +221,9 @@ npm run typecheck
 ```
 
 Node 22.9+ (for `--env-file-if-exists`). `npm run dev` and `npm start` read `.env`, then
-`.env.local` if it exists, so a value there wins. Each app's host is the `avatarId` in
-`apps/<app>/avatar.json`, an avatar of the same account as the five apps' avatars, so one key
-serves all. `AVATAR_<APP_ID>` (for example `AVATAR_CHESS_OPPONENT`) overrides one app's host,
+`.env.local` if it exists, so a value there wins. Each app's host, the five's as much as the others', is the
+`avatarId` in `apps/<app>/avatar.json` (`server/hosts.js` reads them for both servers), all in
+one account, so one key serves all. `AVATAR_<APP_ID>` (for example `AVATAR_CHESS_OPPONENT`) overrides one app's host,
 and `AVATAR_DEFAULT` serves an app with neither. The site runs on `SITE_PORT` (default 5190),
 so `PORT` stays the five apps' own (3333) when `server.js` runs alone. The mini-apps own
 `/apps/…` and `/api/apps/…`; every other path is `server.js`'s.

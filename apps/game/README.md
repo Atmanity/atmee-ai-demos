@@ -41,7 +41,7 @@ the story is driven by the game's events.
 
 ```http
 POST /v1/session
-{ "avatarId": "<AVATAR_GAME>", "maxDurationSeconds": 900,
+{ "avatarId": "<avatarId from apps/game/avatar.json>", "maxDurationSeconds": 900,
   "appTools": { "instructions": "You narrate this island, and at the oracle's shrine you also voice the oracle; these are the oracle's powers, used only while the player kneels there. … call reveal_clue first and answer from what it tells you … whenever your words hand over, bestow or grant anything, call give_item for it first …",
     "tools": [
       { "type": "function", "name": "reveal_clue", "parameters": { "type": "object", "properties": { "seek": { "type": "string", "enum": ["key","chest","map"] } }, "required": ["seek"] }, "x-atmee": { "mode": "await", "timeoutSeconds": 5 } },
@@ -79,8 +79,7 @@ earlier runs the oracle sometimes said "take this lantern" without calling the t
 ```
 ATMEE_BASE_URL=https://staging.atmanity.us
 ATMEE_API_KEY=…            # scope: sessions
-AVATAR_GAME=…              # an avatar whose persona is a storyteller who also voices the oracle
-node --env-file=.env server.js
+node --env-file=.env server.js   # the host: apps/game/avatar.json (AVATAR_GAME overrides it)
 open http://localhost:3333/game.html        # ?debug shows relays, held times and tool calls
 ```
 
