@@ -63,7 +63,7 @@ export const TOOLS: AppTool[] = [
   // ------------------------------------------------------------ the floor
   {
     type: 'function', name: 'lay_out_floor',
-    description: 'Draws a whole floor from a brief, replacing everything on the floor on screen. Call it once you know roughly how big the place is and how many bedrooms, or when the client asks for a redraw or another arrangement. Pass the size too if they gave it. You never place rooms: the layout is worked out for you. From a floor plan they shared: its printed outside size and rooms, checked in the file itself; then bring each room to its printed size with trade_area or move_wall.',
+    description: 'Draws a whole floor from a brief, replacing everything on the floor on screen. Call it once you know roughly how big the place is and how many bedrooms, or when the client asks for a redraw. You never place rooms: the layout is worked out for you. Pass the size they gave. From a floor plan they shared: its printed outside size, else its printed total area as area_m2 (never the floor on screen), checked in the file itself; then bring each room to its printed size with trade_area or move_wall.',
     parameters: params({
       bedrooms: number('How many bedrooms, 1 to 5 (a couple 1, with a baby 2, a family with two children 3; a studio 1).'),
       style: text('The arrangement: day_night (living at the entry end, bedrooms at the far end; the default), open_plan (kitchen, dining and living as one room), dual_aspect (hall down the middle, every room gets a window) or compact (no hall at all).'),

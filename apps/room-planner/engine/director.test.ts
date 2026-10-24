@@ -64,7 +64,7 @@ describe('the instructions', () => {
     expect(INSTRUCTIONS).toContain('Never invent or estimate a size or an outcome');
     const tool = (name: string) => TOOLS.find((t) => t.name === name)!;
     const prop = (name: string, field: string) => (tool(name).parameters.properties as Record<string, { description: string }>)[field].description;
-    expect(tool('lay_out_floor').description).toContain('From a floor plan they shared: its printed outside size and rooms, checked in the file itself; then bring each room to its printed size with trade_area or move_wall.');
+    expect(tool('lay_out_floor').description).toContain('From a floor plan they shared: its printed outside size, else its printed total area as area_m2 (never the floor on screen), checked in the file itself; then bring each room to its printed size with trade_area or move_wall.');
     expect(prop('lay_out_floor', 'width_m')).toContain('as the client said it or their floor plan prints it');
     expect(prop('add_room', 'size_m2')).toBe('Its size, only if the client gave one or their floor plan prints it (two sides multiplied out).');
   });
