@@ -2,9 +2,10 @@
 
 Sample apps built purely on the Atmee Avatar API (v2), with no changes to the platform:
 
-- **Five apps** on one small Node server (`server.js`). They cover the target-app checklist
+- **Six apps** on one small Node server (`server.js`). Five cover the target-app checklist
   from the product thread: a recruiter call, internal training, a presence/companion, an
-  interactive story and a live stream.
+  interactive story and a live stream. The sixth is a family fire-safety plan made with a
+  fire captain.
 - **Fourteen mini-apps** from `Atmanity/apps` (games, tutors, advisors, a planetarium, a room
   planner), rebuilt as products (`server/`, `src/`). See
   [The fourteen mini-apps](#the-fourteen-mini-apps).
@@ -32,6 +33,7 @@ Every app has its folder in `apps/<app>/` with its README.
 | presence | **Kin** | a companion that reacts to the user's screen through the app's own observer; no tools | [apps/presence](apps/presence/README.md) |
 | game | **Isle of Whispers** | an event-driven narrator, and an oracle whose powers are app tools | [apps/game](apps/game/README.md) |
 | livestream | **Nightcap Live** | a host that reads a chatroom, pins lines and runs polls viewers vote in | [apps/livestream](apps/livestream/README.md) |
+| fire-plan | **Station 12 Fire Plan** | a fire captain who builds a family's home escape plan on an agenda, writing each room, meeting spot and alarm onto a printable card with tools | [apps/fire-plan](apps/fire-plan/README.md) |
 
 Each app README covers its use case, architecture, the exact API calls and room messages, its
 tools, how to run it, today's staging results and its limitations. The code stays where it

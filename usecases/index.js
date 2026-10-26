@@ -265,4 +265,67 @@ const game = {
   },
 };
 
-export const USECASES = { livestream, recruiter, training, presence, game };
+// ---------------------------------------------------------------------------
+// 6. Fire plan: a fire captain builds a family's home escape plan with them,
+//    step by step. The plan card is the app's: every item the captain agrees
+//    with the family he writes down with a tool, and the page shows it.
+// ---------------------------------------------------------------------------
+const PLAN_STEPS = ["meet", "exits", "meeting_spot", "alarms", "call_911", "review"];
+const firePlan = {
+  title: "Fire plan: a home escape plan with a fire captain",
+  page: "fire-plan.html",
+  maxSeconds: 2700,
+  speakAfterS: 1.0,
+  // Each step ends on what was said; the page learns the step only from
+  // mark_step, since the agenda cannot tell the app where it is.
+  conductor: {
+    start: "meet",
+    nodes: [
+      { id: "meet", instructions: "Mark this step with mark_step meet. You are helping this family make their home fire escape plan; the plan card on their screen fills in as you write it down. Ask who lives in the home and what the home is like (how many floors, which bedrooms and rooms).", edges: [{ to: "exits", when: "You know who lives in the home and its rooms." }, { to: "meet" }] },
+      { id: "exits", instructions: "Mark this step with mark_step exits. Go room by room through the bedrooms and the main living space. For each, agree two ways out with the family (the door, and a window or a second door), and as soon as a room's two ways out are agreed, write it down with add_room. If a room has only one way out, say how to make a second one safe (an escape ladder upstairs, a window that opens), then write down what they agree.", edges: [{ to: "meeting_spot", when: "Every bedroom and the main living space has two ways out written down." }, { to: "exits" }] },
+      { id: "meeting_spot", instructions: "Mark this step with mark_step meeting_spot. Agree one safe meeting spot outside, in front of the home and away from it (a tree, a lamppost, a neighbour's mailbox), and write it down with set_meeting_spot.", edges: [{ to: "alarms", when: "A meeting spot is agreed and written down." }, { to: "meeting_spot" }] },
+      { id: "alarms", instructions: "Mark this step with mark_step alarms. Ask where their smoke alarms are and whether each was tested this month; write each one down with log_smoke_alarm. Make sure there is one on every level and near every sleeping area, and agree a monthly test.", edges: [{ to: "call_911", when: "Their smoke alarms are written down and a monthly test is agreed." }, { to: "alarms" }] },
+      { id: "call_911", instructions: "Mark this step with mark_step call_911. Rehearse the emergency call with a child, or with whoever answers: get out first, call 911 from outside, say your name, your address and that there is a fire. Play the dispatcher: ask them what they would say, and cheer them on.", edges: [{ to: "review", when: "Someone has rehearsed the emergency call." }, { to: "call_911" }] },
+      { id: "review", instructions: "Mark this step with mark_step review. Walk the family through their plan card in a few sentences: the rooms and their two ways out, the meeting spot, the alarms. Ask whether it is right. When they confirm, call finish_plan, then tell them to print it, stick it on the fridge and practise it twice a year, and say goodbye warmly.", emotion: "warm" },
+    ],
+  },
+  appTools: {
+    instructions: "You are writing this family's home fire escape plan on the plan card on their screen as you talk; the card shows only what you write with these. Each time the call moves on to a new part, mark it with mark_step, every part in order (meet, exits, meeting_spot, alarms, call_911, review). The moment a room's two ways out are agreed, write it down with add_room; when the meeting spot is agreed, set_meeting_spot; for each smoke alarm they tell you about, log_smoke_alarm. When the family confirms the finished plan, call finish_plan before you say goodbye. Write it down first, then speak; keep the conversation natural and never talk about the card's tools.",
+    tools: [
+      tool("mark_step", "Mark the part of the plan you are on now: meet (who lives here, the rooms), exits (two ways out of each room), meeting_spot, alarms (smoke alarms), call_911 (rehearse the call), review (go over the plan).", { step: { type: "string", enum: PLAN_STEPS } }, ["step"]),
+      tool("add_room", "Write a room and its two agreed ways out on the family's plan card.", {
+        room: { type: "string", minLength: 1, maxLength: 40, description: "e.g. 'Kids' bedroom'" },
+        exit_1: { type: "string", minLength: 1, maxLength: 60, description: "e.g. 'Door to the hallway'" },
+        exit_2: { type: "string", minLength: 1, maxLength: 60, description: "e.g. 'Window onto the porch roof, escape ladder'" },
+      }, ["room", "exit_1", "exit_2"]),
+      tool("set_meeting_spot", "Write the family's agreed outdoor meeting spot on the plan card.", { place: { type: "string", minLength: 1, maxLength: 80 } }, ["place"]),
+      tool("log_smoke_alarm", "Write one smoke alarm on the plan card's alarm checklist.", {
+        location: { type: "string", minLength: 1, maxLength: 60, description: "e.g. 'Upstairs hallway'" },
+        tested: { type: "boolean", description: "Whether it was tested this month." },
+      }, ["location", "tested"]),
+      tool("finish_plan", "Mark the family's plan as finished once they confirm it; the card is then ready to print.", {}),
+    ],
+  },
+  onLinked(h) { return [state(firePlanState(h))]; },
+  onUser(h, msg) {
+    // The page sends the family's details once, and the whole plan card after every change.
+    if (msg.kind === "family") { h.memo.family = safeJson(msg.text); return [note(familyNote(h.memo.family)), state(firePlanState(h))]; }
+    if (msg.kind === "plan") { h.memo.plan = safeJson(msg.text); return [state(firePlanState(h))]; }
+    if (msg.kind === "edit") return [event(`The family just changed their plan card by hand: ${msg.text}. Acknowledge it in a few words and carry on.`, 20), state(firePlanState(h))];
+    if (msg.kind === "typed") return [say(msg.text)];
+    return [];
+  },
+};
+const safeJson = (text) => { try { return JSON.parse(text); } catch { return null; } };
+function familyNote(f) {
+  if (!f) return "The family did not say who they are.";
+  return `This family: ${f.name ? `the ${f.name} family` : "name not given"}, living in ${f.home || "a home"}${f.kids ? `, with kids aged ${f.kids}` : ""}. Speak to the kids in simple words.`;
+}
+function firePlanState(h) {
+  const p = h.memo.plan || {};
+  const rooms = (p.rooms || []).map((r) => `${r.room}: ${r.exit_1} / ${r.exit_2}`).join("; ");
+  const alarms = (p.alarms || []).map((a) => `${a.location} (${a.tested ? "tested" : "not tested yet"})`).join("; ");
+  return `Fire plan app state. On the family's plan card now. Step: ${p.step || "meet"}. Rooms with two ways out: ${rooms || "none yet"}. Meeting spot: ${p.meetingSpot || "not set"}. Smoke alarms: ${alarms || "none yet"}. Plan ${p.finished ? "finished and ready to print" : "not finished"}. The family talks to you by voice or by typing.`;
+}
+
+export const USECASES = { livestream, recruiter, training, presence, game, "fire-plan": firePlan };

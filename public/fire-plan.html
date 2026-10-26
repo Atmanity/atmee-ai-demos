@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Station 12 Fire Plan</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Bitter:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<style>
+  :root {
+    --bg: #f7f3ef; --surface: #fffdfb; --surface-2: #f1ebe5; --text: #22181a; --muted: #6f6266; --line: #e6ddd6;
+    --accent: #c8311e; --accent-ink: #fff; --accent-soft: #fbe6e1; --stage: #2a1714;
+    --font: "Inter", system-ui, sans-serif; --font-display: "Bitter", Georgia, serif;
+  }
+  .topbar { display: flex; align-items: center; gap: 18px; padding: 14px max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); border-bottom: 1px solid var(--line); background: var(--surface); }
+  .brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 700; font-size: 18px; }
+  .brand .mark { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 15px; }
+  .crumb { color: var(--muted); font-size: 14px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tracker { display: flex; gap: 4px; align-items: center; font-size: 13px; }
+  .tracker span { padding: 5px 10px; border-radius: 99px; color: var(--muted); white-space: nowrap; }
+  .tracker span.now { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .tracker span.done { color: var(--text); }
+  .tracker span.done::before { content: "✓ "; color: var(--ok); }
+  .timeleft { font-variant-numeric: tabular-nums; }
+
+  /* Always on screen: the plan is for later, a fire now is for 911. */
+  .sos { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 8px 16px; background: #8f1d10; color: #fff; font-size: 14px; font-weight: 600; text-align: center; }
+  .sos b { background: #fff; color: #8f1d10; padding: 1px 8px; border-radius: 6px; }
+
+  /* Lobby */
+  .lobby { max-width: 1040px; margin: 0 auto; padding: 40px max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; grid-template-columns: 1.15fr 1fr; gap: 28px; align-items: start; }
+  .cover { border-radius: 18px; padding: 34px; color: #fff; min-height: 240px; display: flex; flex-direction: column; justify-content: space-between;
+    background: radial-gradient(120% 120% at 100% 0%, #ff8a3d 0%, transparent 55%), linear-gradient(150deg, #5a130b, #c8311e); }
+  .cover h1 { font-size: 34px; margin-top: 10px; }
+  .cover .meta { display: flex; gap: 16px; font-size: 14px; opacity: .9; flex-wrap: wrap; }
+  .outcomes { padding: 24px; margin-top: 20px; }
+  .outcomes h2 { font-size: 18px; margin-bottom: 12px; }
+  .outcomes li { margin: 8px 0; }
+  .join { padding: 28px; display: grid; gap: 14px; }
+  .join h2 { font-size: 22px; }
+  .join label { display: grid; gap: 6px; font-size: 14px; font-weight: 500; }
+  .join input, .join select { font: inherit; padding: 10px 12px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--surface); color: var(--text); }
+  .choice { display: grid; gap: 4px; text-align: left; padding: 14px 18px; border-radius: var(--radius); border: 1.5px solid var(--line); background: var(--surface); cursor: pointer; transition: border-color .15s, background .15s; color: var(--text); }
+  .choice:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .choice b { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+  .choice b svg { width: 18px; height: 18px; color: var(--accent); }
+  .choice span { color: var(--muted); font-size: 14px; }
+
+  /* Call */
+  .room { height: calc(100vh - 98px); display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 20px; padding: 20px max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .plan { min-height: 0; overflow: auto; padding: clamp(20px, 3vw, 36px); display: grid; gap: 22px; align-content: start; }
+  .plan header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .plan h2 { font-size: clamp(24px, 2.6vw, 34px); }
+  .plan .status { font-size: 13px; color: var(--muted); }
+  .plan .status.done { color: var(--ok); font-weight: 600; }
+  .plan h3 { font-size: 15px; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); margin-bottom: 8px; }
+  .rows { display: grid; gap: 8px; }
+  .row { display: grid; grid-template-columns: minmax(110px, .8fr) 1fr 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: 15px; }
+  .row b { font-weight: 600; }
+  .row .x { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 2px 6px; }
+  .row.new { animation: pop .5s ease-out; }
+  @keyframes pop { from { background: var(--accent-soft); } }
+  .empty { color: var(--muted); font-size: 14px; font-style: italic; }
+  .spot { display: flex; gap: 8px; }
+  .spot input { flex: 1; font: inherit; padding: 9px 12px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--surface); color: var(--text); }
+  .script { padding: 14px 16px; border-radius: 10px; border-left: 4px solid var(--accent); background: var(--surface-2); font-size: 15px; line-height: 1.5; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  .side { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+  .captain { aspect-ratio: 1 / 1; flex: none; }
+  .captain .tag { position: absolute; left: 12px; top: 12px; z-index: 1; display: flex; align-items: center; gap: 6px; background: rgb(0 0 0 / .45); color: #fff; padding: 4px 10px; border-radius: 99px; font-size: 13px; font-weight: 500; }
+  .captain .tag .dot { width: 7px; height: 7px; border-radius: 50%; background: #9ca3af; }
+  .captain.talking .tag .dot { background: #4ade80; }
+  .captain .caption { font-size: 15px; bottom: 12px; }
+  .chat { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .chat .transcript { flex: 1; padding: 16px; }
+  .chat .foot { display: flex; gap: 8px; align-items: center; padding: 12px; border-top: 1px solid var(--line); }
+  .hint { font-size: 12px; color: var(--muted); padding: 0 16px 8px; min-height: 18px; }
+
+  /* Shown when the family's own words sound like a fire happening now. */
+  .alert { position: fixed; inset: 0; z-index: 50; background: #8f1d10; color: #fff; display: grid; place-items: center; padding: 24px; text-align: center; }
+  .alert[hidden] { display: none; }
+  .alert h2 { font-size: clamp(32px, 6vw, 64px); margin-bottom: 16px; }
+  .alert p { font-size: 20px; max-width: 34ch; margin: 0 auto 28px; }
+  .alert .btn { background: #fff; color: #8f1d10; }
+
+  @media (max-width: 900px) {
+    .lobby { grid-template-columns: 1fr; padding-top: 24px; }
+    .room { grid-template-columns: 1fr; height: auto; }
+    .captain { aspect-ratio: 16 / 10; }
+    .chat { height: 420px; flex: none; }
+    .crumb, .tracker span:not(.now) { display: none; }
+    .row { grid-template-columns: 1fr auto; }
+    .row span { grid-column: 1; }
+  }
+
+  /* The printed plan: the card alone, for the fridge. */
+  @media print {
+    body { background: #fff; }
+    .topbar, .sos, .side, .actions, .row .x, .lobby, .alert, #spotSave, .debug { display: none !important; }
+    .room { display: block; height: auto; padding: 0; }
+    .plan { overflow: visible; box-shadow: none; border: 0; }
+    .spot input { border: 0; padding: 0; }
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="mark">12</span>Station 12</div>
+  <div class="crumb">Home fire escape plan</div>
+  <nav class="tracker" id="tracker" hidden>
+    <span data-k="meet">Family</span><span data-k="exits">Ways out</span><span data-k="meeting_spot">Meeting spot</span><span data-k="alarms">Alarms</span><span data-k="call_911">911 call</span><span data-k="review">Review</span>
+  </nav>
+  <span class="chip" id="timechip" hidden>Time left&nbsp;<b class="timeleft" id="timeleft">–</b></span>
+</header>
+<div class="sos" role="note">Fire or emergency right now? Get out and call <b>911</b>. This app is for planning ahead.</div>
+
+<main id="lobby" class="lobby">
+  <section>
+    <div class="cover">
+      <div class="eyebrow" style="color:#fff;opacity:.85">Station 12 · Family visit</div>
+      <div><h1>Make your family's fire escape plan with Captain Reyes</h1></div>
+      <div class="meta"><span>⏱ about 15 min</span><span>Two ways out of every room</span><span>Printable plan</span></div>
+    </div>
+    <div class="card outcomes">
+      <h2>Together you'll</h2>
+      <ul>
+        <li>Find two ways out of every bedroom and living space.</li>
+        <li>Pick a meeting spot outside.</li>
+        <li>Check your smoke alarms and agree a monthly test.</li>
+        <li>Practise the 911 call, so the kids know what to say.</li>
+      </ul>
+    </div>
+  </section>
+  <section class="card join">
+    <div class="eyebrow">Live video call</div>
+    <h2>Captain Reyes builds the plan with you, live.</h2>
+    <label>Family name <input id="famName" placeholder="e.g. Chen" maxlength="40" autocomplete="off"></label>
+    <label>Home
+      <select id="famHome">
+        <option>a one-floor apartment</option>
+        <option>a two-floor house</option>
+        <option>a one-floor house</option>
+        <option>a house with three or more floors</option>
+      </select>
+    </label>
+    <label>Kids' ages (optional) <input id="famKids" placeholder="e.g. 7 and 10" maxlength="40" autocomplete="off"></label>
+    <button class="choice" id="withMic" type="button"><b><span id="micIcon"></span>Call with microphone</b><span>Talk to Captain Reyes out loud.</span></button>
+    <button class="choice" id="withKeys" type="button"><b><span id="keyIcon"></span>Call without microphone</b><span>Listen, and type your answers.</span></button>
+    <div class="notice warn" id="lobbyError" hidden></div>
+  </section>
+</main>
+
+<main id="room" class="room" hidden>
+  <article class="card plan" id="plan" aria-live="polite">
+    <header><h2 id="planTitle">Our fire escape plan</h2><span class="status" id="planStatus">Being made with Captain Reyes</span></header>
+    <section><h3>Two ways out of every room</h3><div class="rows" id="rooms"></div></section>
+    <section><h3>Our meeting spot outside</h3>
+      <div class="spot"><input id="spot" placeholder="Captain Reyes will help you pick one" maxlength="80" aria-label="Meeting spot"><button class="btn ghost" id="spotSave" type="button">Save</button></div>
+    </section>
+    <section><h3>Smoke alarms · test every month</h3><div class="rows" id="alarms"></div></section>
+    <section><h3>If there's a fire</h3>
+      <div class="script">1. Shout "Fire!" and get out, by your second way if the first is blocked. Stay low under smoke.<br>2. Go straight to the meeting spot. Never go back inside.<br>3. Call <b>911</b> from outside: "There's a fire at <i>our address</i>. Everyone is out" (or who is still inside).</div>
+    </section>
+    <div class="actions"><button class="btn primary" id="print" type="button">Print our plan</button></div>
+  </article>
+  <aside class="side">
+    <div class="stage captain" id="captain">
+      <span class="tag"><span class="dot"></span>Captain Reyes</span>
+      <video id="video" autoplay playsinline muted></video><audio id="audio" autoplay></audio>
+      <div class="overlay" id="overlay"></div>
+    </div>
+    <div class="card chat">
+      <div class="transcript" id="transcript"></div>
+      <div class="hint" id="hint"></div>
+      <form class="foot composer" id="composer">
+        <button class="icon-btn" id="mic" type="button" hidden></button>
+        <input id="text" placeholder="Type to Captain Reyes…" maxlength="500" autocomplete="off" disabled>
+        <button class="icon-btn" id="send" type="submit" aria-label="Send" disabled></button>
+        <button class="icon-btn end" id="leave" type="button" title="End the call" aria-label="End the call"></button>
+      </form>
+    </div>
+  </aside>
+</main>
+
+<div class="alert" id="alert" role="alertdialog" aria-labelledby="alertTitle" hidden>
+  <div>
+    <h2 id="alertTitle">Is there a fire right now?</h2>
+    <p>Get everyone out now and call <b>911</b> from outside. Don't stop for belongings, and never go back in.</p>
+    <button class="btn" id="alertOk" type="button">No, we're just practising</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/livekit-client@2.9.5/dist/livekit-client.umd.js"></script>
+<script src="common.js"></script>
+<script src="kit.js"></script>
+<script>
+  const { $, icon } = UI;
+  $('micIcon').innerHTML = icon.mic; $('keyIcon').innerHTML = icon.keyboard;
+  $('send').innerHTML = icon.send; $('leave').innerHTML = icon.end;
+
+  const STEPS = ['meet', 'exits', 'meeting_spot', 'alarms', 'call_911', 'review'];
+  // The plan card is the app's truth: Captain Reyes writes it with his tools,
+  // the family can fix it by hand, and every change goes back to him as state.
+  const plan = { step: 'meet', rooms: [], meetingSpot: '', alarms: [], finished: false };
+  let s, family = null, stopClock = () => {};
+  const tr = UI.transcript($('transcript'), { avatar: 'Captain Reyes', user: 'You' });
+  const caption = UI.captionOverlay($('captain'), { id: 'fire-plan', defaultOn: false });
+  UI.backLink(document.querySelector('.topbar'), { getSession: () => s, what: 'call' });
+  const debug = UI.debugLog();
+  const sender = UI.politeSender(() => s);
+  const overlay = UI.stage($('overlay'), {
+    starting: ['Calling Station 12…', 'Finding Captain Reyes for you.'],
+    warming: ['Connecting to Station 12…', 'The captain is gearing up. This takes a minute or two the first time.'],
+    connecting: ['Connecting…', 'Joining the call.'],
+    arriving: ['Captain Reyes is on his way…', 'He will greet you in a moment.'],
+  });
+
+  // A fire happening now is the page's to catch, not only the captain's: the
+  // family's own words are checked, and the alert covers the screen.
+  // Not while the 911 call is being rehearsed: practising it means saying
+  // "there's a fire at our address", which is no emergency.
+  const EMERGENCY = /\b(on fire|is burning|catch(ing)? fire|caught fire|we have a fire|fire in (my|our|the) \w+|can'?t get out|trapped|smell(ing)? (smoke|gas)|smoke (is )?coming)\b/i;
+  function checkEmergency(text) { if (plan.step !== 'call_911' && EMERGENCY.test(text)) $('alert').hidden = false; }
+  $('alertOk').onclick = () => { $('alert').hidden = true; };
+
+  function setStep(step) {
+    plan.step = step; $('tracker').hidden = false;
+    const at = STEPS.indexOf(step);
+    [...$('tracker').children].forEach((el, i) => { el.className = plan.finished || i < at ? 'done' : i === at ? 'now' : ''; });
+  }
+  function render(newRow) {
+    $('planTitle').textContent = family && family.name ? `The ${family.name} family's fire escape plan` : 'Our fire escape plan';
+    $('planStatus').textContent = plan.finished ? '✓ Finished, ready to print' : 'Being made with Captain Reyes';
+    $('planStatus').classList.toggle('done', plan.finished);
+    $('rooms').innerHTML = plan.rooms.length
+      ? plan.rooms.map((r, i) => `<div class="row${newRow === `room${i}` ? ' new' : ''}"><b>${UI.esc(r.room)}</b><span>1 · ${UI.esc(r.exit_1)}</span><span>2 · ${UI.esc(r.exit_2)}</span><button class="x" data-room="${i}" aria-label="Remove ${UI.esc(r.room)}">✕</button></div>`).join('')
+      : '<p class="empty">Rooms appear here as you agree their two ways out.</p>';
+    $('alarms').innerHTML = plan.alarms.length
+      ? plan.alarms.map((a, i) => `<div class="row${newRow === `alarm${i}` ? ' new' : ''}"><b>${UI.esc(a.location)}</b><span>${a.tested ? '✓ Tested this month' : '○ Test it this week'}</span><span></span><button class="x" data-alarm="${i}" aria-label="Remove ${UI.esc(a.location)}">✕</button></div>`).join('')
+      : '<p class="empty">Your smoke alarms appear here.</p>';
+    if (document.activeElement !== $('spot')) $('spot').value = plan.meetingSpot;
+    $('rooms').querySelectorAll('[data-room]').forEach((b) => (b.onclick = () => { const [r] = plan.rooms.splice(Number(b.dataset.room), 1); changed(`removed the room "${r.room}"`); }));
+    $('alarms').querySelectorAll('[data-alarm]').forEach((b) => (b.onclick = () => { const [a] = plan.alarms.splice(Number(b.dataset.alarm), 1); changed(`removed the smoke alarm "${a.location}"`); }));
+  }
+  const report = () => { if (s) s.user('plan', JSON.stringify(plan)); };
+  // A hand edit: shown at once, and Captain Reyes hears of it (an event, plus the new state).
+  function changed(what) { render(); if (s) s.user('edit', what); report(); }
+  $('spotSave').onclick = () => { const v = $('spot').value.trim(); if (v === plan.meetingSpot) return; plan.meetingSpot = v; changed(v ? `set the meeting spot to "${v}"` : 'cleared the meeting spot'); };
+  $('print').onclick = () => window.print();
+
+  const tools = {
+    mark_step: ({ step }) => { setStep(step); report(); },
+    add_room: ({ room, exit_1, exit_2 }) => {
+      const i = plan.rooms.findIndex((r) => r.room.toLowerCase() === room.toLowerCase());
+      if (i >= 0) plan.rooms[i] = { room, exit_1, exit_2 }; else plan.rooms.push({ room, exit_1, exit_2 });
+      render(`room${i >= 0 ? i : plan.rooms.length - 1}`); report();
+    },
+    set_meeting_spot: ({ place }) => { plan.meetingSpot = place; render(); report(); },
+    log_smoke_alarm: ({ location, tested }) => {
+      const i = plan.alarms.findIndex((a) => a.location.toLowerCase() === location.toLowerCase());
+      if (i >= 0) plan.alarms[i] = { location, tested: !!tested }; else plan.alarms.push({ location, tested: !!tested });
+      render(`alarm${i >= 0 ? i : plan.alarms.length - 1}`); report();
+    },
+    finish_plan: () => {
+      if (!plan.rooms.length) return 'Not yet: the plan has no rooms with two ways out. Agree them with the family and write them down first.';
+      plan.finished = true; setStep('review'); render(); report();
+    },
+  };
+
+  async function begin(withMic) {
+    $('lobbyError').hidden = true;
+    family = { name: $('famName').value.trim(), home: $('famHome').value, kids: $('famKids').value.trim() };
+    let mic = null;
+    if (withMic) { try { mic = await Atmee.requestMic(); } catch (e) { $('lobbyError').textContent = e.friendly; $('lobbyError').hidden = false; return; } }
+    $('lobby').hidden = true; $('room').hidden = false; setStep('meet'); render();
+    tr.clear(); tr.note(mic ? 'You joined with your microphone' : 'You joined without a microphone');
+    connect(mic);
+  }
+  async function connect(mic) {
+    try {
+      s = await Atmee.join({
+        usecase: 'fire-plan', video: $('video'), audio: $('audio'), mic, tools,
+        onPhase: (p, d) => overlay.phase(p, d),
+        onCaption: (text, final) => { caption(text, final); tr.avatar(text, final); },
+        onUserCaption: (text, final, ...rest) => { tr.heard(text, final, ...rest); if (final) checkEmergency(text); },
+        onSpeaking: (v) => { $('captain').classList.toggle('talking', v); sender.speaking(v); $('hint').textContent = v && sender.waiting ? 'Your message will be sent when Captain Reyes finishes his sentence.' : ''; },
+        onRelay: debug,
+        onEnd: () => { stopClock(); overlay.ended('<div class="title">The call has ended</div><p>Your plan stays here: print it below.</p><button class="btn primary" onclick="location.reload()">Start again</button>'); lock(true); },
+      });
+      s.user('family', JSON.stringify(family)); report();
+      UI.micButton($('mic'), s);
+      lock(false); $('timechip').hidden = false;
+      stopClock = UI.countdown($('timeleft'), s.session.maxSeconds, () => tr.note('About a minute left in this call'));
+    } catch (e) {
+      overlay.error(e.friendly || 'Something went wrong.', 'Try again', async () => connect(mic ? await Atmee.requestMic().catch(() => null) : null));
+    }
+  }
+  function lock(v) { $('text').disabled = $('send').disabled = v; }
+  $('withMic').onclick = () => begin(true);
+  $('withKeys').onclick = () => begin(false);
+  $('composer').onsubmit = (e) => {
+    e.preventDefault(); const t = $('text').value.trim(); if (!t || !s) return;
+    tr.user(t); checkEmergency(t); sender.send('typed', t); $('text').value = '';
+    if (sender.waiting) $('hint').textContent = 'Your message will be sent when Captain Reyes finishes his sentence.';
+  };
+  $('leave').onclick = async () => { if (s) await s.end(); stopClock(); overlay.ended('<div class="title">You ended the call</div><p>Your plan stays here: print it below.</p><button class="btn primary" onclick="location.reload()">Start again</button>'); lock(true); };
+</script>
+</body>
+</html>
