@@ -143,7 +143,7 @@ async function startSession(h) {
   if (!h.avatarId) throw Object.assign(new Error(`No host: set avatarId in apps/${h.name}/avatar.json or ${avatarEnvName(h.name)}`), { status: 500 });
   await ensureConductor(h);
   const r = await api("POST", "/v1/session", {
-    avatarId: h.avatarId, maxDurationSeconds: Number(process.env.MAX_SECONDS || 900),
+    avatarId: h.avatarId, maxDurationSeconds: h.def.maxSeconds || Number(process.env.MAX_SECONDS || 900),
     language: h.def.language, metadata: { app: "atmee-usecase-demos", usecase: h.name },
     ...(h.def.appTools ? { appTools: h.def.appTools } : {}),
   });
