@@ -69,6 +69,12 @@ export interface AvatarSession {
   note(text: string): Promise<void>;
   event(text: string, ttlS?: number): Promise<void>;
   setMicMuted(muted: boolean): Promise<void>;
+  /**
+   * Publish this audio track as the user's microphone, in place of the silence
+   * of a typing-only session (another avatar's voice, say); null puts the
+   * silence back. For a session started without a microphone.
+   */
+  feedMic(track: MediaStreamTrack | null): Promise<void>;
   /** Whether the host takes files (its runtime reads them): offer a drop only then. */
   acceptsFiles(): boolean;
   /**
@@ -147,6 +153,7 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
   let lastState: string | undefined;
   let micTrack: { mute(): Promise<unknown>; unmute(): Promise<unknown> } | undefined;
   let silence: { ctx: AudioContext; track: MediaStreamTrack } | undefined;
+  let fed: MediaStreamTrack | undefined;   // a track the app publishes as the microphone (feedMic)
   const outbox: [string, string][] = [];   // sent before the agent links the user
   const sendText = async (topic: string, text: string) => {
     if (!linked) {
@@ -350,6 +357,19 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
         return;
       }
       if (micTrack) await (muted ? micTrack.mute() : micTrack.unmute());
+    },
+    async feedMic(track) {
+      if (micTrack) throw new Error('feedMic is for a session started without a microphone');
+      if (ended || track === (fed ?? null)) return;
+      const previous = fed ?? silence?.track;
+      const previousSilence = silence;
+      fed = track ?? undefined;
+      silence = undefined;
+      // The new track first, then the old one goes: the agent never sees the user without a microphone.
+      if (track) await room.localParticipant.publishTrack(track, { source: Track.Source.Microphone, name: 'feed', dtx: false });
+      else silence = await publishSilence(room);
+      if (previous) await room.localParticipant.unpublishTrack(previous, false);
+      if (previousSilence) void previousSilence.ctx.close();
     },
     async end() {
       if (ended) return;

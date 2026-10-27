@@ -53,6 +53,8 @@ export interface Avatar {
   mute(): void;
   unmute(): void;
   setMic(on: boolean): void;
+  /** Hear this track as the user's microphone (another avatar's voice, say); null for silence. Typing-only calls. */
+  feedMic(track: MediaStreamTrack | null): Promise<void>;
   resumeAudio(): void;
   /**
    * Drop files into the call for the host to read and talk about (at most 10).
@@ -249,6 +251,7 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
       // A typing-only session gets a real microphone here; the toggle shows on only once it is.
       session.setMicMuted(!on).then(() => setMicOn(on), () => setDetail('No microphone: you can type instead.'));
     },
+    async feedMic(track) { await sessionRef.current?.feedMic(track); },
     resumeAudio() { void resumeRef.current?.().then(() => setAudioBlocked(false)); },
     async sendFiles(files, options) {
       const session = sessionRef.current;

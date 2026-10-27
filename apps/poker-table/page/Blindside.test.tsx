@@ -31,7 +31,7 @@ function fakeAvatar(phase: AvatarPhase = 'live', over: Partial<Avatar> = {}): Av
   return {
     phase, detail: '', speaking: false, caption: '', heard: '', lines: [], secondsLeft: null, micOn: false, audioBlocked: false,
     videoRef: { current: null }, audioRef: { current: null }, start: vi.fn(async () => undefined), end: async () => undefined,
-    say: noop, record: noop, state: noop, note: noop, event: noop, mute: noop, unmute: noop, setMic: noop, resumeAudio: noop,
+    say: noop, record: noop, state: noop, note: noop, event: noop, mute: noop, unmute: noop, setMic: noop, feedMic: async () => {}, resumeAudio: noop,
     filesAccepted: false, sendFiles: async () => [],
     ...over,
   };
