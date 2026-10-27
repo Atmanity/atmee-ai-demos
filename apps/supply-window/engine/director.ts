@@ -77,8 +77,6 @@ export const slipLine = (s: Slip) => s.status === 'stamped'
 
 /** What a tool call did, in words Hester speaks from. Each leads with the outcome. */
 export const said = {
-  opening: (slips = 0) => `You have just greeted them; do not greet or introduce yourself again. ${slips ? 'They are back at your window, and their earlier slips are still on their screen.' : 'The stores ledger and their chits are on their screen.'} Let them say what they are after; if they hesitate, ask in a few words.`,
-
   check(c: Check): string {
     if (c.kind === 'unknown') return `Not a Supply item: "${c.words}" is not in the ledger. Say Supply does not carry it, and ask what the job is so you can suggest something that is.`;
     if (c.kind === 'in') return `In stock: ${stock(c.item)}${issuedTo(c.item)}${known(c.item)}. The row is lit on their ledger. Before you stamp anything you need how many, their department and what it is for.`;

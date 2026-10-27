@@ -1,6 +1,7 @@
 // Requisition's front door: what the Supply window is, how a visit goes, and the way in.
 import { BackToApps } from '../../../src/kit/index.ts';
 import hester from '../host/portrait.jpg';
+import scene from '../host/scene.jpg';
 
 export function Logo() {
   return (
@@ -36,18 +37,13 @@ export function Lobby({ onStart }: { onStart: (mic: boolean) => void }) {
           </div>
           <p className="rq-small">Talking uses your microphone while you're at the window. A visit takes a few minutes.</p>
         </div>
-        <div className="rq-hero-slip" aria-hidden="true">
-          <div className="rq-slip is-stamped is-sample">
-            <div className="rq-slip-head"><span>Silo 18 · Supply · Requisition</span><b>No. 18-0416</b></div>
-            <dl className="rq-slip-body">
-              <div className="rq-field"><dt>Item</dt><dd>Thread, grey spool</dd></div>
-              <div className="rq-field"><dt>Qty</dt><dd>2</dd></div>
-              <div className="rq-field"><dt>Department</dt><dd>Residence</dd></div>
-              <div className="rq-field"><dt>For</dt><dd>Mending a coverall</dd></div>
-              <div className="rq-field"><dt>Chits</dt><dd>4</dd></div>
-            </dl>
-            <p className="rq-stamp">Stamped</p>
-            <div className="rq-slip-sign">Issued by H. Pell, Supply</div>
+        <div className="rq-hero-scene" aria-hidden="true">
+          <div className="rq-room">
+            <img className="rq-plate-img" src={scene} alt="" draggable={false} />
+            <div className="rq-glass">
+              <div className="rq-host-video"><img className="call-poster" src={hester} alt="" /></div>
+              <div className="rq-tube"><i className="rq-roll" /><i className="rq-grain" /></div>
+            </div>
           </div>
         </div>
       </main>

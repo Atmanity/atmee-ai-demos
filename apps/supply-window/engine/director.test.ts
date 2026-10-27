@@ -56,8 +56,3 @@ test('every result leads with its outcome', () => {
   expect(said.stamp(s.stamp({ item: 'network cable', department: 'Farms', purpose: 'x y z' }), s.purse)).toMatch(/^Refused: network cable, 10 m is issued only to IT, not Farms/);
   expect(said.stamp(s.stamp({ item: 'tape', department: 'Residence', purpose: 'going outside' }), s.purse)).toMatch(/^Refused: Supply issues nothing for the outside/);
 });
-
-test('the opening never greets a second time', () => {
-  expect(said.opening()).toMatch(/^You have just greeted them; do not greet/);
-  expect(said.opening(2)).toContain('earlier slips');
-});

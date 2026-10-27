@@ -74,8 +74,9 @@ button { font: inherit; }
 .rq-lede { margin: 0; max-width: 54ch; font-size: 18px; line-height: 1.55; color: #cfd0c4; }
 .rq-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 4px; }
 .rq-small { margin: 0; font-size: 14px; color: var(--rq-muted); }
-.rq-hero-slip { display: grid; place-items: center; padding: 18px; }
-.rq-slip.is-sample { transform: rotate(2.5deg); max-width: 380px; width: 100%; }
+/* The front door shows the room itself, with Hester's portrait glowing on the CRT. */
+.rq-hero-scene { position: relative; width: 100%; max-width: 560px; aspect-ratio: 1 / 1; justify-self: center; border-radius: 4px; overflow: hidden; box-shadow: 0 24px 50px rgba(0, 0, 0, .5); }
+.rq-hero-scene .rq-room { position: absolute; inset: 0; }
 .rq-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; border-top: 2px solid var(--rq-steel-2); padding-top: 26px; }
 .rq-steps article { display: grid; gap: 6px; align-content: start; }
 .rq-step-n { font: 800 34px/1 var(--rq-display); color: var(--rq-amber); }
@@ -89,23 +90,36 @@ button { font: inherit; }
 .rq-purse b { font: 800 26px/1 var(--rq-display); color: var(--rq-light); }
 .rq-purse.is-low b { color: #f07a5b; }
 
-.rq-main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; grid-template-areas: "scene ledger" "scene chat"; grid-template-rows: auto minmax(0, 1fr); gap: 20px 24px; }
+/* A fixed stage on wide screens: the chat and the ledger scroll inside their own
+   frames, so a long conversation never moves the room. */
+.rq-main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; grid-template-areas: "scene ledger" "scene chat"; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); gap: 20px 24px; height: clamp(640px, calc(100vh - 96px), 860px); }
 
-/* The scene: the Supply window drawn behind, Hester on the wall monitor, the slip on the counter. */
-.rq-scene { grid-area: scene; position: relative; min-height: 660px; overflow: hidden; border-radius: 4px; background: #1b201e; box-shadow: inset 0 0 120px rgba(0, 0, 0, .7), 0 18px 40px rgba(0, 0, 0, .4); isolation: isolate; }
-.rq-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
-.rq-scene::after { content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none; background: radial-gradient(ellipse 80% 70% at 50% 30%, transparent 50%, rgba(0, 0, 0, .55) 100%); }
+/* The scene is a photograph of the Supply window (host/scene.jpg, square). The
+   plate keeps the photo's own proportions, so Hester's picture lands exactly on
+   the CRT's glass; a blurred, darkened copy of the photo fills the rest of the
+   stage. The glass box is measured from the photo: 34.67% / 43.65%, 30.37% x 22.66%. */
+.rq-scene { grid-area: scene; position: relative; min-height: 0; overflow: hidden; border-radius: 4px; background: #121512; isolation: isolate; display: grid; place-items: center; box-shadow: 0 18px 40px rgba(0, 0, 0, .45); }
+.rq-scene::before { content: ""; position: absolute; inset: -40px; z-index: 0; background: var(--rq-scene) center / cover; filter: blur(28px) brightness(.45) saturate(.8); }
+.rq-plate { position: relative; z-index: 1; height: 100%; aspect-ratio: 1 / 1; max-width: 100%; }
+.rq-room { position: absolute; inset: 0; }
+.rq-plate-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; user-select: none;
+  -webkit-mask-image: radial-gradient(ellipse 72% 74% at 50% 50%, #000 62%, transparent 100%); mask-image: radial-gradient(ellipse 72% 74% at 50% 50%, #000 62%, transparent 100%); }
 
-/* The monitor: a heavy grey CRT on a wall bracket, tilted toward the visitor.
-   Hester's picture is laid onto its glass in perspective, so it sits in the room. */
-.rq-monitor { position: absolute; z-index: 1; left: 50%; top: 9%; width: min(54%, 470px); transform: translateX(-50%); perspective: 1100px; display: grid; gap: 12px; }
-.rq-crt { position: relative; padding: 26px 30px 40px; border-radius: 22px 22px 18px 18px;
-  background: linear-gradient(160deg, #a8a28c, #7e7965 55%, #5f5b4b); box-shadow: inset 0 2px 0 rgba(255, 255, 255, .25), inset 0 -6px 12px rgba(0, 0, 0, .35), 0 24px 40px rgba(0, 0, 0, .6);
-  transform: rotateY(-10deg) rotateX(5deg); transform-origin: 50% 0; }
-.rq-crt::after { content: "SUPPLY · INTERCOM 18"; position: absolute; left: 30px; bottom: 13px; font: 600 9px/1 var(--rq-mono); letter-spacing: .18em; color: #3c3a30; }
-.rq-crt::before { content: ""; position: absolute; right: 30px; bottom: 14px; width: 9px; height: 9px; border-radius: 50%; background: #3b3a30; }
-.rq-scene:has(.call-video.is-live) .rq-crt::before { background: #7cf08c; box-shadow: 0 0 8px #7cf08c; }
-.rq-host-video { aspect-ratio: 4 / 3.4; border-radius: 26px / 30px; box-shadow: inset 0 0 0 3px #1c1d18, 0 0 0 6px #3f3d33; background: #0b0f0d; }
+/* The tube's glass, in the photo. */
+.rq-glass { position: absolute; z-index: 2; left: 34.67%; top: 43.65%; width: 30.37%; height: 22.66%; border-radius: 9% / 12%; overflow: hidden; }
+.rq-host-video { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: inherit; background: #070908; }
+.rq-host-video video, .rq-host-video .call-poster { object-position: 50% 28%; }
+.rq-glass .call-status { padding: 8px; gap: 4px; font-size: 11px; }
+.rq-glass .call-status * { font-size: 11px; line-height: 1.25; margin: 0; }
+.rq-glass .call-status :first-child:not(button) { font-size: 13px; font-weight: 600; }
+.rq-glass .call-status button { padding: 5px 10px; font-size: 11px; }
+.rq-glass .call-cc { top: 6px; right: 6px; transform: scale(.8); }
+.rq-glass .call-caption { left: 6px; right: 6px; bottom: 6px; font-size: 11px; }
+/* The glass curves and catches the lamp. */
+.rq-glass::after { content: ""; position: absolute; inset: 0; z-index: 6; pointer-events: none; border-radius: inherit;
+  background: radial-gradient(ellipse 60% 40% at 30% 18%, rgba(255, 236, 200, .16), transparent 70%), radial-gradient(ellipse 120% 120% at 50% 50%, transparent 60%, rgba(0, 0, 0, .55) 100%);
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, .8), inset 0 0 2px rgba(255, 255, 255, .25); }
+
 
 /* The tube: tinted, softened, scanned. The layer sits over the picture and
    under the kit's speaking ring, captions and status. Pure CSS over the
@@ -123,14 +137,44 @@ button { font: inherit; }
 }
 @keyframes rq-flicker { 0%, 47%, 100% { opacity: .95; } 48% { opacity: .8; } 49% { opacity: .97; } 73% { opacity: .9; } }
 
-.rq-nameplate { justify-self: center; display: flex; align-items: center; gap: 10px; margin: 0; padding: 6px 12px; background: rgba(12, 15, 13, .78); border: 1px solid #4d5a53; font-size: 13px; color: var(--rq-muted); }
-.rq-nameplate b { font: 700 18px/1 var(--rq-display); text-transform: uppercase; letter-spacing: .05em; color: var(--rq-light); }
-.rq-open { display: inline-flex; align-items: center; gap: 6px; font: 600 11px/1 var(--rq-mono); text-transform: uppercase; letter-spacing: .1em; color: #7cf08c; }
-.rq-open::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; animation: rq-lamp 2.4s ease-in-out infinite; }
+/* The tube's life: it powers on with a flash, a refresh bar rolls down it,
+   grain crawls, the picture jumps now and then, the edges fringe red and cyan,
+   and the phosphor glows brighter while Hester speaks. Transforms and opacity
+   only, so the stream itself is never re-rendered. */
+.rq-host-video::after { display: none; }   /* the tube's glow replaces the kit's speaking ring */
+.rq-host-video.is-live video { animation: rq-power-on .7s cubic-bezier(.2, .8, .2, 1) both, rq-jump 9s steps(1) 1.2s infinite; }
+.rq-tube { position: absolute; inset: 0; z-index: 5; border-radius: inherit; overflow: hidden; pointer-events: none;
+  box-shadow: inset 3px 0 6px rgba(255, 40, 80, .16), inset -3px 0 6px rgba(40, 210, 255, .16), 0 0 0 rgba(150, 255, 190, 0); transition: box-shadow .3s; }
+.rq-glass.is-speaking .rq-tube { box-shadow: inset 3px 0 6px rgba(255, 40, 80, .2), inset -3px 0 6px rgba(40, 210, 255, .2), 0 0 26px rgba(170, 255, 200, .28); }
+.rq-glass.is-speaking .rq-host-video video { filter: sepia(.2) saturate(.82) contrast(1.2) brightness(1.16) blur(.35px); }
+.rq-roll { position: absolute; left: 0; right: 0; top: -30%; height: 30%; background: linear-gradient(to bottom, transparent, rgba(220, 255, 230, .07) 45%, rgba(255, 255, 255, .11) 50%, transparent); animation: rq-roll 7s linear infinite; }
+.rq-grain { position: absolute; inset: -50%; opacity: .1; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation: rq-grain .6s steps(5) infinite; }
+@keyframes rq-power-on { 0% { transform: scale(1, .006); filter: brightness(4); } 45% { transform: scale(1, .006); filter: brightness(4); } 70% { transform: scale(1, 1.04); filter: brightness(1.8); } 100% { transform: none; } }
+@keyframes rq-jump { 0%, 100% { transform: none; } 91% { transform: translateX(3px) skewX(-1.2deg); } 91.6% { transform: translateX(-2px); } 92.2% { transform: none; } 97% { transform: translateY(1px); } 97.4% { transform: none; } }
+@keyframes rq-roll { to { transform: translateY(440%); } }
+@keyframes rq-grain { 0% { transform: translate(0, 0); } 20% { transform: translate(-8%, 6%); } 40% { transform: translate(5%, -9%); } 60% { transform: translate(-6%, -4%); } 80% { transform: translate(9%, 7%); } }
 
-/* The counter: the slip lies on it, turned toward the visitor. */
-.rq-counter { position: absolute; z-index: 2; right: 4%; bottom: 3%; width: min(46%, 400px); transform: rotate(-2.5deg); }
-.rq-chat { grid-area: chat; min-height: 220px; max-height: 360px; }
+.rq-nameplate { position: absolute; z-index: 3; left: 4%; bottom: 5%; display: flex; flex-direction: column; gap: 3px; margin: 0; padding: 8px 12px; background: #c9bf9f; color: #2a261e; border-radius: 2px; box-shadow: 0 6px 14px rgba(0, 0, 0, .55); transform: rotate(-1.5deg); font: 600 11px/1 var(--rq-mono); text-transform: uppercase; letter-spacing: .12em; }
+.rq-nameplate b { font: 800 20px/1 var(--rq-display); letter-spacing: .06em; }
+.rq-open { display: inline-flex; align-items: center; gap: 6px; color: #2f6b3a; }
+.rq-open::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #3fbf5a; box-shadow: 0 0 6px #3fbf5a; animation: rq-lamp 2.4s ease-in-out infinite; }
+
+/* The slip lies on the counter, right of the monitor, turned toward the visitor. */
+.rq-counter { position: absolute; z-index: 3; left: 70.5%; top: 66%; width: 27.5%; transform: perspective(900px) rotateX(14deg) rotate(4deg); transform-origin: 50% 0; }
+.rq-counter .rq-slip { padding: 12px 14px 10px; }
+.rq-counter .rq-slip-head { font-size: 9px; }
+.rq-counter .rq-slip-body { grid-template-columns: minmax(0, 1fr); }
+.rq-counter .rq-field { grid-template-columns: 64px minmax(0, 1fr); min-height: 22px; }
+.rq-counter .rq-field dd { font-size: 12px; padding: 3px 0; }
+.rq-counter .rq-stamp { font-size: 20px; right: 10px; bottom: 22px; border-width: 3px; }
+.rq-counter .rq-slip-sign { font-size: 11px; margin-top: 6px; }
+.rq-counter .rq-blank-copy { font-size: 12px; margin: 8px 0 4px; }
+.rq-counter .rq-earlier { display: none; }
+
+/* The intercom log beside the terminal. */
+.rq-chat { grid-area: chat; min-height: 0; height: 100%; padding: 12px; box-sizing: border-box; background: #121714; border: 10px solid #5f5b4b; border-radius: 10px; box-shadow: inset 0 0 30px rgba(0, 0, 0, .7); }
 
 /* the slips */
 .rq-slips { grid-area: slips; display: grid; gap: 12px; align-content: start; min-width: 0; }
@@ -160,11 +204,11 @@ button { font: inherit; }
 .rq-earlier li.is-refused .rq-earlier-mark { color: #f08a6e; text-transform: uppercase; font-size: 11px; letter-spacing: .08em; }
 
 /* the ledger: the stores terminal, green phosphor on a dark tube */
-.rq-ledger { grid-area: ledger; min-width: 0; position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); background: #0b120e; color: #8fe3a0; border-radius: 10px; border: 10px solid #5f5b4b; box-shadow: inset 0 0 40px rgba(0, 0, 0, .8), 0 14px 30px rgba(0, 0, 0, .35); text-shadow: 0 0 4px rgba(120, 240, 150, .45); }
+.rq-ledger { grid-area: ledger; min-width: 0; min-height: 0; overflow: hidden; position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); background: #0b120e; color: #8fe3a0; border-radius: 10px; border: 10px solid #5f5b4b; box-shadow: inset 0 0 40px rgba(0, 0, 0, .8), 0 14px 30px rgba(0, 0, 0, .35); text-shadow: 0 0 4px rgba(120, 240, 150, .45); }
 .rq-ledger::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(to bottom, rgba(0, 0, 0, .28) 0 1px, transparent 1px 3px); }
 .rq-ledger h2 { margin: 0; padding: 12px 14px 8px; font: 600 13px/1 var(--rq-mono); text-transform: uppercase; letter-spacing: .16em; border-bottom: 1px dashed rgba(143, 227, 160, .4); }
 .rq-ledger h2::before { content: "> "; }
-.rq-ledger-scroll { overflow: auto; max-height: 360px; }
+.rq-ledger-scroll { overflow: auto; min-height: 0; }
 .rq-ledger table { width: 100%; border-collapse: collapse; font: 400 13px/1.3 var(--rq-mono); font-variant-numeric: tabular-nums; }
 .rq-ledger thead th { position: sticky; top: 0; background: #0b120e; text-align: left; padding: 7px 10px; font: 600 10px/1 var(--rq-mono); text-transform: uppercase; letter-spacing: .12em; color: #5fa871; }
 .rq-ledger td, .rq-ledger tbody th { padding: 6px 10px; border-bottom: 1px dotted rgba(143, 227, 160, .18); text-align: left; vertical-align: top; }
@@ -177,27 +221,38 @@ button { font: inherit; }
 .rq-out { font: 600 11px/1 var(--rq-mono); text-transform: uppercase; letter-spacing: .08em; color: #ffb36b; text-shadow: 0 0 4px rgba(255, 179, 107, .5); }
 .rq-ledger tr.is-lit { background: #8fe3a0; color: #0b120e; text-shadow: none; }
 .rq-ledger tr.is-lit th small, .rq-ledger tr.is-lit .rq-shelf { color: #0b120e; }
+.rq-ledger tr.is-lit .rq-out { color: #8a2410; text-shadow: none; }
 
 @keyframes rq-lamp { 50% { opacity: .45; } }
 @keyframes rq-tear { from { transform: translateY(-8px); opacity: 0; } }
 @keyframes rq-stamp { from { transform: rotate(-12deg) scale(1.8); opacity: 0; } }
 
 @media (max-width: 1100px) {
-  .rq-main { grid-template-columns: minmax(0, 1fr); grid-template-areas: "scene" "chat" "ledger"; }
+  .rq-main { grid-template-columns: minmax(0, 1fr); grid-template-areas: "scene" "chat" "ledger"; grid-template-rows: auto; height: auto; }
+  .rq-scene { height: min(calc(100vw - 32px), 780px); }
+  .rq-chat { height: 340px; }
+  .rq-ledger-scroll { max-height: 420px; }
 }
 @media (max-width: 960px) {
   .rq-hero { grid-template-columns: minmax(0, 1fr); padding: 28px 0; gap: 28px; }
-  .rq-hero-slip { justify-items: start; padding: 0; }
+  .rq-hero-scene { justify-self: stretch; }
   .rq-ledger-scroll { max-height: none; }
 }
 @media (max-width: 720px) {
-  /* On a phone the room folds into a column: the monitor, then the counter. */
-  .rq-scene { min-height: 0; display: grid; gap: 18px; padding: 22px 14px 18px; }
-  .rq-monitor, .rq-counter { position: relative; left: auto; right: auto; bottom: auto; top: auto; transform: none; width: 100%; }
-  .rq-monitor { max-width: 420px; justify-self: center; }
-  .rq-crt { padding: 18px 20px 32px; transform: rotateY(-5deg) rotateX(3deg); }
-  .rq-counter { transform: rotate(-1deg); }
-  .rq-chat { max-height: 340px; }
+  /* On a phone the photo keeps its square, and the slip comes off the counter to full width below it. */
+  .rq-scene { height: auto; display: block; padding: 0 0 14px; }
+  .rq-plate { height: auto; width: 100%; aspect-ratio: auto; }
+  .rq-room { position: relative; inset: auto; aspect-ratio: 1 / 1; overflow: hidden; }
+  /* Closer in on the monitor: the photo and the glass zoom together, so they stay aligned. */
+  .rq-plate-img, .rq-glass { transform: scale(1.55); transform-origin: 50% 56%; }
+  .rq-scene .rq-counter { position: relative; left: auto; top: auto; width: auto; margin: 12px 12px 0; transform: none; }
+  .rq-scene .rq-counter .rq-slip { padding: 16px 16px 12px; }
+  .rq-scene .rq-counter .rq-field dd { font-size: 14px; }
+  .rq-scene .rq-counter .rq-stamp { font-size: 24px; }
+  .rq-scene .rq-counter .rq-earlier { display: grid; }
+  .rq-nameplate { padding: 5px 8px; }
+  .rq-nameplate b { font-size: 15px; }
+  .rq-chat { height: 320px; }
 }
 @media (max-width: 640px) {
   .rq-top { gap: 10px; flex-wrap: wrap; }
@@ -211,5 +266,5 @@ button { font: inherit; }
   .rq-ledger thead th:first-child { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .rq-open::before, .rq-slips > .rq-slip, .rq-slips > .rq-slip .rq-stamp, .rq-host-video::before { animation: none; }
+  .rq-open::before, .rq-slips > .rq-slip, .rq-slips > .rq-slip .rq-stamp, .rq-host-video::before, .rq-host-video.is-live video, .rq-roll, .rq-grain { animation: none; }
 }

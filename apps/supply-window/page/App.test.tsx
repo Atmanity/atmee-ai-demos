@@ -37,11 +37,10 @@ const call = (name: string, args: Record<string, unknown> = {}) =>
 beforeEach(() => { Object.assign(fake, { phase: 'live', states: [], events: [], handlers: {} }); });
 afterEach(() => { cleanup(); });
 
-test('the opening hands Hester the floor once she is on her way, without a second greeting', () => {
+test('the page says nothing at the start: Hester greets on her own, and the window is in her state', () => {
   fake.phase = 'starting';
   render(<App />);
-  expect(fake.events).toHaveLength(1);
-  expect(fake.events[0]).toMatch(/^You have just greeted them/);
+  expect(fake.events).toEqual([]);
   expect(fake.states.at(-1)).toContain('30 chits');
 });
 

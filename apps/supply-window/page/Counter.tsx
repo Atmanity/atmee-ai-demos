@@ -34,7 +34,7 @@ function SlipCard({ slip }: { slip: Slip }) {
       <dl className="rq-slip-body">
         {field('Item', slip.item)}
         {field('Qty', String(slip.quantity))}
-        {field('Department', slip.department)}
+        {field('Dept.', slip.department)}
         {field('For', slip.purpose)}
         {field('Chits', stamped ? String(slip.chits) : '0')}
         {!stamped && field('Reason', slip.reason ?? '')}
