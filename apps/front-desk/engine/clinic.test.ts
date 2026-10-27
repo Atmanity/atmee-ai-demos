@@ -37,6 +37,9 @@ describe('the days the desk books', () => {
     expect(pickClinicians('the nurse').map((c) => c.id)).toEqual(['fischer']);
     expect(pickClinicians('any doctor').map((c) => c.id)).toEqual(['patel', 'okafor']);
     expect(pickClinicians('').length).toBe(3);
+    // A name inside another word is no name: "same" is not Sam.
+    expect(pickClinicians('the same doctor').map((c) => c.id)).toEqual(['patel', 'okafor']);
+    expect(pickClinicians('Sam').map((c) => c.id)).toEqual(['okafor']);
   });
 });
 
@@ -95,7 +98,9 @@ describe('the book, as the tools change it', () => {
     expect(desk.cancel_appointment({ patient_name: 'Mario Gomes' }).text).toMatch(/^Not cancelled: no appointment/);
     const r = desk.cancel_appointment({ patient_name: 'maria gomez' });
     expect(r.text).toMatch(/^Cancelled: Maria Gomez with Dr. Sam Okafor on Friday, October 30 at 2:00 PM/);
-    expect(desk.isOpen(maria.date, maria.time, maria.clinician) || desk.holder(maria.date, maria.time, maria.clinician) === 'taken').toBe(true);
+    // Her slot is open again, and can be booked straight away.
+    expect(desk.isOpen(maria.date, maria.time, maria.clinician)).toBe(true);
+    expect(desk.book_appointment({ patient_name: 'Lee Park', day: maria.date, time: maria.time, who: 'Dr. Okafor', reason: 'a check-up' }).ok).toBe(true);
     expect(desk.find_appointments({ patient_name: 'Maria Gomez' }).ok).toBe(false);
 
     const kim = desk.appointments.find((a) => a.patient === 'Daniel Kim')!;

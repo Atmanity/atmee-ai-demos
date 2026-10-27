@@ -149,7 +149,9 @@ export function pickTime(input: unknown): string | null {
 /** The clinicians a caller asks for: a name ("Patel", "Dr. Okafor", "Lena"), "the nurse", "a doctor"; all when they name none. */
 export function pickClinicians(input: unknown): Clinician[] {
   const text = String(input ?? '').toLowerCase();
-  const named = CLINICIANS.filter((c) => c.name.toLowerCase().split(/[\s.]+/).some((w) => w.length > 2 && w !== 'dr' && text.includes(w)));
+  // Whole words only: "the same doctor" is not Dr. Sam Okafor.
+  const said = new Set(text.split(/[^a-z]+/));
+  const named = CLINICIANS.filter((c) => c.name.toLowerCase().split(/[\s.]+/).some((w) => w.length > 2 && w !== 'dr' && said.has(w)));
   if (named.length) return named;
   if (/\bnurse|practitioner|\bnp\b/.test(text)) return CLINICIANS.filter((c) => c.nurse);
   if (/\bdoctor|\bdr\b|physician|\bgp\b/.test(text)) return CLINICIANS.filter((c) => !c.nurse);
@@ -193,9 +195,12 @@ export class FrontDesk {
 
   /** Who holds a slot: an appointment, another patient (most of the week), or nobody. */
   holder(date: string, time: string, clinician: Clinician['id']): 'open' | 'taken' | 'past' | Appointment {
-    const appt = this.appointments.find((a) => a.status === 'booked' && a.date === date && a.time === time && a.clinician === clinician);
+    const here = this.appointments.filter((a) => a.date === date && a.time === time && a.clinician === clinician);
+    const appt = here.find((a) => a.status === 'booked');
     if (appt) return appt;
     if (date === this.today && minutesOf(time) <= this.nowMinutes + 30) return 'past';
+    // A cancelled appointment's slot is free again, whoever else the week has booked.
+    if (here.length) return 'open';
     return hash(`${date}|${clinician}|${time}`) < 0.6 ? 'taken' : 'open';
   }
 
