@@ -265,4 +265,92 @@ const game = {
   },
 };
 
-export const USECASES = { livestream, recruiter, training, presence, game };
+// ---------------------------------------------------------------------------
+// 6. Spellcraft (Silverfell): a private spell lesson with Draconia Malvane.
+//    She reads the student's school of magic, teaches two of its spells and
+//    sets a trial; the student casts on their screen, tracing a sigil and
+//    saying its words. The grimoire is the page's: it holds the spellbook,
+//    answers her tools with what to teach, judges every cast and reports it
+//    here, and this turns it into the state she reads and the event she
+//    reacts to.
+// ---------------------------------------------------------------------------
+const spellcraft = {
+  title: "Spellcraft: a private spell lesson",
+  page: "spellcraft.html",
+  // Each step's edges carry its own check, with a loop back: a step's
+  // instructions stay in force until the judge sees it done.
+  conductor: {
+    start: "appraise",
+    nodes: [
+      { id: "appraise", instructions: "This is a private spell lesson; the student's grimoire is on their screen and fills in as you use your tools. Greet the student (by name once you know it) and size them up: ask three short questions, one at a time, to read their affinity, for example what they would do with one afternoon of real power, what they are secretly afraid of, which hour of the day feels most like theirs. After their third answer, choose the school that fits them and reveal it with reveal_affinity, then tell them with a flourish what it says about them.", edges: [{ to: "lesson", when: "Draconia has revealed the student's school of magic." }, { to: "appraise" }] },
+      { id: "lesson", instructions: "Teach the two spells of the student's school, one at a time, in the order the app gave you. For each: put it on their casting circle with teach_spell, say its words slowly, tell them to trace the sigil in one stroke from the bright dot and then say the words, and wait for them to cast. The app tells you how each cast went: react to that result, and let them try again after a fizzle. Teach the second spell only once the first has held (shaky or better).", edges: [{ to: "trial", when: "The student has cast both of their spells, and the second one held (shaky or better)." }, { to: "lesson" }] },
+      { id: "trial", instructions: "Set the student's trial: invent one short, vivid situation that one of their two spells answers (a corridor gone pitch dark, a door that must be held shut), put it up with set_trial naming the spell that answers it, describe it, and ask them to choose and cast. Never name the answer. When the app tells you their trial cast, judge it: the right spell with a cast that held passes; otherwise say what went wrong and let them try once more.", edges: [{ to: "verdict", when: "Draconia has judged the student's trial cast." }, { to: "trial" }] },
+      { id: "verdict", instructions: "Give your verdict. Decide their rank honestly from their casts and their trial (Novice, Apprentice, Adept, Spellwright or Magister; a first lesson rarely earns more than Adept) and write it on their certificate with award_rank, with a one-line remark in your voice. Then tell them, with a flash of real warmth under the frost, and bid them goodbye.", emotion: "proud" },
+    ],
+  },
+  // Lenient schemas: Causeur refuses arguments that miss the schema before the
+  // page sees them, so names are free text and the page matches them.
+  appTools: {
+    instructions: "You teach in the student's lesson app: their grimoire, casting circle and certificate are on their screen and change only when you use these. The moment you decide the student's school, reveal it with reveal_affinity, before you announce it; it tells you the two spells you will teach. Put each spell on their casting circle with teach_spell before you teach it, one at a time, in that order. Put the trial up with set_trial before you describe it, and write their rank with award_rank before you announce it. Casting is the student's: they trace and speak on their screen, and the app tells you each result as an event. Never pretend a cast happened or judge one before the app tells you; when the student says an incantation aloud, the result follows a moment later, so just wait for it. Never mention the tools or the app; stay in your world.",
+    tools: [
+      tool("reveal_affinity", "Reveal the student's school of magic in their grimoire, with your one-line reading of them. The app answers with the two spells of that school to teach, in order.", {
+        school: { type: "string", description: "One of Ember, Tide, Gale, Thorn, Gloam, Lumen." },
+        reading: { type: "string", description: "Your reading of the student in one short line, shown under the crest, e.g. 'Too stubborn to stay down.'" },
+      }, ["school"], { mode: "await", timeoutSeconds: 5 }),
+      tool("teach_spell", "Put one of the student's two spells on their casting circle so they can trace its sigil and say its words. The app answers with what to tell them.", {
+        spell: { type: "string", description: "The spell's name, or 1 or 2 for its place in the order." },
+      }, ["spell"], { mode: "await", timeoutSeconds: 5 }),
+      tool("set_trial", "Put the student's trial on their screen: a short situation that one of their two spells answers.", {
+        challenge: { type: "string", description: "The situation, in one or two sentences, e.g. 'The corridor ahead has gone pitch dark, and something is breathing in it.'" },
+        answer: { type: "string", description: "The name of the spell that answers it." },
+      }, ["challenge", "answer"], { mode: "await", timeoutSeconds: 5 }),
+      tool("award_rank", "Write the student's rank on their certificate of rank, with your remark.", {
+        rank: { type: "string", description: "Novice, Apprentice, Adept, Spellwright or Magister." },
+        remark: { type: "string", description: "One line in your voice for the certificate." },
+      }, ["rank", "remark"], { mode: "await", timeoutSeconds: 5 }),
+    ],
+  },
+  onLinked(h) { return [state(spellcraftState(h))]; },
+  onUser(h, msg) {
+    // The page sends the student's name once, the whole grimoire after every change, and each cast.
+    if (msg.kind === "student") { h.memo.student = String(msg.text || "").trim().slice(0, 40); return [note(studentNote(h.memo.student)), state(spellcraftState(h))]; }
+    if (msg.kind === "book") { h.memo.book = safeJson(msg.text); return [state(spellcraftState(h))]; }
+    if (msg.kind === "cast") { const c = safeJson(msg.text); return c ? [event(castEvent(c), 25)] : []; }
+    if (msg.kind === "typed") return [say(msg.text)];
+    return [];
+  },
+};
+const safeJson = (text) => { try { return JSON.parse(text); } catch { return null; } };
+function studentNote(name) {
+  return name ? `The student's name is ${name}. Use it now and then, as a teacher would.` : "The student gave no name; call them darling until they tell you.";
+}
+function spellcraftState(h) {
+  const b = h.memo.book || {};
+  const spells = Array.isArray(b.spells) ? b.spells : [];
+  const parts = [`Spell lesson app state. Student: ${h.memo.student || "unnamed"}.`];
+  if (!b.school) parts.push("Their school: not revealed yet.");
+  else {
+    parts.push(`Their school: ${b.school}${b.reading ? ` (your reading: "${b.reading}")` : ""}.`);
+    parts.push(`Its two spells, in teaching order: ${spells.map((s, i) => `${i + 1}) ${s.name}, sigil ${s.sigil}; it ${s.does}; ${s.taught ? (s.casts ? `taught, cast ${s.casts} time${s.casts === 1 ? "" : "s"}, best power ${s.best}` : "taught, not cast yet") : "not taught yet"}`).join("; ")}.`);
+    if (b.active) parts.push(`On their casting circle now: ${b.active}.`);
+  }
+  if (b.trial) parts.push(`Trial set: "${b.trial.challenge}" (answered by ${b.trial.answer}); ${b.trial.cast ? `they cast ${b.trial.cast}, power ${b.trial.power}` : "not cast yet"}.`);
+  if (b.rank) parts.push(`Rank awarded: ${b.rank}.`);
+  parts.push("They talk to you by voice or by typing, and cast on their screen; the app tells you each cast's result.");
+  return parts.join(" ");
+}
+const TIERS = {
+  brilliant: "a brilliant cast: the spell blazed",
+  solid: "a solid cast: the spell held",
+  shaky: "a shaky cast: the spell sputtered and barely held",
+  fizzled: "it fizzled into a puff of smoke",
+};
+function castEvent(c) {
+  const heard = String(c.words || "").replace(/["\n]/g, " ").trim().slice(0, 60);
+  const words = c.spoken ? "spoke its words clearly" : heard ? `said the wrong words ("${heard}")` : "never said its words, and a sigil alone is half a spell";
+  const cast = `The student just cast ${c.spell}: their sigil was ${c.accuracy}% true and they ${words}. Power ${c.power} of 100, ${TIERS[c.tier] || c.tier}.`;
+  if (c.trial) return `${cast} This was their trial cast. The trial is answered by ${c.answer}, so they chose ${c.rightSpell ? "the right spell" : "the wrong spell"}. Judge the trial now, in character, in two or three sentences.`;
+  return `${cast} React in one or two sentences, in character: grudging, then real, praise for a strong cast; for a weak one, the one thing to fix (the sigil or the words, whichever was worse); after a fizzle, have them try again.`;
+}
+
+export const USECASES = { livestream, recruiter, training, presence, game, spellcraft };

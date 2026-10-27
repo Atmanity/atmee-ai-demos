@@ -2,16 +2,16 @@
 
 Sample apps built purely on the Atmee Avatar API (v2), with no changes to the platform:
 
-- **Five apps** on one small Node server (`server.js`). They cover the target-app checklist
+- **Six apps** on one small Node server (`server.js`). Five cover the target-app checklist
   from the product thread: a recruiter call, internal training, a presence/companion, an
-  interactive story and a live stream.
+  interactive story and a live stream. The sixth is a spell lesson with a mistress of magic.
 - **Fourteen mini-apps** from `Atmanity/apps` (games, tutors, advisors, a planetarium, a room
   planner), rebuilt as products (`server/`, `src/`). See
   [The fourteen mini-apps](#the-fourteen-mini-apps).
 - **Two avatar-only apps** whose own agent speaks while the avatar is only its face, rendered
   into the site's own LiveKit room. See [Avatar-only apps](#avatar-only-apps).
 
-One site serves all twenty-one: `server/index.ts` runs the mini-apps and mounts `server.js` in
+One site serves all twenty-two: `server/index.ts` runs the mini-apps and mounts `server.js` in
 the same process, on one port, and the home page lists every app, says which of the
 [three ways](#three-ways-to-build) each is built, and links to its code.
 
@@ -19,7 +19,7 @@ the same process, on one port, and the home page lists every app, says which of 
 
 | way | Atmee runs | the app brings | API | here |
 |---|---|---|---|---|
-| **Full-stack** | listening, thinking (persona, knowledge, agenda), the voice and the face | what is on screen, events and its tools | `POST /v1/session` | nineteen apps |
+| **Full-stack** | listening, thinking (persona, knowledge, agenda), the voice and the face | what is on screen, events and its tools | `POST /v1/session` | twenty apps |
 | **Speech-to-speech** (coming soon) | one realtime voice model that hears and answers in the avatar's voice; voice only for now (a face today by handing its audio to an avatar-only render) | its own agent over a WebSocket: the instructions, the tools (the client runs them), the audio | `POST /v1/live/sessions` | none yet |
 | **Avatar-only** | the face only | the whole agent (its model, tools and voice) or any audio, and its own LiveKit room | `POST /v1/avatars/{id}/avatar_sessions` | Waybill, Facecast |
 
@@ -32,6 +32,7 @@ Every app has its folder in `apps/<app>/` with its README.
 | presence | **Kin** | a companion that reacts to the user's screen through the app's own observer; no tools | [apps/presence](apps/presence/README.md) |
 | game | **Isle of Whispers** | an event-driven narrator, and an oracle whose powers are app tools | [apps/game](apps/game/README.md) |
 | livestream | **Nightcap Live** | a host that reads a chatroom, pins lines and runs polls viewers vote in | [apps/livestream](apps/livestream/README.md) |
+| spellcraft | **Silverfell** | a tutor who teaches by doing: the student traces and speaks each spell, the page judges the cast, and await tools tell her what to teach next | [apps/spellcraft](apps/spellcraft/README.md) |
 
 Each app README covers its use case, architecture, the exact API calls and room messages, its
 tools, how to run it, today's staging results and its limitations. The code stays where it

@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Silverfell · A spell lesson with Draconia Malvane</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<style>
+  :root {
+    --bg: #0b1210; --surface: #111a17; --surface-2: #19241f; --text: #e8ede9; --muted: #94a49c; --line: #25342e;
+    --accent: #2e9a70; --accent-ink: #fff; --accent-soft: rgb(46 154 112 / .16); --stage: #060a09; --ok: #63d69f;
+    --shadow: 0 1px 2px rgb(0 0 0 / .3), 0 12px 32px rgb(0 0 0 / .35);
+    --silver: #d8dee4;
+    /* The student's school, once Draconia reads it; silver until then. */
+    --school: #cfd6dd; --school-glow: #ffffff; --school-deep: #161c26;
+    --font: "Inter", system-ui, sans-serif; --font-display: "Cormorant Garamond", Georgia, serif;
+  }
+  body { background: radial-gradient(1100px 650px at 85% -10%, rgb(46 154 112 / .13), transparent 60%), radial-gradient(900px 600px at -10% 110%, rgb(160 123 255 / .07), transparent 60%), var(--bg); background-attachment: fixed; }
+  h1, h2, h3 { font-weight: 700; letter-spacing: .01em; }
+  .notice.warn { background: #3a1820; color: #ffc9d3; }
+
+  .topbar { display: flex; align-items: center; gap: 18px; padding: 12px max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); border-bottom: 1px solid var(--line); background: rgb(11 18 16 / .85); backdrop-filter: blur(8px); }
+  .brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 700; font-size: 22px; letter-spacing: .03em; }
+  .brand .mark { width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--silver); color: var(--silver); display: grid; place-items: center; font-size: 17px; }
+  .crumb { color: var(--muted); font-size: 14px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tracker { display: flex; gap: 4px; align-items: center; font-size: 13px; }
+  .tracker span { padding: 5px 10px; border-radius: 99px; color: var(--muted); white-space: nowrap; }
+  .tracker span.now { background: color-mix(in srgb, var(--school) 18%, transparent); color: var(--school-glow); font-weight: 600; }
+  .tracker span.done { color: var(--text); }
+  .tracker span.done::before { content: "✓ "; color: var(--ok); }
+  .timeleft { font-variant-numeric: tabular-nums; }
+
+  /* Lobby */
+  .lobby { max-width: 1060px; margin: 0 auto; padding: 40px max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; grid-template-columns: 1.15fr 1fr; gap: 28px; align-items: start; }
+  .cover { position: relative; overflow: hidden; border-radius: 18px; padding: 34px; min-height: 260px; display: flex; flex-direction: column; justify-content: space-between; gap: 18px; color: #f2f5f2;
+    background: radial-gradient(90% 120% at 100% 0%, rgb(216 222 228 / .22), transparent 55%), radial-gradient(80% 90% at 0% 100%, rgb(46 154 112 / .45), transparent 60%), linear-gradient(155deg, #071410, #123b2c 60%, #0b1f19); border: 1px solid rgb(216 222 228 / .14); }
+  .cover::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+    background-image: radial-gradient(1.5px 1.5px at 12% 22%, #fff, transparent), radial-gradient(1px 1px at 72% 18%, #fff, transparent), radial-gradient(1.2px 1.2px at 86% 64%, #fff, transparent), radial-gradient(1px 1px at 34% 78%, #fff, transparent), radial-gradient(1.4px 1.4px at 58% 44%, #fff, transparent); }
+  .cover .eyebrow { color: #cfe7dc; }
+  .cover h1 { font-size: clamp(34px, 4.4vw, 46px); margin-top: 8px; }
+  .cover .lede { margin: 10px 0 0; max-width: 40ch; opacity: .85; font-size: 16px; }
+  .cover .meta { display: flex; gap: 16px; font-size: 14px; opacity: .9; flex-wrap: wrap; }
+  .outcomes { padding: 24px; margin-top: 20px; }
+  .outcomes h2 { font-size: 24px; margin-bottom: 8px; }
+  .outcomes ol { margin: 0; padding-left: 20px; }
+  .outcomes li { margin: 9px 0; color: var(--muted); }
+  .outcomes li b { color: var(--text); font-weight: 600; }
+  .join { padding: 28px; display: grid; gap: 14px; }
+  .join h2 { font-size: 28px; }
+  .join label { display: grid; gap: 6px; font-size: 14px; font-weight: 500; }
+  .join input { font: inherit; padding: 11px 13px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--surface-2); color: var(--text); }
+  .join input:focus { outline: none; border-color: var(--accent); }
+  .choice { display: grid; gap: 4px; text-align: left; padding: 14px 18px; border-radius: var(--radius); border: 1.5px solid var(--line); background: var(--surface-2); cursor: pointer; transition: border-color .15s, background .15s; color: var(--text); }
+  .choice:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .choice b { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+  .choice b svg { width: 18px; height: 18px; color: var(--ok); }
+  .choice span { color: var(--muted); font-size: 14px; }
+  .fine { margin: 0; font-size: 12px; color: var(--muted); }
+
+  /* The lesson: the grimoire, Draconia, the chat */
+  .room { height: calc(100vh - 57px); display: grid; grid-template-columns: minmax(0, 1fr) 380px; grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "book tutor" "book chat"; gap: 20px; padding: 20px max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .book { grid-area: book; min-height: 0; overflow: auto; padding: clamp(18px, 2.4vw, 30px); display: grid; gap: 22px; align-content: start; }
+  .book-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .book-head h2 { font-size: clamp(28px, 2.8vw, 36px); }
+  .book-head .status { font-size: 13px; color: var(--muted); }
+
+  .crest-row { display: flex; align-items: center; gap: 18px; padding: 16px 18px; border-radius: 14px; background: linear-gradient(120deg, color-mix(in srgb, var(--school) 12%, transparent), transparent 70%); border: 1px solid color-mix(in srgb, var(--school) 22%, var(--line)); }
+  .crest { width: 72px; height: 72px; flex: none; border-radius: 50%; display: grid; place-items: center; border: 1.5px dashed var(--line); background: var(--surface-2); transition: background .6s, border-color .6s, box-shadow .6s; }
+  .crest svg { width: 48px; height: 48px; fill: none; stroke: var(--school-glow); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; opacity: 0; transition: opacity .6s; }
+  .crest.on { border: 1.5px solid var(--school); background: radial-gradient(circle at 40% 35%, color-mix(in srgb, var(--school) 55%, #000), var(--school-deep)); box-shadow: 0 0 28px color-mix(in srgb, var(--school) 45%, transparent); animation: crest 1.2s ease-out; }
+  .crest.on svg { opacity: 1; }
+  @keyframes crest { from { transform: scale(.6) rotate(-30deg); box-shadow: 0 0 80px var(--school); } }
+  .crest-row h3 { font-size: 30px; color: var(--school-glow); }
+  .crest-row p { margin: 2px 0 0; }
+  .crest-row .reading { font-family: var(--font-display); font-style: italic; font-size: 19px; color: var(--text); }
+
+  .casting { display: grid; grid-template-columns: minmax(250px, 420px) minmax(0, 1fr); gap: 24px; align-items: start; }
+  .circle-wrap { position: relative; aspect-ratio: 1 / 1; width: 100%; user-select: none; -webkit-user-select: none; }
+  .circle-wrap::before { content: ""; position: absolute; inset: 0; border-radius: 50%;
+    background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--school-deep) 80%, #0b1512), #050807 72%);
+    box-shadow: inset 0 0 0 1.5px rgb(216 222 228 / .28), inset 0 0 60px rgb(0 0 0 / .6), 0 0 0 7px rgb(216 222 228 / .03); transition: box-shadow .3s; }
+  .circle-wrap::after { content: ""; position: absolute; inset: 5%; border-radius: 50%; border: 1px dashed rgb(216 222 228 / .16); pointer-events: none; }
+  .circle-wrap.charged::before { animation: charged 1s ease-in-out infinite; }
+  @keyframes charged { 50% { box-shadow: inset 0 0 0 2px var(--school), inset 0 0 70px color-mix(in srgb, var(--school) 35%, transparent), 0 0 34px color-mix(in srgb, var(--school) 50%, transparent); } }
+  .circle-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #circle { touch-action: none; cursor: crosshair; z-index: 1; }
+  #fx { pointer-events: none; z-index: 2; }
+  .circle-hint { margin-top: 10px; min-height: 20px; text-align: center; font-size: 13px; color: var(--muted); text-wrap: balance; }
+  .say { margin-top: 12px; display: grid; gap: 8px; }
+  .say-label { font-size: 15px; }
+  .say-label b { font-family: var(--font-display); font-size: 24px; color: var(--school-glow); letter-spacing: .02em; }
+  .say-label small { display: block; color: var(--muted); font-size: 12px; min-height: 16px; }
+  .words { display: flex; gap: 8px; flex-wrap: wrap; }
+  .words input { flex: 1; min-width: 140px; padding: 10px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text); }
+  .words input:focus { outline: none; border-color: var(--school); }
+  .words .btn { padding: 9px 16px; }
+  .charge { height: 3px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .charge i { display: block; height: 100%; width: 100%; background: var(--school); }
+  .result { margin: 12px 0 0; min-height: 22px; font-size: 14px; color: var(--muted); }
+  .tier { font-family: var(--font-display); font-size: 20px; margin-right: 4px; }
+  .tier.brilliant { color: var(--school-glow); } .tier.solid { color: var(--ok); } .tier.shaky { color: #e8c66a; } .tier.fizzled { color: #9aa0a6; }
+
+  .spells-col { display: grid; gap: 12px; }
+  .trial { padding: 14px 16px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--school) 45%, var(--line)); background: color-mix(in srgb, var(--school) 8%, var(--surface-2)); animation: rise .3s ease-out; }
+  .trial p { margin: 4px 0; font-family: var(--font-display); font-size: 20px; line-height: 1.3; }
+  .trial small { color: var(--muted); }
+  .spells { display: grid; gap: 10px; }
+  .spell { display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; gap: 12px; align-items: center; text-align: left; padding: 12px 14px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--surface-2); color: var(--text); font: inherit; }
+  button.spell { cursor: pointer; transition: border-color .15s, background .15s; }
+  button.spell:hover { border-color: color-mix(in srgb, var(--school) 60%, var(--line)); }
+  .spell.active { border-color: var(--school); background: color-mix(in srgb, var(--school) 10%, var(--surface-2)); }
+  .spell .mini { width: 46px; height: 46px; border-radius: 50%; background: #070b0a; border: 1px solid var(--line); }
+  .spell svg.mini { padding: 9px; fill: none; stroke: var(--school-glow); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+  .spell b { font-family: var(--font-display); font-size: 21px; }
+  .spell small { display: block; color: var(--muted); font-size: 12px; letter-spacing: .04em; }
+  .spell p { margin: 3px 0 0; font-size: 13px; color: var(--muted); }
+  .spell .best { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+  .spell.locked { opacity: .55; border-style: dashed; }
+  .spell.fresh { animation: pop .8s ease-out; }
+  @keyframes pop { from { box-shadow: 0 0 0 6px color-mix(in srgb, var(--school) 40%, transparent); } }
+
+  /* The certificate of rank: on the grimoire, and alone on paper */
+  .cert { display: grid; gap: 12px; justify-items: center; animation: rise .5s ease-out; }
+  .cert-inner { width: 100%; max-width: 620px; text-align: center; padding: 30px 28px 26px; border-radius: 6px; color: #2a2116;
+    background: radial-gradient(120% 100% at 50% 0%, #fbf3df, #ecdcb6); box-shadow: 0 0 0 1px #c9b27a, 0 0 0 7px #f3e7c8, 0 0 0 8px #b99a56, 0 18px 40px rgb(0 0 0 / .45); }
+  .cert-inner .eyebrow { color: #7a6435; }
+  .cert-inner h3 { font-size: 34px; margin: 6px 0 12px; }
+  .cert-inner p { margin: 8px auto; max-width: 46ch; }
+  .cert-inner .rank { font-family: var(--font-display); font-size: 40px; font-weight: 700; color: #134a36; margin: 6px auto; }
+  .cert-inner .remark { font-family: var(--font-display); font-style: italic; font-size: 21px; }
+  .cert-inner .sign { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 18px; gap: 12px; }
+  .cert-inner .sig { font-family: var(--font-display); font-style: italic; font-size: 26px; border-top: 1px solid #8a7444; padding-top: 4px; }
+  .cert-inner .sign small { color: #7a6435; }
+  .seal { width: 54px; height: 54px; margin: 0 auto 6px; border-radius: 50%; display: grid; place-items: center; font-size: 24px; color: #f3e7c8; background: radial-gradient(circle at 35% 30%, #2f8a64, #0f3a2a); box-shadow: 0 0 0 3px #b99a56; }
+
+  .tutor { grid-area: tutor; aspect-ratio: 1 / 1; }
+  .tutor .tag { position: absolute; left: 12px; top: 12px; z-index: 1; display: flex; align-items: center; gap: 6px; background: rgb(0 0 0 / .45); color: #fff; padding: 4px 10px; border-radius: 99px; font-size: 13px; font-weight: 500; }
+  .tutor .tag .dot { width: 7px; height: 7px; border-radius: 50%; background: #9ca3af; }
+  .tutor.talking .tag .dot { background: #4ade80; }
+  .tutor .caption { font-size: 15px; bottom: 12px; }
+  .chat { grid-area: chat; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .chat .transcript { flex: 1; padding: 16px; }
+  .chat .foot { display: flex; gap: 8px; align-items: center; padding: 12px; border-top: 1px solid var(--line); }
+  .hint { font-size: 12px; color: var(--muted); padding: 0 16px 8px; min-height: 18px; }
+
+  @media (max-width: 1100px) { .casting { grid-template-columns: 1fr; } .circle-col { max-width: 420px; width: 100%; justify-self: center; } }
+  @media (max-width: 900px) {
+    .lobby { grid-template-columns: 1fr; padding-top: 24px; }
+    .room { grid-template-columns: 1fr; grid-template-rows: none; grid-template-areas: "tutor" "book" "chat"; height: auto; }
+    /* Draconia stays in view while the student traces below her. */
+    .tutor { position: sticky; top: 0; z-index: 5; aspect-ratio: auto; height: min(34vh, 260px); }
+    .book { overflow: visible; }
+    .chat { height: 380px; }
+    .crumb, .tracker span:not(.now) { display: none; }
+    .crest-row h3 { font-size: 26px; }
+  }
+  @media (max-width: 560px) { .spell { grid-template-columns: 40px minmax(0, 1fr); } .spell .best { grid-column: 2; } .spell .mini { width: 40px; height: 40px; } .cert-inner { padding: 24px 16px 20px; } .cert-inner .rank { font-size: 32px; } }
+
+  @media print {
+    body { background: #fff; }
+    .topbar, .tutor, .chat, .lobby, .book-head, .crest-row, .casting, .cert .actions, .debug { display: none !important; }
+    .room { display: block; height: auto; padding: 0; }
+    .book { border: 0; box-shadow: none; background: none; overflow: visible; }
+    .cert-inner { box-shadow: 0 0 0 1px #b99a56; }
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="mark" aria-hidden="true">✦</span>Silverfell</div>
+  <div class="crumb">A private lesson with Draconia Malvane</div>
+  <nav class="tracker" id="tracker" hidden>
+    <span data-k="appraise">Your school</span><span data-k="spell1">First spell</span><span data-k="spell2">Second spell</span><span data-k="trial">Trial</span><span data-k="verdict">Rank</span>
+  </nav>
+  <span class="chip" id="timechip" hidden>Time left&nbsp;<b class="timeleft" id="timeleft">–</b></span>
+</header>
+
+<main id="lobby" class="lobby">
+  <section>
+    <div class="cover">
+      <div class="eyebrow">Silverfell · Private lessons</div>
+      <div>
+        <h1>A spell lesson with Draconia Malvane</h1>
+        <p class="lede">The youngest Mistress of Spellcraft in three centuries has agreed to see you. Do try not to waste her time.</p>
+      </div>
+      <div class="meta"><span>⏱ about 10 min</span><span>Trace and speak your spells</span><span>Earn your rank</span></div>
+    </div>
+    <div class="card outcomes">
+      <h2>In this lesson</h2>
+      <ol>
+        <li><b>She reads you.</b> A few questions, and she names your school of magic.</li>
+        <li><b>She teaches you two spells.</b> Trace each sigil on your casting circle, then say its words.</li>
+        <li><b>She sets your trial.</b> Choose the right spell, and cast it well.</li>
+        <li><b>She names your rank</b> on a certificate you can keep.</li>
+      </ol>
+    </div>
+  </section>
+  <section class="card join">
+    <div class="eyebrow">Live video lesson</div>
+    <h2>Draconia teaches you, live.</h2>
+    <label>Your name <input id="studentName" placeholder="What should she call you?" maxlength="40" autocomplete="off"></label>
+    <button class="choice" id="withMic" type="button"><b><span id="micIcon"></span>Join with microphone</b><span>Answer her, and speak your incantations out loud.</span></button>
+    <button class="choice" id="withKeys" type="button"><b><span id="keyIcon"></span>Join without microphone</b><span>Listen, type your answers, and type the incantations.</span></button>
+    <div class="notice warn" id="lobbyError" hidden></div>
+    <p class="fine">Draconia, Silverfell and its magic are made up.</p>
+  </section>
+</main>
+
+<main id="room" class="room" hidden>
+  <article class="card book" id="book">
+    <header class="book-head">
+      <div><div class="eyebrow">Grimoire</div><h2 id="bookTitle">Your grimoire</h2></div>
+      <span class="status" id="bookStatus" aria-live="polite">Draconia is sizing you up</span>
+    </header>
+    <section class="cert" id="cert" hidden>
+      <div class="cert-inner">
+        <div class="seal" aria-hidden="true">✦</div>
+        <div class="eyebrow">Silverfell · Academy of Spellcraft</div>
+        <h3>Certificate of Rank</h3>
+        <p>Let it be known that <b id="certName"></b>, having studied under Draconia Malvane, Mistress of Spellcraft, is hereby named</p>
+        <p class="rank" id="certRank"></p>
+        <p class="remark" id="certRemark"></p>
+        <div class="sign"><span class="sig">Draconia Malvane</span><small id="certDate"></small></div>
+      </div>
+      <div class="actions"><button class="btn primary" id="print" type="button">Print or save as PDF</button></div>
+    </section>
+    <section class="crest-row">
+      <div class="crest" id="crest"><svg viewBox="0 0 100 100" aria-hidden="true"><polyline id="crestSigil" points=""/></svg></div>
+      <div>
+        <div class="eyebrow">Your school</div>
+        <h3 id="schoolName">Not yet read</h3>
+        <p id="schoolLine" class="muted">Answer Draconia's questions, and she will name your school of magic.</p>
+      </div>
+    </section>
+    <section class="casting">
+      <div class="circle-col">
+        <div class="circle-wrap" id="circleWrap">
+          <canvas id="circle" aria-label="Your casting circle: trace the sigil here"></canvas>
+          <canvas id="fx" aria-hidden="true"></canvas>
+        </div>
+        <div class="circle-hint" id="circleHint">Draconia hasn't put a spell on your circle yet.</div>
+        <div class="say" id="sayRow" hidden>
+          <div class="say-label">Now say the words: <b id="sayWords"></b><small id="saySaid"></small></div>
+          <form class="words" id="wordsForm">
+            <input id="words" placeholder="…or type them here" maxlength="60" autocomplete="off" aria-label="The incantation">
+            <button class="btn primary" type="submit">Cast</button>
+            <button class="btn ghost" id="noWords" type="button">Without words</button>
+          </form>
+          <div class="charge" aria-hidden="true"><i id="chargeBar"></i></div>
+        </div>
+        <p class="result" id="result" aria-live="polite"></p>
+      </div>
+      <div class="spells-col">
+        <div class="trial" id="trial" hidden>
+          <div class="eyebrow">Your trial</div>
+          <p id="trialText"></p>
+          <small id="trialHint">Choose the spell that answers it, then cast it.</small>
+        </div>
+        <div class="spells" id="spells"></div>
+      </div>
+    </section>
+  </article>
+  <div class="stage tutor" id="tutor">
+    <span class="tag"><span class="dot"></span>Draconia Malvane</span>
+    <video id="video" autoplay playsinline muted></video><audio id="audio" autoplay></audio>
+    <div class="overlay" id="overlay"></div>
+  </div>
+  <div class="card chat">
+    <div class="transcript" id="transcript"></div>
+    <div class="hint" id="hint"></div>
+    <form class="foot composer" id="composer">
+      <button class="icon-btn" id="mic" type="button" hidden></button>
+      <input id="text" placeholder="Type to Draconia…" maxlength="500" autocomplete="off" disabled>
+      <button class="icon-btn" id="send" type="submit" aria-label="Send" disabled></button>
+      <button class="icon-btn end" id="leave" type="button" title="End the lesson" aria-label="End the lesson"></button>
+    </form>
+  </div>
+</main>
+
+<script src="https://unpkg.com/livekit-client@2.9.5/dist/livekit-client.umd.js"></script>
+<script src="common.js"></script>
+<script src="kit.js"></script>
+<script src="spellbook.js"></script>
+<script>
+  const { $, icon, esc } = UI;
+  const SB = Spellbook;
+  $('micIcon').innerHTML = icon.mic; $('keyIcon').innerHTML = icon.keyboard;
+  $('send').innerHTML = icon.send; $('leave').innerHTML = icon.end;
+
+  const STEPS = ['appraise', 'spell1', 'spell2', 'trial', 'verdict'];
+  const TIER_LABEL = { brilliant: 'Brilliant', solid: 'Solid', shaky: 'Shaky', fizzled: 'Fizzled' };
+  const HEARD = 0.7; // how close what was said must sound to the words
+  const CHARGE_MS = 12000; // a charged sigil waits this long for its words
+  // The grimoire is the app's truth: Draconia fills it with her tools, the
+  // student's casts are judged here, and every change goes back to her as state.
+  const book = { student: '', school: null, reading: '', taught: [false, false], casts: [0, 0], best: [0, 0], active: null, trial: null, rank: null, remark: '' };
+  let s = null, stopClock = () => {}, fresh = -1;
+  const tr = UI.transcript($('transcript'), { avatar: 'Draconia', user: 'You' });
+  const caption = UI.captionOverlay($('tutor'), { id: 'spellcraft', defaultOn: false });
+  UI.backLink(document.querySelector('.topbar'), { getSession: () => s, what: 'lesson' });
+  const debug = UI.debugLog();
+  const sender = UI.politeSender(() => s);
+  const overlay = UI.stage($('overlay'), {
+    starting: ['Sending word to Silverfell…', 'Asking Draconia to see you.'],
+    warming: ['Lighting the candles…', 'Draconia is on her way. This takes a minute or two the first time.'],
+    connecting: ['Connecting…', 'Opening the study door.'],
+    arriving: ['Draconia is coming…', 'She will be with you in a moment.'],
+  });
+
+  const school = () => (book.school ? SB.SCHOOLS[book.school] : null);
+  const spellAt = (i) => (school() && i != null ? school().spells[i] : null);
+  const activeSpell = () => spellAt(book.active);
+  const label = (sp) => SB.SIGILS[sp.sigil].label;
+  const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+  const svgPoints = (kind) => SB.SIGILS[kind].path().map(([x, y]) => `${(x * 100).toFixed(1)},${(y * 100).toFixed(1)}`).join(' ');
+  const hexA = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
+
+  // ---- The grimoire ---------------------------------------------------------
+  function step() {
+    if (book.rank) return 'verdict';
+    if (book.trial) return 'trial';
+    if (book.taught[1]) return 'spell2';
+    if (book.school) return 'spell1';
+    return 'appraise';
+  }
+  function render() {
+    const sc = school();
+    const root = document.documentElement.style;
+    root.setProperty('--school', sc ? sc.color : '#cfd6dd');
+    root.setProperty('--school-glow', sc ? sc.glow : '#ffffff');
+    root.setProperty('--school-deep', sc ? sc.deep : '#161c26');
+    $('bookTitle').textContent = book.student ? `${book.student}'s grimoire` : 'Your grimoire';
+    $('bookStatus').textContent = book.rank ? `Ranked ${book.rank} of ${sc.name}` : book.trial ? 'Your trial is set' : book.taught.some(Boolean) ? 'Practise on your casting circle' : sc ? 'Your school is read' : 'Draconia is sizing you up';
+    $('crest').classList.toggle('on', !!sc);
+    $('crestSigil').setAttribute('points', sc ? svgPoints(sc.spells[0].sigil) : '');
+    $('schoolName').textContent = sc ? sc.name : 'Not yet read';
+    $('schoolLine').className = sc && book.reading ? 'reading' : 'muted';
+    $('schoolLine').textContent = sc ? (book.reading ? `“${book.reading}”` : `The school of ${sc.virtue}.`) : "Answer Draconia's questions, and she will name your school of magic.";
+    $('spells').innerHTML = [0, 1].map(spellCard).join('');
+    $('spells').querySelectorAll('[data-i]').forEach((b) => (b.onclick = () => choose(Number(b.dataset.i))));
+    fresh = -1;
+    $('trial').hidden = !book.trial;
+    if (book.trial) {
+      $('trialText').textContent = book.trial.challenge;
+      $('trialHint').textContent = book.trial.cast ? `You cast ${book.trial.cast} (power ${book.trial.power}). Draconia will judge it.` : 'Choose the spell that answers it, then cast it.';
+    }
+    $('cert').hidden = !book.rank;
+    if (book.rank) {
+      $('certName').textContent = book.student || 'the student';
+      $('certRank').textContent = `${book.rank} of ${sc.name}`;
+      $('certRemark').textContent = book.remark ? `“${book.remark}”` : '';
+      $('certDate').textContent = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    }
+    $('tracker').hidden = false;
+    const at = STEPS.indexOf(step());
+    [...$('tracker').children].forEach((el, i) => { el.className = book.rank || i < at ? 'done' : i === at ? 'now' : ''; });
+    hint();
+    drawCircle();
+  }
+  function spellCard(i) {
+    const sp = spellAt(i);
+    if (!sp || !book.taught[i]) return `<div class="spell locked"><span class="mini"></span><div><b>${i ? 'Second' : 'First'} spell</b><small>Not yet taught</small></div></div>`;
+    return `<button class="spell${book.active === i ? ' active' : ''}${fresh === i ? ' fresh' : ''}" type="button" data-i="${i}" aria-pressed="${book.active === i}">
+      <svg class="mini" viewBox="0 0 100 100" aria-hidden="true"><polyline points="${svgPoints(sp.sigil)}"/></svg>
+      <div><b>${esc(sp.name)}</b><small>${esc(sp.say)}</small><p>${esc(cap(sp.does))}.</p></div>
+      <span class="best">${book.casts[i] ? `Best ${book.best[i]}` : 'Not cast yet'}</span></button>`;
+  }
+  // The student picks which taught spell is on the circle (the trial asks them to choose).
+  function choose(i) {
+    if (mode === 'drawing' || book.active === i) return;
+    book.active = i; settle(); render(); report();
+  }
+  // Everything Draconia needs to know about the grimoire, after every change.
+  function report() {
+    if (!s) return;
+    const sc = school();
+    s.user('book', JSON.stringify({
+      school: sc ? sc.name : null, reading: book.reading,
+      spells: sc ? sc.spells.map((sp, i) => ({ name: sp.name, sigil: label(sp), does: sp.does, taught: book.taught[i], casts: book.casts[i], best: book.best[i] })) : [],
+      active: activeSpell() ? activeSpell().name : null,
+      trial: book.trial ? { challenge: book.trial.challenge, answer: spellAt(book.trial.answer).name, cast: book.trial.cast, power: book.trial.power } : null,
+      rank: book.rank ? `${book.rank} of ${sc.name}` : null,
+    }));
+  }
+
+  // ---- Draconia's tools: each answers with what she should do next ----------
+  const names = () => school().spells.map((sp) => sp.name).join(' and ');
+  const tools = {
+    reveal_affinity: ({ school: named, reading }) => {
+      const key = SB.schoolOf(named);
+      if (!key) return `Not revealed: "${named}" is no Silverfell school. Choose one of Ember, Tide, Gale, Thorn, Gloam or Lumen.`;
+      book.school = key; book.reading = String(reading || '').trim().slice(0, 140);
+      render(); report();
+      const sc = school();
+      return `Revealed: ${sc.name}, the school of ${sc.virtue}, is in their grimoire. Teach these two spells, in this order. ${sc.spells.map((sp, i) => `${i + 1}) ${sp.name}: it ${sp.does}; its sigil is ${label(sp)}.`).join(' ')}`;
+    },
+    teach_spell: ({ spell }) => {
+      if (!school()) return "Not yet: reveal the student's school with reveal_affinity first.";
+      const i = SB.spellIndex(book.school, spell);
+      if (i < 0) return `Not on the circle: "${spell}" is not one of the student's spells. Their spells are ${names()}.`;
+      const sp = spellAt(i);
+      book.taught[i] = true; book.active = i; fresh = i;
+      settle(); render(); report();
+      return `On the circle: ${sp.name}. Tell them its words, ${sp.name}, and that its sigil is ${label(sp)}, traced in one stroke from the bright dot; then they say the words. Wait for them to cast: the app tells you how it went.`;
+    },
+    set_trial: ({ challenge, answer }) => {
+      if (!school()) return "Not yet: reveal the student's school with reveal_affinity first.";
+      const i = SB.spellIndex(book.school, answer);
+      if (i < 0) return `Not set: "${answer}" is not one of the student's spells (${names()}). Name the one that answers the trial.`;
+      if (!book.taught[i]) return `Not set: they have not learned ${spellAt(i).name} yet. Teach it with teach_spell first.`;
+      book.trial = { challenge: String(challenge || '').trim().slice(0, 240), answer: i, cast: null, power: null };
+      render(); report();
+      return `Set: the trial is on their screen. Describe it, then ask them to choose a spell and cast it. Never name the answer (${spellAt(i).name}).`;
+    },
+    award_rank: ({ rank, remark }) => {
+      if (!school()) return "Not yet: reveal the student's school with reveal_affinity first.";
+      const r = SB.rankOf(rank);
+      if (!r) return `Not written: "${rank}" is no Silverfell rank. Use Novice, Apprentice, Adept, Spellwright or Magister.`;
+      book.rank = r; book.remark = String(remark || '').trim().slice(0, 160);
+      render(); report();
+      $('cert').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return `Written: ${book.student || 'the student'} is named ${r} of ${school().name} on their certificate. Tell them, and bid them goodbye.`;
+    },
+  };
+
+  // ---- The casting circle ----------------------------------------------------
+  // idle (no spell) -> ready -> drawing -> charged (waits for the words) -> cast -> ready
+  const cv = $('circle'), ctx = cv.getContext('2d'), fxc = $('fx'), fx = fxc.getContext('2d');
+  let mode = 'idle', px = 300, stroke = [], strokeAt = 0, chargedAt = 0, accuracy = 0, chargeTimer = null, wordsSince = 0;
+  function fit() {
+    const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    if (!r.width) return;
+    px = r.width;
+    for (const c of [cv, fxc]) { c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr); }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); fx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawCircle();
+  }
+  new ResizeObserver(fit).observe(cv);
+  function trace(points) { ctx.beginPath(); points.forEach(([x, y], i) => (i ? ctx.lineTo(x * px, y * px) : ctx.moveTo(x * px, y * px))); }
+  function drawCircle() {
+    ctx.clearRect(0, 0, px, px);
+    const sp = activeSpell(), sc = school();
+    if (!sp) return;
+    const pts = SB.SIGILS[sp.sigil].path();
+    ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    // The guide: a dotted sigil, a bright dot where it starts and an arrow its way.
+    ctx.strokeStyle = hexA(sc.color, mode === 'charged' || mode === 'cast' ? 0.22 : 0.55);
+    ctx.lineWidth = Math.max(5, px * 0.022); ctx.setLineDash([0.1, px * 0.04]);
+    trace(pts); ctx.stroke(); ctx.setLineDash([]);
+    if (mode === 'ready' || mode === 'drawing') {
+      const [x0, y0] = pts[0], [x1, y1] = SB.resample(pts, 40)[3], a = Math.atan2(y1 - y0, x1 - x0), r = px * 0.028;
+      ctx.fillStyle = sc.glow; ctx.shadowColor = sc.color; ctx.shadowBlur = 16;
+      ctx.beginPath(); ctx.arc(x0 * px, y0 * px, r, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0; ctx.strokeStyle = sc.glow; ctx.lineWidth = 2.5;
+      const ax = x0 * px + Math.cos(a) * r * 2.6, ay = y0 * px + Math.sin(a) * r * 2.6;
+      ctx.beginPath(); ctx.moveTo(ax - Math.cos(a - 0.5) * r, ay - Math.sin(a - 0.5) * r); ctx.lineTo(ax, ay); ctx.lineTo(ax - Math.cos(a + 0.5) * r, ay - Math.sin(a + 0.5) * r); ctx.stroke();
+    }
+    // The student's ink, glowing brighter once the sigil is charged.
+    if (stroke.length > 1) {
+      ctx.strokeStyle = sc.glow; ctx.shadowColor = sc.color; ctx.shadowBlur = mode === 'drawing' ? 12 : 26;
+      ctx.lineWidth = px * 0.018; trace(stroke); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  function hint() {
+    const sp = activeSpell();
+    $('circleHint').textContent = !sp ? "Draconia hasn't put a spell on your circle yet."
+      : mode === 'ready' ? `Trace ${label(sp)} in one stroke, from the bright dot.` : '';
+  }
+  // Back to a calm circle: no ink, no charge, the active spell's guide.
+  function settle() {
+    clearInterval(chargeTimer); stroke = [];
+    $('circleWrap').classList.remove('charged'); $('sayRow').hidden = true;
+    mode = activeSpell() ? 'ready' : 'idle';
+    hint(); drawCircle();
+  }
+  const point = (e) => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; };
+  cv.addEventListener('pointerdown', (e) => {
+    // A new stroke over a charged sigil starts the cast again.
+    if (!(mode === 'ready' || mode === 'charged') || !s || !s.isLive()) return;
+    e.preventDefault(); cv.setPointerCapture(e.pointerId);
+    settle(); mode = 'drawing'; stroke = [point(e)]; strokeAt = Date.now(); $('result').textContent = ''; hint();
+  });
+  cv.addEventListener('pointermove', (e) => {
+    if (mode !== 'drawing') return;
+    for (const ev of e.getCoalescedEvents ? e.getCoalescedEvents() : [e]) {
+      const p = point(ev), q = stroke[stroke.length - 1];
+      if (Math.hypot(p[0] - q[0], p[1] - q[1]) > 0.004) stroke.push(p);
+    }
+    drawCircle();
+  });
+  const lift = () => { if (mode === 'drawing') traced(); };
+  cv.addEventListener('pointerup', lift); cv.addEventListener('pointercancel', lift);
+
+  function traced() {
+    const sp = activeSpell();
+    if (SB.length(stroke) < 0.25) { settle(); $('circleHint').textContent = 'Trace the whole sigil, in one stroke.'; return; }
+    accuracy = SB.scoreTrace(stroke, sp.sigil);
+    mode = 'charged'; chargedAt = Date.now();
+    $('circleWrap').classList.add('charged'); hint(); drawCircle();
+    $('sayWords').textContent = sp.name; $('saySaid').textContent = ''; $('words').value = ''; $('sayRow').hidden = false;
+    if (!s.hasMic()) $('words').focus({ preventScroll: true });
+    // Said while tracing, or just before: it counts.
+    if (heardWords(sp)) return release(true);
+    chargeTimer = setInterval(() => {
+      const left = 1 - (Date.now() - chargedAt) / CHARGE_MS;
+      $('chargeBar').style.width = `${Math.max(0, left) * 100}%`;
+      if (left <= 0) release(false);
+    }, 100);
+  }
+
+  // What the student said lately, from the speech recogniser: one entry per
+  // utterance, kept 30 s. Words used for one cast never count for the next.
+  const speech = new Map(); // segment -> { text, at }
+  const recentSpeech = () => [...speech.values()].filter((v) => v.at >= Math.max(strokeAt - 6000, wordsSince)).map((v) => v.text).join(' ');
+  const heardWords = (sp) => SB.similarity(recentSpeech(), sp.name) >= HEARD;
+  function onHeard(text, segment) {
+    const now = Date.now();
+    speech.set(segment, { text, at: now });
+    for (const [k, v] of speech) if (now - v.at > 30000) speech.delete(k);
+    if (mode !== 'charged') return;
+    $('saySaid').textContent = `Heard: “${recentSpeech().slice(-60)}”`;
+    if (heardWords(activeSpell())) release(true);
+  }
+  $('wordsForm').onsubmit = (e) => {
+    e.preventDefault();
+    if (mode !== 'charged') return;
+    const typed = $('words').value.trim();
+    release(!!typed && SB.similarity(typed, activeSpell().name) >= HEARD, typed);
+  };
+  $('noWords').onclick = () => { if (mode === 'charged') release(false, ''); };
+
+  function release(spoken, typed) {
+    if (mode !== 'charged') return;
+    clearInterval(chargeTimer);
+    $('circleWrap').classList.remove('charged'); $('sayRow').hidden = true;
+    const i = book.active, sp = spellAt(i), sc = school();
+    const said = spoken ? '' : typed !== undefined ? typed : recentSpeech().slice(-60);
+    wordsSince = Date.now();
+    const power = SB.castPower(accuracy, spoken), tier = SB.tier(power);
+    mode = 'cast';
+    burst(stroke, sc, power, tier);
+    book.casts[i] += 1; book.best[i] = Math.max(book.best[i], power);
+    const trial = book.trial && !book.rank ? book.trial : null;
+    if (trial) { trial.cast = sp.name; trial.power = power; }
+    $('result').innerHTML = `<span class="tier ${tier}">${TIER_LABEL[tier]}</span> · Sigil ${accuracy}% true · ${spoken ? 'Words ✓' : said ? 'Wrong words' : 'No words'} · Power ${power}`;
+    render(); report();
+    s.user('cast', JSON.stringify({ spell: sp.name, accuracy, spoken, words: said, power, tier, trial: !!trial, answer: trial ? spellAt(trial.answer).name : undefined, rightSpell: trial ? trial.answer === i : undefined }));
+    setTimeout(() => { if (mode === 'cast') settle(); }, 1800);
+  }
+
+  // ---- The spell's effect, drawn over the circle in the school's colours ---
+  let parts = [], fxFrame = 0;
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function burst(points, sc, power, tier) {
+    const fizzle = tier === 'fizzled', k = px / 400;
+    const pts = points.map(([x, y]) => [x * px, y * px]);
+    const c = pts.reduce((a, p) => [a[0] + p[0] / pts.length, a[1] + p[1] / pts.length], [0, 0]);
+    const kind = fizzle ? 'smoke' : sc.effect;
+    const colors = fizzle ? ['#6f757a', '#9aa0a5', '#585d61'] : [sc.color, sc.glow, '#ffffff'];
+    let n = fizzle ? 26 : Math.round(50 + power * 1.3);
+    if (calm) n = Math.round(n / 5);
+    for (let j = 0; j < n; j++) {
+      const [x, y] = pts[Math.floor(Math.random() * pts.length)];
+      const dx = x - c[0], dy = y - c[1], d = Math.hypot(dx, dy) || 1;
+      const p = { kind, x, y, vx: 0, vy: 0, g: 0, age: 0, life: rnd(40, 80), size: rnd(2, 6) * k, color: colors[j % colors.length] };
+      if (kind === 'flame') Object.assign(p, { vx: rnd(-0.5, 0.5) * k, vy: -rnd(1, 3) * k, g: -0.03 * k, size: rnd(3, 8) * k });
+      else if (kind === 'ripple') Object.assign(p, { vx: (dx / d) * rnd(1, 3) * k, vy: ((dy / d) * rnd(1, 3) - 1.5) * k, g: 0.08 * k });
+      else if (kind === 'swirl') Object.assign(p, { cx: c[0], cy: c[1], ang: Math.atan2(dy, dx), rad: d, spin: rnd(0.05, 0.11), grow: rnd(0.6, 1.6) * k });
+      else if (kind === 'leaves') Object.assign(p, { vx: (dx / d) * rnd(0.5, 1.8) * k, vy: (dy / d) * rnd(0.5, 1.8) * k, g: 0.015 * k, rot: rnd(0, 6), vr: rnd(-0.12, 0.12), size: rnd(4, 8) * k, life: rnd(60, 100) });
+      else if (kind === 'smoke') Object.assign(p, { vx: rnd(-0.4, 0.4) * k, vy: -rnd(0.3, 1.2) * k, size: rnd(8, 20) * k, grow: rnd(0.2, 0.5) * k, life: rnd(50, 90) });
+      else if (kind === 'rays') Object.assign(p, { cx: c[0], cy: c[1], ang: rnd(0, Math.PI * 2), len: 0, speed: rnd(3, 7) * k, tail: 40 * k, width: rnd(1, 3) * k, life: rnd(30, 55) });
+      parts.push(p);
+    }
+    if (!fizzle) parts.push({ kind: 'ring', x: c[0], y: c[1], r: 8 * k, vr: (3 + power / 25) * k, age: 0, life: 45, size: 3 * k, color: sc.glow });
+    if (kind === 'ripple' && !calm) for (let j = 1; j < 3; j++) parts.push({ kind: 'ring', x: c[0], y: c[1], r: 4 * k, vr: (2 + j) * k, age: -j * 10, life: 55, size: 2 * k, color: sc.color });
+    if (!fxFrame) fxFrame = requestAnimationFrame(animate);
+  }
+  function animate() {
+    fx.clearRect(0, 0, px, px);
+    parts = parts.filter((p) => ++p.age < p.life);
+    for (const p of parts) {
+      if (p.age < 0) continue;
+      const t = p.age / p.life;
+      fx.globalCompositeOperation = p.kind === 'smoke' ? 'source-over' : 'lighter';
+      fx.globalAlpha = 1 - t;
+      if (p.kind === 'ring') { p.r += p.vr; fx.strokeStyle = p.color; fx.lineWidth = p.size * (1 - t) + 0.5; fx.beginPath(); fx.arc(p.x, p.y, p.r, 0, Math.PI * 2); fx.stroke(); continue; }
+      if (p.kind === 'rays') {
+        p.len += p.speed;
+        const cos = Math.cos(p.ang), sin = Math.sin(p.ang), from = Math.max(0, p.len - p.tail);
+        fx.strokeStyle = p.color; fx.lineWidth = p.width; fx.beginPath();
+        fx.moveTo(p.cx + cos * from, p.cy + sin * from); fx.lineTo(p.cx + cos * p.len, p.cy + sin * p.len); fx.stroke();
+        continue;
+      }
+      if (p.kind === 'swirl') { p.ang += p.spin; p.rad += p.grow; p.x = p.cx + p.rad * Math.cos(p.ang); p.y = p.cy + p.rad * Math.sin(p.ang); }
+      else { p.vy += p.g; p.x += p.vx; p.y += p.vy; }
+      fx.fillStyle = p.color;
+      if (p.kind === 'smoke') { p.size += p.grow; fx.globalAlpha = (1 - t) * 0.35; }
+      if (p.kind === 'leaves') {
+        p.rot += p.vr; fx.save(); fx.translate(p.x, p.y); fx.rotate(p.rot);
+        fx.beginPath(); fx.ellipse(0, 0, p.size, p.size * 0.45, 0, 0, Math.PI * 2); fx.fill(); fx.restore();
+      } else {
+        fx.beginPath(); fx.arc(p.x, p.y, p.kind === 'flame' ? p.size * (1 - t * 0.7) : p.size, 0, Math.PI * 2); fx.fill();
+      }
+    }
+    fx.globalAlpha = 1; fx.globalCompositeOperation = 'source-over';
+    fxFrame = parts.length ? requestAnimationFrame(animate) : 0;
+    if (!parts.length) fx.clearRect(0, 0, px, px);
+  }
+
+  // ---- The call --------------------------------------------------------------
+  async function begin(withMic) {
+    $('lobbyError').hidden = true;
+    book.student = $('studentName').value.trim().slice(0, 40);
+    let mic = null;
+    if (withMic) { try { mic = await Atmee.requestMic(); } catch (e) { $('lobbyError').textContent = e.friendly; $('lobbyError').hidden = false; return; } }
+    $('lobby').hidden = true; $('room').hidden = false; render();
+    tr.clear(); tr.note(mic ? 'You joined with your microphone' : 'You joined without a microphone');
+    connect(mic);
+  }
+  async function connect(mic) {
+    try {
+      s = await Atmee.join({
+        usecase: 'spellcraft', video: $('video'), audio: $('audio'), mic, tools,
+        onPhase: (p, d) => overlay.phase(p, d),
+        onCaption: (text, final) => { caption(text, final); tr.avatar(text, final); },
+        onUserCaption: (text, final, segment, seq) => { tr.heard(text, final, segment, seq); onHeard(text, segment); },
+        onSpeaking: (v) => { $('tutor').classList.toggle('talking', v); sender.speaking(v); $('hint').textContent = v && sender.waiting ? 'Your message will be sent when Draconia finishes her sentence.' : ''; },
+        onRelay: debug,
+        onEnd: () => ended('The lesson has ended'),
+      });
+      s.user('student', book.student); report();
+      UI.micButton($('mic'), s);
+      lock(false); $('timechip').hidden = false;
+      stopClock = UI.countdown($('timeleft'), s.session.maxSeconds, () => tr.note('About a minute left in this lesson'));
+    } catch (e) {
+      overlay.error(e.friendly || 'Something went wrong.', 'Try again', async () => connect(mic ? await Atmee.requestMic().catch(() => null) : null));
+    }
+  }
+  function ended(title) {
+    stopClock(); lock(true); settle();
+    overlay.ended(`<div class="title">${esc(title)}</div><p>Your grimoire${book.rank ? ' and certificate stay' : ' stays'} here.</p><button class="btn primary" onclick="location.reload()">Start again</button>`);
+  }
+  function lock(v) { $('text').disabled = $('send').disabled = v; }
+  $('withMic').onclick = () => begin(true);
+  $('withKeys').onclick = () => begin(false);
+  $('print').onclick = () => window.print();
+  $('composer').onsubmit = (e) => {
+    e.preventDefault(); const t = $('text').value.trim(); if (!t || !s) return;
+    $('text').value = '';
+    // The words typed in the chat while a sigil is charged cast it, and stay out of the conversation.
+    if (mode === 'charged' && SB.similarity(t, activeSpell().name) >= HEARD) { tr.user(t); release(true); return; }
+    tr.user(t); sender.send('typed', t);
+    if (sender.waiting) $('hint').textContent = 'Your message will be sent when Draconia finishes her sentence.';
+  };
+  $('leave').onclick = async () => { if (s) await s.end(); ended('You ended the lesson'); };
+</script>
+</body>
+</html>
