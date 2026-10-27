@@ -51,7 +51,7 @@ vi.mock('../../../src/kit/index.ts', async (importOriginal) => {
         },
         state: (text: string) => { call.states.push(text); },
         event: (text: string) => { call.events.push(text); },
-        mute: () => {}, unmute: () => {}, setMic: () => {}, resumeAudio: () => {},
+        mute: () => {}, unmute: () => {}, setMic: () => {}, feedMic: async () => {}, resumeAudio: () => {},
       };
     },
   };

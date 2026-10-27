@@ -14,7 +14,7 @@ vi.mock('../avatar/room.ts', async (real) => ({
       note: async (t: string) => { if (failNote) throw new Error('room closed'); session.sent.push(`note:${t}`); },
       state: async (t: string) => { session.sent.push(`state:${t}`); },
       event: async (t: string) => { session.sent.push(`event:${t}`); },
-      say: async () => {}, send: async () => {}, setMicMuted: async () => {},
+      say: async () => {}, send: async () => {}, setMicMuted: async () => {}, feedMic: async () => {},
       acceptsFiles: () => true,
       sendFiles: async (files: File[], o?: { caption?: string }) => {
         session.sent.push(`files:${files.map((f) => f.name).join(',')}:${o?.caption ?? ''}`);
