@@ -10,8 +10,10 @@ Sample apps built purely on the Atmee Avatar API (v2), with no changes to the pl
   [The fourteen mini-apps](#the-fourteen-mini-apps).
 - **Two avatar-only apps** whose own agent speaks while the avatar is only its face, rendered
   into the site's own LiveKit room. See [Avatar-only apps](#avatar-only-apps).
+- **Speech-to-speech apps**: voice calls with no video, whose server pins the conversation and
+  whose page runs its tools. See [Speech-to-speech apps](#speech-to-speech-apps).
 
-One site serves all twenty-one: `server/index.ts` runs the mini-apps and mounts `server.js` in
+One site serves them all: `server/index.ts` runs the mini-apps and mounts `server.js` in
 the same process, on one port, and the home page lists every app, says which of the
 [three ways](#three-ways-to-build) each is built, and links to its code.
 
@@ -20,7 +22,7 @@ the same process, on one port, and the home page lists every app, says which of 
 | way | Atmee runs | the app brings | API | here |
 |---|---|---|---|---|
 | **Full-stack** | listening, thinking (persona, knowledge, agenda), the voice and the face | what is on screen, events and its tools | `POST /v1/session` | nineteen apps |
-| **Speech-to-speech** (coming soon) | one realtime voice model that hears and answers in the avatar's voice; voice only for now (a face today by handing its audio to an avatar-only render) | its own agent over a WebSocket: the instructions, the tools (the client runs them), the audio | `POST /v1/live/sessions` | none yet |
+| **Speech-to-speech** | one realtime voice model that hears and answers in the avatar's voice; voice only for now (a face today by handing its audio to an avatar-only render, or to a character of your own) | its own conversation over a WebSocket: the instructions, persona and tools its server pins, the tools run by its client, the audio | `POST /v1/speech_sessions` | [the speech apps](#speech-to-speech-apps) |
 | **Avatar-only** | the face only | the whole agent (its model, tools and voice) or any audio, and its own LiveKit room | `POST /v1/avatars/{id}/avatar_sessions` | Waybill, Facecast |
 
 Every app has its folder in `apps/<app>/` with its README.
@@ -210,6 +212,28 @@ avatar on `lk.audio_stream`, answers `lk.playback_started` and `lk.playback_fini
 | parcel-help-desk | **Waybill** | a parcel help desk: the app's own model, tools, voice and ears; Tess is the face | [apps/parcel-help-desk](apps/parcel-help-desk/README.md) |
 | presenter-studio | **Facecast** | a script, a recording or your live voice, said to camera by Remy | [apps/presenter-studio](apps/presenter-studio/README.md) |
 
+## Speech-to-speech apps
+
+A voice call with no video: Atmee's speech server hears the user and answers in the avatar's
+voice, over a WebSocket the page holds. The site's server reserves each call
+(`POST /v1/speech_sessions`, routes `/api/apps/<app>/speech`) with the app's avatar and the
+settings the app pins for it (`AppServer.speech.settings()`: who the avatar is in the call, its
+instructions, its tools); the page gets only the WebSocket address and a token for one connection
+within a minute, and cannot change anything pinned. The page streams the microphone as 24 kHz
+PCM16 in 20 ms frames (silence too), plays the voice through a small jitter buffer, and runs the
+tools the model calls, answering each with `response.item.create`. End goes through the server
+(`POST /v1/speech_sessions/{id}/end`), then the page closes the socket, so the session settles at
+once; the page then reads what it cost. The code is shared: `src/speech/` (framework-free) and
+`useSpeech` in the kit.
+
+A speech app is off, and not listed, until its own `AVATAR_<APP_ID>` names an avatar **with a
+voice** (never `AVATAR_DEFAULT`: the voice is the app's character's). Speech sessions need
+session_service's `/v1/speech_sessions` and Causeur's speech server in public mode.
+
+| app | product | what it is | README |
+|---|---|---|---|
+| front-desk | **Callwell** | a clinic's front desk on the phone: Rosa books, moves and cancels appointments in the clinic's own book | [apps/front-desk](apps/front-desk/README.md) |
+
 ### Run them
 
 ```
@@ -238,6 +262,8 @@ server/              the site's server: the API key, sessions, each app's own ro
   api.ts               discovers apps/<app>/server.ts; /api/apps/<app>/session, /end, routes
 src/avatar/          the room, framework-free: join, the app's messages, both sides' words,
                      the app-tool RPC
+src/speech/          a speech-to-speech call, framework-free: the socket, the microphone and
+                     voice worklets, the transcript, tool rounds
 src/kit/             React: useAvatar(), the call parts (HostVideo, CallStatus, ChatPanel),
                      useToolNet() (the safety net for actions the host narrates),
                      BackToApps and useCaptionToggle() (the "All apps" link, the CC button)
