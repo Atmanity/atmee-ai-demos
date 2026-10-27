@@ -8,11 +8,11 @@
 // settles at once. Framework-free; src/kit/useSpeech.ts wraps it for React.
 import { MicError, openSpeechAudio, type SpeechAudio } from './audio.ts';
 import {
-  INPUT_TRANSCRIPT, ToolRounds, base64ToPcm, endReason, pcmToBase64, subprotocols, toolOutput, userText,
+  INPUT_TRANSCRIPT, ToolReply, ToolRounds, base64ToPcm, endReason, pcmToBase64, subprotocols, toolOutput, userText,
   type ToolCall,
 } from './protocol.ts';
 
-export type { ToolCall } from './protocol.ts';
+export { ToolReply, type ToolCall } from './protocol.ts';
 
 /** What our server returns for a reserved session. */
 export interface SpeechInfo { sessionId: string; url: string; token: string; tokenExpiresAt: string; maxSeconds: number }
@@ -104,6 +104,10 @@ export async function startSpeech(opts: SpeechOptions): Promise<SpeechCall> {
     throw err;
   }
   const endOnServer = () => post(`${api}/${info.sessionId}/end`).catch(() => null);
+  // The page goes (a tab closed, a link followed) from here on: the session is ended
+  // by a beacon, whether or not its socket ever opened, so nothing stays reserved.
+  const onPageHide = () => { navigator.sendBeacon?.(`${api}/${info.sessionId}/end`); };
+  addEventListener('pagehide', onPageHide);
   const status = async (): Promise<SpeechStatus | null> => {
     try {
       const res = await fetch(`${api}/${info.sessionId}`);
@@ -119,6 +123,7 @@ export async function startSpeech(opts: SpeechOptions): Promise<SpeechCall> {
     ws = new WebSocket(info.url, subprotocols(info.token));
   } catch {
     // An address the browser will not open (a page on https given ws://): end what was reserved.
+    removeEventListener('pagehide', onPageHide);
     await endOnServer();
     await audio.close();
     throw new SpeechError('connect_failed');
@@ -143,11 +148,6 @@ export async function startSpeech(opts: SpeechOptions): Promise<SpeechCall> {
     return true;
   };
   const finish = async (reason: string) => { if (await release()) opts.onEnd?.(reason); };
-  // A tab closed mid-call: the socket closes with it and the session settles;
-  // the beacon ends it too, in case it never connected.
-  const onPageHide = () => { navigator.sendBeacon?.(`${api}/${info.sessionId}/end`); };
-  addEventListener('pagehide', onPageHide);
-
   const runRound = async (calls: ToolCall[]) => {
     for (const call of calls) {
       opts.onToolCall?.(call, null);
@@ -157,7 +157,10 @@ export async function startSpeech(opts: SpeechOptions): Promise<SpeechCall> {
       let ok = true;
       try {
         if (!handler) throw new Error(`this page has no tool named ${call.name}`);
-        output = toolOutput(await handler(call.arguments, call));
+        const value = await handler(call.arguments, call);
+        // A ToolReply says whether the app did what was asked; anything else counts as done.
+        if (value instanceof ToolReply) ({ output, ok } = { output: toolOutput(value.output), ok: value.ok });
+        else output = toolOutput(value);
       } catch (err) {
         ok = false;
         output = toolOutput(undefined, err);

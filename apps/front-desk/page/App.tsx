@@ -6,7 +6,7 @@
 // week as she confirms it. After the call: how long it was, what it cost,
 // what changed in the book.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BackToApps, END_WORDS, credits, minutes, useSpeech, type Speech, type SpeechLine, type ToolRun } from '../../../src/kit/index.ts';
+import { BackToApps, END_WORDS, ToolReply, credits, minutes, useSpeech, type Speech, type SpeechLine, type ToolRun } from '../../../src/kit/index.ts';
 import { CLINIC, CLINICIANS, FrontDesk, TIMES, dayLabel, timeLabel, type Appointment, type ToolResult } from '../engine/clinic.ts';
 import host from '../avatar.json';
 import './callwell.css';
@@ -33,7 +33,7 @@ export function App() {
     if (result.offered) setOffered(result.offered);
     if (result.appointment) { setLatest({ ...result.appointment }); setOffered([]); }
     setVersion((v) => v + 1);
-    return result.text;
+    return new ToolReply(result.text, result.ok);
   }, []);
   const tools = useMemo(() => Object.fromEntries(TOOL_NAMES.map((name) => [name, (args: Record<string, unknown>) => run(name, args)])), [run]);
   const call = useSpeech('front-desk', { tools });

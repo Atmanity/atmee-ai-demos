@@ -10,6 +10,7 @@ import { SpeechError, startSpeech, type SpeechCall, type SpeechStatus, type Tool
 import type { AvatarPhase } from './useAvatar.ts';
 
 export type { SpeechStatus, ToolCall, ToolHandler } from '../speech/session.ts';
+export { ToolReply } from '../speech/session.ts';
 export type { SpeechLine } from '../speech/lines.ts';
 
 /** One tool the model asked for, and what the page answered. */
@@ -136,17 +137,22 @@ export function useSpeech(app: string, options: { tools?: Record<string, ToolHan
     publish([]);
   }, []);
 
+  // Each call has a number: a summary still settling when the next call starts is dropped.
+  const generation = useRef(0);
   const settle = useCallback(async (c: SpeechCall, reason: string) => {
+    const mine = generation.current;
     const seconds = liveAt.current ? Math.round((Date.now() - liveAt.current) / 1000) : 0;
     setSummary({ seconds, reason, status: null, settling: true });
     // The API settles a session at its end report, a moment after the socket closes.
     for (let i = 0; i < 24; i++) {
       const s = await c.status();
+      if (mine !== generation.current) return;
       if (s && (s.status === 'completed' || s.status === 'failed')) {
         setSummary({ seconds, reason, status: s, settling: false });
         return;
       }
       await new Promise((r) => setTimeout(r, 1500));
+      if (mine !== generation.current) return;
     }
     setSummary((sum) => (sum ? { ...sum, settling: false } : sum));
   }, []);
@@ -154,11 +160,13 @@ export function useSpeech(app: string, options: { tools?: Record<string, ToolHan
   const start = useCallback(async () => {
     if (starting.current || call.current) return;
     starting.current = true;
+    generation.current++;
     transcript.current = new CallLines();
     setErrorCode(undefined); setDetail(''); setLines([]); setToolRuns([]); setSummary(null);
     setEnding(false); setSpeaking(false); setWaiting(false); setToolsRunning(0); setMutedState(false);
     const names = Object.keys(optionsRef.current.tools ?? {});
     // The latest handlers, whatever render placed the call.
+    let endedEarly: string | null = null;
     const tools = Object.fromEntries(names.map((name) => [name, (args: Record<string, unknown>, c: ToolCall) => optionsRef.current.tools?.[name]?.(args, c)]));
     try {
       const placed = await startSpeech({
@@ -179,6 +187,8 @@ export function useSpeech(app: string, options: { tools?: Record<string, ToolHan
         onError: (code, message) => console.warn('[speech] %s: %s', code, message),
         onEnd: (reason) => {
           const c = call.current;
+          // Ended before the call was handed back (the line dropped at once): settled once it is.
+          if (!c) endedEarly = reason;
           call.current = null;
           setPhase('ended');
           setSpeaking(false);
@@ -188,8 +198,12 @@ export function useSpeech(app: string, options: { tools?: Record<string, ToolHan
           optionsRef.current.onEnded?.(reason);
         },
       });
-      call.current = placed;
       liveAt.current = Date.now();
+      if (endedEarly !== null) {
+        void settle(placed, endedEarly);
+        return;
+      }
+      call.current = placed;
       // The session's length counts from its reservation, not from the line opening.
       setSecondsLeft(Math.max(0, placed.info.maxSeconds - Math.round((Date.now() - placed.reservedAt) / 1000)));
       setAudioBlocked(placed.audio.suspended);

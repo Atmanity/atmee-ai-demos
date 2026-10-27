@@ -109,6 +109,15 @@ export function parseArguments(raw: unknown): Record<string, unknown> {
   }
 }
 
+/**
+ * A tool's answer with its outcome: `ok` false when the app refused what was
+ * asked (the model still reads the text, which says why). A handler that
+ * returns plain text or JSON counts as done; one that throws, as an error.
+ */
+export class ToolReply {
+  constructor(readonly output: string, readonly ok = true) {}
+}
+
 /** Longest tool output the server takes, in characters. */
 export const MAX_TOOL_OUTPUT = 65_536;
 

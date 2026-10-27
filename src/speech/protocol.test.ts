@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { MAX_TOOL_OUTPUT, ToolRounds, base64ToPcm, endReason, parseArguments, pcmToBase64, subprotocols, toolOutput, userText } from './protocol.ts';
+import { MAX_TOOL_OUTPUT, ToolReply, ToolRounds, base64ToPcm, endReason, parseArguments, pcmToBase64, subprotocols, toolOutput, userText } from './protocol.ts';
 
 describe('audio on the wire: PCM16 as base64', () => {
   test('a frame survives the round trip, signs and extremes included', () => {
@@ -58,6 +58,11 @@ describe('a tool round', () => {
     expect(parseArguments('[1,2]')).toEqual({});
     expect(parseArguments('')).toEqual({});
     expect(parseArguments({ day: 'Friday' })).toEqual({ day: 'Friday' });
+  });
+
+  test("an app's own refusal is a reply, not an error: the model reads why, the page marks it refused", () => {
+    expect(new ToolReply('Not sold: 8 silver, the player has 4.', false)).toMatchObject({ output: 'Not sold: 8 silver, the player has 4.', ok: false });
+    expect(new ToolReply('Sold.').ok).toBe(true);
   });
 
   test('what the model reads back: text as it is, objects as JSON, errors marked, never over the limit', () => {
