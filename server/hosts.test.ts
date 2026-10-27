@@ -10,8 +10,14 @@ describe('every app names its host the same way', () => {
     expect(dirs).toEqual(expect.arrayContaining(['training', 'recruiter', 'presence', 'game', 'livestream', 'chess-opponent']));
     for (const dir of dirs) {
       const host = JSON.parse(readFileSync(`apps/${dir}/avatar.json`, 'utf8'));
-      expect(host.avatarId, dir).toMatch(UUID);
       expect(host.name, dir).toBeTruthy();
+      // A speech app commits no avatar: it is off until its own variable names one (with a voice that fits its host).
+      if (host.avatarEnv) {
+        expect(host.avatarEnv, dir).toBe(avatarEnvName(dir));
+        expect(host.avatarId, dir).toBeUndefined();
+      } else {
+        expect(host.avatarId, dir).toMatch(UUID);
+      }
     }
   });
 

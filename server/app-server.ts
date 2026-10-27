@@ -1,6 +1,7 @@
 // What an app gives the server: its id, how it is built, the agenda its avatar
 // runs (if any), and its own routes under /api/apps/<id>/ (model calls, data, media).
 import type { Router } from 'express';
+import type { SpeechSettings } from './speech-sessions.ts';
 
 export interface AppServer {
   id: string;
@@ -12,8 +13,15 @@ export interface AppServer {
    * How the app uses the avatar. `full-stack` (default): Atmee runs the whole conversation
    * (POST /v1/session). `avatar-only`: the app's own agent speaks and the avatar is its face,
    * rendered into the app's own LiveKit room (POST /v1/avatars/{id}/avatar_sessions).
+   * `speech`: a voice call with no video; the app pins the conversation's settings and its page
+   * runs the tools, over a WebSocket to Atmee's speech server (POST /v1/speech_sessions).
    */
-  way?: 'full-stack' | 'avatar-only';
+  way?: 'full-stack' | 'avatar-only' | 'speech';
+  /**
+   * A speech app's calls (way `speech`): the settings its server pins for each one, which the
+   * page cannot change, and the conversation's language. The voice is always the avatar's.
+   */
+  speech?: { language?: string; settings: () => SpeechSettings };
   /** A conductor graph, or null to make sure the avatar runs none. */
   conductor?: { graph: unknown; speakAfterS?: number } | null;
   /** Longest session to ask for. */
