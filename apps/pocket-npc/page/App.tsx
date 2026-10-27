@@ -4,7 +4,7 @@
 // tools run here, against the game's state (engine/tavern.ts): a sale takes
 // the player's silver, a quest is pinned to their log, and he beams.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BackToApps, END_WORDS, credits, minutes, useSpeech, type Speech, type SpeechLine, type ToolRun } from '../../../src/kit/index.ts';
+import { BackToApps, END_WORDS, ToolReply, credits, minutes, useSpeech, type Speech, type SpeechLine, type ToolRun } from '../../../src/kit/index.ts';
 import { QUESTS, Tavern, type Result } from '../engine/tavern.ts';
 import host from '../avatar.json';
 import { Scene, type Mood } from './Brannoc.tsx';
@@ -27,7 +27,7 @@ export function App() {
       setPleasedUntil(Date.now() + 2500);
     }
     setVersion((v) => v + 1);
-    return result.text;
+    return new ToolReply(result.text, result.ok);
   }, []);
   const tools = useMemo(() => Object.fromEntries(TOOL_NAMES.map((name) => [name, (args: Record<string, unknown>) => run(name, args)])), [run]);
   const talk = useSpeech('pocket-npc', { tools });
