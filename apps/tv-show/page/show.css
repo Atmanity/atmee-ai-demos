@@ -152,3 +152,5 @@ button { font: inherit; }
 @keyframes nc-crawl { to { transform: translateX(-100%); } }
 .nc-hear { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); z-index: 10; border: 0; border-radius: 999px; padding: 10px 18px; background: #fff; color: #111; font: 600 14px var(--nc-body); cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .nc-ticker span { animation: none; padding-left: 1.5cqw; } }
+/* The CC toggle sits in the header, not on a video: it governs the program's subtitles. */
+.nc-bar .nc-cc { position: static; }

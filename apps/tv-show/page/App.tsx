@@ -6,7 +6,7 @@
 // the producer: they never speak, they choose the topics, and Nico opens each
 // one with the guest.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BackToApps, CallStatus, HostVideo, clock, useAvatar, type Avatar } from '../../../src/kit/index.ts';
+import { BackToApps, CallStatus, CaptionsButton, HostVideo, clock, useAvatar, useCaptionToggle, type Avatar } from '../../../src/kit/index.ts';
 import { createBooth, type Booth, type Role, type Stage } from '../show/booth.ts';
 import { GUESTS, firstName, type Guest } from '../show/guests.ts';
 import { HOST_NAME, guestState, hostState, introCue, producerCue, topicCue, wrapCue, type Segment } from '../show/script.ts';
@@ -47,6 +47,8 @@ export function App() {
   const segment = useRef<Segment | null>(null);
   const logId = useRef(0);
   const mixer = useRef<AudioContext | null>(null);
+  // Subtitles on the program picture: off unless the producer turns them on (remembered).
+  const cc = useCaptionToggle('tv-show', false);
   const addLog = (who: LogLine['who'], text: string) => setLog((l) => [...l.slice(-120), { id: ++logId.current, who, text }]);
 
   const host = useAvatar('tv-show/host', {
@@ -204,13 +206,14 @@ export function App() {
           </span>
         )}
         {onShow && host.secondsLeft !== null && <span className="nc-clock">{clock(host.secondsLeft)}</span>}
+        {onShow && <CaptionsButton on={cc.on} onToggle={cc.toggle} className="nc-cc" />}
       </header>
 
       {!onShow ? (
         <Lobby guestId={guestId} setGuestId={setGuestId} topics={topics} setTopics={setTopics} onGo={goOnAir} />
       ) : (
         <main className="nc-show">
-          <Program host={host} guest={caller} guestInfo={guest} patched={patched} stage={stage}
+          <Program host={host} guest={caller} guestInfo={guest} patched={patched} stage={stage} subtitles={cc.on}
             next={[...topics].find((t) => !used.has(t))} />
 
           <section className="nc-booth" aria-label="The booth">
@@ -262,8 +265,8 @@ function Logo() {
 
 // The program picture, as it goes out: the set, Nico behind the desk, the
 // guest on the studio's wall screen, and the show's graphics over it.
-function Program({ host, guest, guestInfo, patched, stage, next }: {
-  host: Avatar; guest: Avatar; guestInfo: Guest; patched: boolean; stage: Stage; next?: string;
+function Program({ host, guest, guestInfo, patched, stage, next, subtitles }: {
+  host: Avatar; guest: Avatar; guestInfo: Guest; patched: boolean; stage: Stage; next?: string; subtitles: boolean;
 }) {
   const g = firstName(guestInfo.name);
   const live = stage === 'on-air' || stage === 'closing';
@@ -297,7 +300,7 @@ function Program({ host, guest, guestInfo, patched, stage, next }: {
       <div className={`nc-tally ${live ? 'is-on' : ''}`}>{live ? 'Live' : 'Standby'}</div>
 
       <div className="nc-third"><strong>{HOST_NAME}</strong><span>{HOST_BILLING}</span></div>
-      {speaker?.caption && <Subtitle text={speaker.caption} />}
+      {subtitles && speaker?.caption && <Subtitle text={speaker.caption} />}
       {(host.audioBlocked || guest.audioBlocked) && (
         <button type="button" className="nc-hear" onClick={() => { host.resumeAudio(); guest.resumeAudio(); }}>Tap to hear the show</button>
       )}
