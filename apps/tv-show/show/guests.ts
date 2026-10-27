@@ -1,5 +1,5 @@
-// Tonight's possible guests: avatars on the demo account whose own persona
-// fits a talk-show chair and that carry no agenda (a conductor would pull them
+// Tonight's possible guests (all invented characters): avatars on the demo
+// account whose own persona fits a talk-show chair and that carry no agenda (a conductor would pull them
 // back to their own app's steps). AVATAR_TV_SHOW_GUEST_<ID> swaps one.
 export interface Guest {
   id: string;
@@ -14,12 +14,28 @@ export interface Guest {
 
 export const GUESTS: Guest[] = [
   {
+    id: 'vivienne',
+    name: 'Vivienne Lark',
+    billing: 'screen legend and Oscar winner for The Velvet Hour',
+    avatarId: '35d17006-0cf4-4675-9bd2-6f5a6e22358c',
+    subject: 'the lion on her very first picture',
+    rundown: ['The lion on her very first picture', 'Winning the Oscar for The Velvet Hour', 'Three husbands and a dentist', 'Doing her own sword fight in The Silver Veil', 'Life with Bogie and Bacall, her pugs'],
+  },
+  {
     id: 'lumi',
     name: 'Lumi Brook',
     billing: 'a travel writer who has slow-travelled half the world',
     avatarId: '8c589918-2e54-498e-8662-cb0fc3ca9bd5',
     subject: 'the trips that changed her',
     rundown: ['The trip that changed her', 'A city best seen on foot', 'The best meal she ever had abroad', 'One tip for a first solo trip'],
+  },
+  {
+    id: 'draconia',
+    name: 'Draconia Malvane',
+    billing: 'Mistress of Spellcraft at Silverfell, the youngest in three centuries',
+    avatarId: '425bd05c-5dfd-4459-8612-493f70e7501f',
+    subject: 'what it takes to master spellcraft',
+    rundown: ['What it takes to master spellcraft', 'Growing up in the House of Malvane', 'Her owl, Quillon', 'The worst spell a student ever cast in her class'],
   },
   {
     id: 'frank',

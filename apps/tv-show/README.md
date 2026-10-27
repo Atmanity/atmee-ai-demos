@@ -70,7 +70,7 @@ each with `/<id>/end`, and `GET /api/apps/tv-show/guests`.
   the way the portrait has it (there is no gaze control in the API). The render is a 512 px square
   centre crop, and the build refuses a face under 18 % of its width, so the shot is a medium shot;
   the page carries the set on beyond it.
-- **Guests** (`show/guests.ts`): Detective Frank Malone, Lumi Brook and Mira, demo avatars with no
+- **Guests** (`show/guests.ts`): Vivienne Lark (an invented screen legend, made for this show), Lumi Brook, Draconia Malvane (a copy of the spell-lesson host without its lesson agenda), Detective Frank Malone and Mira, demo avatars with no
   conductor. `AVATAR_TV_SHOW_GUEST_<ID>` swaps one; `AVATAR_TV_SHOW` swaps the host.
 
 ## Limitations

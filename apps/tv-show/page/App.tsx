@@ -14,9 +14,11 @@ import nico from '../host/portrait.jpg';
 import frank from '../guests/frank.jpg';
 import lumi from '../guests/lumi.jpg';
 import mira from '../guests/mira.jpg';
+import draconia from '../guests/draconia.jpg';
+import vivienne from '../guests/vivienne.jpg';
 import './show.css';
 
-const PORTRAITS: Record<string, string> = { frank, lumi, mira };
+const PORTRAITS: Record<string, string> = { frank, lumi, mira, draconia, vivienne };
 const HOST_BILLING = 'Host, Nightcap Live';
 // After the guest's goodbye: a beat on the two faces, then both calls end.
 const END_AFTER_GOODBYE_MS = 4_000;
