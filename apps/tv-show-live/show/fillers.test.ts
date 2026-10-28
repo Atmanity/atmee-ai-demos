@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createFillerGate, DELAY_MS } from './fillers.ts';
+import { createFillerGate, DELAY_MS, FADE_SAMPLES } from './fillers.ts';
 
 const FRAME_MS = 20;
 // Feed a voice: a frame every 20 ms whose samples say which frame it is, words at given times.
@@ -64,6 +64,20 @@ describe('fillers off the faces', () => {
     expect(out[at(400)]).toBe(-1);
     expect(out[at(540)]).toBe(-1);                     // made after the call, still inside the span
     expect(out[at(700)]).toBe(at(700));
+  });
+
+  it('fades sound out into a silenced stretch and back in after it, never a step', () => {
+    const gate = createFillerGate();
+    const loud = () => new Int16Array(480).fill(10_000);
+    const out: Int16Array[] = [];
+    for (let t = 0; t <= 600 + DELAY_MS; t += 20) out.push(...gate.push(loud(), t, t >= 200 && t < 400));
+    const flat = Int16Array.from(out.flatMap((f) => [...f]));
+    let jump = 0;
+    for (let i = 1; i < flat.length; i++) jump = Math.max(jump, Math.abs(flat[i] - flat[i - 1]));
+    expect(jump).toBeLessThanOrEqual(Math.ceil(10_000 / FADE_SAMPLES) + 1);
+    expect(flat[at(100) * 480]).toBe(10_000);       // before: heard
+    expect(flat[at(300) * 480]).toBe(0);            // muted: silent
+    expect(flat[at(500) * 480]).toBe(10_000);       // after: heard again
   });
 });
 

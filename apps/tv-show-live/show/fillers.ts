@@ -10,6 +10,8 @@
 export const DELAY_MS = 1_500;
 // Words can arrive a little after the sound they name: marking reaches this far back.
 export const LOOKBACK_MS = 300;
+// Sound cut to silence, or back, ramps over this many samples (10 ms at 24 kHz): cut on the spot, it clicked.
+export const FADE_SAMPLES = 240;
 
 const FILLER_WORD = /^(?:u+h+m*|u+m+|h+m+|m+h*m+|e+r+m+|e+h+|a+h+|o+h+|yeah|ha|haha|ok|okay|well|so|i|mean|you|know|but|right)$/i;
 const isFiller = (w: string) => FILLER_WORD.test(w);
@@ -18,11 +20,11 @@ const isFiller = (w: string) => FILLER_WORD.test(w);
 const HESITATION = /^(?:u+h+m*|u+m+|h+m+|m+h*m+|e+r+m+|e+h+|a+h+)$/i;
 export const HESITATION_LOOKBACK_MS = 200;
 
-export interface Frame { pcm: Int16Array; at: number; filler: boolean; clip?: boolean }
+export interface Frame { pcm: Int16Array; at: number; filler: boolean; clip?: boolean; muted?: boolean }
 
 export interface FillerGate {
-  /** A frame of the voice, as it is made. Returns the frames due at the face now, in order. */
-  push(pcm: Int16Array, now: number): Int16Array[];
+  /** A frame of the voice, as it is made (`muted`: not to be heard, whatever it says). Returns the frames due at the face now, in order. */
+  push(pcm: Int16Array, now: number, muted?: boolean): Int16Array[];
   /** Words of the voice, as they come. */
   words(delta: string, now: number): void;
   /** A stretch of speech begins (after a pause). */
@@ -39,14 +41,24 @@ export function createFillerGate(): FillerGate {
 
   let clipUntil = -Infinity;   // audio made until then is a filler clip
   const mark = (from: number, on: boolean) => { for (const f of queue) if (f.at >= from) f.filler = on; };
+  let silent = false;   // the last frame out was silence (the stream itself starts in silence)
+  const ramp = (pcm: Int16Array, down: boolean) => {
+    const out = new Int16Array(pcm.length);
+    const n = Math.min(FADE_SAMPLES, pcm.length);
+    for (let i = 0; i < n; i++) out[i] = Math.round(pcm[i] * (down ? 1 - i / n : i / n));
+    if (!down) out.set(pcm.subarray(n), n);
+    return out;
+  };
 
   return {
-    push(pcm, now) {
-      queue.push({ pcm, at: now, filler: fillerSince !== null, clip: now <= clipUntil });
+    push(pcm, now, muted = false) {
+      queue.push({ pcm, at: now, filler: fillerSince !== null, clip: now <= clipUntil, muted });
       const out: Int16Array[] = [];
       while (queue.length && queue[0].at <= now - DELAY_MS) {
         const f = queue.shift()!;
-        out.push(f.filler || f.clip ? new Int16Array(f.pcm.length) : f.pcm);
+        const quiet = f.filler || f.clip || f.muted;
+        out.push(quiet ? (silent ? new Int16Array(f.pcm.length) : ramp(f.pcm, true)) : silent ? ramp(f.pcm, false) : f.pcm);
+        silent = !!quiet;
       }
       return out;
     },

@@ -358,9 +358,8 @@ export function App() {
           // Not heard (off the floor), or Jada during the trailer: the face
           // gets silence of the same length, so its stream keeps time.
           const quiet = !floor.onAir(role) || (role === 'host' && hush.current);
-          const out = quiet ? new Int16Array(pcm.length) : pcm;
           // One stream per face for the whole show, from the first frame once that face is up.
-          for (const due of gate.push(out, now)) {
+          for (const due of gate.push(pcm, now, quiet)) {
             for (const { seat, feeder } of feeders) {
               if (seat !== 'host' && seat !== `g${onTvRef.current}`) continue;   // the guest's voice: the slot on the TV
               if (!feeder.open && faces.current[seat].phase === 'live') feeder.start();
