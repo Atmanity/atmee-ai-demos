@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { BackToApps, clock, useAvatarOnly, type AvatarOnly, type SpeechWriter } from '../../../src/kit/index.ts';
 import { createBooth, type Booth, type Role, type Stage } from '../show/booth.ts';
 import { GUESTS, HOST, SHOW, firstName, type Guest } from '../show/cast.ts';
-import { goodbyeCue, introCue, noteCue, topicCue, wrapCue } from '../show/script.ts';
+import { goodbyeCue, inviteCue, noteCue, nudgeCue, topicCue, welcomeCue, wrapCue } from '../show/script.ts';
 import { openSpeech, SpeechError, type SpeechLine } from '../show/speech.ts';
 import { createResampler, createVoice } from '../show/voice.ts';
 import jada from '../host/portrait.jpg';
@@ -23,6 +23,7 @@ const END_AFTER_GOODBYE_MS = 4_000;
 
 const STAGE_TEXT: Record<Stage, string> = {
   greeting: 'Jada is opening the show',
+  inviting: 'Jada is inviting the guest on',
   dialing: 'Putting the guest through…',
   'on-air': 'On air',
   closing: 'Wrapping up',
@@ -149,16 +150,22 @@ export function App() {
     }
   }
 
-  // Both faces first (they take longest); the host's line once her face is up, so she greets on camera.
+  // Both faces first, backstage (they take longest); the show starts, with Jada's line, only once
+  // both are up, so nothing on screen is still loading. The guest's face waits, its TV off, until
+  // Jada invites them on.
   useEffect(() => {
     if (!showId) return;
     void hostFace.start();
     void guestFace.start();
   }, [showId]);
   const hostOpened = useRef(false);
+  const [backstage, setBackstage] = useState(true);
   useEffect(() => {
-    if (hostFace.phase === 'live' && !hostOpened.current && booth.current) { hostOpened.current = true; void openSeat('host'); }
-  }, [hostFace.phase]);
+    if (hostFace.phase !== 'live' || guestFace.phase !== 'live' || hostOpened.current || !booth.current) return;
+    hostOpened.current = true;
+    setBackstage(false);
+    void openSeat('host');
+  }, [hostFace.phase, guestFace.phase]);
   useEffect(() => {
     if (!onShow) return;
     const failed = hostFace.phase === 'failed' ? hostFace : guestFace.phase === 'failed' ? guestFace : null;
@@ -193,8 +200,11 @@ export function App() {
     hostOpened.current = false;
     segment.current = guest;
     firstTopic.current = first;
+    setBackstage(true);
     booth.current = createBooth({
-      intro: introCue(guest, first),
+      invite: inviteCue(guest),
+      welcome: welcomeCue(guest, first),
+      nudge: nudgeCue(guest),
       wrap: wrapCue(guest),
       goodbye: goodbyeCue,
       deliver({ to, kind, text }) {
@@ -248,7 +258,7 @@ export function App() {
         <Lobby guestId={guestId} setGuestId={setGuestId} topics={topics} setTopics={setTopics} onGo={goOnAir} problem={problem} />
       ) : (
         <main className="nc-show">
-          <Program host={hostFace} guest={guestFace} guestInfo={guest} patched={patched} stage={stage}
+          <Program host={hostFace} guest={guestFace} guestInfo={guest} patched={patched} stage={stage} backstage={backstage}
             next={[...topics].find((t) => !used.has(t))} />
           <section className="nc-booth" aria-label="The booth">
             <div className="nc-booth-head">
@@ -290,37 +300,52 @@ function Face({ face, poster }: { face: AvatarOnly; poster: string }) {
   );
 }
 
-const PHASE: Partial<Record<AvatarOnly['phase'], string>> = {
-  starting: 'Booking the studio…', warming: 'Warming up the cameras…', connecting: 'Connecting…', arriving: 'Almost there…',
-};
-
-// The program picture: one studio, two shots side by side. Jada on the left,
-// turned toward her guest; the guest on the right, turned toward her. The
-// shots overlap a little and the seam is feathered, so the set reads as one
-// room; each shot clips at its own edges.
-function Program({ host, guest, guestInfo, patched, stage, next }: {
-  host: AvatarOnly; guest: AvatarOnly; guestInfo: Guest; patched: boolean; stage: Stage; next?: string;
+// The program picture: Jada's shot is the studio, and the set carries on to
+// her left, where the guest is on a flat-panel TV on the wall, angled toward
+// her: a thin bezel, glass glare, a pixel grid, the screen's light on the wall.
+function Program({ host, guest, guestInfo, patched, stage, backstage, next }: {
+  host: AvatarOnly; guest: AvatarOnly; guestInfo: Guest; patched: boolean; stage: Stage; backstage: boolean; next?: string;
 }) {
   const g = firstName(guestInfo.name);
   const live = stage === 'on-air' || stage === 'closing';
-  const cover = (face: AvatarOnly, waiting: string) => (face.phase === 'failed' ? face.detail : face.phase !== 'live' ? PHASE[face.phase] ?? waiting : null);
-  const hostCover = cover(host, 'Getting Jada ready…');
-  // The guest's seat stays dark until they are introduced.
-  const guestCover = patched && guest.phase === 'live' ? null : cover(guest, '') ?? `${g} is in the wings`;
+  // One card for the whole studio until both faces are up: the slower one's state, never two spinners.
+  const failed = [host, guest].find((f) => f.phase === 'failed');
+  const slower = [host, guest].find((f) => f.phase !== 'live');
+  const backstageText = failed ? failed.detail : slower?.phase === 'warming' ? 'Warming up the cameras…' : 'Getting the studio ready…';
+  const onScreen = patched && guest.phase === 'live';
+  const screen = onScreen ? null : stage === 'dialing' ? `Calling ${g}…` : 'Stand by';
   return (
-    <section className="ll-program" aria-label="The show, as it goes out">
-      <div className="ll-shot is-host">
+    <section className="nc-program ll-tv-program" aria-label="The show, as it goes out">
+      <div className="nc-set" aria-hidden="true" style={{ backgroundImage: `url(${jada})` }} />
+      <div className={`tv-spill ${onScreen ? 'is-on' : ''}`} aria-hidden="true" />
+      <div className="tv">
+        <div className="tv-mount" aria-hidden="true" />
+        <div className="tv-body">
+          <div className={`tv-panel ${onScreen ? 'is-on' : ''}`}>
+            <Face face={guest} poster={PORTRAITS[guestInfo.id]} />
+            {screen && !backstage && <div className="tv-idle" role="status"><span className="ll-mark" aria-hidden="true" /><strong>{screen}</strong></div>}
+            {onScreen && <span className="tv-live"><span className="nc-rec" />Live · via video call</span>}
+            {onScreen && <span className="tv-name"><strong>{guestInfo.name}</strong><span>{guestInfo.billing}</span></span>}
+            <span className="tv-grid" aria-hidden="true" />
+            <span className="tv-glare" aria-hidden="true" />
+          </div>
+          <span className="tv-led" aria-hidden="true" />
+        </div>
+      </div>
+      <div className="nc-hostcam">
         <Face face={host} poster={jada} />
-        {hostCover && <div className="nc-cover" role="status"><span className="call-spinner" aria-hidden="true" /><strong>{hostCover}</strong></div>}
       </div>
-      <div className="ll-shot is-guest">
-        <Face face={guest} poster={PORTRAITS[guestInfo.id]} />
-        {guestCover && <div className="nc-cover" role="status">{guest.phase !== 'failed' && <span className="call-spinner" aria-hidden="true" />}<strong>{guestCover}</strong></div>}
-      </div>
+      {backstage && (
+        <div className="ll-backstage" role="status">
+          {!failed && <span className="call-spinner" aria-hidden="true" />}
+          <strong>{backstageText}</strong>
+          {!failed && <span>The show starts as soon as Jada and {g} are in place.</span>}
+        </div>
+      )}
+      <div className="nc-desk" aria-hidden="true" />
       <div className="nc-bug"><span className="ll-mark" aria-hidden="true" />The Late <b>Line</b></div>
       <div className={`nc-tally ${live ? 'is-on' : ''}`}>{live ? 'Live' : 'Standby'}</div>
-      <div className="ll-third is-host"><strong>{HOST.name}</strong><span>{HOST.billing}</span></div>
-      {patched && <div className="ll-third is-guest"><strong>{guestInfo.name}</strong><span>{guestInfo.billing}</span></div>}
+      <div className="nc-third"><strong>{HOST.name}</strong><span>{HOST.billing}</span></div>
       {(host.audioBlocked || guest.audioBlocked) && (
         <button type="button" className="nc-hear" onClick={() => { host.resumeAudio(); guest.resumeAudio(); }}>Tap to hear the show</button>
       )}

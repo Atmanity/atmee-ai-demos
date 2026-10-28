@@ -1,6 +1,6 @@
 # The Late Line: a talk show on speech-to-speech
 
-Jada Monroe hosts a late-night talk show with a guest beside her at the desk; both are Atmee avatars. Unlike
+Jada Monroe hosts a late-night talk show and invites a guest onto the studio's big screen; both are Atmee avatars. Unlike
 [Nightcap Live](../tv-show/README.md), the two hear each other **directly**: each avatar has a
 speech-to-speech session, and each one's voice is what the other one hears. Both faces are in
 **one** LiveKit room, the studio's. The person at the page is the producer: they never speak; they
@@ -36,11 +36,14 @@ Built the speech-to-speech way (`POST /v1/speech_sessions`), with each face an a
   token, keeps its input fed in real time (a frame of silence whenever nothing else is due), and
   forwards every frame of each avatar's voice into the other's input. Turn-taking is theirs: they
   listen to each other as to a person.
-- **One studio, two shots.** All three portraits are shots of the same set: Jada on the left,
-  turned toward her guest; each guest on the right, turned toward her, hands on the desk and clear
-  of the inner edge. The page lays the two square faces side by side in a 2:1 picture, overlapping
-  a little with the seam feathered, so they read as one room. The pose is the portrait's (there is
-  no pose control), so a big gesture can still reach the seam, where each shot clips.
+- **The studio and its TV.** Jada's portrait is the studio, her whole body turned toward the big
+  screen at her left. The page carries the set on past her square shot and hangs a flat-panel TV
+  on the wall, angled toward her: thin bezel, glass glare, a faint pixel grid, the screen's light
+  on the wall, the network's live tag and name strip on the guest's feed. The guests call in from
+  home (their own portraits).
+- **Showtime only when everyone is in place.** Both faces start backstage, behind one card; Jada's
+  line opens, and the show starts, only once both are up. The guest's face waits with the TV on
+  standby until Jada invites them on.
 - **One room, two faces.** The server starts both renders into the show's room, each under its own
   identity; the page joins the room twice, once as each face's agent. Each avatar's whole voice is
   resampled from 24 kHz to 16 kHz and streamed to its face as **one** piece for the show, silence
@@ -49,9 +52,12 @@ Built the speech-to-speech way (`POST /v1/speech_sessions`), with each face an a
   dropouts, since every new piece starts the renderer cold; one stream lost 0.05 s of 13.4 s.)
   `show/voice.ts` also finds the stretches of speech, which tell the booth who is speaking. The
   page plays the faces' voices, not the raw speech.
-- **The booth** (`show/booth.ts`, tested in `booth.test.ts`): Jada's line opens once her face is
-  up and she greets the viewers; when her greeting is over she is directed to introduce the guest
-  and the guest's line opens, so the guest's first words ("can you hear me?") reach her. A
+- **The booth** (`show/booth.ts`, tested in `booth.test.ts`): Jada greets the viewers alone; then
+  she is directed to say who tonight's guest is and invite them onto the big screen; once she has,
+  the guest's line opens and the TV comes on, the guest's first words reach her, and she is
+  directed to welcome them with a first question. A conversation that stalls (both quiet 10 s) gets
+  a prompt for Jada to pick it back up, up to three times; a guest who never says goodbye does not
+  keep the show open past 15 s. A
   producer's cue is a directive on Jada's session (`causeur.directive.set`), taken off once she
   has finished a turn that began after it; on a floor quiet for 10 s it is also spoken at once as
   commentary (`session.commentary.append`). The wrap directs Jada to close, then the guest to say
@@ -83,9 +89,8 @@ All three are invented characters, made for this show (staging, the demo account
 - **Otto Brandt** `9b4228cf`, an inventor of magnificent, mostly useless machines.
 - **Rosa Quintero** `8c20336d`, a big-wave surfer turned taco-stand owner.
 
-The guests' portraits were made from Jada's shot (for the set) and their own first portraits (for
-their faces), so all three are the same studio. Both sessions also carry a pinned delivery
-instruction (plain words, no bracketed cues), since the voices laughed far too often.
+Both sessions carry a pinned delivery instruction (plain words, no bracketed cues), since the
+voices laughed far too often.
 
 `AVATAR_TV_SHOW_LIVE` swaps the host; `AVATAR_TV_SHOW_LIVE_GUEST_<ID>` a guest.
 
@@ -119,6 +124,11 @@ Needs the site's own LiveKit project (`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT
   Remembers) and a note ("which invention exploded": the butter churn that coated the ceiling)
   each landed on her next turn and were cleared after it; the wrap, Otto's goodbye ("Do mind the
   ceiling butter"), and the show ended itself at 206 s.
+- With the TV and the invitation, Otto: Jada greeted the viewers alone, invited him onto the big
+  screen, welcomed him; a topic and a note each landed on her next turn; the wrap and goodbyes; the
+  show ended itself at 212 s. An earlier run stalled: Jada cut into a pause with "hold on", Otto's
+  session took it as a request to wait and went quiet (the speech server's idle module, which a
+  public session cannot turn off). Jada now waits through pauses, and a stall gets a prompt.
 - Found and fixed live: two faces at once need a second v2 worker, whose start outlasted the
   gateway (524), so a gateway timeout is now retried as warming; and Jada said "my producers tell
   me", so her scenario no longer names who sends the topics.
