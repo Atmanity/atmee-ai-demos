@@ -23,7 +23,7 @@ import { createDirector, type Director, type Shot, type ShotMode } from '../show
 import { FILM, GUESTS, HOST, SHOW, firstName, type Guest } from '../show/cast.ts';
 import { bridgeCue, facingAt, farewellCue, filmCue, goodbyeCue, guestFarewellCue, guestPrompts, holdCue, hostPrompts, LISTENING_EVERY_MS, type Facing, holdMoreCue, inviteCue, inviteNowCue, noteCue, nudgeCue, topicCue, welcomeCue, wrapCue } from '../show/script.ts';
 import { openSpeech, SpeechError, type SpeechLine } from '../show/speech.ts';
-import { createVoice, SPEECH_RATE } from '../show/voice.ts';
+import { createResampler, createVoice, FACE_RATE } from '../show/voice.ts';
 import cam2 from '../studio/cam2.jpg';
 import wall from '../studio/wall.jpg';
 import desk from '../studio/desk.webp';
@@ -88,9 +88,8 @@ const posterOf = (g: Guest | null, inventions: Record<string, InventionView>) =>
 // silence included. Measured live against the raw voice: a piece per stretch
 // of speech lost 1.3 s of 13.8 s to dropouts (every new piece starts the
 // renderer cold); one stream lost 0.05 s of 13.4 s.
-// Each voice goes to its face as the speech session makes it, 24 kHz: squeezed to 16 kHz it lost its
-// top and sounded duller than the same avatar in a chat room, whose renderer gets 24 kHz.
-const WRITE_SAMPLES = SPEECH_RATE / 10;   // 100 ms per write: fewer, larger packets
+// The face takes 16 kHz: sent 24 kHz and told so, it played it slow and low.
+const WRITE_SAMPLES = FACE_RATE / 10;   // 100 ms per write: fewer, larger packets
 
 /**
  * Hands one avatar's voice to a face. The face opens its stream asynchronously,
@@ -112,7 +111,7 @@ function faceFeeder(face: () => AvatarOnly) {
   };
   return {
     get open() { return writer !== null; },
-    start() { writer = face().open(SPEECH_RATE); },
+    start() { writer = face().open(); },
     frame(pcm: Int16Array) {
       if (!writer) return;
       pending.push(pcm); pendingSamples += pcm.length;
@@ -289,6 +288,7 @@ export function App() {
       const feeders = seats.map((seat) => ({ seat, feeder: faceFeeder(() => faces.current[seat]) }));
       // The voice reaches the face through the filler gate: "yeah uh ummm oh" never said or mouthed.
       const gate = createFillerGate();
+      const resample = createResampler();
       // And Causeur's stock filler clips are silenced by their sound, whoever's voice it is now (show/clips.ts):
       // each avatar's are known from earlier shows, and the ones heard replayed are reported.
       const spotters = new Map<string, { spot: ClipSpotter; n: number; chunks: { start: number; at: number }[] }>();
@@ -359,7 +359,7 @@ export function App() {
           // gets silence of the same length, so its stream keeps time.
           const quiet = !floor.onAir(role) || (role === 'host' && hush.current);
           // One stream per face for the whole show, from the first frame once that face is up.
-          for (const due of gate.push(pcm, now, quiet)) {
+          for (const due of gate.push(resample(pcm), now, quiet)) {
             for (const { seat, feeder } of feeders) {
               if (seat !== 'host' && seat !== `g${onTvRef.current}`) continue;   // the guest's voice: the slot on the TV
               if (!feeder.open && faces.current[seat].phase === 'live') feeder.start();

@@ -10,7 +10,7 @@
 export const DELAY_MS = 1_500;
 // Words can arrive a little after the sound they name: marking reaches this far back.
 export const LOOKBACK_MS = 300;
-// Sound cut to silence, or back, ramps over this many samples (10 ms at 24 kHz): cut on the spot, it clicked.
+// Sound cut to silence, or back, ramps over this many samples (15 ms at the face's 16 kHz): cut on the spot, it clicked.
 export const FADE_SAMPLES = 240;
 
 const FILLER_WORD = /^(?:u+h+m*|u+m+|h+m+|m+h*m+|e+r+m+|e+h+|a+h+|o+h+|yeah|ha|haha|ok|okay|well|so|i|mean|you|know|but|right)$/i;
