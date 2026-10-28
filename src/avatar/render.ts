@@ -62,7 +62,8 @@ export interface RenderedAvatar {
   /** Says a whole piece (16 kHz mono PCM); resolves once the avatar has played it, or it was cut. */
   say(pcm: Int16Array): Promise<Played>;
   /** Opens a piece to write as the audio comes. */
-  open(): Promise<SpeechWriter>;
+  /** `rate`: the PCM's sample rate, SAMPLE_RATE unless said (a speech session's 24 kHz voice goes as made). */
+  open(rate?: number): Promise<SpeechWriter>;
   /** Cuts what the avatar is saying and anything still waiting to be said. */
   interrupt(): Promise<void>;
   /**
@@ -248,16 +249,16 @@ export async function renderAvatar(opts: RenderOptions): Promise<RenderedAvatar>
   // One piece at a time on the wire, in order.
   let queue: Promise<unknown> = Promise.resolve();
   const inTurn = <T>(job: () => Promise<T>) => { const next = queue.then(job, job); queue = next.catch(() => {}); return next; };
-  const openStream = () => room.localParticipant.streamBytes({
+  const openStream = (rate: number) => room.localParticipant.streamBytes({
     topic: AUDIO_STREAM,
     destinationIdentities: [info.avatarIdentity],
-    attributes: { sample_rate: String(SAMPLE_RATE), num_channels: '1' },
+    attributes: { sample_rate: String(rate), num_channels: '1' },
   });
   const bytes = (pcm: Int16Array) => new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength);
 
-  async function open(): Promise<SpeechWriter> {
+  async function open(rate = SAMPLE_RATE): Promise<SpeechWriter> {
     if (ended) throw new RenderError('ended');
-    const writer = await inTurn(openStream);
+    const writer = await inTurn(() => openStream(rate));
     let samples = 0;
     let closed = false;
     return {
@@ -270,7 +271,7 @@ export async function renderAvatar(opts: RenderOptions): Promise<RenderedAvatar>
         if (closed) return { interrupted: true, position: 0 };
         closed = true;
         // Given up on a while after it should have played, counted from its turn: the avatar plays in real time.
-        const done = playback.add((samples / SAMPLE_RATE + 30) * 1000);
+        const done = playback.add((samples / rate + 30) * 1000);
         await writer.close();
         return done;
       },

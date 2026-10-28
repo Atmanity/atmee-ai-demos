@@ -17,12 +17,13 @@ import { startScore } from './score.ts';
 import { createAdvancer, type Advancer, type Verdict } from '../show/advance.ts';
 import { createBooker, type Booker, type Booking } from '../show/booker.ts';
 import { createFloor } from '../show/floor.ts';
+import { createClipSpotter, type ClipSpotter } from '../show/clips.ts';
 import { createFillerGate, DELAY_MS as FILLER_DELAY_MS } from '../show/fillers.ts';
 import { createDirector, type Director, type Shot, type ShotMode } from '../show/director.ts';
 import { FILM, GUESTS, HOST, SHOW, firstName, type Guest } from '../show/cast.ts';
 import { bridgeCue, facingAt, farewellCue, filmCue, goodbyeCue, guestFarewellCue, guestPrompts, holdCue, hostPrompts, LISTENING_EVERY_MS, type Facing, holdMoreCue, inviteCue, inviteNowCue, noteCue, nudgeCue, topicCue, welcomeCue, wrapCue } from '../show/script.ts';
 import { openSpeech, SpeechError, type SpeechLine } from '../show/speech.ts';
-import { createResampler, createVoice } from '../show/voice.ts';
+import { createVoice, SPEECH_RATE } from '../show/voice.ts';
 import cam2 from '../studio/cam2.jpg';
 import wall from '../studio/wall.jpg';
 import desk from '../studio/desk.webp';
@@ -35,6 +36,9 @@ import still5 from '../film/still-5.jpg';
 import './gilded.css';
 
 const API = '/api/apps/tv-show-live';
+// A filler clip's span, as the spotter finds it, widened by this much at each end (show/clips.ts).
+const CLIP_PAD_MS = 60;
+const CLIP_REPORT_MS = 10_000;
 const PORTRAITS: Record<string, string> = { ines };
 const STILLS: Record<number, string> = { 1: still1, 2: still2, 3: still3, 4: still4, 5: still5 };
 const END_AFTER_GOODBYE_MS = 4_000;
@@ -84,7 +88,9 @@ const posterOf = (g: Guest | null, inventions: Record<string, InventionView>) =>
 // silence included. Measured live against the raw voice: a piece per stretch
 // of speech lost 1.3 s of 13.8 s to dropouts (every new piece starts the
 // renderer cold); one stream lost 0.05 s of 13.4 s.
-const WRITE_SAMPLES = 1600;   // 100 ms at 16 kHz per write: fewer, larger packets
+// Each voice goes to its face as the speech session makes it, 24 kHz: squeezed to 16 kHz it lost its
+// top and sounded duller than the same avatar in a chat room, whose renderer gets 24 kHz.
+const WRITE_SAMPLES = SPEECH_RATE / 10;   // 100 ms per write: fewer, larger packets
 
 /**
  * Hands one avatar's voice to a face. The face opens its stream asynchronously,
@@ -106,7 +112,7 @@ function faceFeeder(face: () => AvatarOnly) {
   };
   return {
     get open() { return writer !== null; },
-    start() { writer = face().open(); },
+    start() { writer = face().open(SPEECH_RATE); },
     frame(pcm: Int16Array) {
       if (!writer) return;
       pending.push(pcm); pendingSamples += pcm.length;
@@ -281,9 +287,25 @@ export function App() {
   const voices = useMemo(() => {
     const make = (role: Role, seats: ('host' | 'g0' | 'g1')[]) => {
       const feeders = seats.map((seat) => ({ seat, feeder: faceFeeder(() => faces.current[seat]) }));
-      const resample = createResampler();
       // The voice reaches the face through the filler gate: "yeah uh ummm oh" never said or mouthed.
       const gate = createFillerGate();
+      // And Causeur's stock filler clips are silenced by their sound, whoever's voice it is now (show/clips.ts):
+      // each avatar's are known from earlier shows, and the ones heard replayed are reported.
+      const spotters = new Map<string, { spot: ClipSpotter; n: number; chunks: { start: number; at: number }[] }>();
+      const seatNow = () => (role === 'host' ? 'host' : segment.current ? `g-${segment.current.id}` : null);
+      const spotterFor = (seat: string) => {
+        let sp = spotters.get(seat);
+        if (!sp) {
+          const known = new Set<string>();
+          sp = { spot: createClipSpotter(known), n: 0, chunks: [] };
+          spotters.set(seat, sp);
+          if (showRef.current) {
+            void fetch(`${API}/show/${showRef.current}/${seat}/fillers`).then((r) => (r.ok ? r.json() : null))
+              .then((j: { keys?: string[] } | null) => { for (const k of j?.keys ?? []) known.add(k); }).catch(() => {});
+          }
+        }
+        return sp;
+      };
       const voice = createVoice({
         // The voice's stretches say when the avatar speaks, for the booth and the transcript.
         onStart() {
@@ -320,12 +342,25 @@ export function App() {
       return {
         feed(pcm: Int16Array) {
           voice.feed(pcm);
+          const now = performance.now();
+          const seat = seatNow();
+          if (seat) {
+            const sp = spotterFor(seat);
+            sp.chunks.push({ start: sp.n, at: now });
+            if (sp.chunks.length > 400) sp.chunks.splice(0, 200);
+            sp.n += pcm.length;
+            for (const span of sp.spot.feed(pcm)) {
+              let from = sp.chunks[0];
+              for (const c of sp.chunks) if (c.start <= span.from) from = c; else break;
+              gate.silence(from.at - CLIP_PAD_MS, now + CLIP_PAD_MS);
+            }
+          }
           // Not heard (off the floor), or Jada during the trailer: the face
           // gets silence of the same length, so its stream keeps time.
           const quiet = !floor.onAir(role) || (role === 'host' && hush.current);
-          const pcm16 = resample(quiet ? new Int16Array(pcm.length) : pcm);
+          const out = quiet ? new Int16Array(pcm.length) : pcm;
           // One stream per face for the whole show, from the first frame once that face is up.
-          for (const due of gate.push(pcm16, performance.now())) {
+          for (const due of gate.push(out, now)) {
             for (const { seat, feeder } of feeders) {
               if (seat !== 'host' && seat !== `g${onTvRef.current}`) continue;   // the guest's voice: the slot on the TV
               if (!feeder.open && faces.current[seat].phase === 'live') feeder.start();
@@ -334,11 +369,25 @@ export function App() {
           }
         },
         words(delta: string) { gate.words(delta, performance.now()); },
+        /** The filler clips this voice has heard replayed since last asked, for each avatar's record. */
+        reportClips() {
+          const show = showRef.current;
+          for (const [seat, sp] of spotters) {
+            const keys = sp.spot.learned();
+            for (let o = 0; show && o < keys.length; o += 1_000) {
+              void fetch(`${API}/show/${show}/${seat}/fillers`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ keys: keys.slice(o, o + 1_000) }) }).catch(() => {});
+            }
+          }
+        },
         flush() { voice.flush(); for (const { feeder } of feeders) feeder.end(); },
       };
     };
     return { host: make('host', ['host']), guest: make('guest', ['g0', 'g1']) };
   }, []);
+  useEffect(() => {
+    const id = setInterval(() => { voices.host.reportClips(); voices.guest.reportClips(); }, CLIP_REPORT_MS);
+    return () => clearInterval(id);
+  }, [voices]);
 
   // rejoin: a guest whose line dropped, put back through once (their face is still up), the
   // conversation carrying on where it was.

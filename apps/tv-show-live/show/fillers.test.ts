@@ -51,5 +51,19 @@ describe('fillers off the faces', () => {
     expect(out[at(800)]).toBe(-1);                 // the "uh" is not
     expect(out[at(1300)]).toBe(at(1300));          // "three silks" is heard
   });
+
+  it('silences a span it is told is a filler clip, even when real words follow', () => {
+    const gate = createFillerGate();
+    const out: number[] = [];
+    for (let t = 0, i = 0; t <= 1_000 + DELAY_MS; t += FRAME_MS, i++) {
+      if (t === 500) gate.silence(300, 560);           // the clip: 300 to 560 ms
+      if (t === 600) gate.words('the light was everything.', t);
+      for (const pcm of gate.push(new Int16Array([i + 1]), t)) out.push(pcm[0] ? pcm[0] - 1 : -1);
+    }
+    expect(out[at(200)]).toBe(at(200));
+    expect(out[at(400)]).toBe(-1);
+    expect(out[at(540)]).toBe(-1);                     // made after the call, still inside the span
+    expect(out[at(700)]).toBe(at(700));
+  });
 });
 

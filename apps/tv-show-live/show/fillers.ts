@@ -18,7 +18,7 @@ const isFiller = (w: string) => FILLER_WORD.test(w);
 const HESITATION = /^(?:u+h+m*|u+m+|h+m+|m+h*m+|e+r+m+|e+h+|a+h+)$/i;
 export const HESITATION_LOOKBACK_MS = 200;
 
-export interface Frame { pcm: Int16Array; at: number; filler: boolean }
+export interface Frame { pcm: Int16Array; at: number; filler: boolean; clip?: boolean }
 
 export interface FillerGate {
   /** A frame of the voice, as it is made. Returns the frames due at the face now, in order. */
@@ -27,6 +27,8 @@ export interface FillerGate {
   words(delta: string, now: number): void;
   /** A stretch of speech begins (after a pause). */
   stretch(): void;
+  /** The audio made from `from` to `to` (a filler clip, by its sound) goes out as silence, whatever its words. */
+  silence(from: number, to: number): void;
 }
 
 export function createFillerGate(): FillerGate {
@@ -35,15 +37,16 @@ export function createFillerGate(): FillerGate {
   let fillerSince: number | null = null;   // marking from then on, while only fillers have come
   let hesitationSince: number | null = null;   // within that, a hesitation from then on: never unmarked
 
+  let clipUntil = -Infinity;   // audio made until then is a filler clip
   const mark = (from: number, on: boolean) => { for (const f of queue) if (f.at >= from) f.filler = on; };
 
   return {
     push(pcm, now) {
-      queue.push({ pcm, at: now, filler: fillerSince !== null });
+      queue.push({ pcm, at: now, filler: fillerSince !== null, clip: now <= clipUntil });
       const out: Int16Array[] = [];
       while (queue.length && queue[0].at <= now - DELAY_MS) {
         const f = queue.shift()!;
-        out.push(f.filler ? new Int16Array(f.pcm.length) : f.pcm);
+        out.push(f.filler || f.clip ? new Int16Array(f.pcm.length) : f.pcm);
       }
       return out;
     },
@@ -75,5 +78,9 @@ export function createFillerGate(): FillerGate {
       }
     },
     stretch() { sentenceStart = true; },
+    silence(from, to) {
+      for (const f of queue) if (f.at >= from && f.at <= to) f.clip = true;
+      clipUntil = Math.max(clipUntil, to);
+    },
   };
 }
