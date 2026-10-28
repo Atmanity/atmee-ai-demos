@@ -10,7 +10,7 @@
 //   POST /api/apps/tv-show-live/show/<show>/<seat>/speech    the seat's speech session: { url, token }
 //   POST .../render/<id>/end, .../speech/<id>/end, /show/<show>/end
 //
-// <seat> is host, guest or front (camera 1: a second face of the host, render only). Each speech session is pinned to its role on the
+// <seat> is host or guest. Each speech session is pinned to its role on the
 // show (scenario, user_name): the page cannot change who an avatar thinks it
 // is talking to.
 import { randomUUID } from 'node:crypto';
@@ -19,26 +19,25 @@ import type { AppServer } from '../../server/app-server.ts';
 import { avatarApi } from '../../server/atmee.ts';
 import { avatarFor } from '../../server/hosts.js';
 import { endRender, renderConfigured, startRender } from '../../server/render.ts';
-import { GUESTS, HOST, HOST_FRONT_AVATAR, guestById, type Guest } from './show/cast.ts';
+import { GUESTS, HOST, guestById, type Guest } from './show/cast.ts';
 import { DELIVERY, HOST_USER, guestScenario, hostScenario } from './show/script.ts';
 
 const ID = 'tv-show-live';
 const MAX_SECONDS = 900;
 
-/** host and guest each have a speech session and a face; front is a second face of the host (camera 1). */
-type Seat = 'host' | 'guest' | 'front';
+/** host and guest each have a speech session and a face. */
+type Seat = 'host' | 'guest';
 interface Show { room: string; guest: Guest; renders: Map<string, Seat>; speech: Map<string, Seat>; at: number }
 const shows = new Map<string, Show>();
 
 const guestAvatar = (g: Guest) => process.env[`AVATAR_TV_SHOW_LIVE_GUEST_${g.id.toUpperCase()}`] || g.avatarId;
-const avatarOf = (show: Show, seat: Seat) => (seat === 'host' ? avatarFor(ID)
-  : seat === 'front' ? process.env.AVATAR_TV_SHOW_LIVE_FRONT || HOST_FRONT_AVATAR : guestAvatar(show.guest));
+const avatarOf = (show: Show, seat: Seat) => (seat === 'host' ? avatarFor(ID) : guestAvatar(show.guest));
 const maxSeconds = () => Number(process.env.MAX_SECONDS) || MAX_SECONDS;
 
 function showFor(req: { params: Record<string, string> }, res: Response): { show: Show; seat: Seat } | null {
   const show = shows.get(req.params.show);
   const seat = req.params.seat;
-  if (!show || (seat !== 'host' && seat !== 'guest' && seat !== 'front')) {
+  if (!show || (seat !== 'host' && seat !== 'guest')) {
     res.status(404).json({ error: 'not_found' });
     return null;
   }
@@ -120,7 +119,6 @@ const app: AppServer = {
       const found = showFor(req, res);
       if (!found) return;
       const { show, seat } = found;
-      if (seat === 'front') return void res.status(404).json({ error: 'not_found' });
       const settings = seat === 'host'
         // The session opens by greeting its user by name: the host's user is the viewers until her
         // guest is on (her scenario says who speaks after that), or she welcomes a guest not yet there.

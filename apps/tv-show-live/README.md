@@ -28,7 +28,7 @@ No platform changes.
 │                               └────────► Inès's face (the studio screen)    │
 └──────────────┬───────────────────────────────────────────┬────────────────┘
                │ WebSockets (token per seat)               │ one LiveKit room, two renders
-        Atmee speech server                             face-front-…, face-guest-…
+        Atmee speech server                              face-host-…, face-guest-…
 ```
 
 - **One studio, with a TV on the wall.** The set (`studio/wall.jpg`) was outpainted from Jada's
@@ -43,8 +43,8 @@ No platform changes.
   renderer's softer background. An earlier version cropped her render into a studio photograph
   and showed the seam.
 - **The cameras are the page's**: cuts between moves on that one set, wide (Jada and the TV), in
-  on Jada from the chest up, or in on the TV. One render has one pose, so Jada faces the lens in
-  every shot. A shot keeps part of every face in frame: LiveKit's adaptive stream stops sending
+  on Jada from the chest up, or in on the TV. One render has one pose, so Jada is turned toward
+  the TV in every shot, the trailer's corner window included. A shot keeps part of every face in frame: LiveKit's adaptive stream stops sending
   video to an element outside the viewport.
 - **The director** (`show/director.ts`, tested in `director.test.ts`): Jada's medium shot until the
   guest is on; then it follows the speaker (Jada's close-up, the guest, both when they talk over
@@ -85,8 +85,9 @@ On each speech WebSocket: `session.start`, `session.input_audio.append`, `sessio
 
 ## The cast (staging, the demo account)
 
-- **Jada Monroe** `307b2aba` (her speech session) and **Jada Monroe (camera 1)** `bdaf5bd3` (her
-  face, facing the lens, at a calm walnut desk); a designed voice.
+- **Jada Monroe** `307b2aba`: her speech session and her face, one avatar, seated at a calm
+  walnut desk and turned toward the TV (a render's pose is fixed by its picture, so she keeps
+  that pose for the whole show); a designed voice.
 - **Inès Valcour** `5190aed1`, AMBERFALL's costume and production designer, centred and facing
   the lens in a studio dressed for the film.
 

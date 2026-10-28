@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDirector, HOLD_MS, hostPose, type Shot } from './director.ts';
+import { createDirector, HOLD_MS, type Shot } from './director.ts';
 
 function setup() {
   const shots: Shot[] = [];
@@ -67,13 +67,5 @@ describe('the director', () => {
     expect(director.shot).toBe('two');
     director.mode('auto');
     expect(director.shot).toBe('guest');
-  });
-});
-
-describe("Jada's pose", () => {
-  it('faces the lens for the viewers and turns to the TV only while her guest is on, until the wrap', () => {
-    for (const s of ['greeting', 'introducing', 'trailer', 'inviting', 'dialing', 'closing', 'over'] as const) expect(hostPose(s, false)).toBe('front');
-    expect(hostPose('on-air', false)).toBe('turned');
-    expect(hostPose('on-air', true)).toBe('front');
   });
 });
