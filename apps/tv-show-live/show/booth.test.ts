@@ -344,6 +344,17 @@ describe('a handover to the next guest', () => {
     expect(h.retire).toHaveBeenCalledOnce();
   });
 
+  it('runs when a nudge during it is refused', () => {
+    const s = onAir();
+    const h = steps();
+    s.booth.handover(h);
+    s.booth.speakUpRefused();                         // the idle nudge's commentary, refused mid-turn
+    s.turn('host');                                   // her goodbye
+    expect(s.sent).toContainEqual({ to: 'guest', kind: 'directive', text: 'GUEST BYE' });
+    s.turn('guest');
+    expect(h.retire).toHaveBeenCalledOnce();
+  });
+
   it('is dropped by the wrap before it has begun', () => {
     const s = onAir();
     const h = steps();

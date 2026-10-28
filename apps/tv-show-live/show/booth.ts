@@ -309,7 +309,9 @@ export function createBooth(opts: BoothOptions): Booth {
       invite(read(opts.invite));
     },
     // The turn that was open is not the one that answers the speak-up: it does not count.
-    speakUpRefused() { refused = true; begun = false; },
+    // Only a speak-up still waiting for her is refused: an idle nudge refused mid-turn left the flag
+    // set, none of her turns counted as begun again, and a handover stalled at her farewell.
+    speakUpRefused() { if (!lastSpeakUp || lastSpeakUp.at !== stage || begun) return; refused = true; begun = false; },
     guestReady() {
       if (stage === 'holding') invite(read(opts.inviteNow ?? opts.invite));
     },
@@ -329,7 +331,7 @@ export function createBooth(opts: BoothOptions): Booth {
         clearTimeout(turnTimers[role]);
         delete turnTimers[role];
         inTurn[role] = true;
-        if (role === 'host' && directed && !refused && now() - directedAt >= lead) begun = true;
+        if (role === 'host' && directed && !refused && now() - directedAt >= lead) { begun = true; lastSpeakUp = null; }
         return;
       }
       clearTimeout(turnTimers[role]);
