@@ -44,4 +44,12 @@ describe('fillers off the faces', () => {
     const out = run([{ at: 0, words: 'We used, well, three silks' }], 600, [0]);
     expect(out.slice(0, at(600)).every((v) => v >= 0)).toBe(true);
   });
+
+  it('silences a hesitation mid-sentence, and keeps the words around it', () => {
+    const out = run([{ at: 0, words: 'We used,' }, { at: 600, words: ' uh,' }, { at: 1200, words: ' three silks.' }], 1600, [0]);
+    expect(out[at(200)]).toBe(at(200));            // "We used" is heard
+    expect(out[at(800)]).toBe(-1);                 // the "uh" is not
+    expect(out[at(1300)]).toBe(at(1300));          // "three silks" is heard
+  });
 });
+

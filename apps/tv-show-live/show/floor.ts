@@ -11,8 +11,9 @@
 // a statue.
 import type { Role } from './booth.ts';
 
-export const REACTION_MS = 1_200;
-export const REACTION_GAP_MS = 8_000;
+// One every 8 s, from each avatar, was heard as a stream of "oh... hmm... ha": rarer and shorter.
+export const REACTION_MS = 800;
+export const REACTION_GAP_MS = 25_000;
 
 export interface Floor {
   /** A role's voice starts or ends a stretch of speech. */

@@ -13,6 +13,10 @@ export const LOOKBACK_MS = 300;
 
 const FILLER_WORD = /^(?:u+h+m*|u+m+|h+m+|m+h*m+|e+r+m+|e+h+|a+h+|o+h+|yeah|ha|haha|ok|okay|well|so|i|mean|you|know|but|right)$/i;
 const isFiller = (w: string) => FILLER_WORD.test(w);
+// A pure hesitation is never a word anyone means, so it goes wherever it falls, mid-sentence too
+// ("we used, uh, three silks"); its word arrives about 0.1-0.6 s after its sound starts.
+const HESITATION = /^(?:u+h+m*|u+m+|h+m+|m+h*m+|e+r+m+|e+h+|a+h+)$/i;
+export const HESITATION_LOOKBACK_MS = 200;
 
 export interface Frame { pcm: Int16Array; at: number; filler: boolean }
 
@@ -29,6 +33,7 @@ export function createFillerGate(): FillerGate {
   const queue: Frame[] = [];
   let sentenceStart = true;      // the next word starts a sentence (or a stretch)
   let fillerSince: number | null = null;   // marking from then on, while only fillers have come
+  let hesitationSince: number | null = null;   // within that, a hesitation from then on: never unmarked
 
   const mark = (from: number, on: boolean) => { for (const f of queue) if (f.at >= from) f.filler = on; };
 
@@ -48,8 +53,21 @@ export function createFillerGate(): FillerGate {
         if (w) {
           if (isFiller(w)) {
             if (sentenceStart && fillerSince === null) { fillerSince = now - LOOKBACK_MS; mark(fillerSince, true); }
+            if (HESITATION.test(w) && hesitationSince === null) {
+              hesitationSince = now - HESITATION_LOOKBACK_MS;
+              if (fillerSince === null) { fillerSince = hesitationSince; mark(fillerSince, true); }
+            }
           } else {
-            if (fillerSince !== null) { mark(fillerSince, false); fillerSince = null; }
+            // A real word: what came before it was meant ("Yeah, the light...") unless it was a
+            // hesitation, which stays silent up to where this word's sound begins.
+            if (fillerSince !== null) {
+              const wordFrom = now - LOOKBACK_MS;
+              for (const f of queue) {
+                if (f.at < fillerSince) continue;
+                f.filler = hesitationSince !== null && f.at >= hesitationSince && f.at < wordFrom;
+              }
+              fillerSince = hesitationSince = null;
+            }
             sentenceStart = false;
           }
         }
