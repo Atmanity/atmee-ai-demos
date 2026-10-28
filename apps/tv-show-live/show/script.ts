@@ -141,7 +141,9 @@ export const STABLE_PICTURE =
   'motion should be coherent, fluid, stable, and naturally driven by the audio.';
 // The framing, said outright: Causeur's "fixed camera" alone left this renderer zooming in and out.
 const FRAMING = 'The camera is locked off on a tripod: one fixed medium shot, exactly as framed at the start, the whole upper body and the desk always in frame. The camera never zooms in or out, never pushes in, never pans or tilts.';
-const prompt = (state: string, setting: string) => `${state}\n\n${setting}\n\n${FRAMING} ${STABLE_PICTURE}`;
+// The room said to be still, outright: "background stable" alone left doors opening and things moving behind her.
+const STILL = 'Everything behind the person is a fixed, empty set and stays completely still: nothing in it moves or changes, no door or panel opens, no one enters or walks by, nothing slides, falls or appears, the curtains hang motionless, and the lights stay exactly as they are. Only the person moves.';
+const prompt = (state: string, setting: string) => `${state}\n\n${setting} ${STILL}\n\n${FRAMING} ${STABLE_PICTURE}`;
 const STUDIO = 'The setting is a late-night TV studio, softly out of focus: stepped walnut art-deco panels lit warmly from behind, and a tall window onto a city at night behind sheer amber curtains, its lights melting into bokeh, behind a walnut desk with a brass edge, warm low light.';
 /**
  * While listening, small reactions, which the page rotates every LISTENING_EVERY_MS so the face
