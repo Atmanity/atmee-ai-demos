@@ -22,7 +22,8 @@ function setup(extra: Partial<BoothOptions> = {}) {
 function onAir() {
   const s = setup();
   s.booth.hostLive();
-  s.turn('host');            // the greeting and the film, "roll the trailer"
+  s.turn('host');            // the greeting
+  s.turn('host');            // the film, "roll the trailer"
   s.booth.trailerDone();
   s.turn('host');            // the invitation
   s.booth.guestLive();
@@ -36,11 +37,14 @@ beforeEach(() => { vi.useFakeTimers(); });
 afterEach(() => { vi.useRealTimers(); });
 
 describe('the opening', () => {
-  it('rolls the trailer once her opening turn (the greeting and the film) is over, with no cue in between', () => {
+  it('has her speak up for the film after the greeting, and rolls the trailer once she has introduced it', () => {
     const { booth, sent, roll, dial, turn } = setup();
     booth.hostLive();
     turn('host');
-    expect(sent).toEqual([]);
+    expect(sent).toEqual([{ to: 'host', kind: 'commentary', text: 'FILM' }]);
+    expect(booth.stage).toBe('introducing');
+    turn('host');
+    expect(sent.at(-1)).toEqual({ to: 'host', kind: 'directive', text: '' });
     expect(roll).toHaveBeenCalledOnce();
     expect(booth.stage).toBe('trailer');
     expect(dial).not.toHaveBeenCalled();
@@ -49,6 +53,7 @@ describe('the opening', () => {
   it('has her speak up after the trailer, then dials the guest once the invitation is spoken', () => {
     const { booth, sent, dial, turn } = setup();
     booth.hostLive();
+    turn('host');
     turn('host');
     sent.length = 0;
     booth.trailerDone();
@@ -67,6 +72,7 @@ describe('the opening', () => {
   it('asks again when she does not speak up after the trailer, three times in all', () => {
     const { booth, sent, turn } = setup();
     booth.hostLive();
+    turn('host');
     turn('host');
     sent.length = 0;
     booth.trailerDone();
@@ -106,19 +112,18 @@ describe('the opening', () => {
   });
 
   it('asks again when she does not speak up for the film, three times in all, and not once she has', () => {
-    const { booth, sent } = setup();
+    const { booth, sent, turn } = setup();
     booth.hostLive();
-    vi.advanceTimersByTime(GREETING_WAIT_MS);
+    turn('host');
     vi.advanceTimersByTime(SPEAK_UP_MS * 5);
     expect(sent.filter((d) => d.text === 'FILM')).toHaveLength(3);
 
     const second = setup();
     second.booth.hostLive();
-    vi.advanceTimersByTime(GREETING_WAIT_MS);
+    second.turn('host');
     second.turn('host');
     vi.advanceTimersByTime(SPEAK_UP_MS * 5);
     expect(second.sent.filter((d) => d.text === 'FILM')).toHaveLength(1);
-    expect(second.roll).toHaveBeenCalledOnce();
   });
 });
 
@@ -329,7 +334,7 @@ describe('a refused speak-up', () => {
   it('is sent again the moment her open turn is over, not after the retry timer', () => {
     const { booth, sent, turn } = setup();
     booth.hostLive();
-    vi.advanceTimersByTime(GREETING_WAIT_MS);           // she never opened the show: FILM is spoken up
+    turn('host');                                       // the greeting: FILM is spoken up
     expect(sent.filter((d) => d.text === 'FILM')).toHaveLength(1);
     booth.speakUpRefused();                             // she was still mid-turn ("ummm I mean uh")
     booth.speaking('host', true);

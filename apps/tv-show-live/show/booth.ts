@@ -183,17 +183,11 @@ export function createBooth(opts: BoothOptions): Booth {
     if (tries > 1) speakUpTimer = setTimeout(() => { if (stage === at && !begun) speakUp(text, tries - 1); }, SPEAK_UP_MS);
   };
 
-  // Her opening turn greets the viewers and introduces the film (her scenario): once it is over, the
-  // trailer rolls. As two turns, the film's cue went out only once the greeting was over, a pause
-  // while her reply was written, and she introduced the film twice. If she never opens the show, she
-  // is asked for the film.
-  const greeted = (spoke: boolean) => {
+  // Her opening is two turns: her greeting (her avatar's, at most 500 characters: the welcome and the
+  // show), then, asked at once, the film at length; the trailer rolls when that is over.
+  const greeted = () => {
     if (stage !== 'greeting') return;
     clearTimeout(greetingTimer);
-    if (spoke) {
-      setStage('trailer');
-      return opts.rollTrailer();
-    }
     setStage('introducing');
     speakUp(opts.film);
   };
@@ -253,7 +247,7 @@ export function createBooth(opts: BoothOptions): Booth {
       return speakUp(lastSpeakUp.text, lastSpeakUp.tries);
     }
     if (role === 'host') {
-      if (stage === 'greeting') return greeted(true);
+      if (stage === 'greeting') return greeted();
       if (directed && begun) {
         directed = false;
         waiting = null;
@@ -300,7 +294,7 @@ export function createBooth(opts: BoothOptions): Booth {
     get stage() { return stage; },
     hostLive() {
       clearTimeout(greetingTimer);
-      greetingTimer = setTimeout(() => { if (stage === 'greeting' && quiet()) greeted(false); }, GREETING_WAIT_MS);
+      greetingTimer = setTimeout(() => { if (stage === 'greeting' && quiet()) greeted(); }, GREETING_WAIT_MS);
     },
     guestLive() {
       if (stage === 'dialing') setStage('on-air');

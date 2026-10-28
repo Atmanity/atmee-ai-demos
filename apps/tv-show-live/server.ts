@@ -14,10 +14,6 @@
 // show (scenario, user_name): the page cannot change who an avatar thinks it
 // is talking to.
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { Response } from 'express';
 import type { AppServer } from '../../server/app-server.ts';
 import { avatarApi } from '../../server/atmee.ts';
@@ -61,35 +57,6 @@ function showFor(req: { params: Record<string, string> }, res: Response): { show
   return { show, seat, guest };
 }
 const avatarOf = (seat: Seat, guest?: Guest) => (seat === 'host' ? avatarFor(ID) : guestAvatar(guest!));
-
-// Each avatar's filler clips, by their fingerprints (show/clips.ts): those shipped with the app
-// (fillers/<avatar>.json), and those the page has heard replayed since, kept for later shows.
-const CLIP_SEEDS = fileURLToPath(new URL('./fillers/', import.meta.url));
-const CLIP_LEARNED = join(tmpdir(), 'gilded-reel-fillers');
-const CLIP_KEY = /^-?\d{1,9}:\d{1,10}$/;
-const MAX_CLIP_KEYS = 60_000;
-const clipKeys = new Map<string, Set<string>>();
-const readKeys = (file: string): string[] => {
-  try { return existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as string[]).filter((k) => CLIP_KEY.test(k)) : []; } catch { return []; }
-};
-function clipsOf(avatar: string): Set<string> {
-  let keys = clipKeys.get(avatar);
-  if (!keys) {
-    keys = new Set([...readKeys(join(CLIP_SEEDS, `${avatar}.json`)), ...readKeys(join(CLIP_LEARNED, `${avatar}.json`))]);
-    clipKeys.set(avatar, keys);
-  }
-  return keys;
-}
-function learnClips(avatar: string, keys: string[]): number {
-  const known = clipsOf(avatar);
-  const before = known.size;
-  for (const k of keys) if (known.size < MAX_CLIP_KEYS && CLIP_KEY.test(k)) known.add(k);
-  if (known.size > before) {
-    mkdirSync(CLIP_LEARNED, { recursive: true });
-    writeFileSync(join(CLIP_LEARNED, `${avatar}.json`), JSON.stringify([...known]));
-  }
-  return known.size - before;
-}
 
 async function endSpeech(id: string) {
   return avatarApi('POST', `/v1/speech_sessions/${id}/end`);
@@ -203,24 +170,6 @@ const app: AppServer = {
       const r = await endSpeech(req.params.id);
       if (r.status === 200) found.show.speech.delete(req.params.id);
       res.status(r.status).json(r.json);
-    });
-
-    // A voice's filler clips: the page silences them, and reports the ones it has heard replayed.
-    router.get('/show/:show/:seat/fillers', (req, res) => {
-      const found = showFor(req, res);
-      if (!found) return;
-      const avatar = avatarOf(found.seat, found.guest);
-      res.json({ keys: avatar ? [...clipsOf(avatar)] : [] });
-    });
-    router.post('/show/:show/:seat/fillers', (req, res) => {
-      const found = showFor(req, res);
-      if (!found) return;
-      const avatar = avatarOf(found.seat, found.guest);
-      const keys = Array.isArray(req.body?.keys) ? (req.body.keys as unknown[]).filter((k): k is string => typeof k === 'string').slice(0, 5_000) : [];
-      if (!avatar || !keys.length) return void res.status(400).json({ error: 'no_keys' });
-      const added = learnClips(avatar, keys);
-      if (added) console.log('[%s] %s fillers: %d new fingerprints', ID, found.seat, added);
-      res.json({ added });
     });
 
     // Auto-advance's judge: has the current topic run its course? { done, reason }
