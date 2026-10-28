@@ -3,6 +3,7 @@
 // producer's cues reach the host as a directive, which the session follows
 // on its next reply and never mentions, or as commentary when she must speak
 // up on her own (after the trailer).
+import type { Stage } from './booth.ts';
 import { FILM, HOST, SHOW, firstName, type Guest } from './cast.ts';
 
 export function hostScenario(): string {
@@ -153,11 +154,23 @@ const REACTIONS = [
   'listening with interest, her eyebrows raised slightly, her head tilted a little',
   'listening thoughtfully, giving a slow single nod',
 ];
-const JADA = 'A woman with curly black hair and gold hoop earrings, in an emerald-green blazer over a black crew-neck top, is sitting at a long walnut desk, her body and face turned toward the right of the frame, her forearms resting on the desk';
-export const hostPrompts = {
-  talking: prompt(`${JADA}, speaking warmly.`, STUDIO),
-  listening: REACTIONS.map((r) => prompt(`${JADA}, ${r}.`, STUDIO)),
+/**
+ * Where Jada looks: into the camera when she speaks to the viewers, at the TV on her right when
+ * she talks with the guest. Her body keeps the portrait's pose (turned to the TV); only her head
+ * and eyes turn.
+ */
+export type Facing = 'viewers' | 'guest';
+const JADA = 'A woman with curly black hair and gold hoop earrings, in an emerald-green blazer over a black crew-neck top, is sitting at a long walnut desk, her body turned toward the right of the frame, her forearms resting on the desk';
+const LOOK: Record<Facing, string> = {
+  viewers: 'her head and eyes turned to look straight into the camera, addressing the viewers at home',
+  guest: 'her head and eyes turned toward the right of the frame, looking at the TV screen where her guest is',
 };
+export const hostPrompts = (facing: Facing) => ({
+  talking: prompt(`${JADA}, ${LOOK[facing]}, speaking warmly.`, STUDIO),
+  listening: REACTIONS.map((r) => prompt(`${JADA}, ${LOOK[facing]}, ${r}.`, STUDIO)),
+});
+/** Whom Jada addresses at each stage of the show; during a handover, the page decides. */
+export const facingAt = (stage: Stage): Facing => (stage === 'on-air' ? 'guest' : 'viewers');
 export const guestPrompts = (guest: Guest) => {
   const setting = `The setting is ${guest.from || 'their workplace'}, behind them, softly out of focus.`;
   const who = `A person, ${guest.billing}, is sitting facing the camera on a video call`;

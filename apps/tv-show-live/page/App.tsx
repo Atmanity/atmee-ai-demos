@@ -20,7 +20,7 @@ import { createFloor } from '../show/floor.ts';
 import { createFillerGate, DELAY_MS as FILLER_DELAY_MS } from '../show/fillers.ts';
 import { createDirector, type Director, type Shot, type ShotMode } from '../show/director.ts';
 import { FILM, GUESTS, HOST, SHOW, firstName, type Guest } from '../show/cast.ts';
-import { bridgeCue, farewellCue, filmCue, goodbyeCue, guestFarewellCue, guestPrompts, holdCue, hostPrompts, LISTENING_EVERY_MS, holdMoreCue, inviteCue, inviteNowCue, noteCue, nudgeCue, topicCue, welcomeCue, wrapCue } from '../show/script.ts';
+import { bridgeCue, facingAt, farewellCue, filmCue, goodbyeCue, guestFarewellCue, guestPrompts, holdCue, hostPrompts, LISTENING_EVERY_MS, type Facing, holdMoreCue, inviteCue, inviteNowCue, noteCue, nudgeCue, topicCue, welcomeCue, wrapCue } from '../show/script.ts';
 import { openSpeech, SpeechError, type SpeechLine } from '../show/speech.ts';
 import { createResampler, createVoice } from '../show/voice.ts';
 import cam2 from '../studio/cam2.jpg';
@@ -225,16 +225,28 @@ export function App() {
   // Each face is told what it shows, and to keep a fixed camera, once it is up; while it listens,
   // its small reactions take turns every LISTENING_EVERY_MS (script.ts).
   const promptTurn = useRef(0);
+  // Jada looks into the camera for the viewers, at the TV for the guest. A new look reaches her
+  // face with what she says: `after` ms from now, about when that speech plays there.
+  const facing = useRef<Facing>('viewers');
+  const look = (to: Facing, after: number) => {
+    const show = showRef.current;
+    setTimeout(() => {
+      if (showRef.current !== show || facing.current === to) return;
+      facing.current = to;
+      if (faces.current.host.phase === 'live') void faces.current.host.setPrompt(pickPrompts(hostPrompts(to)));
+    }, after);
+  };
+  const pickPrompts = (p: { talking: string; listening: string[] }) => ({ talking: p.talking, listening: p.listening[promptTurn.current % p.listening.length] });
   useEffect(() => {
     const id = setInterval(() => { promptTurn.current++; sendPrompts(false); }, LISTENING_EVERY_MS);
     return () => clearInterval(id);
   }, []);
   const sendPrompts = (first: boolean) => {
-    const k = promptTurn.current;
-    const pick = (p: { talking: string; listening: string[] }) => ({ talking: p.talking, listening: p.listening[k % p.listening.length] });
+    const pick = pickPrompts;
     const f0 = faces.current;
     if (f0.host.phase === 'live') {
-      void f0.host.setPrompt(first ? pick(hostPrompts) : { listening: pick(hostPrompts).listening })
+      const host = hostPrompts(facing.current);
+      void f0.host.setPrompt(first ? pick(host) : { listening: pick(host).listening })
         .then((a) => { if (first) console.info('[gilded-reel] Jada prompt: renders_prompts=%s', a?.renders_prompts); });
     }
     [f0.g0, f0.g1].forEach((f, i) => {
@@ -468,7 +480,7 @@ export function App() {
     setCurrent(cast ?? earlyGuest); setSlots([cast ?? (earlyView?.ready ? earlyGuest : null), null]); setOnTv(0); onTvRef.current = 0; handingOver.current = false;
     if (!early) { setInventions({}); purpose.current = {}; }
     if (earlyGuest) { first = earlyGuest.rundown[0] ?? ''; setTopics(earlyGuest.rundown); }
-    setProblem(''); setLog([]); setUsed(new Set(first ? [first] : [])); setPatched(false); setStage('greeting'); setTrailer(false); setTrailerLeaving(false); setShot('host-front'); setShotMode('auto'); setSuggestWrap(false);
+    setProblem(''); setLog([]); setUsed(new Set(first ? [first] : [])); setPatched(false); setStage('greeting'); facing.current = 'viewers'; setTrailer(false); setTrailerLeaving(false); setShot('host-front'); setShotMode('auto'); setSuggestWrap(false);
     director.current?.close();
     director.current = createDirector({ onShot: setShot });
     firstTopic.current = first;
@@ -533,7 +545,7 @@ export function App() {
         else line.commentary(text);
       },
       dialGuest: () => void openSeat('guest', slotsRef.current[0]!),
-      onStage: (next) => { setStage(next); director.current?.stage(next); },
+      onStage: (next) => { setStage(next); director.current?.stage(next); look(facingAt(next), FACE_LAG_MS - 2_000); },
     });
     if (first) addLog('booth', `First topic: ${first}`);
     if (describe && !early) {
@@ -627,6 +639,7 @@ export function App() {
         goneGuests.current.push(`${from.name}, ${from.billing}`);
         setGone((g) => [...g, from.id]);
         setTvCard(`Up next: ${to.name}`);
+        look('viewers', 0);   // her bridge is to the viewers
         await lines.current.guest?.end();
         lines.current.guest = undefined;
         await faces.current[old === 0 ? 'g0' : 'g1'].end();
@@ -637,6 +650,7 @@ export function App() {
         onTvRef.current = next;
         setOnTv(next);
         setTvCard(null);
+        look('guest', 0);
         segment.current = to;
         setCurrent(to);
         setTopics(to.rundown);
