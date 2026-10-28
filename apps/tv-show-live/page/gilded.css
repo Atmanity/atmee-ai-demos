@@ -254,7 +254,7 @@ button { font: inherit; }
 .gr-tv-feed { position: absolute; inset: 0; opacity: 0; transition: opacity .5s; filter: blur(.35px); }
 .gr-tv-feed.is-on { opacity: 1; }
 /* The top of the guest's frame: her face and the film's art behind her (her hands fall below the TV). */
-.gr-tv-feed .ll-face img, .gr-tv-feed .ll-face video { object-position: 50% 45%; }
+.gr-tv-feed .ll-face img, .gr-tv-feed .ll-face video { object-position: 50% 60%; }
 .gr-tv-card { position: absolute; inset: 0; display: grid; align-content: center; justify-items: center; gap: .5cqw; text-align: center; }
 .gr-tv-card img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: brightness(.45); }
 .gr-tv-card > :not(img) { position: relative; }
