@@ -337,8 +337,16 @@ export function App() {
   }, [hostFace.phase, slotFaces[0].phase, slots[0]]);
   useEffect(() => {
     if (!onShow) return;
-    const failed = [hostFace, ...slotFaces].find((f) => f.phase === 'failed');
-    if (failed) offAir(failed.detail || 'A camera could not start.');
+    // Jada's camera, or the camera of the guest on air (or about to be, before anyone is on),
+    // failing ends the show; a next guest's failing does not: the booth says so, the show goes on.
+    const failed = [hostFace, slotFaces[onTv]].find((f) => f.phase === 'failed');
+    if (failed) return offAir(failed.detail || 'A camera could not start.');
+    const next = 1 - onTv;
+    if (patched && slotFaces[next].phase === 'failed' && slots[next]) {
+      addLog('booth', `${slots[next]!.name}'s camera could not start (${slotFaces[next].detail || 'unknown'}); the show goes on with ${segment.current?.name ?? 'the guest on air'}`);
+      for (const [id, w] of Object.entries(purpose.current)) if (id === slots[next]!.id) delete purpose.current[id];
+      setSlots((all) => all.map((g, i) => (i === next ? null : g)));
+    }
   }, [hostFace.phase, slotFaces[0].phase, slotFaces[1].phase]);
   // A guest's face is up: the booth may put them through (held for, or handed over to).
   useEffect(() => {
