@@ -319,6 +319,20 @@ describe('a handover to the next guest', () => {
     expect(s.sent.at(-1)).toEqual({ to: 'host', kind: 'commentary', text: 'BRIDGE' });
   });
 
+  it('is not derailed by a topic cued while it runs', () => {
+    const s = onAir();
+    const h = steps();
+    s.booth.handover(h);
+    s.booth.cue('A NEW TOPIC');
+    expect(s.sent).toEqual([{ to: 'host', kind: 'directive', text: 'FAREWELL' }]);
+    s.turn('host');
+    s.turn('guest');
+    s.booth.cue('ANOTHER TOPIC');
+    expect(s.sent.at(-1)).toEqual({ to: 'host', kind: 'commentary', text: 'BRIDGE' });
+    s.turn('host');
+    expect(h.bringOn).toHaveBeenCalledOnce();
+  });
+
   it('is dropped by the wrap before it has begun', () => {
     const s = onAir();
     const h = steps();

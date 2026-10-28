@@ -333,7 +333,9 @@ export function createBooth(opts: BoothOptions): Booth {
       turnTimers[role] = setTimeout(() => turnOver(role), TURN_QUIET_MS);
     },
     cue(text) {
-      if (stage === 'closing' || stage === 'over' || wrapping || !text.trim()) return;
+      // Not during a handover: a cue replaces the directive she has, and her farewell or her
+      // introduction of the next guest would give way to it, leaving the handover never done.
+      if (stage === 'closing' || stage === 'over' || wrapping || handing || !text.trim()) return;
       const t = text.trim();
       if (stage !== 'on-air') return direct(t);
       direct(t);
