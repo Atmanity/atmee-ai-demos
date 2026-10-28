@@ -46,6 +46,7 @@ const FACE_LAG_MS = 4_500;
 // her face is FACE_LAG_MS behind. Cued at the end, she was silent on screen for five seconds.
 const INVITE_LEAD_MS = FACE_LAG_MS + 1_500;
 const TRAILER_FADE_MS = 900;
+const CAPTION_LINGER_MS = 3_000;
 const SEGMENT_MS = 4 * 60_000;   // a guest's time on air before an auto-booked guest may take over   // the dissolve into the trailer and back out to the studio
 
 const STAGE_TEXT: Record<Stage, string> = {
@@ -194,6 +195,18 @@ export function App() {
   // What is being said, word by word, in step with the faces: words arrive with the voice, which
   // the faces play FACE_LAG_MS later, so each word shows that much later, as heard.
   const [speaking, setSpeaking] = useState<Partial<Record<Role, { name?: string; text: string }>>>({});
+  // Captions on the video: the line being said, as heard; it lingers CAPTION_LINGER_MS after.
+  const [caption, setCaption] = useState<{ who: Role; name: string; text: string } | null>(null);
+  useEffect(() => {
+    const role = (['guest', 'host'] as Role[]).find((r) => speaking[r]?.text.trim());
+    if (role) return void setCaption({ who: role, name: role === 'host' ? HOST.name : speaking[role]!.name ?? 'Guest', text: speaking[role]!.text.trim() });
+    const id = setTimeout(() => setCaption(null), CAPTION_LINGER_MS);
+    return () => clearTimeout(id);
+  }, [speaking]);
+  // The booth and what went out on air fold away; the show can go full screen.
+  const [boothOpen, setBoothOpen] = useState(true);
+  const [transcriptOpen, setTranscriptOpen] = useState(true);
+  const toggleFullScreen = () => { if (document.fullscreenElement) void document.exitFullscreen(); else void document.documentElement.requestFullscreen().catch(() => {}); };
 
   // A ref, not the state: the booth's callbacks are made before the show has its id.
   const showRef = useRef<string | null>(null);
@@ -595,6 +608,11 @@ export function App() {
       }),
     });
   }
+  const posterByName = (name?: string) => {
+    const cast = GUESTS.find((g) => g.name === name);
+    if (cast) return PORTRAITS[cast.id];
+    return Object.values(inventions).find((v) => v.guest?.name === name)?.portrait ?? BLANK;
+  };
   /** Where a guest of the show is: on air, waiting with their camera, or gone. */
   const statusOf = (id: string): string | null => {
     if (gone.includes(id)) return 'Gone';
@@ -651,21 +669,29 @@ export function App() {
     advancer.current?.topic(topic);
     addLog('booth', reason === undefined ? `Topic for Jada: ${topic}` : `Moving on: ${topic} (${reason})`);
   };
-  // A note may ask for a new guest ("we need to invite the camera man too"): read first; a
-  // booking is invented like the Invite box's, anything else goes to Jada as a note.
-  const sendNote = async (text: string) => {
+  // The booth's one command box: read for what the producer means (an invitation, a topic, or a
+  // note for Jada's next turn) and done; the reply under the box says which.
+  const [commandReply, setCommandReply] = useState('');
+  const sendCommand = async (text: string) => {
+    setCommandReply('Reading…');
     const res = await fetch(`${API}/show/${showRef.current}/intent`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) }).catch(() => null);
     const intent = res?.ok ? await res.json().catch(() => null) : null;
-    if (intent?.invite && intent.description) {
-      if (!patched) return addLog('booth', `A new guest can come once ${firstName(guest.name)} is on: ${text}`);
-      if (pendingInvite) return addLog('booth', `A guest is already being invented; try again once they are on: ${text}`);
+    if (intent?.kind === 'invite' && intent.description) {
+      if (!patched) return setCommandReply(`A new guest can come once ${firstName(guest.name)} is on.`);
+      if (pendingInvite) return setCommandReply('A guest is already being made: try again once they are on.');
       const id = await startInvention(intent.description);
-      if (!id) return;
+      if (!id) return setCommandReply('Could not start inventing them.');
       purpose.current[id] = { slot: 1 - onTvRef.current, opening: false };
-      return addLog('booth', `Inviting the next guest: ${intent.description} (from your note)`);
+      addLog('booth', `Inviting the next guest: ${intent.description}`);
+      return setCommandReply(`Inviting: ${intent.description}`);
+    }
+    if (intent?.kind === 'topic' && intent.topic) {
+      sendTopic(intent.topic);
+      return setCommandReply(`Sent as the next topic: ${intent.topic}`);
     }
     booth.current?.cue(noteCue(text));
     addLog('booth', `Note for Jada: ${text}`);
+    setCommandReply('Sent to Jada as a note for her next turn.');
   };
   const wrap = () => { booth.current?.wrap(); live.current.wrapped = true; setSuggestWrap(false); addLog('booth', 'Wrap it up'); };
   const chooseShot = (mode: ShotMode) => { setShotMode(mode); director.current?.mode(mode); };
@@ -686,19 +712,28 @@ export function App() {
           </span>
         )}
         {onShow && hostFace.secondsLeft !== null && <span className="nc-clock">{clock(hostFace.secondsLeft)}</span>}
+        {onShow && <button type="button" className="nc-btn gr-fullscreen" onClick={toggleFullScreen} aria-label="Full screen">⛶</button>}
       </header>
 
       {!onShow ? (
         <Lobby guestId={guestId} setGuestId={setGuestId} inventText={inventText} setInventText={setInventText} topics={topics} setTopics={setTopics} onGo={goOnAir} problem={problem}
           invention={lobbyInvention ? inventions[lobbyInvention] : undefined} onInvent={inventInLobby} />
       ) : (
-        <main className="nc-show">
-          <Program host={hostFace} tvFaces={slotFaces} onTv={onTv} tvCard={tvCard} posters={slots.map((g) => posterOf(g, inventions))} guestInfo={guest} patched={patched} stage={stage}
+        <main className={`nc-show ${boothOpen ? '' : 'is-booth-closed'} ${transcriptOpen ? '' : 'is-transcript-closed'}`}>
+          <Program host={hostFace} tvFaces={slotFaces} onTv={onTv} tvCard={tvCard} caption={trailerUp || backstage ? null : caption} posters={slots.map((g) => posterOf(g, inventions))} guestInfo={guest} patched={patched} stage={stage}
             backstage={backstage} shot={shot} trailer={trailer} trailerLeaving={trailerLeaving} onTrailerEnding={trailerEnding} onTrailerDone={trailerDone} />
-          <section className="nc-booth" aria-label="The booth">
+          {!boothOpen && (
+            <button type="button" className="gr-rail" onClick={() => setBoothOpen(true)} aria-label="Open the booth">
+              <span className="gr-rail-label">The booth</span>
+              <span className="gr-rail-chip">{STAGE_TEXT[stage]}</span>
+              {autoAdvance && autoBook && <span className="gr-rail-chip">Autopilot</span>}
+            </button>
+          )}
+          <section className="nc-booth" aria-label="The booth" hidden={!boothOpen}>
             <div className="nc-booth-head">
               <h2>The booth</h2>
               <span className="nc-stage-text">{STAGE_TEXT[stage]}</span>
+              <button type="button" className="gr-fold" onClick={() => setBoothOpen(false)} aria-label="Fold the booth away">⟩</button>
             </div>
             {problem && <p className="nc-problem" role="alert">{problem}</p>}
             {stage === 'over' && allDone ? (
@@ -707,18 +742,19 @@ export function App() {
                 <button type="button" className="nc-btn nc-primary" onClick={backToLobby}>Book another night</button>
               </div>
             ) : (
-              <Console topics={topics} used={used} disabled={stage !== 'on-air'} onTopic={(t) => sendTopic(t)} onNote={sendNote}
-                onWrap={wrap} onEnd={endShow} guestFirst={firstName(guest.name)}
-                autoAdvance={autoAdvance} onAutoAdvance={setAutoAdvance} suggestWrap={suggestWrap}
+              <Console topics={topics} used={used} disabled={stage !== 'on-air'} onTopic={(t) => sendTopic(t)} onCommand={sendCommand} commandReply={commandReply}
+                onWrap={wrap} onEnd={endShow}
+                autoAdvance={autoAdvance} onAutoAdvance={setAutoAdvance} autoBook={autoBook} onAutoBook={setAutoBook} suggestWrap={suggestWrap}
                 cast={castOnShow ? [{ guest: castOnShow, poster: PORTRAITS[castOnShow.id], status: statusOf(castOnShow.id) ?? 'Waiting' }] : []}
-                statusOf={statusOf}
-                inventions={Object.values(inventions)} canInvite={patched && !pendingInvite && stage === 'on-air'} onInvite={inviteGuest}
-                autoBook={autoBook} onAutoBook={setAutoBook} />
+                statusOf={statusOf} inventions={Object.values(inventions)} />
             )}
           </section>
           <section className="nc-transcript" aria-label="On air">
-            <h2>On air</h2>
-            <Transcript log={log} live={speaking} />
+            <div className="gr-transcript-head">
+              <h2>Transcript</h2>
+              <button type="button" className="gr-fold" onClick={() => setTranscriptOpen((o) => !o)} aria-label={transcriptOpen ? 'Fold the transcript away' : 'Open the transcript'}>{transcriptOpen ? '⌄' : '⌃'}</button>
+            </div>
+            {transcriptOpen && <Transcript log={log} live={speaking} poster={(who, name) => (who === 'host' ? cam2 : posterByName(name))} />}
           </section>
         </main>
       )}
@@ -747,8 +783,8 @@ function Face({ face, poster }: { face: AvatarOnly; poster: string }) {
 // the renderer's drift has no hard line to slip against); the guest plays on
 // the TV. The director's shots are camera
 // moves on that set: wide, pushed in on Jada, pushed in on the TV.
-function Program({ host, tvFaces, onTv, tvCard, posters, guestInfo, patched, stage, backstage, shot, trailer, trailerLeaving, onTrailerEnding, onTrailerDone }: {
-  host: AvatarOnly; tvFaces: AvatarOnly[]; onTv: number; tvCard: string | null; posters: string[]; guestInfo: Guest; patched: boolean; stage: Stage;
+function Program({ host, tvFaces, onTv, tvCard, caption, posters, guestInfo, patched, stage, backstage, shot, trailer, trailerLeaving, onTrailerEnding, onTrailerDone }: {
+  host: AvatarOnly; tvFaces: AvatarOnly[]; onTv: number; tvCard: string | null; caption: { who: Role; name: string; text: string } | null; posters: string[]; guestInfo: Guest; patched: boolean; stage: Stage;
   backstage: boolean; shot: Shot; trailer: boolean; trailerLeaving: boolean; onTrailerEnding: () => void; onTrailerDone: () => void;
 }) {
   const live = stage === 'on-air' || stage === 'closing';
@@ -790,7 +826,13 @@ function Program({ host, tvFaces, onTv, tvCard, posters, guestInfo, patched, sta
             behind a desk that stays put, and the desk runs on unbroken. */}
         <img className="gr-desk" src={desk} alt="" />
       </div>
-      {third && <div className="gr-third"><strong>{third.name}</strong><span>{third.billing}</span></div>}
+      {caption && (
+        <div className={`gr-caption is-${caption.who}`} aria-live="off">
+          <span className="gr-caption-name">{firstName(caption.name)}</span>
+          <span className="gr-caption-text">{captionTail(caption.text)}</span>
+        </div>
+      )}
+      {third && !caption && <div className="gr-third"><strong>{third.name}</strong><span>{third.billing}</span></div>}
       <div className="nc-bug gr-bug"><span className="gr-fan" aria-hidden="true" />The Gilded <b>Reel</b></div>
       <div className={`nc-tally ${live ? 'is-on' : ''}`}>{live ? 'Live' : 'Standby'}</div>
       {trailer && <Trailer leaving={trailerLeaving} onEnding={onTrailerEnding} onDone={onTrailerDone} />}
@@ -913,72 +955,68 @@ function Lobby({ guestId, setGuestId, inventText, setInventText, topics, setTopi
   );
 }
 
-function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guestFirst, autoAdvance, onAutoAdvance, suggestWrap, cast, statusOf, inventions, canInvite, onInvite, autoBook, onAutoBook }: {
-  topics: string[]; used: Set<string>; disabled: boolean; guestFirst: string;
-  onTopic: (t: string) => void; onNote: (t: string) => void; onWrap: () => void; onEnd: () => void;
-  autoAdvance: boolean; onAutoAdvance: (on: boolean) => void; suggestWrap: boolean;
-  cast: { guest: Guest; poster: string; status: string }[]; statusOf: (id: string) => string | null;
-  inventions: InventionView[]; canInvite: boolean; onInvite: (description: string) => void;
-  autoBook: boolean; onAutoBook: (on: boolean) => void;
+function Console({ topics, used, disabled, onTopic, onCommand, commandReply, onWrap, onEnd, autoAdvance, onAutoAdvance, autoBook, onAutoBook, suggestWrap, cast, statusOf, inventions }: {
+  topics: string[]; used: Set<string>; disabled: boolean;
+  onTopic: (t: string) => void; onCommand: (text: string) => void; commandReply: string; onWrap: () => void; onEnd: () => void;
+  autoAdvance: boolean; onAutoAdvance: (on: boolean) => void; autoBook: boolean; onAutoBook: (on: boolean) => void; suggestWrap: boolean;
+  cast: { guest: Guest; poster: string; status: string }[]; statusOf: (id: string) => string | null; inventions: InventionView[];
 }) {
-  const [invite, setInvite] = useState('');
-  const [topic, setTopic] = useState('');
-  const [note, setNote] = useState('');
-  const extra = [...used].filter((t) => !topics.includes(t));
+  const [command, setCommand] = useState('');
+  const order = [...used];
+  const current = order.at(-1);
+  const all = [...topics, ...order.filter((t) => !topics.includes(t))];
+  const autopilot = autoAdvance && autoBook;
   return (
-    <div className="nc-console">
-      <div className="nc-group">
-        <h3>Guests</h3>
-        <label className="gr-auto">
-          <input type="checkbox" checked={autoBook} onChange={(e) => onAutoBook(e.target.checked)} />
-          <span>Auto-book: the show books the next guest when the conversation calls for one</span>
+    <div className="nc-console gr-console">
+      <div className="gr-pilot">
+        <label className="gr-switch">
+          <input type="checkbox" checked={autopilot} onChange={(e) => { onAutoAdvance(e.target.checked); onAutoBook(e.target.checked); }} />
+          <span className="gr-switch-track" aria-hidden="true" />
+          <span><strong>Autopilot</strong><small>{autopilot ? 'Topics and guests move on their own' : autoAdvance || autoBook ? 'Partly on' : 'Everything waits for you'}</small></span>
         </label>
+        <details className="gr-settings">
+          <summary aria-label="Autopilot settings">Settings</summary>
+          <label className="gr-auto"><input type="checkbox" checked={autoAdvance} onChange={(e) => onAutoAdvance(e.target.checked)} /><span>Next topic when this one has run its course</span></label>
+          <label className="gr-auto"><input type="checkbox" checked={autoBook} onChange={(e) => onAutoBook(e.target.checked)} /><span>Book the next guest when the conversation calls for one</span></label>
+        </details>
+      </div>
+
+      <section className="gr-section">
+        <h3>Guests</h3>
         {cast.map((c) => (
           <div key={c.guest.id} className={`gr-progress ${c.status === 'On air' ? 'is-on-air' : c.status === 'Gone' ? 'is-gone' : ''}`}>
             <img src={c.poster} alt="" />
-            <div>
-              <strong>{c.guest.name}</strong>
-              <small>{c.guest.billing}</small>
-              <span className="gr-status">{c.status}</span>
-            </div>
+            <div><strong>{c.guest.name}</strong><small>{c.guest.billing}</small><span className="gr-status">{c.status}</span></div>
           </div>
         ))}
         {inventions.map((v) => <GuestProgress key={v.id} view={v} status={statusOf(v.id)} />)}
-        <form className="nc-row" onSubmit={(e) => { e.preventDefault(); const t = invite.trim(); if (t.length >= 3 && canInvite) { onInvite(t); setInvite(''); } }}>
-          <input className="nc-input" value={invite} onChange={(e) => setInvite(e.target.value)} disabled={!canInvite}
-            placeholder={canInvite ? 'Invite a guest, e.g. the actor who plays the queen' : 'Once a guest is on, invite the next one here'} aria-label="Invite a guest" />
-          <button type="submit" className="nc-btn" disabled={!canInvite || invite.trim().length < 3}>Invite</button>
+      </section>
+
+      <section className="gr-section">
+        <h3>Rundown</h3>
+        <ol className="gr-rundown">
+          {all.map((t) => {
+            const state = t === current ? 'is-current' : used.has(t) ? 'is-done' : 'is-next';
+            return (
+              <li key={t} className={state}>
+                <button type="button" disabled={disabled || state !== 'is-next'} onClick={() => onTopic(t)} title={state === 'is-next' ? 'Move to this topic' : undefined}>{t}</button>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+
+      <section className="gr-section">
+        <h3>Tell the booth</h3>
+        <form className="gr-command" onSubmit={(e) => { e.preventDefault(); const t = command.trim(); if (t) { onCommand(t); setCommand(''); } }}>
+          <input className="nc-input" value={command} onChange={(e) => setCommand(e.target.value)} disabled={disabled} aria-label="Tell the booth"
+            placeholder="Invite the director · talk about the glass palace · ask about the hardest costume" />
+          <button type="submit" className="nc-btn" disabled={disabled || !command.trim()}>Send</button>
         </form>
-      </div>
-      <div className="nc-group">
-        <h3>Next topic for Jada</h3>
-        <label className="gr-auto">
-          <input type="checkbox" checked={autoAdvance} onChange={(e) => onAutoAdvance(e.target.checked)} />
-          <span>Auto-advance: the next topic when this one has run its course</span>
-        </label>
-        <ul className="nc-rundown">
-          {[...topics, ...extra].map((t) => (
-            <li key={t}>
-              <button type="button" className={`nc-chip ${used.has(t) ? 'is-used' : ''}`} disabled={disabled} onClick={() => onTopic(t)}>
-                {used.has(t) && <span aria-label="sent">✓ </span>}{t}
-              </button>
-            </li>
-          ))}
-        </ul>
-        <form className="nc-row" onSubmit={(e) => { e.preventDefault(); const t = topic.trim(); if (t) { onTopic(t); setTopic(''); } }}>
-          <input className="nc-input" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder={`A new topic to raise with ${guestFirst}`} disabled={disabled} aria-label="New topic" />
-          <button type="submit" className="nc-btn" disabled={disabled || !topic.trim()}>Send</button>
-        </form>
-      </div>
-      <div className="nc-group">
-        <h3>A note for Jada</h3>
-        <form className="nc-row" onSubmit={(e) => { e.preventDefault(); const t = note.trim(); if (t) { onNote(t); setNote(''); } }}>
-          <input className="nc-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. ask about the hardest costume" disabled={disabled} aria-label="Note for Jada" />
-          <button type="submit" className="nc-btn" disabled={disabled || !note.trim()}>Send</button>
-        </form>
-        <p className="nc-hint">Topics and notes reach Jada on her next turn: she reacts to {guestFirst}, then moves on.</p>
-      </div>
-      <div className="nc-actions">
+        {commandReply && <p className="nc-hint">{commandReply}</p>}
+      </section>
+
+      <div className="nc-actions gr-actions">
         <button type="button" className={`nc-btn ${suggestWrap ? 'is-suggested' : ''}`} disabled={disabled} onClick={onWrap}>Wrap it up</button>
         <button type="button" className="nc-btn nc-danger" onClick={onEnd}>End the show</button>
       </div>
@@ -1011,25 +1049,32 @@ function GuestProgress({ view, status }: { view: InventionView; status?: string 
   );
 }
 
-function Transcript({ log, live }: { log: LogLine[]; live: Partial<Record<Role, { name?: string; text: string }>> }) {
+function Transcript({ log, live, poster }: { log: LogLine[]; live: Partial<Record<Role, { name?: string; text: string }>>; poster: (who: Role, name?: string) => string }) {
   const list = useRef<HTMLOListElement>(null);
   const liveText = (live.host?.text ?? '') + (live.guest?.text ?? '');
   useEffect(() => { list.current?.scrollTo({ top: list.current.scrollHeight, behavior: 'smooth' }); }, [log.length, liveText.length]);
+  const speaker = (who: Role, name: string | undefined, text: string, key: string, isLive = false) => (
+    <li key={key} className={`gr-turn is-${who} ${isLive ? 'is-live' : ''}`}>
+      <img src={poster(who, name)} alt="" />
+      <div>
+        <span className="gr-turn-name">{who === 'host' ? 'Jada' : firstName(name ?? 'Guest')}</span>
+        <p>{text}{isLive && <span className="gr-caret" aria-hidden="true" />}</p>
+      </div>
+    </li>
+  );
   return (
-    <ol className="nc-lines" ref={list} aria-live="polite">
+    <ol className="nc-lines gr-lines" ref={list} aria-live="polite">
       {log.length === 0 && <li className="nc-empty">The show starts when Jada does.</li>}
-      {log.map((line) => (
-        <li key={line.id} className={`nc-line is-${line.who}`}>
-          <span className="nc-who">{line.who === 'host' ? 'Jada' : line.who === 'guest' ? firstName(line.name ?? 'Guest') : 'Booth'}</span>
-          <span>{line.text}</span>
-        </li>
-      ))}
-      {(['host', 'guest'] as Role[]).map((role) => live[role]?.text.trim() && (
-        <li key={`live-${role}`} className={`nc-line is-${role} is-live`}>
-          <span className="nc-who">{role === 'host' ? 'Jada' : firstName(live[role]!.name ?? 'Guest')}</span>
-          <span>{live[role]!.text.trim()}<span className="gr-caret" aria-hidden="true" /></span>
-        </li>
-      ))}
+      {log.map((line) => (line.who === 'booth'
+        ? <li key={line.id} className="gr-note">{line.text}</li>
+        : speaker(line.who, line.name, line.text, String(line.id))))}
+      {(['host', 'guest'] as Role[]).map((role) => live[role]?.text.trim() && speaker(role, live[role]!.name, live[role]!.text.trim(), `live-${role}`, true))}
     </ol>
   );
+}
+/** A caption's last words: about two lines' worth, from a word boundary. */
+function captionTail(text: string, max = 150) {
+  if (text.length <= max) return text;
+  const cut = text.slice(-max);
+  return '…' + cut.slice(cut.indexOf(' ') + 1);
 }

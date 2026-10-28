@@ -376,3 +376,68 @@ button { font: inherit; }
 .gr-caret { display: inline-block; width: .5em; height: 1em; margin-left: 2px; vertical-align: -2px; background: var(--gr-gold); animation: nc-pulse 1s steps(1) infinite; }
 .gr-progress.is-building .gr-status { color: var(--gr-gold-hi); }
 .gr-progress.is-building .gr-status::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--gr-gold); animation: nc-pulse 1.2s ease-in-out infinite; }
+
+/* ---------- Captions on the video: who is speaking, and their last words ---------- */
+.gr-caption { position: absolute; left: 50%; bottom: 11%; transform: translateX(-50%); z-index: 9; max-width: 72%; display: flex; gap: .9cqw; align-items: baseline;
+  padding: .6cqw 1.3cqw .7cqw; border-radius: .7cqw; background: rgba(10, 8, 5, .8); backdrop-filter: blur(4px); box-shadow: 0 .4cqw 1.6cqw rgba(0, 0, 0, .45);
+  font: 500 1.45cqw/1.4 var(--nc-body); color: #fbf6ea; animation: gr-fade-in .3s ease both; }
+.gr-caption-name { flex: none; font: 700 .95cqw/1 var(--nc-display); letter-spacing: .1em; text-transform: uppercase; color: var(--gr-gold-hi); }
+.gr-caption.is-guest .gr-caption-name { color: #9fdcc0; }
+
+/* ---------- Folding the booth and the transcript away; full screen ---------- */
+.gr-fullscreen { padding: 4px 10px; font-size: 15px; line-height: 1; }
+.nc-booth[hidden] { display: none; }
+.nc-booth-head { align-items: center; }
+.gr-fold { margin-left: auto; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; border: 1px solid var(--nc-line); background: transparent; color: var(--nc-muted); cursor: pointer; font-size: 15px; }
+.gr-fold:hover { color: var(--gr-gold-hi); border-color: var(--gr-gold); }
+.gr-rail { grid-area: booth; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px 6px; border-radius: 18px; border: 1px solid var(--nc-line); background: var(--nc-panel); color: var(--nc-ink); cursor: pointer; }
+.gr-rail-label { writing-mode: vertical-rl; font: 700 12px var(--nc-body); letter-spacing: .14em; text-transform: uppercase; color: var(--gr-gold); }
+.gr-rail-chip { writing-mode: vertical-rl; font-size: 11px; color: var(--nc-muted); }
+.gr-transcript-head { display: flex; align-items: center; gap: 8px; }
+@media (min-width: 981px) {
+  .gr.is-show .nc-show.is-booth-closed { grid-template-columns: minmax(0, 1fr) 44px; }
+  .gr.is-show .nc-show.is-transcript-closed { grid-template-rows: auto auto; }
+  .gr.is-show .nc-show.is-transcript-closed .gr-program { width: min(100%, calc((100vh - 150px) * 16 / 9)); }
+}
+
+/* ---------- The booth: Autopilot, guests, rundown, one command box ---------- */
+.gr-console { gap: 18px; }
+.gr-section { display: grid; gap: 8px; }
+.gr-section h3, .gr-pilot small { font: 600 11px var(--nc-body); letter-spacing: .14em; text-transform: uppercase; color: var(--nc-muted); }
+.gr-pilot { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(201, 169, 97, .08); }
+.gr-switch { display: flex; align-items: center; gap: 10px; cursor: pointer; flex: 1; }
+.gr-switch input { position: absolute; opacity: 0; pointer-events: none; }
+.gr-switch-track { position: relative; width: 36px; height: 20px; flex: none; border-radius: 999px; background: rgba(255, 255, 255, .16); transition: background .2s; }
+.gr-switch-track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .2s; }
+.gr-switch input:checked + .gr-switch-track { background: var(--gr-gold); }
+.gr-switch input:checked + .gr-switch-track::after { transform: translateX(16px); }
+.gr-switch input:focus-visible + .gr-switch-track { outline: 2px solid var(--gr-gold-hi); outline-offset: 2px; }
+.gr-switch strong { display: block; font-size: 14px; }
+.gr-pilot small { letter-spacing: .04em; text-transform: none; font-weight: 400; font-size: 12px; }
+.gr-settings summary { cursor: pointer; font-size: 12px; color: var(--nc-muted); list-style: none; }
+.gr-settings[open] { position: relative; }
+.gr-settings[open] > label { position: relative; z-index: 2; margin-top: 6px; }
+.gr-rundown { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.gr-rundown li { position: relative; padding-left: 20px; }
+.gr-rundown li::before { content: "○"; position: absolute; left: 0; top: 6px; font-size: 11px; color: var(--nc-muted); }
+.gr-rundown li.is-done::before { content: "✓"; color: #7ee0a3; }
+.gr-rundown li.is-current::before { content: "●"; color: var(--gr-gold); }
+.gr-rundown button { width: 100%; text-align: left; padding: 5px 8px; border-radius: 8px; border: 0; background: transparent; color: var(--nc-ink); font: 14px/1.35 var(--nc-body); cursor: pointer; }
+.gr-rundown li.is-done button { color: var(--nc-muted); }
+.gr-rundown li.is-current button { color: var(--gr-gold-hi); font-weight: 600; background: rgba(201, 169, 97, .08); }
+.gr-rundown li.is-next button:hover:not(:disabled) { background: rgba(255, 255, 255, .05); }
+.gr-rundown button:disabled { cursor: default; }
+.gr-command { display: flex; gap: 8px; }
+.gr-command .nc-input { flex: 1; min-width: 0; }
+.gr-actions { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--nc-line); }
+@media (min-width: 981px) { .gr.is-show .nc-booth { display: flex; flex-direction: column; } .gr.is-show .nc-booth[hidden] { display: none; } .gr.is-show .gr-console { flex: 1; display: flex; flex-direction: column; } }
+
+/* ---------- The transcript: who said it, plainly; the booth's own lines set apart ---------- */
+.gr-lines { gap: 12px; }
+.gr-turn { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; }
+.gr-turn img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; object-position: center 25%; }
+.gr-turn-name { font: 700 11px var(--nc-body); letter-spacing: .12em; text-transform: uppercase; color: var(--gr-gold); }
+.gr-turn.is-guest .gr-turn-name { color: #9fdcc0; }
+.gr-turn p { margin: 2px 0 0; font-size: 15px; line-height: 1.5; color: var(--nc-ink); }
+.gr-turn.is-live p { color: #fff; }
+.gr-note { justify-self: center; max-width: 92%; padding: 3px 12px; border-radius: 999px; background: rgba(255, 255, 255, .05); font-size: 12px; color: var(--nc-muted); text-align: center; }

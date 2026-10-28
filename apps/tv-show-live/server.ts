@@ -217,19 +217,20 @@ const app: AppServer = {
       }
     });
 
-    // The producer's note, read for an invitation: { invite, description }
+    // The booth's command box, read for what the producer means: { kind: invite | topic | note, description, topic }
     router.post('/show/:show/intent', async (req, res) => {
       if (!shows.get(req.params.show)) return void res.status(404).json({ error: 'not_found' });
       const text = String(req.body?.text ?? '').trim().slice(0, 500);
       if (!text) return void res.status(400).json({ error: 'bad_request' });
       try {
-        const r = await structured<{ invite: boolean; description: string }>({
+        const r = await structured<{ kind: string; description: string; topic: string }>({
           system: INTENT_SYSTEM,
           user: text,
-          schema: { type: 'object', properties: { invite: { type: 'boolean' }, description: { type: 'string' } }, required: ['invite', 'description'] },
+          schema: { type: 'object', properties: { kind: { type: 'string', enum: ['invite', 'topic', 'note'] }, description: { type: 'string' }, topic: { type: 'string' } }, required: ['kind', 'description', 'topic'] },
           temperature: 0,
         });
-        res.json({ invite: r.invite === true, description: String(r.description ?? '').slice(0, 300) });
+        const kind = ['invite', 'topic', 'note'].includes(r.kind) ? r.kind : 'note';
+        res.json({ kind, description: String(r.description ?? '').slice(0, 300), topic: String(r.topic ?? '').slice(0, 120) });
       } catch (err) {
         console.warn('[%s] intent failed: %s', ID, (err as Error).message);
         res.status(502).json({ error: 'intent_failed' });

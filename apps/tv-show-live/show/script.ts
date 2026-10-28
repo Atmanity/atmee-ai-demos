@@ -108,13 +108,16 @@ export function bookerUser(guests: string[], lines: { who: 'host' | 'guest'; tex
 }
 
 /**
- * The producer's note, read for an invitation: "we need to invite the camera
- * man too" is a booking, not something for the host to say.
+ * The booth's one command box, read for what the producer means: a new guest
+ * to bring on ("we need to invite the camera man too"), a topic to move to
+ * ("the glass palace"), or a note for the host's next turn ("ask about the
+ * hardest costume").
  */
 export const INTENT_SYSTEM = [
-  `You read what the producer of ${SHOW}, a live TV talk show about the art of film, typed into the booth's note box; tonight's film is ${FILM.title}.`,
-  'Say invite = true when the note asks to bring a new guest onto the show (invite, book, get, bring on, have someone join), and false for anything else (a question for the host to ask, a direction, a remark).',
-  "When invite is true, description is the guest in one sentence, as one of the film's makers, from the producer's words (\"the camera man\" is the cinematographer of the film), with one vivid trait.",
+  `You read what the producer of ${SHOW}, a live TV talk show about the art of film, typed into the booth; tonight's film is ${FILM.title}.`,
+  "kind = invite when it asks to bring a new guest onto the show (invite, book, get, bring on, have someone join); description is then that guest in one sentence, as one of the film's makers, from the producer's words (\"the camera man\" is the film's cinematographer), with one vivid trait.",
+  'kind = topic when it names a subject to move the conversation to (a few words, or "talk about ..."); topic is then a short title for it, three to six words.',
+  'kind = note for anything else: a question for the host to ask, a direction, a remark.',
 ].join(' ');
 
 /** A stalled conversation: the host picks it back up. */
