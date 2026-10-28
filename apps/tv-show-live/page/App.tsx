@@ -708,7 +708,7 @@ export function App() {
               </div>
             ) : (
               <Console topics={topics} used={used} disabled={stage !== 'on-air'} onTopic={(t) => sendTopic(t)} onNote={sendNote}
-                onWrap={wrap} onEnd={endShow} guestFirst={firstName(guest.name)} shotMode={shotMode} onShot={chooseShot}
+                onWrap={wrap} onEnd={endShow} guestFirst={firstName(guest.name)}
                 autoAdvance={autoAdvance} onAutoAdvance={setAutoAdvance} suggestWrap={suggestWrap}
                 cast={castOnShow ? [{ guest: castOnShow, poster: PORTRAITS[castOnShow.id], status: statusOf(castOnShow.id) ?? 'Waiting' }] : []}
                 statusOf={statusOf}
@@ -913,9 +913,9 @@ function Lobby({ guestId, setGuestId, inventText, setInventText, topics, setTopi
   );
 }
 
-function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guestFirst, shotMode, onShot, autoAdvance, onAutoAdvance, suggestWrap, cast, statusOf, inventions, canInvite, onInvite, autoBook, onAutoBook }: {
-  topics: string[]; used: Set<string>; disabled: boolean; guestFirst: string; shotMode: ShotMode;
-  onTopic: (t: string) => void; onNote: (t: string) => void; onWrap: () => void; onEnd: () => void; onShot: (m: ShotMode) => void;
+function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guestFirst, autoAdvance, onAutoAdvance, suggestWrap, cast, statusOf, inventions, canInvite, onInvite, autoBook, onAutoBook }: {
+  topics: string[]; used: Set<string>; disabled: boolean; guestFirst: string;
+  onTopic: (t: string) => void; onNote: (t: string) => void; onWrap: () => void; onEnd: () => void;
   autoAdvance: boolean; onAutoAdvance: (on: boolean) => void; suggestWrap: boolean;
   cast: { guest: Guest; poster: string; status: string }[]; statusOf: (id: string) => string | null;
   inventions: InventionView[]; canInvite: boolean; onInvite: (description: string) => void;
@@ -925,17 +925,8 @@ function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guest
   const [topic, setTopic] = useState('');
   const [note, setNote] = useState('');
   const extra = [...used].filter((t) => !topics.includes(t));
-  const cams: [ShotMode, string][] = [['auto', 'Auto'], ['host', 'Jada'], ['guest', guestFirst], ['two', 'Both']];
   return (
     <div className="nc-console">
-      <div className="nc-group">
-        <h3>Shot</h3>
-        <div className="gr-cams" role="radiogroup" aria-label="Shot">
-          {cams.map(([m, label]) => (
-            <button key={m} type="button" role="radio" aria-checked={shotMode === m} className={`nc-chip ${shotMode === m ? 'is-on' : ''}`} onClick={() => onShot(m)}>{label}</button>
-          ))}
-        </div>
-      </div>
       <div className="nc-group">
         <h3>Guests</h3>
         <label className="gr-auto">
@@ -995,24 +986,26 @@ function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guest
   );
 }
 
-// A guest being invented, step by step, as the booth follows it: written, drawn, voiced, built.
-const STEPS: [keyof InventionView['steps'], string][] = [['character', 'Character'], ['portrait', 'Portrait'], ['voice', 'Voice'], ['avatar', 'Avatar build']];
+// A guest being invented, as the booth follows it: one status, the step it is at (written, drawn
+// and voiced, built), then where the guest is once built (camera, on air, gone).
+const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+function buildStatus(view: InventionView): string {
+  if (view.error) return `Failed: ${view.error}`;
+  if (view.ready) return 'Ready';
+  const st = (k: keyof InventionView['steps']) => view.steps[k]?.status;
+  const doing = st('avatar') === 'running' ? 'Building avatar' : st('portrait') === 'running' || st('voice') === 'running' ? 'Portrait & voice' : 'Writing the character';
+  return `${doing} · ${mmss(view.seconds)}`;
+}
 function GuestProgress({ view, status }: { view: InventionView; status?: string | null }) {
   const g = view.guest;
+  const shown = status ?? buildStatus(view);
   return (
-    <div className={`gr-progress ${status === 'On air' ? 'is-on-air' : status === 'Gone' ? 'is-gone' : view.ready ? 'is-ready' : view.error ? 'is-failed' : ''}`}>
+    <div className={`gr-progress ${status === 'On air' ? 'is-on-air' : status === 'Gone' ? 'is-gone' : view.error ? 'is-failed' : view.ready ? 'is-ready' : 'is-building'}`}>
       {view.portrait ? <img src={view.portrait} alt="" /> : <span className="gr-progress-blank" aria-hidden="true">✦</span>}
       <div>
         <strong>{g ? g.name : 'Inventing a guest…'}</strong>
         {g && <small>{g.billing}</small>}
-        {status && <span className="gr-status">{status}</span>}
-        <ol>
-          {STEPS.map(([k, label]) => {
-            const st = view.steps[k]?.status ?? 'waiting';
-            return <li key={k} className={`is-${st}`}>{label}{view.steps[k]?.ms ? ` · ${Math.round(view.steps[k]!.ms! / 1000)} s` : st === 'running' ? '…' : ''}</li>;
-          })}
-          <li className={view.ready ? 'is-done' : 'is-waiting'}>{view.ready ? `Ready · ${view.seconds} s` : view.error ? `Failed: ${view.error}` : `${view.seconds} s so far`}</li>
-        </ol>
+        <span className="gr-status">{shown}</span>
       </div>
     </div>
   );

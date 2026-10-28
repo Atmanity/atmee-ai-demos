@@ -374,3 +374,5 @@ button { font: inherit; }
 /* The line being said: it grows word by word, then becomes a line of the transcript. */
 .nc-line.is-live > span:last-child { color: var(--nc-ink); }
 .gr-caret { display: inline-block; width: .5em; height: 1em; margin-left: 2px; vertical-align: -2px; background: var(--gr-gold); animation: nc-pulse 1s steps(1) infinite; }
+.gr-progress.is-building .gr-status { color: var(--gr-gold-hi); }
+.gr-progress.is-building .gr-status::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--gr-gold); animation: nc-pulse 1.2s ease-in-out infinite; }
