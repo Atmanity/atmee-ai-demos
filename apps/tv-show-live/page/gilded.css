@@ -233,7 +233,9 @@ button { font: inherit; }
   box-shadow: 0 1.4cqw 3cqw rgba(0, 0, 0, .55), 0 0 0 .12cqw rgba(216, 177, 92, .35);
   transition: left .6s cubic-bezier(.3, .7, .2, 1), top .6s cubic-bezier(.3, .7, .2, 1), width .6s cubic-bezier(.3, .7, .2, 1), opacity .45s; }
 .gr-cam { position: absolute; inset: 0; transition: opacity .22s ease; }
-.gr-box.is-side .gr-cam.is-front, .gr-box.is-front .gr-cam.is-side { opacity: 0; }
+/* Jada's close-up is the page's own camera: the same render, pushed in on her face. */
+.gr-box.is-host .gr-cam { transform-origin: 50% 30%; transition: transform .7s cubic-bezier(.3, .7, .2, 1); }
+.gr-box.is-host.is-close .gr-cam { transform: scale(1.45); }
 .ll-face { position: absolute; inset: 0; overflow: hidden; background: transparent; }
 .ll-face img, .ll-face video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 

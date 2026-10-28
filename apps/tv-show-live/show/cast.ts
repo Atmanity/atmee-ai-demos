@@ -1,8 +1,9 @@
 // The Gilded Reel's cast and tonight's film. Everything here is invented: the
 // show, the host, the film AMBERFALL and its designer.
 //
-// Jada has two cameras, two avatars of the same set: camera 1 facing the lens
-// (studio/cam1.jpg), camera 2 turned toward her guest (studio/cam2.jpg).
+// Jada's face on screen is her camera-1 avatar, facing the lens (studio/cam1.jpg);
+// her conversation runs on the host avatar. The page frames that one render as
+// a medium shot or a close-up.
 // AVATAR_TV_SHOW_LIVE swaps the host (avatar.json), AVATAR_TV_SHOW_LIVE_GUEST_<ID> a guest.
 export interface Guest {
   id: string;
@@ -17,8 +18,8 @@ export interface Guest {
 export const SHOW = 'The Gilded Reel';
 export const HOST = { name: 'Jada Monroe', billing: 'Host, The Gilded Reel' };
 /**
- * Camera 1: Jada facing the lens, for when she speaks to the viewers. A face
- * only (a render of her voice; her conversation runs on the host avatar).
+ * Jada's face: facing the lens. A face only (a render of her voice; her
+ * conversation runs on the host avatar).
  * AVATAR_TV_SHOW_LIVE_FRONT swaps it.
  */
 export const HOST_FRONT_AVATAR = 'bdaf5bd3-1698-4bc2-abfe-a26c69156794';

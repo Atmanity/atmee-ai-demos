@@ -1,9 +1,9 @@
-// The director: which shot is on air. Every shot is a whole render (Jada's two
-// cameras, the guest's), never a face set into a photograph, so the renderer's
-// own camera drift never shows a seam.
+// The director: which shot is on air. The cameras are the page's own framings
+// of two renders, Jada's and the guest's, never a face set into a photograph, so
+// the renderer's own camera drift never shows a seam.
 //
-// In auto, before the guest is on, Jada is on camera 1 (to the lens). On air it
-// follows the speaker: Jada on camera 2 (turned toward her guest), the guest on
+// In auto, before the guest is on, Jada is on camera 1 (a medium shot). On air
+// it follows the speaker: Jada on camera 2 (a close-up), the guest on
 // theirs, both together when they talk over each other. A shot holds at least
 // HOLD_MS, so a quick "mm" does not cut away. For the goodbyes it is the
 // two-shot. The producer can take over: Jada, the guest, or the two-shot.
