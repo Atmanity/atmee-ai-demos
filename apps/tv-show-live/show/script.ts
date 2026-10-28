@@ -52,9 +52,16 @@ export const holdMoreCue = (guest: Guest | null) =>
 export const inviteNowCue = (guest: Guest) =>
   `The line is through: tell the viewers ${guest.name} is joining, and bring ${firstName(guest.name)} in on the screen now. Do not greet ${firstName(guest.name)} yet: ${firstName(guest.name)} will say hello first.`;
 
-/** The producer brings on a new guest mid-show: the host thanks the one on air, then brings the next one in. */
-export const handoverCue = (from: Guest, to: Guest) =>
-  `Wrap up with ${firstName(from.name)} now: thank ${firstName(from.name)} warmly in one sentence and say goodbye. Then tell the viewers who is joining next, ${to.name}, ${to.billing}, and that you are bringing ${firstName(to.name)} in on the screen. Do not greet ${firstName(to.name)} yet: ${firstName(to.name)} will say hello first.`;
+/**
+ * A new guest mid-show, as a real show does it: the host says goodbye to the
+ * guest on air, the guest says goodbye back, the host turns to the viewers and
+ * introduces the next guest, who then says hello.
+ */
+export const farewellCue = (from: Guest) =>
+  `It is time to say goodbye to ${firstName(from.name)}: thank ${firstName(from.name)} warmly for coming on, in one or two sentences, and say goodbye. Do not mention any other guest yet.`;
+export const guestFarewellCue = `${HOST.name} is saying goodbye to you: say a short, warm goodbye to her and the viewers, in one or two sentences.`;
+export const bridgeCue = (from: Guest, to: Guest) =>
+  `${firstName(from.name)} has left the call. Turn to the viewers: one or two sentences on what ${firstName(from.name)} shared, then tell them who is joining next, ${to.name}, ${to.billing}, and that you are bringing ${firstName(to.name)} in on the screen now. Do not greet ${firstName(to.name)} yet: ${firstName(to.name)} will say hello first.`;
 
 /** Once the guest is on the screen: welcome them, then the first topic. */
 export const welcomeCue = (guest: Guest, topic: string) =>

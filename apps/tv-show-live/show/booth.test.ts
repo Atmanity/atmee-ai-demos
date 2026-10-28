@@ -291,23 +291,41 @@ describe('a guest still being made', () => {
 });
 
 describe('a handover to the next guest', () => {
-  it('directs the host, and hands over once she has spoken it', () => {
+  const steps = () => ({ farewell: 'FAREWELL', goodbye: 'GUEST BYE', bridge: 'BRIDGE', retire: vi.fn(), bringOn: vi.fn() });
+
+  it('runs farewell, the guest goodbye, retire, bridge, then brings the next guest on', () => {
     const s = onAir();
-    const then = vi.fn();
-    s.booth.handover('THANK AND BRING ON', then);
-    expect(s.sent).toEqual([{ to: 'host', kind: 'directive', text: 'THANK AND BRING ON' }]);
-    s.turn('guest');
-    expect(then).not.toHaveBeenCalled();
-    s.turn('host');
-    expect(then).toHaveBeenCalledOnce();
+    const h = steps();
+    s.booth.handover(h);
+    expect(s.sent).toEqual([{ to: 'host', kind: 'directive', text: 'FAREWELL' }]);
+    s.turn('host');                                   // her goodbye
+    expect(s.sent).toContainEqual({ to: 'guest', kind: 'directive', text: 'GUEST BYE' });
+    expect(h.retire).not.toHaveBeenCalled();
+    s.turn('guest');                                  // theirs
+    expect(h.retire).toHaveBeenCalledOnce();
+    expect(s.sent.at(-1)).toEqual({ to: 'host', kind: 'commentary', text: 'BRIDGE' });
+    expect(h.bringOn).not.toHaveBeenCalled();
+    s.turn('host');                                   // the bridge and the introduction
+    expect(h.bringOn).toHaveBeenCalledOnce();
   });
 
-  it('is dropped by the wrap', () => {
+  it('moves on when the guest does not say goodbye', () => {
     const s = onAir();
-    const then = vi.fn();
-    s.booth.handover('THANK AND BRING ON', then);
+    const h = steps();
+    s.booth.handover(h);
+    s.turn('host');
+    vi.advanceTimersByTime(GOODBYE_WAIT_MS);
+    expect(h.retire).toHaveBeenCalledOnce();
+    expect(s.sent.at(-1)).toEqual({ to: 'host', kind: 'commentary', text: 'BRIDGE' });
+  });
+
+  it('is dropped by the wrap before it has begun', () => {
+    const s = onAir();
+    const h = steps();
+    s.booth.handover(h);
     s.booth.wrap();
     s.turn('host');
-    expect(then).not.toHaveBeenCalled();
+    expect(h.retire).not.toHaveBeenCalled();
+    expect(h.bringOn).not.toHaveBeenCalled();
   });
 });

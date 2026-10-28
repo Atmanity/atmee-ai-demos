@@ -356,3 +356,18 @@ button { font: inherit; }
 .gr-progress.is-on-air { border-color: rgba(255, 90, 80, .6); }
 .gr-progress.is-on-air .gr-status { background: var(--nc-red); color: #fff; }
 .gr-progress.is-gone { opacity: .55; }
+
+/* During a show, on a wide screen, nothing scrolls the page: the program with what went out on
+   air below it, and the booth beside them at full height (scrolling inside itself if it must). */
+@media (min-width: 981px) {
+  .gr.nc-app.is-show { height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; padding-bottom: 12px; overflow: hidden; }
+  .gr.is-show .nc-show { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); grid-template-areas: "program booth" "transcript booth"; grid-template-rows: auto minmax(0, 1fr); align-items: stretch; }
+  /* The program leaves the history at least ~240px below it. */
+  .gr.is-show .gr-program { width: min(100%, calc((100vh - 340px) * 16 / 9)); justify-self: center; align-self: start; }
+  .gr.is-show .nc-booth { overflow-y: auto; min-height: 0; }
+  .gr.is-show .nc-transcript { max-height: none; min-height: 0; }
+  .gr.is-show .nc-console { gap: 12px; }
+  .gr.is-show .nc-group { gap: 6px; }
+  .gr.is-show .nc-chip { padding: 5px 10px; font-size: 13px; }
+  .gr.is-show .gr-progress { padding: 8px; margin-bottom: 6px; }
+}

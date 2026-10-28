@@ -23,8 +23,11 @@
 // follows it in its next reply and never mentions it. It is cleared once the
 // host has finished a turn that began after it. When the conversation has
 // stalled (both quiet for IDLE_MS), a cue is spoken at once as commentary.
-// A handover (a new guest) is a cue whose turn, once spoken, hands the show to
-// the page: it ends the old guest's line and puts the new one through.
+// A handover to a new guest runs as a real show's would: the host says goodbye
+// to the guest on air (a directive on her next turn); the guest says goodbye
+// back (a directive on theirs; GOODBYE_WAIT_MS at most); the page retires
+// them; the host turns to the viewers and introduces the next guest
+// (commentary); and once she has, the page puts the new guest through.
 //
 // The texts may be functions, read when they are used: an invented guest's
 // name is only known once it has been written, after the show has begun.
@@ -78,6 +81,19 @@ export interface BoothOptions {
   now?: () => number;
 }
 
+export interface HandoverSteps {
+  /** The host's goodbye to the guest on air. */
+  farewell: string;
+  /** The guest's goodbye back. */
+  goodbye: string;
+  /** The host to the viewers: a word, then the next guest introduced (not greeted). */
+  bridge: string;
+  /** The guest has said goodbye: end their line and face. */
+  retire(): void;
+  /** The host has introduced the next guest: put them through. */
+  bringOn(): void;
+}
+
 export interface Booth {
   readonly stage: Stage;
   hostLive(): void;
@@ -86,8 +102,8 @@ export interface Booth {
   trailerDone(): void;
   /** The guest the booth was holding for is ready to be put through. */
   guestReady(): void;
-  /** On air: the host's next turn is this (thank the guest, bring on the next); when it is spoken, then(). */
-  handover(text: string, then: () => void): void;
+  /** On air: hand over to the next guest, step by step (see the top of this file). */
+  handover(steps: HandoverSteps): void;
   speaking(role: Role, on: boolean): void;
   cue(text: string): void;
   wrap(): void;
@@ -113,7 +129,17 @@ export function createBooth(opts: BoothOptions): Booth {
   let nudges = 0;            // prompts in this stall; any voice resets it
   let goodbyeTimer: ReturnType<typeof setTimeout> | undefined;
   let holdTimer: ReturnType<typeof setTimeout> | undefined;
-  let afterTurn: (() => void) | null = null;   // a handover's next step, once its turn is spoken
+  // A handover under way: its steps, and which one it is at.
+  let handing: { steps: HandoverSteps; at: 'farewell' | 'goodbye' | 'bridge' } | null = null;
+  let handTimer: ReturnType<typeof setTimeout> | undefined;
+  const afterGoodbye = () => {
+    if (!handing || handing.at !== 'goodbye') return;
+    clearTimeout(handTimer);
+    opts.deliver({ to: 'guest', kind: 'directive', text: '' });
+    handing.at = 'bridge';
+    handing.steps.retire();
+    speakUp(handing.steps.bridge);
+  };
 
   const setStage = (next: Stage) => {
     if (stage === next) return;
@@ -219,10 +245,17 @@ export function createBooth(opts: BoothOptions): Booth {
           clearTimeout(speakUpTimer);
           return dial();
         }
-        if (afterTurn && stage === 'on-air') {
-          const then = afterTurn;
-          afterTurn = null;
-          then();
+        if (handing && stage === 'on-air') {
+          if (handing.at === 'farewell') {
+            handing.at = 'goodbye';
+            opts.deliver({ to: 'guest', kind: 'directive', text: handing.steps.goodbye });
+            handTimer = setTimeout(afterGoodbye, GOODBYE_WAIT_MS);
+          } else if (handing.at === 'bridge') {
+            clearTimeout(speakUpTimer);
+            const steps = handing.steps;
+            handing = null;
+            steps.bringOn();
+          }
         }
         if (wrapping && stage === 'on-air') {
           setStage('closing');
@@ -231,6 +264,8 @@ export function createBooth(opts: BoothOptions): Booth {
           goodbyeTimer = setTimeout(() => { if (stage === 'closing') setStage('over'); }, GOODBYE_WAIT_MS);
         }
       }
+    } else if (handing?.at === 'goodbye') {
+      return afterGoodbye();
     } else if (stage === 'closing') {
       clearTimeout(goodbyeTimer);
       if (guestDirected) opts.deliver({ to: 'guest', kind: 'directive', text: '' });
@@ -257,11 +292,11 @@ export function createBooth(opts: BoothOptions): Booth {
     guestReady() {
       if (stage === 'holding') invite(read(opts.inviteNow ?? opts.invite));
     },
-    handover(text, then) {
-      if (stage !== 'on-air' || wrapping || !text.trim()) return;
-      afterTurn = then;
-      direct(text.trim());
-      waiting = text.trim();
+    handover(steps) {
+      if (stage !== 'on-air' || wrapping || handing) return;
+      handing = { steps, at: 'farewell' };
+      direct(steps.farewell);
+      waiting = steps.farewell;
       watchIdle();
     },
     speaking(role, on) {
@@ -292,7 +327,7 @@ export function createBooth(opts: BoothOptions): Booth {
       if (wrapping || stage === 'closing' || stage === 'over') return;
       wrapping = true;
       if (stage !== 'on-air') return setStage('over');
-      afterTurn = null;
+      if (handing?.at === 'farewell') handing = null;   // not yet begun: the wrap takes its place
       direct(read(opts.wrap));
       waiting = read(opts.wrap);
       watchIdle();
@@ -304,6 +339,7 @@ export function createBooth(opts: BoothOptions): Booth {
       clearTimeout(goodbyeTimer);
       clearTimeout(speakUpTimer);
       clearTimeout(holdTimer);
+      clearTimeout(handTimer);
       clearTimeout(turnTimers.host);
       clearTimeout(turnTimers.guest);
     },

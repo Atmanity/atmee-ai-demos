@@ -19,7 +19,7 @@ import { createBooker, type Booker, type Booking } from '../show/booker.ts';
 import { createFloor } from '../show/floor.ts';
 import { createDirector, type Director, type Shot, type ShotMode } from '../show/director.ts';
 import { FILM, GUESTS, HOST, SHOW, firstName, type Guest } from '../show/cast.ts';
-import { filmCue, goodbyeCue, handoverCue, holdCue, holdMoreCue, inviteCue, inviteNowCue, noteCue, nudgeCue, topicCue, welcomeCue, wrapCue } from '../show/script.ts';
+import { bridgeCue, farewellCue, filmCue, goodbyeCue, guestFarewellCue, holdCue, holdMoreCue, inviteCue, inviteNowCue, noteCue, nudgeCue, topicCue, welcomeCue, wrapCue } from '../show/script.ts';
 import { openSpeech, SpeechError, type SpeechLine } from '../show/speech.ts';
 import { createResampler, createVoice } from '../show/voice.ts';
 import cam2 from '../studio/cam2.jpg';
@@ -154,6 +154,8 @@ export function App() {
   // The cast guest the show opened with, if any, for the booth's roster of guests.
   const [castOnShow, setCastOnShow] = useState<Guest | null>(null);
   const [gone, setGone] = useState<string[]>([]);
+  // What the TV says between two guests (the key art, and who is next).
+  const [tvCard, setTvCard] = useState<string | null>(null);
   const [topics, setTopics] = useState<string[]>(castGuest.rundown);
   // Auto-advance (show/advance.ts): the next topic goes to Jada when the conversation says the
   // current one has run its course. The advancer is made per show; refs keep its view current.
@@ -386,7 +388,7 @@ export function App() {
     const earlyView = early ? inventions[early] : undefined;
     const earlyGuest = earlyView?.guest ? { ...earlyView.guest, avatarId: '' } : null;
     goneGuests.current = [];
-    setCastOnShow(cast); setGone([]);
+    setCastOnShow(cast); setGone([]); setTvCard(null);
     setCurrent(cast ?? earlyGuest); setSlots([cast ?? (earlyView?.ready ? earlyGuest : null), null]); setOnTv(0); onTvRef.current = 0; handingOver.current = false;
     if (!early) { setInventions({}); purpose.current = {}; }
     if (earlyGuest) { first = earlyGuest.rundown[0] ?? ''; setTopics(earlyGuest.rundown); }
@@ -536,16 +538,29 @@ export function App() {
     if (!to || !from || !booth.current) return;
     handingOver.current = true;
     addLog('booth', `Bring on ${to.name}`);
-    booth.current.handover(handoverCue(from, to), () => {
-      const show = showRef.current;
-      setTimeout(async () => {
-        if (showRef.current !== show) return;
+    const show = showRef.current;
+    // Each step lands on the faces FACE_LAG_MS after it is said; the page acts once viewers have seen it.
+    const later = (f: () => void | Promise<void>) => setTimeout(() => { if (showRef.current === show) void f(); }, FACE_LAG_MS - 1_500);
+    booth.current.handover({
+      farewell: farewellCue(from),
+      goodbye: guestFarewellCue,
+      bridge: bridgeCue(from, to),
+      // The guest has said goodbye: their line and face end, and the TV says who is next.
+      retire: () => later(async () => {
         const old = onTvRef.current;
-        if (from) { goneGuests.current.push(`${from.name}, ${from.billing}`); setGone((g) => [...g, from.id]); }
+        goneGuests.current.push(`${from.name}, ${from.billing}`);
+        setGone((g) => [...g, from.id]);
+        setTvCard(`Up next: ${to.name}`);
         await lines.current.guest?.end();
         lines.current.guest = undefined;
+        await faces.current[old === 0 ? 'g0' : 'g1'].end();
+      }),
+      // Jada has introduced them: the new guest is put through, and says hello first.
+      bringOn: () => later(async () => {
+        const old = onTvRef.current;
         onTvRef.current = next;
         setOnTv(next);
+        setTvCard(null);
         segment.current = to;
         setCurrent(to);
         setTopics(to.rundown);
@@ -553,12 +568,11 @@ export function App() {
         live.current.used = new Set(firstTopic.current ? [firstTopic.current] : []);
         setUsed(new Set(live.current.used));
         setSuggestWrap(false);
-        await faces.current[old === 0 ? 'g0' : 'g1'].end();
         setSlots((all) => all.map((g, i) => (i === old ? null : g)));
         const line = await openSeat('guest', to);
         if (line && firstTopic.current) booth.current?.cue(welcomeCue(to, firstTopic.current));
         handingOver.current = false;
-      }, FACE_LAG_MS - 1_500);
+      }),
     });
   }
   /** Where a guest of the show is: on air, waiting with their camera, or gone. */
@@ -642,7 +656,7 @@ export function App() {
   const allDone = done(hostFace.phase) && slotFaces.every((f) => done(f.phase));
 
   return (
-    <div className="nc-app gr">
+    <div className={`nc-app gr ${onShow ? 'is-show' : ''}`}>
       <header className="nc-bar">
         <BackToApps avatar={hostFace} name="Jada and the guest" className="nc-back" />
         <Logo />
@@ -659,7 +673,7 @@ export function App() {
           invention={lobbyInvention ? inventions[lobbyInvention] : undefined} onInvent={inventInLobby} />
       ) : (
         <main className="nc-show">
-          <Program host={hostFace} tvFaces={slotFaces} onTv={onTv} posters={slots.map((g) => posterOf(g, inventions))} guestInfo={guest} patched={patched} stage={stage}
+          <Program host={hostFace} tvFaces={slotFaces} onTv={onTv} tvCard={tvCard} posters={slots.map((g) => posterOf(g, inventions))} guestInfo={guest} patched={patched} stage={stage}
             backstage={backstage} shot={shot} trailer={trailer} trailerLeaving={trailerLeaving} onTrailerEnding={trailerEnding} onTrailerDone={trailerDone} />
           <section className="nc-booth" aria-label="The booth">
             <div className="nc-booth-head">
@@ -713,8 +727,8 @@ function Face({ face, poster }: { face: AvatarOnly; poster: string }) {
 // the renderer's drift has no hard line to slip against); the guest plays on
 // the TV. The director's shots are camera
 // moves on that set: wide, pushed in on Jada, pushed in on the TV.
-function Program({ host, tvFaces, onTv, posters, guestInfo, patched, stage, backstage, shot, trailer, trailerLeaving, onTrailerEnding, onTrailerDone }: {
-  host: AvatarOnly; tvFaces: AvatarOnly[]; onTv: number; posters: string[]; guestInfo: Guest; patched: boolean; stage: Stage;
+function Program({ host, tvFaces, onTv, tvCard, posters, guestInfo, patched, stage, backstage, shot, trailer, trailerLeaving, onTrailerEnding, onTrailerDone }: {
+  host: AvatarOnly; tvFaces: AvatarOnly[]; onTv: number; tvCard: string | null; posters: string[]; guestInfo: Guest; patched: boolean; stage: Stage;
   backstage: boolean; shot: Shot; trailer: boolean; trailerLeaving: boolean; onTrailerEnding: () => void; onTrailerDone: () => void;
 }) {
   const live = stage === 'on-air' || stage === 'closing';
@@ -738,12 +752,12 @@ function Program({ host, tvFaces, onTv, posters, guestInfo, patched, stage, back
           <div className={`gr-tv-feed ${patched ? 'is-on' : ''}`}>
             {tvFaces.map((f, i) => <div key={i} className={`gr-tv-slot ${i === onTv ? '' : 'is-off'}`}><Face face={f} poster={posters[i]} /></div>)}
           </div>
-          {!patched && (
+          {(!patched || tvCard) && (
             <div className="gr-tv-card" aria-hidden="true">
               <img src={STILLS[5]} alt="" />
               <span className="gr-kicker">Tonight</span>
               <strong>{FILM.title}</strong>
-              <span>{stage === 'dialing' ? `Calling ${g}…` : 'Behind the frame'}</span>
+              <span>{tvCard ?? (stage === 'dialing' ? `Calling ${g}…` : 'Behind the frame')}</span>
             </div>
           )}
           {patched && <span className="tv-live"><span className="nc-rec" />Live · via video call</span>}
