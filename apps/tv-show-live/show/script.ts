@@ -139,15 +139,29 @@ export const STABLE_PICTURE =
   'motion should be coherent, fluid, stable, and naturally driven by the audio.';
 const prompt = (state: string, setting: string) => `${state}\n\n${setting}\n\n${STABLE_PICTURE}`;
 const STUDIO = 'The setting is a late-night TV studio: walnut wall panels, a brass art-deco fan, a tall window onto a city at night, warm low light.';
+/**
+ * While listening, small reactions, which the page rotates every LISTENING_EVERY_MS so the face
+ * stays alive: only the head and the face move (Causeur's avatar2: a held state changes the head
+ * and the face freely, and keeps the body, arms and hands where the portrait has them, or the
+ * picture breaks down).
+ */
+export const LISTENING_EVERY_MS = 12_000;
+const REACTIONS = [
+  'listening attentively, nodding gently now and then, with a small encouraging smile',
+  'listening with interest, her eyebrows raised slightly, her head tilted a little',
+  'listening thoughtfully, giving a slow single nod',
+];
+const JADA = 'A woman with curly black hair and gold hoop earrings, in an emerald-green blazer over a black crew-neck top, is sitting at a long walnut desk, her body and face turned toward the right of the frame, her forearms resting on the desk';
 export const hostPrompts = {
-  talking: prompt('A woman with curly black hair and gold hoop earrings, in an emerald-green blazer over a black crew-neck top, is sitting at a long walnut desk, her body and face turned toward the right of the frame, her forearms resting on the desk, speaking warmly.', STUDIO),
-  listening: prompt('A woman with curly black hair and gold hoop earrings, in an emerald-green blazer over a black crew-neck top, is sitting at a long walnut desk, her body and face turned toward the right of the frame, her forearms resting on the desk, listening attentively.', STUDIO),
+  talking: prompt(`${JADA}, speaking warmly.`, STUDIO),
+  listening: REACTIONS.map((r) => prompt(`${JADA}, ${r}.`, STUDIO)),
 };
 export const guestPrompts = (guest: Guest) => {
   const setting = `The setting is ${guest.from || 'their workplace'}, behind them, softly out of focus.`;
+  const who = `A person, ${guest.billing}, is sitting facing the camera on a video call`;
   return {
-    talking: prompt(`A person, ${guest.billing}, is sitting facing the camera on a video call, speaking warmly.`, setting),
-    listening: prompt(`A person, ${guest.billing}, is sitting facing the camera on a video call, listening attentively.`, setting),
+    talking: prompt(`${who}, speaking warmly.`, setting),
+    listening: REACTIONS.map((r) => prompt(`${who}, ${r.replace('her eyebrows', 'eyebrows').replace('her head', 'head')}.`, setting)),
   };
 };
 
