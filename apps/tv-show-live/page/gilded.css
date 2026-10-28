@@ -230,7 +230,7 @@ button { font: inherit; }
 /* Cuts, not zooms: a studio camera is either on its shot or not. */
 /* Jada from the chest up; the TV's edge stays in frame (a video off screen is not sent). */
 .gr-program.is-host .gr-set { transform: scale(1.5); transform-origin: 4% 35%; }
-.gr-program.is-tv .gr-set { transform: scale(1.9); transform-origin: 92.99% 72.36%; }
+.gr-program.is-tv .gr-set { transform: scale(1.9); transform-origin: 96.44% 54.33%; }
 .gr-wall { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; }
 
 /* Jada: her whole render, laid exactly over her place in the set (the set was outpainted from
@@ -246,9 +246,12 @@ button { font: inherit; }
 .ll-face { position: absolute; inset: 0; overflow: hidden; background: transparent; }
 .ll-face img, .ll-face video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 
-/* The TV on its stand: the screen measured from the backdrop's green. */
-/* Above Jada's render, whose wide right edge passes under it; its bezel drawn, as her render covers the set's. */
-.gr-tv { position: absolute; left: 60.365%; top: 39.537%; width: 34.375%; height: 40.000%; overflow: hidden; z-index: 4; box-shadow: 0 0 0 .3cqw #0b0a09; background: #0e0d0c; }
+/* Its brass floor stand, from under the screen down behind the desk. */
+.gr-tv-stand { position: absolute; left: calc(62% + 31% / 2 - .35cqw); top: 62%; width: .7cqw; height: 24%; z-index: 2;
+  background: linear-gradient(90deg, #6b4e1f, #e2c27a 45%, #8a6a2c); box-shadow: 0 0 .6cqw rgba(0, 0, 0, .5); }
+/* The TV stands in the open stage, drawn here (the set has none): moving it is these numbers. Above
+   Jada's render, whose wide right edge may pass under it. */
+.gr-tv { position: absolute; left: 62%; top: 31%; width: 31%; height: 31%; overflow: hidden; z-index: 4; box-shadow: 0 0 0 .3cqw #0b0a09, 0 1.2cqw 2.4cqw rgba(0, 0, 0, .55); background: #0e0d0c; }
 .gr-tv-feed { position: absolute; inset: 0; opacity: 0; transition: opacity .5s; }
 .gr-tv-feed.is-on { opacity: 1; }
 /* The top of the guest's frame: her face and the film's art behind her (her hands fall below the TV). */

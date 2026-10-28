@@ -903,6 +903,7 @@ function Program({ host, tvFaces, onTv, tvCard, caption, captionsOn, onCaptions,
     <section className={`gr-program is-${camera} ${trailer && !trailerLeaving ? 'is-trailer' : ''}`} aria-label="The show, as it goes out">
       <div className="gr-set">
         <img className="gr-wall" src={wall} alt="" />
+        <span className="gr-tv-stand" aria-hidden="true" />
         <div className="gr-tv">
           {/* Both guest slots stay in the TV (a video off screen is not sent): the one on air shows. */}
           <div className={`gr-tv-feed ${patched ? 'is-on' : ''}`}>
