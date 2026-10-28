@@ -396,8 +396,10 @@ button { font: inherit; }
 .gr-transcript-head { display: flex; align-items: center; gap: 8px; }
 @media (min-width: 981px) {
   .gr.is-show .nc-show.is-booth-closed { grid-template-columns: minmax(0, 1fr) 44px; }
-  .gr.is-show .nc-show.is-transcript-closed { grid-template-rows: auto auto; }
-  .gr.is-show .nc-show.is-transcript-closed .gr-program { width: min(100%, calc((100vh - 150px) * 16 / 9)); }
+  /* Folded, the transcript is a one-line bar: the program's row takes the rest, the picture at its top. */
+  .gr.is-show .nc-show.is-transcript-closed { grid-template-rows: minmax(0, 1fr) auto; }
+  .gr.is-show .nc-show.is-transcript-closed .gr-program { width: min(100%, calc((100vh - 150px) * 16 / 9)); align-self: start; }
+  .gr.is-show .nc-show.is-transcript-closed .nc-transcript { padding: 8px 16px; }
 }
 
 /* ---------- The booth: Autopilot, guests, rundown, one command box ---------- */
