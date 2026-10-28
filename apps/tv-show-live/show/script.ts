@@ -142,7 +142,7 @@ export const STABLE_PICTURE =
 // The framing, said outright: Causeur's "fixed camera" alone left this renderer zooming in and out.
 const FRAMING = 'The camera is locked off on a tripod: one fixed medium shot, exactly as framed at the start, the whole upper body and the desk always in frame. The camera never zooms in or out, never pushes in, never pans or tilts.';
 const prompt = (state: string, setting: string) => `${state}\n\n${setting}\n\n${FRAMING} ${STABLE_PICTURE}`;
-const STUDIO = 'The setting is a late-night TV studio: walnut wall panels, a brass art-deco fan, a tall window onto a city at night, warm low light.';
+const STUDIO = 'The setting is an art-deco cinema talk-show stage, softly out of focus: deep burgundy velvet drapes, gold geometric sunburst panels and warm marquee bulbs melting into bokeh, behind a glossy black lacquer desk with a brass edge, warm light.';
 /**
  * While listening, small reactions, which the page rotates every LISTENING_EVERY_MS so the face
  * stays alive: only the head and the face move (Causeur's avatar2: a held state changes the head

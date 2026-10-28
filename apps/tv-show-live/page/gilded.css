@@ -228,9 +228,9 @@ button { font: inherit; }
   background: #0c0a07; box-shadow: 0 20px 60px rgba(0, 0, 0, .45), 0 0 0 1px var(--nc-line); }
 .gr-set { position: absolute; inset: 0; transform-origin: 50% 50%; }
 /* Cuts, not zooms: a studio camera is either on its shot or not. */
-/* Jada from the chest up; the TV's edge stays in frame (a video off screen is not sent). */
-.gr-program.is-host .gr-set { transform: scale(1.5); transform-origin: 4% 35%; }
-.gr-program.is-tv .gr-set { transform: scale(1.9); transform-origin: 95.36% 19.4%; }
+/* Jada from the waist up, her hands in frame; the TV's edge stays in frame (a video off screen is not sent). */
+.gr-program.is-host .gr-set { transform: scale(1.6); transform-origin: 8.1% 87.4%; }
+.gr-program.is-tv .gr-set { transform: scale(1.9); transform-origin: 95.52% 51.44%; }
 .gr-wall { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; }
 
 /* Jada: her whole render, laid exactly over her place in the set (the set was outpainted from
@@ -244,8 +244,8 @@ button { font: inherit; }
 .ll-face { position: absolute; inset: 0; overflow: hidden; background: transparent; }
 .ll-face img, .ll-face video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 
-/* The TV on the wall: the screen measured from the backdrop's green. */
-.gr-tv { position: absolute; left: 61.483%; top: 14.453%; width: 34.738%; height: 36.328%; overflow: hidden; z-index: 1; background: #0e0d0c; }
+/* The TV on its stand: the screen measured from the backdrop's green. */
+.gr-tv { position: absolute; left: 61.563%; top: 29.630%; width: 33.385%; height: 34.722%; overflow: hidden; z-index: 1; background: #0e0d0c; }
 .gr-tv-feed { position: absolute; inset: 0; opacity: 0; transition: opacity .5s; }
 .gr-tv-feed.is-on { opacity: 1; }
 /* The top of the guest's frame: her face and the film's art behind her (her hands fall below the TV). */
@@ -278,7 +278,7 @@ button { font: inherit; }
 .gr-program.is-trailer .gr-host { left: auto; top: auto; right: 2%; bottom: 10.5%; width: 14%; height: auto; aspect-ratio: 1; z-index: 16;
   -webkit-mask-image: none; mask-image: none; opacity: 1; overflow: hidden; border-radius: .7cqw; background: #0c0a07;
   box-shadow: 0 .8cqw 2.4cqw rgba(0, 0, 0, .7), 0 0 0 .15cqw rgba(216, 177, 92, .7); }
-.gr-program.is-trailer .gr-host .ll-face { transform: scale(1.8); transform-origin: 38% 18%; }
+.gr-program.is-trailer .gr-host .ll-face { transform: scale(2.3); transform-origin: 45.6% 53.3%; }
 .gr-program.is-trailer .gr-host::after { content: attr(data-label); position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: .25cqw .5cqw;
   font: 600 .7cqw/1.2 var(--nc-display); letter-spacing: .08em; text-transform: uppercase; color: var(--nc-ink); background: linear-gradient(0deg, rgba(10, 8, 5, .85), transparent); }
 

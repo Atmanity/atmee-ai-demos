@@ -877,8 +877,8 @@ function Face({ face, poster }: { face: AvatarOnly; poster: string }) {
 }
 
 // The program picture: one studio. The set (studio/wall.jpg) was outpainted from
-// Jada's own camera still: her desk runs on to the right, under a TV on the
-// wall. Her whole render lies exactly over her still, never cropped (her desk
+// Jada's own camera still: her desk runs on to the right, in front of a TV on a
+// stand. Her whole render lies exactly over her still, never cropped (her desk
 // leaves through the bottom of the frame; the edges inside the frame fade, so
 // the renderer's drift has no hard line to slip against); the guest plays on
 // the TV. The director's shots are camera
