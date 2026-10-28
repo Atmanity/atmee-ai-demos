@@ -128,6 +128,11 @@ export function App() {
   const lines = useRef<Partial<Record<Role, SpeechLine>>>({});
   const words = useRef<Record<Role, string>>({ host: '', guest: '' });
   const segment = useRef<Guest | null>(null);
+  // Who is speaking now (their voice's stretch): while one speaks, the other's voice is not passed
+  // to them. Each session takes any sound from its user as a barge-in, and live a guest's "Oh,"
+  // or "hmm" cut the host off mid-sentence again and again. A pause longer than the voice's
+  // stretch still lets the other answer.
+  const talking = useRef<Record<Role, boolean>>({ host: false, guest: false });
 
   // Each avatar's voice: its face says it, the other avatar hears it, and the booth sees when it speaks.
   const voices = useMemo(() => {
@@ -136,9 +141,10 @@ export function App() {
       const resample = createResampler();
       const voice = createVoice({
         // The voice's stretches say when the avatar speaks, for the booth and the transcript.
-        onStart() { booth.current?.speaking(role, true); director.current?.speaking(role, true); },
+        onStart() { talking.current[role] = true; booth.current?.speaking(role, true); director.current?.speaking(role, true); },
         onFrame() {},
         onEnd() {
+          talking.current[role] = false;
           booth.current?.speaking(role, false);
           director.current?.speaking(role, false);
           const said = words.current[role].trim();
@@ -168,7 +174,7 @@ export function App() {
       const line = await openSpeech(seatApi(role), {
         onAudio(b64, pcm) {
           voices[role].feed(pcm);
-          lines.current[other]?.hear(b64);
+          if (!talking.current[other]) lines.current[other]?.hear(b64);
         },
         onWords(delta) { words.current[role] += delta; },
         onClosed(reason) { if (booth.current && booth.current.stage !== 'over') offAir(`${role === 'host' ? HOST.name : segment.current?.name} left the line (${reason}).`); },
