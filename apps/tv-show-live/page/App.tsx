@@ -190,7 +190,10 @@ export function App() {
   const [shotMode, setShotMode] = useState<ShotMode>('auto');
   const director = useRef<Director | null>(null);
   const logId = useRef(0);
-  const addLog = (who: LogLine['who'], text: string) => setLog((l) => [...l.slice(-150), { id: ++logId.current, who, text, name: who === 'guest' ? segment.current?.name : undefined }]);
+  const addLog = (who: LogLine['who'], text: string, name = who === 'guest' ? segment.current?.name : undefined) => setLog((l) => [...l.slice(-150), { id: ++logId.current, who, text, name }]);
+  // What is being said, word by word, in step with the faces: words arrive with the voice, which
+  // the faces play FACE_LAG_MS later, so each word shows that much later, as heard.
+  const [speaking, setSpeaking] = useState<Partial<Record<Role, { name?: string; text: string }>>>({});
 
   // A ref, not the state: the booth's callbacks are made before the show has its id.
   const showRef = useRef<string | null>(null);
@@ -243,10 +246,15 @@ export function App() {
           const said = words.current[role].trim();
           words.current[role] = '';
           if (said && aired && !trailerOn.current) {
-            addLog(role, said);
             advancer.current?.line({ who: role, text: said });
             booker.current?.line({ who: role, text: said });
           }
+          // The live line becomes a line of the transcript once its last word has been heard.
+          const name = role === 'guest' ? segment.current?.name : undefined;
+          setTimeout(() => {
+            setSpeaking((l) => ({ ...l, [role]: undefined }));
+            if (said && aired && !trailerOn.current) addLog(role, said, name);
+          }, FACE_LAG_MS);
         },
       });
       return {
@@ -282,6 +290,10 @@ export function App() {
         },
         onWords(delta) {
           words.current[role] += delta;
+          if (!trailerOn.current && floor.onAir(role)) {
+            const name = role === 'guest' ? segment.current?.name : undefined;
+            setTimeout(() => setSpeaking((l) => ({ ...l, [role]: { name, text: (l[role]?.text ?? '') + delta } })), FACE_LAG_MS);
+          }
           // Auto-advance judges the guest's answer while it is still being given (show/advance.ts).
           if (role === 'guest' && floor.onAir('guest')) advancer.current?.hearing(words.current.guest);
         },
@@ -396,7 +408,7 @@ export function App() {
     const earlyView = early ? inventions[early] : undefined;
     const earlyGuest = earlyView?.guest ? { ...earlyView.guest, avatarId: '' } : null;
     goneGuests.current = [];
-    setCastOnShow(cast); setGone([]); setTvCard(null);
+    setCastOnShow(cast); setGone([]); setTvCard(null); setSpeaking({});
     setCurrent(cast ?? earlyGuest); setSlots([cast ?? (earlyView?.ready ? earlyGuest : null), null]); setOnTv(0); onTvRef.current = 0; handingOver.current = false;
     if (!early) { setInventions({}); purpose.current = {}; }
     if (earlyGuest) { first = earlyGuest.rundown[0] ?? ''; setTopics(earlyGuest.rundown); }
@@ -706,7 +718,7 @@ export function App() {
           </section>
           <section className="nc-transcript" aria-label="On air">
             <h2>On air</h2>
-            <Transcript log={log} />
+            <Transcript log={log} live={speaking} />
           </section>
         </main>
       )}
@@ -1006,9 +1018,10 @@ function GuestProgress({ view, status }: { view: InventionView; status?: string 
   );
 }
 
-function Transcript({ log }: { log: LogLine[] }) {
+function Transcript({ log, live }: { log: LogLine[]; live: Partial<Record<Role, { name?: string; text: string }>> }) {
   const list = useRef<HTMLOListElement>(null);
-  useEffect(() => { list.current?.scrollTo({ top: list.current.scrollHeight, behavior: 'smooth' }); }, [log.length]);
+  const liveText = (live.host?.text ?? '') + (live.guest?.text ?? '');
+  useEffect(() => { list.current?.scrollTo({ top: list.current.scrollHeight, behavior: 'smooth' }); }, [log.length, liveText.length]);
   return (
     <ol className="nc-lines" ref={list} aria-live="polite">
       {log.length === 0 && <li className="nc-empty">The show starts when Jada does.</li>}
@@ -1016,6 +1029,12 @@ function Transcript({ log }: { log: LogLine[] }) {
         <li key={line.id} className={`nc-line is-${line.who}`}>
           <span className="nc-who">{line.who === 'host' ? 'Jada' : line.who === 'guest' ? firstName(line.name ?? 'Guest') : 'Booth'}</span>
           <span>{line.text}</span>
+        </li>
+      ))}
+      {(['host', 'guest'] as Role[]).map((role) => live[role]?.text.trim() && (
+        <li key={`live-${role}`} className={`nc-line is-${role} is-live`}>
+          <span className="nc-who">{role === 'host' ? 'Jada' : firstName(live[role]!.name ?? 'Guest')}</span>
+          <span>{live[role]!.text.trim()}<span className="gr-caret" aria-hidden="true" /></span>
         </li>
       ))}
     </ol>

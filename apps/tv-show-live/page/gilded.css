@@ -371,3 +371,6 @@ button { font: inherit; }
   .gr.is-show .nc-chip { padding: 5px 10px; font-size: 13px; }
   .gr.is-show .gr-progress { padding: 8px; margin-bottom: 6px; }
 }
+/* The line being said: it grows word by word, then becomes a line of the transcript. */
+.nc-line.is-live > span:last-child { color: var(--nc-ink); }
+.gr-caret { display: inline-block; width: .5em; height: 1em; margin-left: 2px; vertical-align: -2px; background: var(--gr-gold); animation: nc-pulse 1s steps(1) infinite; }
