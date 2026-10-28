@@ -248,8 +248,9 @@ button { font: inherit; }
 
 /* The TV on its easel in the set: the screen measured from the photo's green. Above Jada's render,
    whose wide right edge may pass under it; its bezel drawn, for where her render covers the set's. */
-.gr-tv { position: absolute; left: 62.240%; top: 30.000%; width: 31.406%; height: 33.889%; overflow: hidden; z-index: 4; box-shadow: 0 0 0 .3cqw #0b0a09, 0 1.2cqw 2.4cqw rgba(0, 0, 0, .55); background: #0e0d0c; }
-.gr-tv-feed { position: absolute; inset: 0; opacity: 0; transition: opacity .5s; }
+.gr-tv { position: absolute; left: 62.240%; top: 30.000%; width: 31.406%; height: 33.889%; overflow: hidden; z-index: 4; box-shadow: 0 0 .12cqw .26cqw rgba(11, 10, 9, .92), 0 1.2cqw 2.4cqw rgba(0, 0, 0, .55); background: #0e0d0c; }
+/* A hair soft, as the lens sees the screen a little behind Jada. */
+.gr-tv-feed { position: absolute; inset: 0; opacity: 0; transition: opacity .5s; filter: blur(.35px); }
 .gr-tv-feed.is-on { opacity: 1; }
 /* The top of the guest's frame: her face and the film's art behind her (her hands fall below the TV). */
 .gr-tv-feed .ll-face img, .gr-tv-feed .ll-face video { object-position: 50% 12%; }
