@@ -329,3 +329,21 @@ describe('a handover to the next guest', () => {
     expect(h.bringOn).not.toHaveBeenCalled();
   });
 });
+
+describe('a refused speak-up', () => {
+  it('is sent again the moment her open turn is over, not after the retry timer', () => {
+    const { booth, sent, turn } = setup();
+    booth.hostLive();
+    turn('host');                                       // the greeting: FILM is spoken up
+    expect(sent.filter((d) => d.text === 'FILM')).toHaveLength(1);
+    booth.speakUpRefused();                             // she was still mid-turn ("ummm I mean uh")
+    booth.speaking('host', true);
+    vi.advanceTimersByTime(800);
+    booth.speaking('host', false);
+    vi.advanceTimersByTime(TURN_QUIET_MS);              // the filler turn is over
+    expect(sent.filter((d) => d.text === 'FILM')).toHaveLength(2);
+    expect(booth.stage).toBe('introducing');            // the filler turn did not roll the trailer
+    expect(SPEAK_UP_MS).toBeGreaterThan(TURN_QUIET_MS + 800);
+  });
+});
+

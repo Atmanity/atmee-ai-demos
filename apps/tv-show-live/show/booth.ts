@@ -102,6 +102,11 @@ export interface Booth {
   trailerDone(): void;
   /** The guest the booth was holding for is ready to be put through. */
   guestReady(): void;
+  /**
+   * The host's session refused the last speak-up: her turn was still open (she ended it with
+   * fillers, "ummm I mean uh"). It is sent again the moment that turn is over.
+   */
+  speakUpRefused(): void;
   /** On air: hand over to the next guest, step by step (see the top of this file). */
   handover(steps: HandoverSteps): void;
   speaking(role: Role, on: boolean): void;
@@ -162,8 +167,12 @@ export function createBooth(opts: BoothOptions): Booth {
   // while a turn is open, so it is sent again until she starts speaking, three
   // tries in all.
   let speakUpTimer: ReturnType<typeof setTimeout> | undefined;
+  let lastSpeakUp: { text: string; tries: number; at: Stage } | null = null;
+  let refused = false;
   const speakUp = (text: string, tries = 3) => {
     const at = stage;
+    lastSpeakUp = { text, tries, at };
+    refused = false;
     directed = true;
     begun = false;
     // Commentary makes her speak at once: the very next turn is hers.
@@ -230,6 +239,11 @@ export function createBooth(opts: BoothOptions): Booth {
   const turnOver = (role: Role) => {
     delete turnTimers[role];
     inTurn[role] = false;
+    // A speak-up refused while her turn was open: now that it is over, at once.
+    if (role === 'host' && refused && lastSpeakUp && stage === lastSpeakUp.at && !begun) {
+      clearTimeout(speakUpTimer);
+      return speakUp(lastSpeakUp.text, lastSpeakUp.tries);
+    }
     if (role === 'host') {
       if (stage === 'greeting') return greeted();
       if (directed && begun) {
@@ -289,6 +303,8 @@ export function createBooth(opts: BoothOptions): Booth {
       if (opts.guestReady && !opts.guestReady()) return hold();
       invite(read(opts.invite));
     },
+    // The turn that was open is not the one that answers the speak-up: it does not count.
+    speakUpRefused() { refused = true; begun = false; },
     guestReady() {
       if (stage === 'holding') invite(read(opts.inviteNow ?? opts.invite));
     },
@@ -308,7 +324,7 @@ export function createBooth(opts: BoothOptions): Booth {
         clearTimeout(turnTimers[role]);
         delete turnTimers[role];
         inTurn[role] = true;
-        if (role === 'host' && directed && now() - directedAt >= lead) begun = true;
+        if (role === 'host' && directed && !refused && now() - directedAt >= lead) begun = true;
         return;
       }
       clearTimeout(turnTimers[role]);

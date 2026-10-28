@@ -12,7 +12,7 @@
 // Jada opens each one with the guest.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BackToApps, clock, useAvatarOnly, type AvatarOnly, type SpeechWriter } from '../../../src/kit/index.ts';
-import { createBooth, type Booth, type Role, type Stage } from '../show/booth.ts';
+import { createBooth, TURN_QUIET_MS, type Booth, type Role, type Stage } from '../show/booth.ts';
 import { startScore } from './score.ts';
 import { createAdvancer, type Advancer, type Verdict } from '../show/advance.ts';
 import { createBooker, type Booker, type Booking } from '../show/booker.ts';
@@ -232,6 +232,10 @@ export function App() {
   // or "hmm" cut the host off mid-sentence again and again. A pause longer than the voice's
   // stretch still lets the other answer.
   const talking = useRef<Record<Role, boolean>>({ host: false, guest: false });
+  // ...held until the speaker has been quiet TURN_QUIET_MS, as the booth ends a turn: a voice's
+  // stretch ends after 0.6 s, and a pause mid-sentence let the other's "mm-hmm" through, which
+  // cut the host off while the guest was not speaking at all.
+  const talkingUntil = useRef<Partial<Record<Role, ReturnType<typeof setTimeout>>>>({});
   // And what goes on air: of the listener's "mm-hmm" and "wow" over the speaker, only a short, rare reaction (show/floor.ts).
   const floor = useMemo(() => createFloor(), []);
 
@@ -243,6 +247,7 @@ export function App() {
       const voice = createVoice({
         // The voice's stretches say when the avatar speaks, for the booth and the transcript.
         onStart() {
+          clearTimeout(talkingUntil.current[role]);
           talking.current[role] = true;
           floor.speaking(role, true);
           if (!floor.onAir(role)) return;   // a backchannel: neither the booth nor the director sees it
@@ -251,7 +256,8 @@ export function App() {
         },
         onFrame() {},
         onEnd() {
-          talking.current[role] = false;
+          clearTimeout(talkingUntil.current[role]);
+          talkingUntil.current[role] = setTimeout(() => { talking.current[role] = false; }, TURN_QUIET_MS);
           const aired = floor.wentOnAir(role);
           floor.speaking(role, false);
           booth.current?.speaking(role, false);
@@ -321,7 +327,11 @@ export function App() {
           }
           offAir(`${role === 'host' ? HOST.name : who?.name ?? 'The guest'} left the line (${reason}).`);
         },
-        onError(message) { console.warn('[gilded-reel] %s: %s', role, message); },
+        onError(message) {
+          console.warn('[gilded-reel] %s: %s', role, message);
+          // A speak-up sent while her turn was still open: the booth sends it again when it is over.
+          if (role === 'host' && /between turns/i.test(message)) booth.current?.speakUpRefused();
+        },
       });
       opened = line;
       lines.current[role] = line;
@@ -1062,13 +1072,28 @@ function Transcript({ log, live, poster }: { log: LogLine[]; live: Partial<Recor
       </div>
     </li>
   );
+  // One entry per turn: a speaker's consecutive lines (a voice's stretches end on every pause)
+  // merge, and the line being said joins its speaker's entry when it continues it.
+  type Entry = { key: string; who: Role | 'booth'; name?: string; text: string; live?: boolean };
+  const entries: Entry[] = [];
+  for (const line of log) {
+    const last = entries.at(-1);
+    if (line.who !== 'booth' && last && last.who === line.who && last.name === line.name) last.text += ` ${line.text}`;
+    else entries.push({ key: String(line.id), who: line.who, name: line.name, text: line.text });
+  }
+  for (const role of ['host', 'guest'] as Role[]) {
+    const text = live[role]?.text.trim();
+    if (!text) continue;
+    const last = entries.at(-1);
+    if (last && last.who === role && last.name === live[role]!.name) { last.text += ` ${text}`; last.live = true; }
+    else entries.push({ key: `live-${role}`, who: role, name: live[role]!.name, text, live: true });
+  }
   return (
     <ol className="nc-lines gr-lines" ref={list} aria-live="polite">
-      {log.length === 0 && <li className="nc-empty">The show starts when Jada does.</li>}
-      {log.map((line) => (line.who === 'booth'
-        ? <li key={line.id} className="gr-note">{line.text}</li>
-        : speaker(line.who, line.name, line.text, String(line.id))))}
-      {(['host', 'guest'] as Role[]).map((role) => live[role]?.text.trim() && speaker(role, live[role]!.name, live[role]!.text.trim(), `live-${role}`, true))}
+      {entries.length === 0 && <li className="nc-empty">The show starts when Jada does.</li>}
+      {entries.map((e) => (e.who === 'booth'
+        ? <li key={e.key} className="gr-note">{e.text}</li>
+        : speaker(e.who, e.name, e.text, e.key, e.live)))}
     </ol>
   );
 }
