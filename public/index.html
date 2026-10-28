@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>Atmee Showcase</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Apps run by live avatars, built three ways on the Atmee Avatar API: full-stack, speech-to-speech (coming soon) and avatar-only.">
+<meta name="description" content="Apps run by live avatars, built three ways on the Atmee Avatar API: full-stack, speech-to-speech and avatar-only.">
 <meta name="color-scheme" content="light dark">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -112,6 +112,7 @@
   /* Which way the app is built, on its art. */
   .app .art .way { position: absolute; left: 14px; top: 14px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .02em; background: rgb(255 255 255 / .92); color: #16151a; }
   .app .art .way.is-avatar-only { background: rgb(10 10 14 / .78); color: #fff; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .55); }
+  .app .art .way.is-speech-to-speech { background: rgb(13 43 43 / .85); color: #f2c14e; box-shadow: inset 0 0 0 1px rgb(242 193 78 / .5); }
   .app .body { padding-bottom: 20px; }
   .app:focus-visible { outline-offset: 4px; border-radius: 20px; }
   .app .art { height: 150px; display: flex; align-items: end; padding: 18px; color: #fff; position: relative; }
@@ -289,8 +290,8 @@
         </ol>
         <button type="button" class="show" data-show-way="full-stack">Show the full-stack apps</button>
       </article>
-      <article class="way-card soon" aria-labelledby="way-speech">
-        <header><h3 id="way-speech">Speech-to-speech</h3><span class="badge">Coming soon</span></header>
+      <article class="way-card" aria-labelledby="way-speech">
+        <header><h3 id="way-speech">Speech-to-speech</h3><span class="badge" data-way-count="speech-to-speech">On staging</span></header>
         <p class="lede">Your own agent on Atmee's realtime speech: one voice model hears and answers in a single step, in the avatar's voice, while your client sets its instructions and runs its tools over a WebSocket.</p>
         <ul class="who" aria-label="Who does what: Atmee listens and speaks; the thinking follows your instructions and tools; the face is avatar-only today, built in next">
           <li class="atmee"><b>Listen</b>Atmee</li><li class="yours"><b>Think</b>Your rules</li><li class="atmee"><b>Speak</b>Atmee</li><li class="later"><b>Face</b>Next</li>
@@ -299,11 +300,12 @@
         <p>You want your own agent (its instructions, tools and logic) with the quickest voice back-and-forth, without building speech recognition and text-to-speech yourself: phone-style assistants, support lines, live interpreting.</p>
         <h4>How it works</h4>
         <ol>
-          <li>Your server calls <code>POST /v1/live/sessions</code> and gets a WebSocket address and a token good for one minute.</li>
-          <li>Your client connects (OpenAI Realtime-style events), sets the instructions and tools, and streams the user's audio.</li>
+          <li>Your server calls <code>POST /v1/speech_sessions</code> (pinning what the client may not change) and gets a WebSocket address and a token good for one minute.</li>
+          <li>Your client connects, starts the session and streams what the avatar hears: a user's microphone, or another avatar's voice, as in <a href="/apps/tv-show-live/">The Late Line</a>.</li>
           <li>Answers stream back as audio in the avatar's voice. When the model calls one of your tools, your client runs it and sends the result.</li>
         </ol>
-        <p class="note">Voice only for now. For a face today, hand its audio to an avatar-only render in your own room; a face built into the session comes next.</p>
+        <p class="note">Voice only for now. For a face today, hand its audio to an avatar-only render in your own room, as The Late Line does for both its avatars; a face built into the session comes next.</p>
+        <button type="button" class="show" data-show-way="speech-to-speech">Show the speech-to-speech apps</button>
       </article>
       <article class="way-card" aria-labelledby="way-face">
         <header><h3 id="way-face">Avatar-only</h3><span class="badge" data-way-count="avatar-only">Two apps here</span></header>
@@ -348,11 +350,13 @@
     "room-planner": ["🏠", ["Home", "Floor plan"], "Draw with Iris", "advice"],
     "parcel-help-desk": ["📦", ["Support", "Own agent"], "Talk to Tess", "work"],
     "presenter-studio": ["🎙️", ["Studio", "Any audio"], "Put Remy on air", "work"],
+    "tv-show": ["📺", ["Talk show", "Two avatars"], "Run the booth", "play"],
+    "tv-show-live": ["🎬", ["Talk show", "Two avatars", "One room"], "Run the booth", "play"],
   };
   const KINDS = [["all", "All"], ["learn", "Learn"], ["play", "Play"], ["advice", "Advice"], ["work", "Work and live"]];
   // How each app is built: the five above are full-stack; the list says for the others.
-  const WAYS = [["any", "Any way"], ["full-stack", "Full-stack"], ["avatar-only", "Avatar-only"]];
-  const WAY_LABEL = { "full-stack": "Full-stack", "avatar-only": "Avatar-only" };
+  const WAYS = [["any", "Any way"], ["full-stack", "Full-stack"], ["speech-to-speech", "Speech-to-speech"], ["avatar-only", "Avatar-only"]];
+  const WAY_LABEL = { "full-stack": "Full-stack", "speech-to-speech": "Speech-to-speech", "avatar-only": "Avatar-only" };
   // Every app's code is its folder in the repository (the five's folders point to their files).
   const CODE = "https://github.com/Atmanity/atmee-ai-demos/tree/main/apps/";
   const GITHUB = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>';
@@ -497,7 +501,7 @@
         body.append(el("p", "", a.tagline), tagRow, el("span", "open", `${open} →`));
         card.append(art, body);
         grid.append(card);
-        place(card, a.way === "avatar-only" ? "avatar-only" : "full-stack");
+        place(card, WAY_LABEL[a.way] ? a.way : "full-stack");
         if (tools != null) tools += Number(a.tools) || 0;
       }
     }
