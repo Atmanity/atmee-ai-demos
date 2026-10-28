@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { BackToApps, clock, useAvatarOnly, type AvatarOnly, type SpeechWriter } from '../../../src/kit/index.ts';
 import { createBooth, type Booth, type Role, type Stage } from '../show/booth.ts';
 import { startScore } from './score.ts';
+import { createAdvancer, type Advancer, type Verdict } from '../show/advance.ts';
 import { createFloor } from '../show/floor.ts';
 import { createDirector, type Director, type Shot, type ShotMode } from '../show/director.ts';
 import { FILM, GUESTS, HOST, SHOW, firstName, type Guest } from '../show/cast.ts';
@@ -103,6 +104,15 @@ export function App() {
   const [guestId, setGuestId] = useState(GUESTS[0].id);
   const guest = GUESTS.find((g) => g.id === guestId)!;
   const [topics, setTopics] = useState<string[]>(guest.rundown);
+  // Auto-advance (show/advance.ts): the next topic goes to Jada when the conversation says the
+  // current one has run its course. The advancer is made per show; refs keep its view current.
+  const [autoAdvance, setAutoAdvance] = useState(true);
+  const [suggestWrap, setSuggestWrap] = useState(false);
+  const advancer = useRef<Advancer | null>(null);
+  const firstTopic = useRef('');
+  const live = useRef({ topics: [] as string[], used: new Set<string>(), auto: true, wrapped: false });
+  live.current.topics = topics;
+  live.current.auto = autoAdvance;
   const [showId, setShowId] = useState<string | null>(null);
   const [stage, setStage] = useState<Stage>('greeting');
   const [patched, setPatched] = useState(false);
@@ -150,7 +160,7 @@ export function App() {
   // or "hmm" cut the host off mid-sentence again and again. A pause longer than the voice's
   // stretch still lets the other answer.
   const talking = useRef<Record<Role, boolean>>({ host: false, guest: false });
-  // And what goes on air: the listener's "mm-hmm" and "ok" over the speaker are kept off it (show/floor.ts).
+  // And what goes on air: of the listener's "mm-hmm" and "wow" over the speaker, only a short, rare reaction (show/floor.ts).
   const floor = useMemo(() => createFloor(), []);
 
   // Each avatar's voice: its face says it, the other avatar hears it, and the booth sees when it speaks.
@@ -176,15 +186,18 @@ export function App() {
           director.current?.speaking(role, false);
           const said = words.current[role].trim();
           words.current[role] = '';
-          if (said && aired && !trailerOn.current) addLog(role, said);
+          if (said && aired && !trailerOn.current) {
+            addLog(role, said);
+            advancer.current?.line({ who: role, text: said });
+          }
         },
       });
       return {
         feed(pcm: Int16Array) {
           voice.feed(pcm);
-          // Off the floor, or Jada during the trailer, the face gets silence of the same length,
-          // so its stream keeps time.
-          const quiet = !floor.onAir(role) || (role === 'host' && hush.current);
+          // Not heard (off the floor, past a short reaction), or Jada during the trailer: the face
+          // gets silence of the same length, so its stream keeps time.
+          const quiet = !floor.audible(role) || (role === 'host' && hush.current);
           const pcm16 = resample(quiet ? new Int16Array(pcm.length) : pcm);
           // One stream per face for the whole show, from the first frame once that face is up.
           for (const { seat, feeder } of feeders) {
@@ -206,14 +219,18 @@ export function App() {
           voices[role].feed(pcm);
           if (!talking.current[other]) lines.current[other]?.hear(b64);
         },
-        onWords(delta) { words.current[role] += delta; },
+        onWords(delta) {
+          words.current[role] += delta;
+          // Auto-advance judges the guest's answer while it is still being given (show/advance.ts).
+          if (role === 'guest' && floor.onAir('guest')) advancer.current?.hearing(words.current.guest);
+        },
         onClosed(reason) { if (booth.current && booth.current.stage !== 'over') offAir(`${role === 'host' ? HOST.name : segment.current?.name} left the line (${reason}).`); },
         onError(message) { console.warn('[gilded-reel] %s: %s', role, message); },
       });
       lines.current[role] = line;
       if (role === 'host') booth.current?.hostLive();
       // The guest is on: the two-shot, Jada and the TV, until the booth or the director cuts.
-      else { setPatched(true); chooseShot('two'); booth.current?.guestLive(); }
+      else { setPatched(true); chooseShot('two'); booth.current?.guestLive(); advancer.current?.topic(firstTopic.current); }
     } catch (err) {
       offAir(`We couldn't open ${role === 'host' ? HOST.name : segment.current?.name}'s line: ${(err as SpeechError).code ?? (err as Error).message}`);
     }
@@ -274,9 +291,26 @@ export function App() {
   }
 
   async function goOnAir(first: string) {
-    setProblem(''); setLog([]); setUsed(new Set([first])); setPatched(false); setStage('greeting'); setTrailer(false); setTrailerLeaving(false); setShot('host-front'); setShotMode('auto');
+    setProblem(''); setLog([]); setUsed(new Set([first])); setPatched(false); setStage('greeting'); setTrailer(false); setTrailerLeaving(false); setShot('host-front'); setShotMode('auto'); setSuggestWrap(false);
     director.current?.close();
     director.current = createDirector({ onShot: setShot });
+    firstTopic.current = first;
+    live.current.wrapped = false;
+    live.current.used = new Set([first]);
+    // Live while it is this show's: an advancer of an earlier show stays quiet. (Not the show's id:
+    // that is only known once the server has made the show, after this.)
+    const mine: Advancer = createAdvancer({
+      judge: async (topic, lines) => {
+        const res = await fetch(`${API}/show/${showRef.current}/judge`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic, lines }) });
+        if (!res.ok) throw new Error(`judge ${res.status}`);
+        return (await res.json()) as Verdict;
+      },
+      next: () => live.current.topics.find((t) => !live.current.used.has(t)) ?? null,
+      move: (topic, reason) => sendTopic(topic, reason),
+      exhausted: () => { setSuggestWrap(true); addLog('booth', "That was the last topic on the rundown: wrap it up when you're ready"); },
+      enabled: () => advancer.current === mine && live.current.auto && !live.current.wrapped && booth.current?.stage === 'on-air',
+    });
+    advancer.current = mine;
     hostOpened.current = false;
     segment.current = guest;
     setBackstage(true);
@@ -317,14 +351,17 @@ export function App() {
     setTimeout(() => { if (showRef.current === show) { setTrailer(false); setTrailerLeaving(false); } }, TRAILER_FADE_MS);
   };
   // Commentating: a cued remark at some of the trailer's shots (commentary, which she speaks at once).
-  const sendTopic = (topic: string) => {
+  // A topic for Jada: the producer's, or auto-advance's (with the judge's reason).
+  const sendTopic = (topic: string, reason?: string) => {
     if (!booth.current || !segment.current) return;
     booth.current.cue(topicCue(segment.current, topic));
+    live.current.used.add(topic);
     setUsed((u) => new Set(u).add(topic));
-    addLog('booth', `Topic for Jada: ${topic}`);
+    advancer.current?.topic(topic);
+    addLog('booth', reason === undefined ? `Topic for Jada: ${topic}` : `Moving on: ${topic} (${reason})`);
   };
   const sendNote = (text: string) => { booth.current?.cue(noteCue(text)); addLog('booth', `Note for Jada: ${text}`); };
-  const wrap = () => { booth.current?.wrap(); addLog('booth', 'Wrap it up'); };
+  const wrap = () => { booth.current?.wrap(); live.current.wrapped = true; setSuggestWrap(false); addLog('booth', 'Wrap it up'); };
   const chooseShot = (mode: ShotMode) => { setShotMode(mode); director.current?.mode(mode); };
   const endShow = () => { offAir(''); setStage('over'); };
   const backToLobby = () => { booth.current = null; setOnShow(false); setShowId(null); };
@@ -363,8 +400,9 @@ export function App() {
                 <button type="button" className="nc-btn nc-primary" onClick={backToLobby}>Book another night</button>
               </div>
             ) : (
-              <Console topics={topics} used={used} disabled={stage !== 'on-air'} onTopic={sendTopic} onNote={sendNote}
-                onWrap={wrap} onEnd={endShow} guestFirst={firstName(guest.name)} shotMode={shotMode} onShot={chooseShot} />
+              <Console topics={topics} used={used} disabled={stage !== 'on-air'} onTopic={(t) => sendTopic(t)} onNote={sendNote}
+                onWrap={wrap} onEnd={endShow} guestFirst={firstName(guest.name)} shotMode={shotMode} onShot={chooseShot}
+                autoAdvance={autoAdvance} onAutoAdvance={setAutoAdvance} suggestWrap={suggestWrap} />
             )}
           </section>
           <section className="nc-transcript" aria-label="On air">
@@ -540,9 +578,10 @@ function Lobby({ guestId, setGuestId, topics, setTopics, onGo, problem }: {
   );
 }
 
-function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guestFirst, shotMode, onShot }: {
+function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guestFirst, shotMode, onShot, autoAdvance, onAutoAdvance, suggestWrap }: {
   topics: string[]; used: Set<string>; disabled: boolean; guestFirst: string; shotMode: ShotMode;
   onTopic: (t: string) => void; onNote: (t: string) => void; onWrap: () => void; onEnd: () => void; onShot: (m: ShotMode) => void;
+  autoAdvance: boolean; onAutoAdvance: (on: boolean) => void; suggestWrap: boolean;
 }) {
   const [topic, setTopic] = useState('');
   const [note, setNote] = useState('');
@@ -560,6 +599,10 @@ function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guest
       </div>
       <div className="nc-group">
         <h3>Next topic for Jada</h3>
+        <label className="gr-auto">
+          <input type="checkbox" checked={autoAdvance} onChange={(e) => onAutoAdvance(e.target.checked)} />
+          <span>Auto-advance: the next topic when this one has run its course</span>
+        </label>
         <ul className="nc-rundown">
           {[...topics, ...extra].map((t) => (
             <li key={t}>
@@ -583,7 +626,7 @@ function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guest
         <p className="nc-hint">Topics and notes reach Jada on her next turn: she reacts to {guestFirst}, then moves on.</p>
       </div>
       <div className="nc-actions">
-        <button type="button" className="nc-btn" disabled={disabled} onClick={onWrap}>Wrap it up</button>
+        <button type="button" className={`nc-btn ${suggestWrap ? 'is-suggested' : ''}`} disabled={disabled} onClick={onWrap}>Wrap it up</button>
         <button type="button" className="nc-btn nc-danger" onClick={onEnd}>End the show</button>
       </div>
     </div>

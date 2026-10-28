@@ -20,7 +20,8 @@ import { avatarApi } from '../../server/atmee.ts';
 import { avatarFor } from '../../server/hosts.js';
 import { endRender, renderConfigured, startRender } from '../../server/render.ts';
 import { GUESTS, HOST, guestById, type Guest } from './show/cast.ts';
-import { DELIVERY, HOST_USER, guestScenario, hostScenario } from './show/script.ts';
+import { structured } from '../../server/llm.ts';
+import { DELIVERY, HOST_USER, JUDGE_SYSTEM, guestScenario, hostScenario, judgeUser } from './show/script.ts';
 
 const ID = 'tv-show-live';
 const MAX_SECONDS = 900;
@@ -141,6 +142,29 @@ const app: AppServer = {
       const r = await endSpeech(req.params.id);
       if (r.status === 200) found.show.speech.delete(req.params.id);
       res.status(r.status).json(r.json);
+    });
+
+    // Auto-advance's judge: has the current topic run its course? { done, reason }
+    router.post('/show/:show/judge', async (req, res) => {
+      const show = shows.get(req.params.show);
+      if (!show) return void res.status(404).json({ error: 'not_found' });
+      const topic = String(req.body?.topic ?? '').slice(0, 300);
+      const lines = (Array.isArray(req.body?.lines) ? req.body.lines : []).slice(-12)
+        .map((l: { who?: unknown; text?: unknown }) => ({ who: l?.who === 'guest' ? 'guest' as const : 'host' as const, text: String(l?.text ?? '').slice(0, 1200) }));
+      if (!topic || !lines.length) return void res.status(400).json({ error: 'bad_request' });
+      try {
+        const verdict = await structured<{ done: boolean; reason: string }>({
+          system: JUDGE_SYSTEM,
+          user: judgeUser(show.guest, topic, lines),
+          schema: { type: 'object', properties: { done: { type: 'boolean' }, reason: { type: 'string' } }, required: ['done', 'reason'] },
+          temperature: 0,
+        });
+        console.log('[%s] judge %s: %s (%s)', ID, req.params.show.slice(0, 8), verdict.done ? 'move on' : 'stay', verdict.reason);
+        res.json({ done: verdict.done === true, reason: String(verdict.reason ?? '').slice(0, 120) });
+      } catch (err) {
+        console.warn('[%s] judge failed: %s', ID, (err as Error).message);
+        res.status(502).json({ error: 'judge_failed' });
+      }
     });
 
     router.post('/show/:show/end', async (req, res) => {

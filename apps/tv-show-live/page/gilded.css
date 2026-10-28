@@ -324,3 +324,8 @@ button { font: inherit; }
   .gr .nc-show { grid-template-columns: minmax(0, 1fr); grid-template-areas: "program" "booth" "transcript"; grid-template-rows: auto; }
   .gr .nc-transcript { max-height: 420px; }
 }
+
+/* Auto-advance's switch, and the wrap it suggests once the rundown is used up. */
+.gr-auto { display: flex; gap: 8px; align-items: center; margin: 2px 0 8px; font-size: 13px; color: var(--nc-muted); cursor: pointer; }
+.gr-auto input { accent-color: var(--gr-gold); }
+.gr .nc-btn.is-suggested { border-color: var(--gr-gold); color: var(--gr-gold-hi); animation: nc-pulse 1.6s ease-in-out infinite; }

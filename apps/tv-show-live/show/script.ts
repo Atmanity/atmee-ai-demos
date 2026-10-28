@@ -48,6 +48,24 @@ export const welcomeCue = (guest: Guest, topic: string) =>
 export const topicCue = (guest: Guest, topic: string) =>
   `New topic: ${topic}. Close the last thread in a few words, then open this topic with ${firstName(guest.name)} with a question of your own.`;
 
+/**
+ * The judge of auto-advance (show/advance.ts): whether the current topic has
+ * run its course, from the conversation itself. It leans to staying: moving on
+ * too soon cuts a good answer short, moving on late only costs one exchange.
+ */
+export const JUDGE_SYSTEM = [
+  `You help the producer of ${SHOW}, a live TV talk show about the art of film, decide when the host should move on to the next topic.`,
+  'You get the current topic and the last lines of the conversation between the host and her guest.',
+  'Say done = true only when the topic has run its course: the guest has already answered it with real substance, and the conversation is now repeating itself, winding down, going round in small talk, or has drifted onto something else.',
+  'Say done = false while the topic is still being explored: the guest is still opening it up, the host has just asked a fresh question about it, or the last answers keep adding new details.',
+  'Give a reason of at most eight words, for the producer.',
+].join(' ');
+
+export function judgeUser(guest: Guest, topic: string, lines: { who: 'host' | 'guest'; text: string }[]): string {
+  const name = (who: 'host' | 'guest') => (who === 'host' ? HOST.name : guest.name);
+  return [`Current topic: ${topic}`, '', 'The last lines, oldest first:', ...lines.map((l) => `${name(l.who)}: ${l.text}`)].join('\n');
+}
+
 /** A stalled conversation: the host picks it back up. */
 export const nudgeCue = (guest: Guest) => `Pick the conversation back up: ask ${firstName(guest.name)} a fresh, specific question about the design of ${FILM.title}.`;
 
