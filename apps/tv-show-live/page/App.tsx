@@ -25,7 +25,7 @@ import { createResampler, createVoice, FACE_RATE } from '../show/voice.ts';
 import cam2 from '../studio/cam2.jpg';
 import wall from '../studio/wall.jpg';
 import desk from '../studio/desk.webp';
-import ines from '../guests/ines.jpg';
+import theo from '../guests/theo.jpg';
 import still1 from '../film/still-1.jpg';
 import still2 from '../film/still-2.jpg';
 import still3 from '../film/still-3.jpg';
@@ -34,7 +34,7 @@ import still5 from '../film/still-5.jpg';
 import './gilded.css';
 
 const API = '/api/apps/tv-show-live';
-const PORTRAITS: Record<string, string> = { ines };
+const PORTRAITS: Record<string, string> = { theo };
 const STILLS: Record<number, string> = { 1: still1, 2: still2, 3: still3, 4: still4, 5: still5 };
 const END_AFTER_GOODBYE_MS = 4_000;
 const SHOT_MS = 5_200;          // each trailer still, held and pushed in on

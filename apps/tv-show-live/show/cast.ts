@@ -32,10 +32,10 @@ export const FILM = {
 
 export const GUESTS: Guest[] = [
   {
-    id: 'ines',
-    name: 'Inès Valcour',
+    id: 'theo',
+    name: 'Theo Marlowe',
     billing: `costume and production designer of ${FILM.title}`,
-    from: 'her atelier',
+    from: 'his atelier',
     avatarId: '5190aed1-124c-4447-adb8-7045d8b35fb1',
     rundown: ["The queen's amber veil", 'Four hundred caravan robes', 'Building the salt-glass monoliths', 'The glass palace and its lanterns'],
   },
