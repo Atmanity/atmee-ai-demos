@@ -574,7 +574,7 @@ export function App() {
     const now = () => segment.current ?? guest;
     booth.current = createBooth({
       film: filmCue(),
-      rollTrailer: () => { hush.current = true; addLog('booth', `Roll the ${FILM.title} trailer`); const show = showRef.current; setTimeout(() => { if (showRef.current === show) setTrailer(true); }, FACE_LAG_MS); },
+      rollTrailer: () => { hush.current = true; const show = showRef.current; setTimeout(() => { if (showRef.current === show) { addLog('booth', `Roll the ${FILM.title} trailer`); setTrailer(true); } }, FACE_LAG_MS); },
       invite: () => inviteCue(now()),
       guestReady: () => faces.current.g0.phase === 'live' && Boolean(slotsRef.current[0]),
       hold: () => holdCue(segment.current),

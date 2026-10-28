@@ -11,7 +11,7 @@ export function hostScenario(): string {
     `You are hosting ${SHOW}, a late-night TV talk show about the art of film. Tonight's film is ${FILM.title}, ${FILM.logline}. A studio audience and viewers at home are watching.`,
     // The guest goes unnamed here: named, she was welcomed in the opening line, before she was on.
     // The cues that bring the guest on name them.
-    `Tonight's guest joins you later on a live video call, shown on the screen in your studio, once you are told to invite them on. Until then you are talking to the viewers alone: your opening line greets the viewers and welcomes them to the show, and nothing more.`,
+    `Tonight's guest joins you later on a live video call, shown on the screen in your studio, once you are told to invite them on. Until then you are talking to the viewers alone: your opening turn greets the viewers and welcomes them to the show, introduces tonight's film in two sentences, and ends by saying it is time to roll the trailer, and nothing more.`,
     `Once your guest is on, the user is your guest, speaking to you on air. Talk to them directly: let them finish, waiting through any pause mid-thought, then react to what they said and ask one follow-up question about how the film was designed and made.`,
     // Naming who sends the topics plants the word: she once said "my producers tell me".
     'When a direction gives you a new topic, bring it up with your guest as your own idea, in your own words.',
@@ -32,7 +32,7 @@ export function guestScenario(guest: Guest): string {
 /** Who the host's session talks to when it opens: the viewers (the guest comes on later). */
 export const HOST_USER = 'the viewers at home';
 
-/** After the greeting: the film, then the trailer. */
+/** When she never opens the show by herself: the film, then the trailer. */
 export const filmCue = () =>
   `Introduce tonight's film to the viewers in two sentences: ${FILM.title}, ${FILM.logline}. Then say that it is time to roll the trailer.`;
 
@@ -64,9 +64,10 @@ export const guestFarewellCue = `${HOST.name} is saying goodbye to you: say a sh
 export const bridgeCue = (from: Guest, to: Guest) =>
   `${firstName(from.name)} has left the call. Turn to the viewers: one or two sentences on what ${firstName(from.name)} shared, then tell them who is joining next, ${to.name}, ${to.billing}, and that you are bringing ${firstName(to.name)} in on the screen now. Do not greet ${firstName(to.name)} yet: ${firstName(to.name)} will say hello first.`;
 
-/** Once the guest is on the screen: welcome them, then the first topic. */
+// Once the guest is on the screen and has said hello: she answers it and asks the first topic. Told
+// to welcome them, she said "Hi there! It is so great meeting you" after the guest's whole introduction.
 export const welcomeCue = (guest: Guest, topic: string) =>
-  `${firstName(guest.name)} is on the screen now. Welcome them warmly, then ask a first question about this: ${topic}.`;
+  `${firstName(guest.name)} is on the screen now and has just said hello and introduced themselves to you. Do not greet them again (no hello, hi or nice to meet you: you have already introduced them to the viewers): react to what they just said in a few warm words, then ask a first question about this: ${topic}.`;
 
 export const topicCue = (guest: Guest, topic: string) =>
   `New topic: ${topic}. Close the last thread in a few words, then open this topic with ${firstName(guest.name)} with a question of your own.`;

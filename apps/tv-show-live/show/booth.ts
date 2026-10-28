@@ -57,7 +57,7 @@ export interface BoothOptions {
   deliver(delivery: Delivery): void;
   /** Opens the guest's session; the booth is told when it is up (guestLive). */
   dialGuest(): void;
-  /** Spoken by the host after the greeting: introduce the film, roll the trailer. */
+  /** Spoken up for when the host never opens the show by herself: introduce the film, roll the trailer. */
   film: string;
   /** Plays the trailer; the page calls trailerDone() when it is over. */
   rollTrailer(): void;
@@ -183,9 +183,17 @@ export function createBooth(opts: BoothOptions): Booth {
     if (tries > 1) speakUpTimer = setTimeout(() => { if (stage === at && !begun) speakUp(text, tries - 1); }, SPEAK_UP_MS);
   };
 
-  const greeted = () => {
+  // Her opening turn greets the viewers and introduces the film (her scenario): once it is over, the
+  // trailer rolls. As two turns, the film's cue went out only once the greeting was over, a pause
+  // while her reply was written, and she introduced the film twice. If she never opens the show, she
+  // is asked for the film.
+  const greeted = (spoke: boolean) => {
     if (stage !== 'greeting') return;
     clearTimeout(greetingTimer);
+    if (spoke) {
+      setStage('trailer');
+      return opts.rollTrailer();
+    }
     setStage('introducing');
     speakUp(opts.film);
   };
@@ -245,7 +253,7 @@ export function createBooth(opts: BoothOptions): Booth {
       return speakUp(lastSpeakUp.text, lastSpeakUp.tries);
     }
     if (role === 'host') {
-      if (stage === 'greeting') return greeted();
+      if (stage === 'greeting') return greeted(true);
       if (directed && begun) {
         directed = false;
         waiting = null;
@@ -292,7 +300,7 @@ export function createBooth(opts: BoothOptions): Booth {
     get stage() { return stage; },
     hostLive() {
       clearTimeout(greetingTimer);
-      greetingTimer = setTimeout(() => { if (stage === 'greeting' && quiet()) greeted(); }, GREETING_WAIT_MS);
+      greetingTimer = setTimeout(() => { if (stage === 'greeting' && quiet()) greeted(false); }, GREETING_WAIT_MS);
     },
     guestLive() {
       if (stage === 'dialing') setStage('on-air');
