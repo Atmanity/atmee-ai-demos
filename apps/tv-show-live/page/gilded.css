@@ -228,8 +228,8 @@ button { font: inherit; }
   background: #0c0a07; box-shadow: 0 20px 60px rgba(0, 0, 0, .45), 0 0 0 1px var(--nc-line); }
 .gr-set { position: absolute; inset: 0; transform-origin: 50% 50%; }
 /* Cuts, not zooms: a studio camera is either on its shot or not. */
-/* Jada from the waist up, her hands in frame; the TV's edge stays in frame (a video off screen is not sent). */
-.gr-program.is-host .gr-set { transform: scale(1.6); transform-origin: 8.1% 87.4%; }
+/* Jada from the chest up; the TV's edge stays in frame (a video off screen is not sent). */
+.gr-program.is-host .gr-set { transform: scale(1.5); transform-origin: 4% 35%; }
 .gr-program.is-tv .gr-set { transform: scale(1.9); transform-origin: 92.99% 72.36%; }
 .gr-wall { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; }
 
@@ -237,7 +237,9 @@ button { font: inherit; }
    her still and she was then removed from it; her place was measured by matching the two). It
    fills the frame's height, so only its right edge lies inside the frame, and that edge fades
    into empty wall and window. */
-.gr-host { position: absolute; left: 0.486%; top: 0.498%; width: 55.417%; height: 99.254%; z-index: 2;
+/* Her portrait is framed wide, so her right hand never leaves the render: laid over the set at 1/0.78 of
+   that, she is back to her old size and place, the frame cropping its top and bottom. */
+.gr-host { position: absolute; left: -7.3%; top: -27.5%; width: 71.05%; height: 127.25%; z-index: 2;
   -webkit-mask-image: linear-gradient(to right, #000 86%, transparent 100%); mask-image: linear-gradient(to right, #000 86%, transparent 100%); }
 /* The desk's front, from just below her hands: cut from the set, laid over her render. */
 .gr-desk { position: absolute; left: 0; top: 86%; width: 100%; height: 14%; z-index: 3; pointer-events: none; }
@@ -245,7 +247,8 @@ button { font: inherit; }
 .ll-face img, .ll-face video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 
 /* The TV on its stand: the screen measured from the backdrop's green. */
-.gr-tv { position: absolute; left: 60.365%; top: 39.537%; width: 34.375%; height: 40.000%; overflow: hidden; z-index: 1; background: #0e0d0c; }
+/* Above Jada's render, whose wide right edge passes under it; its bezel drawn, as her render covers the set's. */
+.gr-tv { position: absolute; left: 60.365%; top: 39.537%; width: 34.375%; height: 40.000%; overflow: hidden; z-index: 4; box-shadow: 0 0 0 .3cqw #0b0a09; background: #0e0d0c; }
 .gr-tv-feed { position: absolute; inset: 0; opacity: 0; transition: opacity .5s; }
 .gr-tv-feed.is-on { opacity: 1; }
 /* The top of the guest's frame: her face and the film's art behind her (her hands fall below the TV). */
