@@ -18,6 +18,7 @@ import { SAMPLE_RATE } from './pcm.ts';
 
 const AUDIO_STREAM = 'lk.audio_stream';
 const CLEAR_BUFFER = 'lk.clear_buffer';
+const SET_PROMPT = 'avatar.set_prompt';
 const PLAYBACK_STARTED = 'lk.playback_started';
 const PLAYBACK_FINISHED = 'lk.playback_finished';
 const CHUNK_SAMPLES = SAMPLE_RATE / 10;      // 100 ms per write: an even byte count, whole samples
@@ -64,8 +65,18 @@ export interface RenderedAvatar {
   open(): Promise<SpeechWriter>;
   /** Cuts what the avatar is saying and anything still waiting to be said. */
   interrupt(): Promise<void>;
+  /**
+   * The renderer's free-form prompts (avatar_service's `avatar.set_prompt`): what the avatar
+   * looks like and how it moves, while it talks and while it listens. A prompt holds until it is
+   * replaced; null or '' clears it, a mode left out keeps its prompt. Only the agent the avatar
+   * publishes on behalf of may set them: this page. Resolves to the renderer's answer, which says
+   * whether it draws prompts at all (`renders_prompts`), or null when it could not be asked.
+   */
+  setPrompt(update: { talking?: string | null; listening?: string | null }): Promise<AvatarPrompts | null>;
   end(): Promise<void>;
 }
+
+export interface AvatarPrompts { talking?: string | null; listening?: string | null; renders_prompts?: boolean }
 
 export class RenderError extends Error {
   constructor(readonly code: string, message?: string, readonly retryAfter = 0) { super(message || code); }
@@ -282,6 +293,16 @@ export async function renderAvatar(opts: RenderOptions): Promise<RenderedAvatar>
       await room.localParticipant.performRpc({ destinationIdentity: info.avatarIdentity, method: CLEAR_BUFFER, payload: '' }).catch(() => {});
       // The avatar reports the cut piece; what was queued behind it was cleared with it and gets no report.
       setTimeout(() => { cut(); if (!playback.pending) setSpeaking(false); }, 1500);
+    },
+    async setPrompt(update) {
+      if (ended) return null;
+      try {
+        const answer = await room.localParticipant.performRpc({ destinationIdentity: info.avatarIdentity, method: SET_PROMPT, payload: JSON.stringify(update), responseTimeout: 10_000 });
+        return JSON.parse(answer) as AvatarPrompts;
+      } catch (err) {
+        console.warn('[render] set_prompt failed: %s', (err as Error).message);
+        return null;
+      }
     },
     end: () => finish('ended_by_page'),
   };

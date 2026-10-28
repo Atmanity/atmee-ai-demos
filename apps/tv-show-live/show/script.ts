@@ -120,6 +120,37 @@ export const INTENT_SYSTEM = [
   'kind = note for anything else: a question for the host to ask, a direction, a remark.',
 ].join(' ');
 
+/**
+ * The renderer's free-form prompts for each face (avatar_service's
+ * `avatar.set_prompt`, set by the page), in Causeur's form: the character in
+ * the pose of her portrait, the setting, then Causeur's fixed instructions for
+ * a stable picture (causeur/modules/avatar2 DEFAULT_SUFFIX, word for word).
+ * The renderer otherwise moves its own camera: it zoomed and drifted during a
+ * show. Set once, they hold for the whole show.
+ */
+export const STABLE_PICTURE =
+  'Natural audio-driven speaking motion with accurate lip synchronization. Expressions ' +
+  'and gestures should respond naturally to the rhythm, tone, and emotion of the speech while ' +
+  'remaining realistic. Maintain strong temporal consistency across all frames. Use a single ' +
+  'continuous shot with a fixed camera and no cuts, transitions, angle changes, or viewpoint ' +
+  'changes. Keep facial appearance, identity, pose, body structure, clothing details, ' +
+  'lighting, and background stable throughout the video. Avoid sudden motion changes, unnatural expression shifts, frame-to-frame appearance variation, ' +
+  'flickering, jitter, ghosting, texture instability, temporal artifacts, or deformation. All ' +
+  'motion should be coherent, fluid, stable, and naturally driven by the audio.';
+const prompt = (state: string, setting: string) => `${state}\n\n${setting}\n\n${STABLE_PICTURE}`;
+const STUDIO = 'The setting is a late-night TV studio: walnut wall panels, a brass art-deco fan, a tall window onto a city at night, warm low light.';
+export const hostPrompts = {
+  talking: prompt('A woman with curly black hair and gold hoop earrings, in an emerald-green blazer over a black crew-neck top, is sitting at a long walnut desk, her body and face turned toward the right of the frame, her forearms resting on the desk, speaking warmly.', STUDIO),
+  listening: prompt('A woman with curly black hair and gold hoop earrings, in an emerald-green blazer over a black crew-neck top, is sitting at a long walnut desk, her body and face turned toward the right of the frame, her forearms resting on the desk, listening attentively.', STUDIO),
+};
+export const guestPrompts = (guest: Guest) => {
+  const setting = `The setting is ${guest.from || 'their workplace'}, behind them, softly out of focus.`;
+  return {
+    talking: prompt(`A person, ${guest.billing}, is sitting facing the camera on a video call, speaking warmly.`, setting),
+    listening: prompt(`A person, ${guest.billing}, is sitting facing the camera on a video call, listening attentively.`, setting),
+  };
+};
+
 /** A stalled conversation: the host picks it back up. */
 export const nudgeCue = (guest: Guest) => `Pick the conversation back up: ask ${firstName(guest.name)} a fresh, specific question about the design of ${FILM.title}.`;
 

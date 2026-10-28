@@ -20,7 +20,7 @@ import { createFloor } from '../show/floor.ts';
 import { createFillerGate, DELAY_MS as FILLER_DELAY_MS } from '../show/fillers.ts';
 import { createDirector, type Director, type Shot, type ShotMode } from '../show/director.ts';
 import { FILM, GUESTS, HOST, SHOW, firstName, type Guest } from '../show/cast.ts';
-import { bridgeCue, farewellCue, filmCue, goodbyeCue, guestFarewellCue, holdCue, holdMoreCue, inviteCue, inviteNowCue, noteCue, nudgeCue, topicCue, welcomeCue, wrapCue } from '../show/script.ts';
+import { bridgeCue, farewellCue, filmCue, goodbyeCue, guestFarewellCue, guestPrompts, holdCue, hostPrompts, holdMoreCue, inviteCue, inviteNowCue, noteCue, nudgeCue, topicCue, welcomeCue, wrapCue } from '../show/script.ts';
 import { openSpeech, SpeechError, type SpeechLine } from '../show/speech.ts';
 import { createResampler, createVoice } from '../show/voice.ts';
 import cam2 from '../studio/cam2.jpg';
@@ -223,6 +223,18 @@ export function App() {
   const hostFace = useAvatarOnly(face('host'));
   const slotFaces = [useAvatarOnly(slotFace(0)), useAvatarOnly(slotFace(1))];
   const guestFace = slotFaces[onTv];
+  // Each face is told what it shows, and to keep a fixed camera, once it is up (script.ts).
+  useEffect(() => {
+    if (hostFace.phase !== 'live') return;
+    void hostFace.setPrompt(hostPrompts).then((a) => console.info('[gilded-reel] Jada prompt: renders_prompts=%s', a?.renders_prompts));
+  }, [hostFace.phase]);
+  useEffect(() => {
+    slotFaces.forEach((f, i) => {
+      const g = slots[i];
+      if (f.phase !== 'live' || !g) return;
+      void f.setPrompt(guestPrompts(g)).then((a) => console.info('[gilded-reel] %s prompt: renders_prompts=%s', g.name, a?.renders_prompts));
+    });
+  }, [slotFaces[0].phase, slotFaces[1].phase, slots[0]?.id, slots[1]?.id]);
   const faces = useRef({ host: hostFace, g0: slotFaces[0], g1: slotFaces[1] });
   faces.current = { host: hostFace, g0: slotFaces[0], g1: slotFaces[1] };
 
