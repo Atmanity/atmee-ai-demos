@@ -205,10 +205,9 @@ export function App() {
     const id = setTimeout(() => setCaption(null), CAPTION_LINGER_MS);
     return () => clearTimeout(id);
   }, [speaking]);
-  // The booth and what went out on air fold away; the show can go full screen.
-  const [boothOpen, setBoothOpen] = useState(true);
+  // Director mode shows the booth and the transcript beside the picture; full window, the picture alone.
+  const [view, setView] = useState<'director' | 'full'>('director');
   const [captionsOn, setCaptionsOn] = useState(true);
-  const [transcriptOpen, setTranscriptOpen] = useState(true);
   const toggleFullScreen = () => { if (document.fullscreenElement) void document.exitFullscreen(); else void document.documentElement.requestFullscreen().catch(() => {}); };
 
   // A ref, not the state: the booth's callbacks are made before the show has its id.
@@ -756,6 +755,12 @@ export function App() {
           </span>
         )}
         {onShow && hostFace.secondsLeft !== null && <span className="nc-clock">{clock(hostFace.secondsLeft)}</span>}
+        {onShow && (
+          <div className="gr-view" role="group" aria-label="View">
+            <button type="button" aria-pressed={view === 'full'} onClick={() => setView('full')}>Full window</button>
+            <button type="button" aria-pressed={view === 'director'} onClick={() => setView('director')}>Director</button>
+          </div>
+        )}
         {onShow && <button type="button" className="nc-btn gr-fullscreen" onClick={toggleFullScreen} aria-label="Full screen">⛶</button>}
       </header>
 
@@ -763,21 +768,13 @@ export function App() {
         <Lobby guestId={guestId} setGuestId={setGuestId} inventText={inventText} setInventText={setInventText} topics={topics} setTopics={setTopics} onGo={goOnAir} problem={problem}
           invention={lobbyInvention ? inventions[lobbyInvention] : undefined} onInvent={inventInLobby} />
       ) : (
-        <main className={`nc-show ${boothOpen ? '' : 'is-booth-closed'} ${transcriptOpen ? '' : 'is-transcript-closed'}`}>
+        <main className={`nc-show ${view === 'full' ? 'is-full' : ''}`}>
           <Program host={hostFace} tvFaces={slotFaces} onTv={onTv} tvCard={tvCard} caption={trailerUp || backstage || !captionsOn ? null : caption} captionsOn={captionsOn} onCaptions={() => setCaptionsOn((c) => !c)} posters={slots.map((g) => posterOf(g, inventions))} guestInfo={guest} patched={patched} stage={stage}
             backstage={backstage} shot={shot} trailer={trailer} trailerLeaving={trailerLeaving} onTrailerEnding={trailerEnding} onTrailerDone={trailerDone} />
-          {!boothOpen && (
-            <button type="button" className="gr-rail" onClick={() => setBoothOpen(true)} aria-label="Open the booth">
-              <span className="gr-rail-label">The booth</span>
-              <span className="gr-rail-chip">{STAGE_TEXT[stage]}</span>
-              {autoAdvance && autoBook && <span className="gr-rail-chip">Autopilot</span>}
-            </button>
-          )}
-          <section className="nc-booth" aria-label="The booth" hidden={!boothOpen}>
+          <section className="nc-booth" aria-label="The booth" hidden={view === 'full'}>
             <div className="nc-booth-head">
               <h2>The booth</h2>
               <span className="nc-stage-text">{STAGE_TEXT[stage]}</span>
-              <button type="button" className="gr-fold" onClick={() => setBoothOpen(false)} aria-label="Fold the booth away">⟩</button>
             </div>
             {problem && <p className="nc-problem" role="alert">{problem}</p>}
             {stage === 'over' && allDone ? (
@@ -793,12 +790,9 @@ export function App() {
                 statusOf={statusOf} inventions={Object.values(inventions)} />
             )}
           </section>
-          <section className="nc-transcript" aria-label="On air">
-            <div className="gr-transcript-head">
-              <h2>Transcript</h2>
-              <button type="button" className="gr-fold" onClick={() => setTranscriptOpen((o) => !o)} aria-label={transcriptOpen ? 'Fold the transcript away' : 'Open the transcript'}>{transcriptOpen ? '⌄' : '⌃'}</button>
-            </div>
-            {transcriptOpen && <Transcript log={log} live={speaking} poster={(who, name) => (who === 'host' ? cam2 : posterByName(name))} />}
+          <section className="nc-transcript" aria-label="On air" hidden={view === 'full'}>
+            <h2>Transcript</h2>
+            <Transcript log={log} live={speaking} poster={(who, name) => (who === 'host' ? cam2 : posterByName(name))} />
           </section>
         </main>
       )}

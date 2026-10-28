@@ -384,23 +384,17 @@ button { font: inherit; }
 .gr-caption-name { flex: none; font: 700 .95cqw/1 var(--nc-display); letter-spacing: .1em; text-transform: uppercase; color: var(--gr-gold-hi); }
 .gr-caption.is-guest .gr-caption-name { color: #9fdcc0; }
 
-/* ---------- Folding the booth and the transcript away; full screen ---------- */
+/* ---------- Director mode or full window; full screen ---------- */
 .gr-fullscreen { padding: 4px 10px; font-size: 15px; line-height: 1; }
-.nc-booth[hidden] { display: none; }
+.gr-view { display: inline-flex; padding: 3px; gap: 2px; border-radius: 999px; border: 1px solid var(--nc-line); background: var(--nc-panel); }
+.gr-view button { padding: 5px 14px; border: 0; border-radius: 999px; background: transparent; color: var(--nc-muted); font: 600 13px var(--nc-body); cursor: pointer; }
+.gr-view button:hover { color: var(--nc-ink); }
+.gr-view button[aria-pressed="true"] { background: var(--gr-gold); color: #17120a; }
+.nc-booth[hidden], .nc-transcript[hidden] { display: none; }
 .nc-booth-head { align-items: center; }
-.gr-fold { margin-left: auto; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; border: 1px solid var(--nc-line); background: transparent; color: var(--nc-muted); cursor: pointer; font-size: 15px; }
-.gr-fold:hover { color: var(--gr-gold-hi); border-color: var(--gr-gold); }
-.gr-rail { grid-area: booth; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px 6px; border-radius: 18px; border: 1px solid var(--nc-line); background: var(--nc-panel); color: var(--nc-ink); cursor: pointer; }
-.gr-rail-label { writing-mode: vertical-rl; font: 700 12px var(--nc-body); letter-spacing: .14em; text-transform: uppercase; color: var(--gr-gold); }
-.gr-rail-chip { writing-mode: vertical-rl; font-size: 11px; color: var(--nc-muted); }
-.gr-transcript-head { display: flex; align-items: center; gap: 8px; }
-@media (min-width: 981px) {
-  .gr.is-show .nc-show.is-booth-closed { grid-template-columns: minmax(0, 1fr) 44px; }
-  /* Folded, the transcript is a one-line bar: the program's row takes the rest, the picture at its top. */
-  .gr.is-show .nc-show.is-transcript-closed { grid-template-rows: minmax(0, 1fr) auto; }
-  .gr.is-show .nc-show.is-transcript-closed .gr-program { width: min(100%, calc((100vh - 150px) * 16 / 9)); align-self: start; }
-  .gr.is-show .nc-show.is-transcript-closed .nc-transcript { padding: 8px 16px; }
-}
+/* Full window: the picture alone, as large as the window lets it be. */
+.gr.is-show .nc-show.is-full { grid-template-columns: minmax(0, 1fr); grid-template-areas: "program"; grid-template-rows: minmax(0, 1fr); align-items: center; }
+.gr.is-show .nc-show.is-full .gr-program { width: min(100%, calc((100vh - 110px) * 16 / 9)); justify-self: center; align-self: center; }
 
 /* ---------- The booth: Autopilot, guests, rundown, one command box ---------- */
 .gr-console { gap: 18px; }
