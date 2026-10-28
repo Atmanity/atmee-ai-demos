@@ -37,10 +37,13 @@ Built the speech-to-speech way (`POST /v1/speech_sessions`), with each face an a
   forwards every frame of each avatar's voice into the other's input. Turn-taking is theirs: they
   listen to each other as to a person.
 - **One room, two faces.** The server starts both renders into the show's room, each under its own
-  identity; the page joins the room twice, once as each face's agent. Each avatar's voice is cut
-  into pieces (`show/voice.ts`: it opens on the first sound and closes after 600 ms of quiet),
-  resampled from 24 kHz to 16 kHz and streamed to its face, which publishes the face and the voice
-  in sync. The page plays the faces' voices, not the raw speech.
+  identity; the page joins the room twice, once as each face's agent. Each avatar's whole voice is
+  resampled from 24 kHz to 16 kHz and streamed to its face as **one** piece for the show, silence
+  included, in 100 ms writes; the face publishes the face and the voice in sync. (Measured live
+  against the raw voice: cutting it into a piece per stretch of speech lost 1.3 s of 13.8 s to
+  dropouts, since every new piece starts the renderer cold; one stream lost 0.05 s of 13.4 s.)
+  `show/voice.ts` also finds the stretches of speech, which tell the booth who is speaking. The
+  page plays the faces' voices, not the raw speech.
 - **The booth** (`show/booth.ts`, tested in `booth.test.ts`): Jada's line opens once her face is
   up and she greets the viewers; when her greeting is over she is directed to introduce the guest
   and the guest's line opens, so the guest's first words ("can you hear me?") reach her. A
@@ -88,8 +91,8 @@ Needs the site's own LiveKit project (`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT
 ## Limitations
 
 - **Four things bill at once**: two speech sessions and two renders.
-- **The faces lag the voices a little**: each avatar hears the other's raw voice as it is made,
-  while the viewer sees and hears it from the face a moment later.
+- **The show plays about 4 s late**: each avatar hears the other's raw voice as it is made, while
+  the viewer sees and hears it from the faces about 4 s later (both equally, like a broadcast delay).
 - **Speech recognition sits between them**, so a misheard word or an overlap is still possible.
 - **Check-ins stay on** (a public session may not change them), which is harmless while the two
   hear each other.

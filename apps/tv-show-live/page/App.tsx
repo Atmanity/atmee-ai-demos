@@ -11,7 +11,7 @@ import { createBooth, type Booth, type Role, type Stage } from '../show/booth.ts
 import { GUESTS, HOST, SHOW, firstName, type Guest } from '../show/cast.ts';
 import { goodbyeCue, introCue, noteCue, topicCue, wrapCue } from '../show/script.ts';
 import { openSpeech, SpeechError, type SpeechLine } from '../show/speech.ts';
-import { createVoice } from '../show/voice.ts';
+import { createResampler, createVoice } from '../show/voice.ts';
 import jada from '../host/portrait.jpg';
 import otto from '../guests/otto.jpg';
 import rosa from '../guests/rosa.jpg';
@@ -31,16 +31,44 @@ const STAGE_TEXT: Record<Stage, string> = {
 
 interface LogLine { id: number; who: Role | 'booth'; text: string }
 
+// Each avatar's voice reaches its face as ONE stream for the whole show,
+// silence included. Measured live against the raw voice: a piece per stretch
+// of speech lost 1.3 s of 13.8 s to dropouts (every new piece starts the
+// renderer cold); one stream lost 0.05 s of 13.4 s.
+const WRITE_SAMPLES = 1600;   // 100 ms at 16 kHz per write: fewer, larger packets
+
 /**
- * Hands one avatar's voice to its face, a piece per stretch of speech. The face
- * opens a piece asynchronously, so the first frames wait for it.
+ * Hands one avatar's voice to its face. The face opens a piece asynchronously,
+ * so frames wait for it; writes go out one after another, in order, in 100 ms chunks.
  */
 function faceFeeder(face: () => AvatarOnly) {
   let writer: Promise<SpeechWriter | null> | null = null;
+  let chain: Promise<unknown> = Promise.resolve();
+  let pending: Int16Array[] = [];
+  let pendingSamples = 0;
+  const flush = () => {
+    if (!pendingSamples || !writer) return;
+    const pcm = new Int16Array(pendingSamples);
+    let at = 0;
+    for (const p of pending) { pcm.set(p, at); at += p.length; }
+    pending = []; pendingSamples = 0;
+    const w = writer;
+    chain = chain.then(() => w.then((x) => x?.write(pcm))).catch(() => {});
+  };
   return {
+    get open() { return writer !== null; },
     start() { writer = face().open(); },
-    frame(pcm: Int16Array) { void writer?.then((w) => w?.write(pcm)); },
-    end() { const w = writer; writer = null; void w?.then((x) => x?.end()); },
+    frame(pcm: Int16Array) {
+      if (!writer) return;
+      pending.push(pcm); pendingSamples += pcm.length;
+      if (pendingSamples >= WRITE_SAMPLES) flush();
+    },
+    end() {
+      flush();
+      const w = writer;
+      writer = null;
+      chain = chain.then(() => w?.then((x) => x?.end())).catch(() => {});
+    },
   };
 }
 
@@ -76,17 +104,27 @@ export function App() {
   const voices = useMemo(() => {
     const make = (role: Role) => {
       const feeder = faceFeeder(() => faces.current[role]);
-      return createVoice({
-        onStart() { feeder.start(); booth.current?.speaking(role, true); },
-        onFrame(pcm) { feeder.frame(pcm); },
+      const resample = createResampler();
+      const voice = createVoice({
+        // The voice's pieces say when the avatar speaks, for the booth and the transcript.
+        onStart() { booth.current?.speaking(role, true); },
+        onFrame() {},
         onEnd() {
-          feeder.end();
           booth.current?.speaking(role, false);
           const said = words.current[role].trim();
           words.current[role] = '';
           if (said) addLog(role, said);
         },
       });
+      return {
+        feed(pcm: Int16Array) {
+          voice.feed(pcm);
+          // One stream for the whole show, from the first frame once the face is up.
+          if (!feeder.open && faces.current[role].phase === 'live') feeder.start();
+          feeder.frame(resample(pcm));
+        },
+        flush() { voice.flush(); feeder.end(); },
+      };
     };
     return { host: make('host'), guest: make('guest') };
   }, []);

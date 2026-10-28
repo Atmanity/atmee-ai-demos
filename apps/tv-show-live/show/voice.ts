@@ -1,8 +1,9 @@
 // An avatar's voice as the speech session sends it: one continuous stream of
 // 24 kHz mono PCM16 in 20 ms frames, silence included, in real time. Its face
-// (an avatar-only render) takes speech as pieces of 16 kHz PCM: each piece
-// opens when the voice starts and closes once it has been quiet for a moment,
-// so the face knows when it is speaking and when it is listening.
+// (an avatar-only render) takes 16 kHz PCM (createResampler); the page streams
+// it the whole voice as one piece. createVoice finds the stretches of speech in
+// it (on at the first sound, off after a moment of quiet): when the avatar
+// speaks, for the booth and the transcript.
 export const SPEECH_RATE = 24_000;
 export const FACE_RATE = 16_000;
 /** Below this peak a frame counts as silence (PCM16; the session pads with digital zeros). */
