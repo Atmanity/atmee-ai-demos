@@ -142,10 +142,12 @@ export const STABLE_PICTURE =
 // The framing, said outright: Causeur's "fixed camera" alone left this renderer zooming in and out.
 const FRAMING = 'The camera is locked off on a tripod: one fixed medium shot, exactly as framed at the start, the whole upper body and the desk always in frame. The camera never zooms in or out, never pushes in, never pans or tilts.';
 // The room said to be still, outright: "background stable" alone left doors opening and things moving behind her.
-const STILL = 'The background never moves, and the person is alone: there is no other person anywhere in the picture, no one walking by, no figure, silhouette, shadow or reflection of a person in the window, the curtains or the background, at any moment. Everything behind the person is a fixed, empty set and stays completely still: nothing in it moves or changes, no door or panel opens, no one enters or walks by, nothing slides, falls or appears, no screen, monitor or TV is anywhere behind them, the curtains hang motionless, and the lights stay exactly as they are. Only the person moves.';
+// Said only in positive terms: naming what must not appear ("no one walking by", a door, a screen) put
+// those very words in the renderer's conditioning, and people started walking past her window.
+const STILL = 'The background is completely still and unchanging, like a photograph of a quiet, empty studio; only the person in front of it moves, gently.';
 // The still room leads the prompt (and is said again at its end), so the renderer weighs it first.
 const prompt = (state: string, setting: string) => `${STILL}\n\n${state}\n\n${setting}\n\n${FRAMING} ${STABLE_PICTURE} ${STILL}`;
-const STUDIO = 'The setting is a closed, empty late-night TV studio with no one else in it, high up in a tower, softly out of focus: stepped walnut art-deco panels lit warmly from behind, and a tall window looking out from high above the city, showing only the distant skyline and its lights far below; nothing and no one is ever near or behind the glass, and nothing moves in the window. Sheer amber curtains hang still at its sides. Behind a walnut desk with a brass edge, warm low light.';
+const STUDIO = 'The setting is a quiet late-night TV studio high up in a tower, softly out of focus: stepped walnut art-deco panels lit warmly from behind, and a tall window showing a distant city skyline far below at night, its lights softly blurred, with sheer amber curtains at its sides. Behind a walnut desk with a brass edge, warm low light.';
 /**
  * While listening, small reactions, which the page rotates every LISTENING_EVERY_MS so the face
  * stays alive: only the head and the face move (Causeur's avatar2: a held state changes the head
@@ -164,11 +166,11 @@ const REACTIONS = [
  * and eyes turn.
  */
 export type Facing = 'viewers' | 'guest';
-const JADA = 'Alone in the studio, a woman with curly black hair and gold hoop earrings, in an emerald-green blazer over a black crew-neck top, is sitting at a long walnut desk, her body turned toward the right of the frame, her forearms resting on the desk, her hands resting on the desk or moving gently just above it, always low, close to her body and inside the frame';
+const JADA = 'A woman with curly black hair and gold hoop earrings, in an emerald-green blazer over a black crew-neck top, is sitting at a long walnut desk, her body turned toward the right of the frame, her forearms resting on the desk, her hands resting on the desk or moving gently just above it, always low, close to her body and inside the frame';
 const LOOK: Record<Facing, string> = {
   viewers: 'her head and eyes turned to look straight into the camera, addressing the viewers at home',
   // Not "at the TV screen": named, a screen appeared in her picture.
-  guest: 'her head and eyes turned toward the right of the frame, looking at someone just off the frame to her right',
+  guest: 'her head and eyes turned toward the right of the frame, looking off to her right, attentive',
 };
 export const hostPrompts = (facing: Facing) => ({
   talking: prompt(`${JADA}, ${LOOK[facing]}, speaking warmly.`, STUDIO),

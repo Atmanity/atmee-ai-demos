@@ -47,7 +47,9 @@ const FACE_LAG_MS = 4_500;
 const INVITE_LEAD_MS = FACE_LAG_MS + 1_500;
 const TRAILER_FADE_MS = 900;
 const CAPTION_LINGER_MS = 3_000;
-const HOLD_EVERY_MS = 25_000;   // waiting for a guest still on their way: Jada keeps the viewers company this often
+const HOLD_EVERY_MS = 25_000;
+// `?prompts=off`: the faces get no free-form prompt, as in the regular chat room (to compare).
+const PROMPTS_ON = typeof location === 'undefined' || new URLSearchParams(location.search).get('prompts') !== 'off';   // waiting for a guest still on their way: Jada keeps the viewers company this often
 const SEGMENT_MS = 4 * 60_000;   // a guest's time on air before an auto-booked guest may take over   // the dissolve into the trailer and back out to the studio
 
 const STAGE_TEXT: Record<Stage, string> = {
@@ -233,7 +235,7 @@ export function App() {
     setTimeout(() => {
       if (showRef.current !== show || facing.current === to) return;
       facing.current = to;
-      if (faces.current.host.phase === 'live') void faces.current.host.setPrompt(pickPrompts(hostPrompts(to)));
+      if (PROMPTS_ON && faces.current.host.phase === 'live') void faces.current.host.setPrompt(pickPrompts(hostPrompts(to)));
     }, after);
   };
   const pickPrompts = (p: { talking: string; listening: string[] }) => ({ talking: p.talking, listening: p.listening[promptTurn.current % p.listening.length] });
@@ -242,6 +244,7 @@ export function App() {
     return () => clearInterval(id);
   }, []);
   const sendPrompts = (first: boolean) => {
+    if (!PROMPTS_ON) return;
     const pick = pickPrompts;
     const f0 = faces.current;
     if (f0.host.phase === 'live') {
