@@ -333,6 +333,17 @@ describe('a handover to the next guest', () => {
     expect(h.bringOn).toHaveBeenCalledOnce();
   });
 
+  it('runs even after a speak-up earlier in the show was refused', () => {
+    const s = onAir();
+    s.booth.speakUpRefused();
+    const h = steps();
+    s.booth.handover(h);
+    s.turn('host');                                   // her goodbye
+    expect(s.sent).toContainEqual({ to: 'guest', kind: 'directive', text: 'GUEST BYE' });
+    s.turn('guest');
+    expect(h.retire).toHaveBeenCalledOnce();
+  });
+
   it('is dropped by the wrap before it has begun', () => {
     const s = onAir();
     const h = steps();

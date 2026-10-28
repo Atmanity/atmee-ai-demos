@@ -156,6 +156,9 @@ export function createBooth(opts: BoothOptions): Booth {
   const direct = (text: string) => {
     directed = true;
     begun = false;
+    // A refusal answered an earlier speak-up: left standing, no later turn of hers would count as
+    // begun, and a handover stalled at her farewell for the rest of the show.
+    refused = false;
     directedAt = now();
     lead = DIRECTIVE_LEAD_MS;
     opts.deliver({ to: 'host', kind: 'directive', text });
