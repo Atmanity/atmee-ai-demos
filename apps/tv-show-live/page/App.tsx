@@ -263,7 +263,7 @@ export function App() {
   // stretch ends after 0.6 s, and a pause mid-sentence let the other's "mm-hmm" through, which
   // cut the host off while the guest was not speaking at all.
   const talkingUntil = useRef<Partial<Record<Role, ReturnType<typeof setTimeout>>>>({});
-  // And what goes on air: of the listener's "mm-hmm" and "wow" over the speaker, only a short, rare reaction (show/floor.ts).
+  // And what goes on air: only the speaker; the listener's "mm-hmm" and "wow" stay off it (show/floor.ts).
   const floor = useMemo(() => createFloor(), []);
 
   // Each avatar's voice: its face says it, the other avatar hears it, and the booth sees when it speaks.
@@ -309,9 +309,9 @@ export function App() {
       return {
         feed(pcm: Int16Array) {
           voice.feed(pcm);
-          // Not heard (off the floor, past a short reaction), or Jada during the trailer: the face
+          // Not heard (off the floor), or Jada during the trailer: the face
           // gets silence of the same length, so its stream keeps time.
-          const quiet = !floor.audible(role) || (role === 'host' && hush.current);
+          const quiet = !floor.onAir(role) || (role === 'host' && hush.current);
           const pcm16 = resample(quiet ? new Int16Array(pcm.length) : pcm);
           // One stream per face for the whole show, from the first frame once that face is up.
           for (const due of gate.push(pcm16, performance.now())) {
