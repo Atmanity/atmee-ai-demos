@@ -166,7 +166,7 @@ const REACTIONS = [
  * and eyes turn.
  */
 export type Facing = 'viewers' | 'guest';
-const JADA = 'A woman with curly black hair and gold hoop earrings, in an emerald-green blazer over a black crew-neck top, is sitting at a long walnut desk, her body turned toward the right of the frame, her forearms resting on the desk, her hands resting on the desk or moving gently just above it, always low, close to her body and inside the frame';
+const JADA = 'A woman with curly black hair and gold hoop earrings, in an emerald-green blazer over a black crew-neck top, is sitting at a long walnut desk, her body turned toward the right of the frame, her forearms resting on the desk, her hands calm and mostly resting on the desk, only now and then making a small, slow gesture just above it, always low, close to her body and inside the frame';
 const LOOK: Record<Facing, string> = {
   viewers: 'her head and eyes turned to look straight into the camera, addressing the viewers at home',
   // Not "at the TV screen": named, a screen appeared in her picture.
