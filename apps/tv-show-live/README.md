@@ -31,13 +31,17 @@ No platform changes.
         Atmee speech server                             face-front-…, face-guest-…
 ```
 
-- **The cameras are the page's.** There are two renders, Jada's (facing the lens) and the guest's,
-  and every camera is a framing of one of them, made in the page: Jada in a medium shot (camera 1)
-  or pushed in to a close-up (camera 2), the guest alone, or both side by side. The renders are boxes
-  on the show's backdrop that glide between layouts as the director cuts. No face is set into a
-  photograph: the v2 renderer moves its camera on its own (zooms and drifts), and an earlier version
-  that set Jada's face into a studio photograph showed the seam as soon as it did. One render has
-  one pose, so Jada faces the lens in every framing.
+- **One studio, with a TV on the wall.** The set (`studio/wall.jpg`) was outpainted from Jada's
+  own camera still: her desk runs on to the right, under a wall TV where the film's key art waits
+  and the guest then appears (its screen measured from a pure-green screen in the generated
+  picture). Jada's whole render lies exactly over her still in the set (her place measured by
+  matching the two), never cropped: her desk leaves through the bottom of the frame and the edges
+  inside the frame fade narrowly, so when the v2 renderer drifts there is no hard line to slip
+  against. An earlier version cropped her render into a studio photograph and showed the seam.
+- **The cameras are the page's**: cuts between moves on that one set, wide (Jada and the TV), in
+  on Jada from the chest up, or in on the TV. One render has one pose, so Jada faces the lens in
+  every shot. A shot keeps part of every face in frame: LiveKit's adaptive stream stops sending
+  video to an element outside the viewport.
 - **The director** (`show/director.ts`, tested in `director.test.ts`): Jada's medium shot until the
   guest is on; then it follows the speaker (Jada's close-up, the guest, both when they talk over
   each other), holding each shot at least 3 s; the two-shot for the goodbyes. The booth can take

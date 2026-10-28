@@ -20,6 +20,7 @@ import { filmCue, goodbyeCue, inviteCue, noteCue, nudgeCue, topicCue, welcomeCue
 import { openSpeech, SpeechError, type SpeechLine } from '../show/speech.ts';
 import { createResampler, createVoice } from '../show/voice.ts';
 import cam1 from '../studio/cam1.jpg';
+import wall from '../studio/wall.jpg';
 import ines from '../guests/ines.jpg';
 import still1 from '../film/still-1.jpg';
 import still2 from '../film/still-2.jpg';
@@ -344,10 +345,13 @@ function Face({ face, poster }: { face: AvatarOnly; poster: string }) {
   );
 }
 
-// The program picture: every shot is a whole render, framed as a box on the
-// show's backdrop (never cropped, never set into a photograph), and the boxes
-// glide between layouts as the director cuts: Jada alone, the guest alone, or
-// both side by side.
+// The program picture: one studio. The set (studio/wall.jpg) was outpainted from
+// Jada's own camera still: her desk runs on to the right, under a TV on the
+// wall. Her whole render lies exactly over her still, never cropped (her desk
+// leaves through the bottom of the frame; the edges inside the frame fade, so
+// the renderer's drift has no hard line to slip against); the guest plays on
+// the TV. The director's shots are camera
+// moves on that set: wide, pushed in on Jada, pushed in on the TV.
 function Program({ host, guest, guestInfo, patched, stage, backstage, shot, trailer, onTrailerDone }: {
   host: AvatarOnly; guest: AvatarOnly; guestInfo: Guest; patched: boolean; stage: Stage;
   backstage: boolean; shot: Shot; trailer: boolean; onTrailerDone: () => void;
@@ -359,27 +363,29 @@ function Program({ host, guest, guestInfo, patched, stage, backstage, shot, trai
   const backstageText = failed ? failed.detail : faces.some((f) => f.phase === 'warming') ? 'Lighting the stage…' : 'Getting the studio ready…';
   // Which cameras are up, so a long wait says what it is waiting for.
   const cameras: [string, AvatarOnly][] = [['Jada', host], [g, guest]];
-  // Until the guest is on, the layout keeps Jada alone whatever the director says.
-  // Her two shots are framings of the one render: medium (camera 1) and close-up (camera 2).
-  const layout = patched ? shot : 'host-front';
-  const hostCam = layout === 'host-side' ? 'close' : 'medium';
+  // Until the guest is on, the camera stays wide on Jada and the key art on the TV.
+  const camera = !patched ? 'wide' : shot === 'host-side' ? 'host' : shot === 'guest' ? 'tv' : 'wide';
+  const third = camera === 'tv' ? { name: guestInfo.name, billing: guestInfo.billing } : camera === 'host' || !patched ? HOST : null;
   return (
-    <section className={`gr-program is-${layout}`} aria-label="The show, as it goes out">
-      <div className="gr-backdrop" aria-hidden="true"><span className="gr-fan" /></div>
-      <figure className={`gr-box is-host is-${hostCam}`}>
-        <div className="gr-cam"><Face face={host} poster={cam1} /></div>
-        <figcaption className="gr-third"><strong>{HOST.name}</strong><span>{HOST.billing}</span></figcaption>
-      </figure>
-      <figure className="gr-box is-guest">
-        <Face face={guest} poster={PORTRAITS[guestInfo.id]} />
-        <span className="tv-live"><span className="nc-rec" />Live · via video call</span>
-        <figcaption className="gr-third"><strong>{guestInfo.name}</strong><span>{guestInfo.billing}</span></figcaption>
-      </figure>
-      <aside className="gr-card-side" aria-hidden="true">
-        <span className="gr-kicker">Tonight</span>
-        <strong>{FILM.title}</strong>
-        <span>{stage === 'dialing' ? `Calling ${g}…` : patched ? `with ${guestInfo.name}` : 'Behind the frame'}</span>
-      </aside>
+    <section className={`gr-program is-${camera}`} aria-label="The show, as it goes out">
+      <div className="gr-set">
+        <img className="gr-wall" src={wall} alt="" />
+        <div className="gr-tv">
+          <div className={`gr-tv-feed ${patched ? 'is-on' : ''}`}><Face face={guest} poster={PORTRAITS[guestInfo.id]} /></div>
+          {!patched && (
+            <div className="gr-tv-card" aria-hidden="true">
+              <img src={STILLS[5]} alt="" />
+              <span className="gr-kicker">Tonight</span>
+              <strong>{FILM.title}</strong>
+              <span>{stage === 'dialing' ? `Calling ${g}…` : 'Behind the frame'}</span>
+            </div>
+          )}
+          {patched && <span className="tv-live"><span className="nc-rec" />Live · via video call</span>}
+          <span className="gr-tv-glass" aria-hidden="true" />
+        </div>
+        <div className="gr-host"><Face face={host} poster={cam1} /></div>
+      </div>
+      {third && <div className="gr-third"><strong>{third.name}</strong><span>{third.billing}</span></div>}
       <div className="nc-bug gr-bug"><span className="gr-fan" aria-hidden="true" />The Gilded <b>Reel</b></div>
       <div className={`nc-tally ${live ? 'is-on' : ''}`}>{live ? 'Live' : 'Standby'}</div>
       {trailer && <Trailer onDone={onTrailerDone} />}
