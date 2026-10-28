@@ -212,7 +212,7 @@ export function App() {
   }, [speaking]);
   // Director mode shows the booth and the transcript beside the picture; full window, the picture alone.
   const [view, setView] = useState<'director' | 'full'>('director');
-  const [captionsOn, setCaptionsOn] = useState(true);
+  const [captionsOn, setCaptionsOn] = useState(false);   // off until the viewer turns them on (CC)
   const toggleFullScreen = () => { if (document.fullscreenElement) void document.exitFullscreen(); else void document.documentElement.requestFullscreen().catch(() => {}); };
 
   // A ref, not the state: the booth's callbacks are made before the show has its id.
