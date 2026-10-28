@@ -274,6 +274,15 @@ button { font: inherit; }
 .gr-program .nc-ticker { bottom: 0; height: 4.2cqw; border-top-color: rgba(216, 177, 92, .6); background: rgba(10, 8, 5, .9); }
 .gr-program .nc-ticker span { font-size: 1.15cqw; }
 
+/* During the trailer, camera 1 is a window in the corner, over the trailer: close on Jada,
+   framed like a reaction camera, with her name on it. */
+.gr-program.is-trailer .gr-host.is-front { left: auto; top: auto; right: 2.5%; bottom: 7%; width: 22%; height: auto; aspect-ratio: 1; z-index: 16;
+  -webkit-mask-image: none; mask-image: none; opacity: 1; overflow: hidden; border-radius: .7cqw; background: #0c0a07;
+  box-shadow: 0 .8cqw 2.4cqw rgba(0, 0, 0, .7), 0 0 0 .15cqw rgba(216, 177, 92, .7); }
+.gr-program.is-trailer .gr-host.is-front .ll-face { transform: scale(1.8); transform-origin: 38% 22%; }
+.gr-program.is-trailer .gr-host.is-front::after { content: attr(data-label); position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: .35cqw .7cqw;
+  font: 600 .85cqw/1.2 var(--nc-display); letter-spacing: .08em; text-transform: uppercase; color: var(--nc-ink); background: linear-gradient(0deg, rgba(10, 8, 5, .85), transparent); }
+
 /* The trailer, full frame. */
 .gr-trailer { position: absolute; inset: 0; z-index: 15; background: #000; overflow: hidden; }
 .gr-trailer::before, .gr-trailer::after { content: ""; position: absolute; left: 0; right: 0; height: 9%; background: #000; z-index: 3; }
