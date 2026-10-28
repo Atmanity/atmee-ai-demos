@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BackToApps, clock, useAvatarOnly, type AvatarOnly, type SpeechWriter } from '../../../src/kit/index.ts';
 import { createBooth, type Booth, type Role, type Stage } from '../show/booth.ts';
+import { startScore } from './score.ts';
 import { createDirector, type Director, type Shot, type ShotMode } from '../show/director.ts';
 import { FILM, GUESTS, HOST, SHOW, firstName, type Guest } from '../show/cast.ts';
 import { filmCue, goodbyeCue, inviteCue, noteCue, nudgeCue, topicCue, welcomeCue, wrapCue } from '../show/script.ts';
@@ -32,6 +33,9 @@ const PORTRAITS: Record<string, string> = { ines };
 const STILLS: Record<number, string> = { 1: still1, 2: still2, 3: still3, 4: still4, 5: still5 };
 const END_AFTER_GOODBYE_MS = 4_000;
 const SHOT_MS = 5_200;          // each trailer still, held and pushed in on
+// The booth hears Jada's line end in her speech session; viewers hear it from her face about
+// 4 s later (measured). The trailer rolls once the face is through it, not over her last words.
+const FACE_LAG_MS = 4_500;
 
 const STAGE_TEXT: Record<Stage, string> = {
   greeting: 'Jada is opening the show',
@@ -239,7 +243,7 @@ export function App() {
     setBackstage(true);
     booth.current = createBooth({
       film: filmCue(),
-      rollTrailer: () => { setTrailer(true); addLog('booth', `Roll the ${FILM.title} trailer`); },
+      rollTrailer: () => { addLog('booth', `Roll the ${FILM.title} trailer`); const show = showRef.current; setTimeout(() => { if (showRef.current === show) setTrailer(true); }, FACE_LAG_MS); },
       invite: inviteCue(guest),
       welcome: welcomeCue(guest, first),
       nudge: nudgeCue(guest),
@@ -408,6 +412,16 @@ function Program({ host, guest, guestInfo, patched, stage, backstage, shot, trai
 function Trailer({ onDone }: { onDone: () => void }) {
   const [shot, setShot] = useState(0);
   const shots = FILM.trailer;
+  const score = useRef<ReturnType<typeof startScore>>(null);
+  useEffect(() => {
+    score.current = startScore((shots.length * SHOT_MS) / 1000);
+    return () => score.current?.end();
+  }, []);
+  useEffect(() => {
+    const s = shots[shot];
+    if (s?.card) score.current?.hit(s.title === true);
+    if (shot === shots.length - 1) setTimeout(() => score.current?.end(), SHOT_MS - 1_300);
+  }, [shot]);
   useEffect(() => {
     if (shot >= shots.length) { onDone(); return; }
     const id = setTimeout(() => setShot((s) => s + 1), SHOT_MS);

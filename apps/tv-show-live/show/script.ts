@@ -10,7 +10,7 @@ export function hostScenario(guest: Guest): string {
   return [
     `You are hosting ${SHOW}, a late-night TV talk show about the art of film. Tonight's film is ${FILM.title}, ${FILM.logline}. A studio audience and viewers at home are watching.`,
     `Tonight's guest is ${guest.name}, ${guest.billing}; ${g} joins you on a live video call from ${guest.from}, shown on the screen in your studio, once you invite them on.`,
-    `Until you invite ${g} on, you are talking to the viewers alone.`,
+    `Until you invite ${g} on, you are talking to the viewers alone: your opening line greets the viewers and welcomes them to the show, and does not mention or welcome ${g}, who is not on yet.`,
     `Once ${g} is on, the user is ${g}, speaking to you on air. Talk to ${g} directly: let ${g} finish, waiting through any pause mid-thought, then react to what ${g} said and ask one follow-up question about how the film was designed and made.`,
     // Naming who sends the topics plants the word: she once said "my producers tell me".
     'When a direction gives you a new topic, bring it up with your guest as your own idea, in your own words.',
@@ -25,6 +25,9 @@ export function guestScenario(guest: Guest): string {
     'When the line is quiet, she is about to speak: never ask whether anyone is still there.',
   ].join(' ');
 }
+
+/** Who the host's session talks to when it opens: the viewers (the guest comes on later). */
+export const HOST_USER = 'the viewers at home';
 
 /** After the greeting: the film, then the trailer. */
 export const filmCue = () =>

@@ -20,7 +20,7 @@ import { avatarApi } from '../../server/atmee.ts';
 import { avatarFor } from '../../server/hosts.js';
 import { endRender, renderConfigured, startRender } from '../../server/render.ts';
 import { GUESTS, HOST, HOST_FRONT_AVATAR, guestById, type Guest } from './show/cast.ts';
-import { DELIVERY, guestScenario, hostScenario } from './show/script.ts';
+import { DELIVERY, HOST_USER, guestScenario, hostScenario } from './show/script.ts';
 
 const ID = 'tv-show-live';
 const MAX_SECONDS = 900;
@@ -122,7 +122,9 @@ const app: AppServer = {
       const { show, seat } = found;
       if (seat === 'front') return void res.status(404).json({ error: 'not_found' });
       const settings = seat === 'host'
-        ? { scenario: hostScenario(show.guest), user_name: show.guest.name, instructions: DELIVERY }
+        // The session opens by greeting its user by name: the host's user is the viewers until her
+        // guest is on (her scenario says who speaks after that), or she welcomes a guest not yet there.
+        ? { scenario: hostScenario(show.guest), user_name: HOST_USER, instructions: DELIVERY }
         : { scenario: guestScenario(show.guest), user_name: HOST.name, instructions: DELIVERY };
       const r = await avatarApi('POST', '/v1/speech_sessions', { avatarId: avatarOf(show, seat), maxDurationSeconds: maxSeconds(), settings });
       if (r.status !== 201) {
