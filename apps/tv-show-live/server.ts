@@ -124,7 +124,7 @@ const app: AppServer = {
       const settings = seat === 'host'
         // The session opens by greeting its user by name: the host's user is the viewers until her
         // guest is on (her scenario says who speaks after that), or she welcomes a guest not yet there.
-        ? { scenario: hostScenario(show.guest), user_name: HOST_USER, instructions: DELIVERY }
+        ? { scenario: hostScenario(), user_name: HOST_USER, instructions: DELIVERY }
         : { scenario: guestScenario(show.guest), user_name: HOST.name, instructions: DELIVERY };
       const r = await avatarApi('POST', '/v1/speech_sessions', { avatarId: avatarOf(show, seat), maxDurationSeconds: maxSeconds(), settings });
       if (r.status !== 201) {

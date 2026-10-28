@@ -36,8 +36,12 @@ No platform changes.
   and the guest then appears (its screen measured from a pure-green screen in the generated
   picture). Jada's whole render lies exactly over her still in the set (her place measured by
   matching the two), never cropped: her desk leaves through the bottom of the frame and the edges
-  inside the frame fade narrowly, so when the v2 renderer drifts there is no hard line to slip
-  against. An earlier version cropped her render into a studio photograph and showed the seam.
+  inside the frame fade, so when the v2 renderer drifts there is no hard line to slip against.
+  The front of the desk (`studio/desk.webp`, cut from the set) lies over her render: the renderer
+  zooms in on its own during a show (about 1.25x, measured live), and then her arms go behind a
+  desk that stays put instead of the desk breaking off. The set is softened slightly to match the
+  renderer's softer background. An earlier version cropped her render into a studio photograph
+  and showed the seam.
 - **The cameras are the page's**: cuts between moves on that one set, wide (Jada and the TV), in
   on Jada from the chest up, or in on the TV. One render has one pose, so Jada faces the lens in
   every shot. A shot keeps part of every face in frame: LiveKit's adaptive stream stops sending
@@ -80,7 +84,8 @@ On each speech WebSocket: `session.start`, `session.input_audio.append`, `sessio
 
 - **Jada Monroe** `307b2aba` (her speech session) and **Jada Monroe (camera 1)** `bdaf5bd3` (her
   face, facing the lens, at a calm walnut desk); a designed voice.
-- **Inès Valcour** `5190aed1`, AMBERFALL's costume and production designer, at her atelier.
+- **Inès Valcour** `5190aed1`, AMBERFALL's costume and production designer, centred and facing
+  the lens in a studio dressed for the film.
 
 ## Limitations
 

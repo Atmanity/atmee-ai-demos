@@ -21,6 +21,7 @@ import { openSpeech, SpeechError, type SpeechLine } from '../show/speech.ts';
 import { createResampler, createVoice } from '../show/voice.ts';
 import cam1 from '../studio/cam1.jpg';
 import wall from '../studio/wall.jpg';
+import desk from '../studio/desk.webp';
 import ines from '../guests/ines.jpg';
 import still1 from '../film/still-1.jpg';
 import still2 from '../film/still-2.jpg';
@@ -175,7 +176,8 @@ export function App() {
       });
       lines.current[role] = line;
       if (role === 'host') booth.current?.hostLive();
-      else { setPatched(true); booth.current?.guestLive(); }
+      // The guest is on: the two-shot, Jada and the TV, until the booth or the director cuts.
+      else { setPatched(true); chooseShot('two'); booth.current?.guestLive(); }
     } catch (err) {
       offAir(`We couldn't open ${role === 'host' ? HOST.name : segment.current?.name}'s line: ${(err as SpeechError).code ?? (err as Error).message}`);
     }
@@ -384,6 +386,9 @@ function Program({ host, guest, guestInfo, patched, stage, backstage, shot, trai
           <span className="gr-tv-glass" aria-hidden="true" />
         </div>
         <div className="gr-host"><Face face={host} poster={cam1} /></div>
+        {/* The front of the desk, in front of her: when the renderer zooms in, her arms go
+            behind a desk that stays put, and the desk runs on unbroken. */}
+        <img className="gr-desk" src={desk} alt="" />
       </div>
       {third && <div className="gr-third"><strong>{third.name}</strong><span>{third.billing}</span></div>}
       <div className="nc-bug gr-bug"><span className="gr-fan" aria-hidden="true" />The Gilded <b>Reel</b></div>
