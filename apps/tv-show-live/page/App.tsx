@@ -737,6 +737,14 @@ export function App() {
       return setCommandReply(`Inviting: ${intent.description}`);
     }
     if (intent?.kind === 'topic' && intent.topic) {
+      // Before the guest is on, a topic is the one Jada opens the interview with.
+      if (stage !== 'on-air') {
+        firstTopic.current = intent.topic;
+        live.current.used = new Set([intent.topic]);
+        setUsed(new Set(live.current.used));
+        addLog('booth', `First topic: ${intent.topic}`);
+        return setCommandReply(`Jada opens the interview with: ${intent.topic}`);
+      }
       sendTopic(intent.topic);
       return setCommandReply(`Sent as the next topic: ${intent.topic}`);
     }
@@ -791,7 +799,7 @@ export function App() {
                 <button type="button" className="nc-btn nc-primary" onClick={backToLobby}>Book another night</button>
               </div>
             ) : (
-              <Console topics={topics} used={used} disabled={stage !== 'on-air'} onTopic={(t) => sendTopic(t)} onCommand={sendCommand} commandReply={commandReply}
+              <Console topics={topics} used={used} disabled={stage !== 'on-air'} commandDisabled={stage === 'over'} onTopic={(t) => sendTopic(t)} onCommand={sendCommand} commandReply={commandReply}
                 onWrap={wrap} onEnd={endShow}
                 autoAdvance={autoAdvance} onAutoAdvance={setAutoAdvance} autoBook={autoBook} onAutoBook={setAutoBook} suggestWrap={suggestWrap}
                 cast={castOnShow ? [{ guest: castOnShow, poster: PORTRAITS[castOnShow.id], status: statusOf(castOnShow.id) ?? 'Waiting' }] : []}
@@ -1002,8 +1010,10 @@ function Lobby({ guestId, setGuestId, inventText, setInventText, topics, setTopi
   );
 }
 
-function Console({ topics, used, disabled, onTopic, onCommand, commandReply, onWrap, onEnd, autoAdvance, onAutoAdvance, autoBook, onAutoBook, suggestWrap, cast, statusOf, inventions }: {
+function Console({ topics, used, disabled, commandDisabled, onTopic, onCommand, commandReply, onWrap, onEnd, autoAdvance, onAutoAdvance, autoBook, onAutoBook, suggestWrap, cast, statusOf, inventions }: {
   topics: string[]; used: Set<string>; disabled: boolean;
+  /** The command box is open the whole show, opening included; the rest waits for the guest. */
+  commandDisabled: boolean;
   onTopic: (t: string) => void; onCommand: (text: string) => void; commandReply: string; onWrap: () => void; onEnd: () => void;
   autoAdvance: boolean; onAutoAdvance: (on: boolean) => void; autoBook: boolean; onAutoBook: (on: boolean) => void; suggestWrap: boolean;
   cast: { guest: Guest; poster: string; status: string }[]; statusOf: (id: string) => string | null; inventions: InventionView[];
@@ -1056,9 +1066,9 @@ function Console({ topics, used, disabled, onTopic, onCommand, commandReply, onW
       <section className="gr-section">
         <h3>Tell the booth</h3>
         <form className="gr-command" onSubmit={(e) => { e.preventDefault(); const t = command.trim(); if (t) { onCommand(t); setCommand(''); } }}>
-          <input className="nc-input" value={command} onChange={(e) => setCommand(e.target.value)} disabled={disabled} aria-label="Tell the booth"
+          <input className="nc-input" value={command} onChange={(e) => setCommand(e.target.value)} disabled={commandDisabled} aria-label="Tell the booth"
             placeholder="Invite the director · talk about the glass palace · ask about the hardest costume" />
-          <button type="submit" className="nc-btn" disabled={disabled || !command.trim()}>Send</button>
+          <button type="submit" className="nc-btn" disabled={commandDisabled || !command.trim()}>Send</button>
         </form>
         {commandReply && <p className="nc-hint">{commandReply}</p>}
       </section>
