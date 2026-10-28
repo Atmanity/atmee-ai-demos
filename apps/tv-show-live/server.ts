@@ -87,8 +87,16 @@ const app: AppServer = {
       const found = showFor(req, res);
       if (!found) return;
       const { show, seat } = found;
+      // A fresh identity per attempt: a start that timed out at the gateway may still join later,
+      // and must not take the place of the face that did start.
       const r = await startRender(avatarOf(show, seat), maxSeconds(), { app: 'atmee-usecase-demos', usecase: ID, seat },
-        { room: show.room, avatarIdentity: `face-${seat}` });
+        { room: show.room, avatarIdentity: `face-${seat}-${randomUUID().slice(0, 6)}` });
+      // The v2 pool can take minutes to start a second worker, longer than the gateway waits:
+      // the page retries, as it does while a render warms up (the pool is starting by then).
+      if (!r.ok && [502, 504, 524].includes(r.status)) {
+        console.warn('[%s] %s render -> %d (gateway timeout); the page retries', ID, seat, r.status);
+        return void res.status(503).json({ error: 'avatar_warming', retryAfter: 5 });
+      }
       if (!r.ok) {
         console.warn('[%s] %s render -> %d %s %s', ID, seat, r.status, r.json?.error ?? '', r.json?.message ?? '');
         return void res.status(r.status).json({ error: r.json?.error || `http_${r.status}`, retryAfter: r.retryAfter });

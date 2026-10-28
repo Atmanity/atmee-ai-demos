@@ -58,7 +58,9 @@ export function App() {
   const logId = useRef(0);
   const addLog = (who: LogLine['who'], text: string) => setLog((l) => [...l.slice(-150), { id: ++logId.current, who, text }]);
 
-  const seatApi = (seat: Role) => `${API}/show/${showId}/${seat}`;
+  // A ref, not the state: the booth's callbacks are made before the show has its id.
+  const showRef = useRef<string | null>(null);
+  const seatApi = (seat: Role) => `${API}/show/${showRef.current}/${seat}`;
   const hostFace = useAvatarOnly(showId ? `tv-show-live/show/${showId}/host` : 'tv-show-live');
   const guestFace = useAvatarOnly(showId ? `tv-show-live/show/${showId}/guest` : 'tv-show-live');
   const faces = useRef<Record<Role, AvatarOnly>>({ host: hostFace, guest: guestFace });
@@ -145,7 +147,7 @@ export function App() {
     voices.guest.flush();
     await Promise.allSettled([lines.current.host?.end(), lines.current.guest?.end(), faces.current.host.end(), faces.current.guest.end()]);
     lines.current = {};
-    if (showId) void fetch(`${API}/show/${showId}/end`, { method: 'POST', keepalive: true }).catch(() => {});
+    if (showRef.current) void fetch(`${API}/show/${showRef.current}/end`, { method: 'POST', keepalive: true }).catch(() => {});
   }
 
   async function goOnAir(first: string) {
@@ -172,6 +174,7 @@ export function App() {
     const res = await fetch(`${API}/shows`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ guest: guest.id }) }).catch(() => null);
     const json = res ? await res.json().catch(() => ({})) : {};
     if (!res?.ok) return setProblem(json.message || json.error || 'We could not book the studio.');
+    showRef.current = json.showId;
     setOnShow(true);
     setShowId(json.showId);
   }

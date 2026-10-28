@@ -25,7 +25,7 @@ Built the speech-to-speech way (`POST /v1/speech_sessions`), with each face an a
 │              Jada's face ◄─ 16 kHz pieces      pieces ─► Otto's face      │
 └──────────────┬──────────────────────────────────────────────┬───────────┘
                │ WebSockets (token per seat)                  │ one LiveKit room, the site's own
-       Atmee speech server                         two avatar-only renders, `face-host`, `face-guest`
+       Atmee speech server                         two avatar-only renders, `face-host-…`, `face-guest-…`
                ▲                                              ▲
                └──── server.ts: /v1/speech_sessions × 2, /v1/avatars/{id}/avatar_sessions × 2 ────┘
 ```
@@ -54,7 +54,7 @@ Built the speech-to-speech way (`POST /v1/speech_sessions`), with each face an a
 | Call | What for |
 |---|---|
 | `POST /v1/speech_sessions` × 2 | each avatar's session, `maxDurationSeconds` 900, with `settings` pinning `scenario` and `user_name` |
-| `POST /v1/avatars/{id}/avatar_sessions` × 2 | each face, into the show's room under its own identity (`face-host`, `face-guest`) |
+| `POST /v1/avatars/{id}/avatar_sessions` × 2 | each face, into the show's room under its own identity (`face-host-…`, `face-guest-…`, fresh per attempt); a gateway timeout while the v2 pool starts a worker is retried as warming |
 | `POST /v1/speech_sessions/{id}/end`, `POST /v1/avatar_sessions/{id}/end` | all four, at the end, from End the show, or when any one drops |
 
 On each speech WebSocket: `session.start`, `session.input_audio.append` (what the avatar hears),
@@ -99,6 +99,15 @@ Needs the site's own LiveKit project (`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT
 
 ## Live runs
 
-2026-10-28, staging, headless: two speech sessions piped into each other (the studio Nico and
-Lumi) held a natural back-and-forth for 75 s with no relay and no check-ins. The page with both
-faces in one room is not yet run live: see the PR.
+2026-10-28, staging:
+
+- Headless, two speech sessions piped into each other (the studio Nico and Lumi) held a natural
+  back-and-forth for 75 s with no relay and no check-ins.
+- The page, driven headless as the producer, with Otto: both faces in one room, Jada greeted on
+  camera, introduced Otto and asked about the Singing Toaster; a topic (the Umbrella That
+  Remembers) and a note ("which invention exploded": the butter churn that coated the ceiling)
+  each landed on her next turn and were cleared after it; the wrap, Otto's goodbye ("Do mind the
+  ceiling butter"), and the show ended itself at 206 s.
+- Found and fixed live: two faces at once need a second v2 worker, whose start outlasted the
+  gateway (524), so a gateway timeout is now retried as warming; and Jada said "my producers tell
+  me", so her scenario no longer names who sends the topics.
