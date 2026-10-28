@@ -22,7 +22,7 @@ import { endRender, renderConfigured, startRender } from '../../server/render.ts
 import { GUESTS, HOST, guestById, type Guest } from './show/cast.ts';
 import { llmAvailable, structured } from '../../server/llm.ts';
 import { invent, invention } from './invent.ts';
-import { DELIVERY, HOST_USER, JUDGE_SYSTEM, guestScenario, hostScenario, judgeUser } from './show/script.ts';
+import { BOOKER_SYSTEM, DELIVERY, HOST_USER, JUDGE_SYSTEM, bookerUser, guestScenario, hostScenario, judgeUser } from './show/script.ts';
 
 const ID = 'tv-show-live';
 const MAX_SECONDS = 900;
@@ -192,6 +192,28 @@ const app: AppServer = {
       } catch (err) {
         console.warn('[%s] judge failed: %s', ID, (err as Error).message);
         res.status(502).json({ error: 'judge_failed' });
+      }
+    });
+
+    // Auto-booking's booker: is there a natural reason to bring on another of the film's makers? { book, description, reason }
+    router.post('/show/:show/book', async (req, res) => {
+      if (!shows.get(req.params.show)) return void res.status(404).json({ error: 'not_found' });
+      const guests = (Array.isArray(req.body?.guests) ? req.body.guests : []).slice(0, 6).map((g: unknown) => String(g).slice(0, 200));
+      const lines = (Array.isArray(req.body?.lines) ? req.body.lines : []).slice(-12)
+        .map((l: { who?: unknown; text?: unknown }) => ({ who: l?.who === 'guest' ? 'guest' as const : 'host' as const, text: String(l?.text ?? '').slice(0, 1200) }));
+      if (!lines.length) return void res.status(400).json({ error: 'bad_request' });
+      try {
+        const b = await structured<{ book: boolean; description: string; reason: string }>({
+          system: BOOKER_SYSTEM,
+          user: bookerUser(guests, lines, String(req.body?.guest ?? 'the guest').slice(0, 100)),
+          schema: { type: 'object', properties: { book: { type: 'boolean' }, description: { type: 'string' }, reason: { type: 'string' } }, required: ['book', 'description', 'reason'] },
+          temperature: 0.2,
+        });
+        console.log('[%s] booker %s: %s%s', ID, req.params.show.slice(0, 8), b.book ? 'book ' : 'no one', b.book ? `${b.description} (${b.reason})` : '');
+        res.json({ book: b.book === true, description: String(b.description ?? '').slice(0, 300), reason: String(b.reason ?? '').slice(0, 120) });
+      } catch (err) {
+        console.warn('[%s] booker failed: %s', ID, (err as Error).message);
+        res.status(502).json({ error: 'booker_failed' });
       }
     });
 

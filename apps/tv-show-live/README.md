@@ -81,7 +81,23 @@ No platform changes.
   topic; asked after the answer, it landed one exchange late. The producer's own topics reset
   it; when the rundown is used up, the booth suggests the wrap. The transcript shows each move
   with the judge's reason.
-- **The floor** (`show/floor.ts`): the speech model backchannels while the other one talks. What
+- **Invented guests** (`invent.ts`): a guest from a one-line description, from the lobby (before
+  or as the show starts) or the booth (mid-show). Gemini writes the character (name, credit,
+  persona, greeting, topics), draws the portrait to the renderer's needs and reads a voice sample;
+  the Avatar API builds the avatar from both uploads (3 to 5 minutes, nearly all of it the build).
+  The booth shows each step's time. If the trailer ends before the opening guest is built, Jada
+  holds (a line every 40 s, never repeating herself) and invites them the moment their face is up.
+  A new guest mid-show warms up in the TV's second slot; then Jada thanks the guest on air,
+  introduces the next, and the TV switches to them with their own topics.
+- **Auto-booking** (`show/booker.ts`, tested in `booker.test.ts`; on by default, a switch in the
+  booth): the show books its next guest from the conversation. Once a guest has been on a minute,
+  at most every 45 s, a model reads the last lines and says whether there is a natural reason to
+  bring on another of the film's makers (a collaborator the guest keeps mentioning, a thread
+  someone else could answer), and describes them; they are invented as the producer's would be.
+  An auto-booked guest comes on at a natural moment: the guest on air's topics used up, or four
+  minutes on air. At most three guests a show, one being made at a time, none after the wrap.
+  Every invented guest is a new avatar on the account (50 API avatars at most).
+: the speech model backchannels while the other one talks. What
   the listener says never reaches the speaker's session (it would cut them off), and only a short
   reaction reaches the air: its first 1.2 s, at most one every 8 s per avatar. The renderer has
   no control over expressions; a listening face shows its own idle motion and these reactions.

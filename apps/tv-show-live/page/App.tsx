@@ -15,6 +15,7 @@ import { BackToApps, clock, useAvatarOnly, type AvatarOnly, type SpeechWriter } 
 import { createBooth, type Booth, type Role, type Stage } from '../show/booth.ts';
 import { startScore } from './score.ts';
 import { createAdvancer, type Advancer, type Verdict } from '../show/advance.ts';
+import { createBooker, type Booker, type Booking } from '../show/booker.ts';
 import { createFloor } from '../show/floor.ts';
 import { createDirector, type Director, type Shot, type ShotMode } from '../show/director.ts';
 import { FILM, GUESTS, HOST, SHOW, firstName, type Guest } from '../show/cast.ts';
@@ -44,7 +45,8 @@ const FACE_LAG_MS = 4_500;
 // comes out of her face as it ends: her session takes a second or so to start the line, then
 // her face is FACE_LAG_MS behind. Cued at the end, she was silent on screen for five seconds.
 const INVITE_LEAD_MS = FACE_LAG_MS + 1_500;
-const TRAILER_FADE_MS = 900;   // the dissolve into the trailer and back out to the studio
+const TRAILER_FADE_MS = 900;
+const SEGMENT_MS = 4 * 60_000;   // a guest's time on air before an auto-booked guest may take over   // the dissolve into the trailer and back out to the studio
 
 const STAGE_TEXT: Record<Stage, string> = {
   greeting: 'Jada is opening the show',
@@ -134,7 +136,18 @@ export function App() {
   onTvRef.current = onTv;
   // Guests being invented: the server's view of each, polled; and what each is for.
   const [inventions, setInventions] = useState<Record<string, InventionView>>({});
-  const purpose = useRef<Record<string, { slot: number; opening: boolean }>>({});
+  // What each invented guest is for: the slot it goes to, whether it opens the show, and whether
+  // the show booked it on its own (auto-booking), which brings it on at a natural moment.
+  const purpose = useRef<Record<string, { slot: number; opening: boolean; auto?: boolean }>>({});
+  // Auto-booking (show/booker.ts): the show books its next guest from the conversation.
+  const [autoBook, setAutoBook] = useState(true);
+  const autoBookRef = useRef(true);
+  autoBookRef.current = autoBook;
+  const booker = useRef<Booker | null>(null);
+  // An auto-booked guest comes on once the guest on air has had their time: their topics used
+  // up, or SEGMENT_MS on air.
+  const [segmentDone, setSegmentDone] = useState(false);
+  const segmentTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // A guest can be invented from the lobby, before the show: go on air when it is ready, and
   // Jada never has to hold for them (a build takes three to five minutes).
   const [lobbyInvention, setLobbyInvention] = useState<string | null>(null);
@@ -227,6 +240,7 @@ export function App() {
           if (said && aired && !trailerOn.current) {
             addLog(role, said);
             advancer.current?.line({ who: role, text: said });
+            booker.current?.line({ who: role, text: said });
           }
         },
       });
@@ -269,7 +283,13 @@ export function App() {
       lines.current[role] = line;
       if (role === 'host') booth.current?.hostLive();
       // The guest is on: the two-shot, Jada and the TV, until the booth or the director cuts.
-      else { setPatched(true); chooseShot('two'); booth.current?.guestLive(); advancer.current?.topic(firstTopic.current, true); }
+      else {
+        setPatched(true); chooseShot('two'); booth.current?.guestLive(); advancer.current?.topic(firstTopic.current, true);
+        booker.current?.guestOn();
+        setSegmentDone(false);
+        clearTimeout(segmentTimer.current);
+        segmentTimer.current = setTimeout(() => setSegmentDone(true), SEGMENT_MS);
+      }
       return line;
     } catch (err) {
       offAir(`We couldn't open ${role === 'host' ? HOST.name : segment.current?.name}'s line: ${(err as SpeechError).code ?? (err as Error).message}`);
@@ -301,8 +321,9 @@ export function App() {
     if (!onShow) return;
     if (!patched && slotFaces[0].phase === 'live') booth.current?.guestReady();
     const next = 1 - onTv;
-    if (patched && slots[next] && slotFaces[next].phase === 'live' && !handingOver.current) handOver(next);
-  }, [slotFaces[0].phase, slotFaces[1].phase, patched, onShow]);
+    const nextFor = slots[next] && purpose.current[slots[next]!.id];
+    if (patched && slots[next] && slotFaces[next].phase === 'live' && !handingOver.current && (!nextFor?.auto || segmentDone)) handOver(next);
+  }, [slotFaces[0].phase, slotFaces[1].phase, patched, onShow, segmentDone]);
   useEffect(() => {
     if (stage !== 'over' || !onShow) return;
     const id = setTimeout(() => void wrapUp(), END_AFTER_GOODBYE_MS);
@@ -342,6 +363,7 @@ export function App() {
     const early = describe && lobbyInvention ? lobbyInvention : null;
     const earlyView = early ? inventions[early] : undefined;
     const earlyGuest = earlyView?.guest ? { ...earlyView.guest, avatarId: '' } : null;
+    goneGuests.current = [];
     setCurrent(cast ?? earlyGuest); setSlots([cast ?? (earlyView?.ready ? earlyGuest : null), null]); setOnTv(0); onTvRef.current = 0; handingOver.current = false;
     if (!early) { setInventions({}); purpose.current = {}; }
     if (earlyGuest) { first = earlyGuest.rundown[0] ?? ''; setTopics(earlyGuest.rundown); }
@@ -355,16 +377,35 @@ export function App() {
     // that is only known once the server has made the show, after this.)
     const mine: Advancer = createAdvancer({
       judge: async (topic, lines) => {
-        const res = await fetch(`${API}/show/${showRef.current}/judge`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic, lines }) });
+        const res = await fetch(`${API}/show/${showRef.current}/judge`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic, lines, guest: segment.current?.name }) });
         if (!res.ok) throw new Error(`judge ${res.status}`);
         return (await res.json()) as Verdict;
       },
       next: () => live.current.topics.find((t) => !live.current.used.has(t)) ?? null,
       move: (topic, reason) => sendTopic(topic, reason),
-      exhausted: () => { setSuggestWrap(true); addLog('booth', "That was the last topic on the rundown: wrap it up when you're ready"); },
+      exhausted: () => {
+        if (Object.values(purpose.current).some((w) => !w.opening)) { setSegmentDone(true); addLog('booth', 'That was the last topic on the rundown: the next guest comes on when ready'); return; }
+        setSuggestWrap(true);
+        addLog('booth', "That was the last topic on the rundown: wrap it up when you're ready");
+      },
       enabled: () => advancer.current === mine && live.current.auto && !live.current.wrapped && booth.current?.stage === 'on-air',
     });
     advancer.current = mine;
+    // Live while it is this show's, as the advancer.
+    const myBooker: Booker = createBooker({
+      ask: async (lines, guests) => {
+        const res = await fetch(`${API}/show/${showRef.current}/book`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lines, guests, guest: segment.current?.name }) });
+        if (!res.ok) throw new Error(`booker ${res.status}`);
+        return (await res.json()) as Booking;
+      },
+      book: (description, reason) => void bookGuest(description, reason),
+      enabled: () => booker.current === myBooker && autoBookRef.current && !live.current.wrapped && booth.current?.stage === 'on-air'
+        && !handingOver.current && !Object.keys(purpose.current).some((id) => !inventionsRef.current[id]?.ready && !inventionsRef.current[id]?.error),
+      guests: () => showGuests(),
+    });
+    booker.current = myBooker;
+    setSegmentDone(false);
+    clearTimeout(segmentTimer.current);
     hostOpened.current = false;
     segment.current = cast ?? earlyGuest;
     setBackstage(true);
@@ -477,6 +518,7 @@ export function App() {
       setTimeout(async () => {
         if (showRef.current !== show) return;
         const old = onTvRef.current;
+        if (from) goneGuests.current.push(`${from.name}, ${from.billing}`);
         await lines.current.guest?.end();
         lines.current.guest = undefined;
         onTvRef.current = next;
@@ -504,6 +546,26 @@ export function App() {
     purpose.current[id] = { slot: 1 - onTvRef.current, opening: false };
     addLog('booth', `Inventing the next guest: ${description}`);
   };
+  // Auto-booking's choice: invented as the producer's would be, brought on at a natural moment.
+  async function bookGuest(description: string, reason: string) {
+    if (!patched) return;
+    const id = await startInvention(description);
+    if (!id) return;
+    purpose.current[id] = { slot: 1 - onTvRef.current, opening: false, auto: true };
+    addLog('booth', `Booking the next guest: ${description} (${reason})`);
+  }
+  /** Every guest of the show: the one on air, those gone, and those being made. */
+  function showGuests(): string[] {
+    const names = new Set<string>();
+    if (segment.current) names.add(`${segment.current.name}, ${segment.current.billing}`);
+    for (const id of Object.keys(purpose.current)) {
+      const g = inventionsRef.current[id]?.guest;
+      names.add(g ? `${g.name}, ${g.billing}` : (inventionsRef.current[id] ? 'a guest being invented' : id));
+    }
+    for (const line of goneGuests.current) names.add(line);
+    return [...names];
+  }
+  const goneGuests = useRef<string[]>([]);
 
   // Shortly before the trailer ends, her line after it is cued (see INVITE_LEAD_MS); at its end it goes.
   const trailerEnding = () => { hush.current = false; booth.current?.trailerDone(); };
@@ -567,7 +629,8 @@ export function App() {
               <Console topics={topics} used={used} disabled={stage !== 'on-air'} onTopic={(t) => sendTopic(t)} onNote={sendNote}
                 onWrap={wrap} onEnd={endShow} guestFirst={firstName(guest.name)} shotMode={shotMode} onShot={chooseShot}
                 autoAdvance={autoAdvance} onAutoAdvance={setAutoAdvance} suggestWrap={suggestWrap}
-                inventions={Object.values(inventions)} canInvite={patched && !pendingInvite && stage === 'on-air'} onInvite={inviteGuest} />
+                inventions={Object.values(inventions)} canInvite={patched && !pendingInvite && stage === 'on-air'} onInvite={inviteGuest}
+                autoBook={autoBook} onAutoBook={setAutoBook} />
             )}
           </section>
           <section className="nc-transcript" aria-label="On air">
@@ -767,11 +830,12 @@ function Lobby({ guestId, setGuestId, inventText, setInventText, topics, setTopi
   );
 }
 
-function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guestFirst, shotMode, onShot, autoAdvance, onAutoAdvance, suggestWrap, inventions, canInvite, onInvite }: {
+function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guestFirst, shotMode, onShot, autoAdvance, onAutoAdvance, suggestWrap, inventions, canInvite, onInvite, autoBook, onAutoBook }: {
   topics: string[]; used: Set<string>; disabled: boolean; guestFirst: string; shotMode: ShotMode;
   onTopic: (t: string) => void; onNote: (t: string) => void; onWrap: () => void; onEnd: () => void; onShot: (m: ShotMode) => void;
   autoAdvance: boolean; onAutoAdvance: (on: boolean) => void; suggestWrap: boolean;
   inventions: InventionView[]; canInvite: boolean; onInvite: (description: string) => void;
+  autoBook: boolean; onAutoBook: (on: boolean) => void;
 }) {
   const [invite, setInvite] = useState('');
   const [topic, setTopic] = useState('');
@@ -790,6 +854,10 @@ function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guest
       </div>
       <div className="nc-group">
         <h3>Guests</h3>
+        <label className="gr-auto">
+          <input type="checkbox" checked={autoBook} onChange={(e) => onAutoBook(e.target.checked)} />
+          <span>Auto-book: the show books the next guest when the conversation calls for one</span>
+        </label>
         {inventions.map((v) => <GuestProgress key={v.id} view={v} />)}
         <form className="nc-row" onSubmit={(e) => { e.preventDefault(); const t = invite.trim(); if (t.length >= 3 && canInvite) { onInvite(t); setInvite(''); } }}>
           <input className="nc-input" value={invite} onChange={(e) => setInvite(e.target.value)} disabled={!canInvite}

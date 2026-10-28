@@ -81,6 +81,25 @@ export function judgeUser(guestName: string, topic: string, lines: { who: 'host'
   return [`Current topic: ${topic}`, '', 'The last lines, oldest first:', ...lines.map((l) => `${name(l.who)}: ${l.text}`)].join('\n');
 }
 
+/**
+ * Auto-booking's booker (show/booker.ts): whether the conversation gives a
+ * natural reason to bring on another of the film's makers now, and who. It
+ * books only for a reason the viewers would see: a guest swap for its own sake
+ * cuts a good conversation short.
+ */
+export const BOOKER_SYSTEM = [
+  `You are the booking producer of ${SHOW}, a live TV talk show about the art of film; tonight's film is ${FILM.title}, ${FILM.logline}.`,
+  'You get the guests of the show so far and the last lines of the conversation between the host and the guest on air.',
+  "Say book = true only when the conversation gives a natural reason to bring on another of the film's makers next: the guest keeps mentioning a particular collaborator, or a thread has come up that someone else on the film could answer better (the director, an actor, the composer, the cinematographer, a craftsperson).",
+  'Never book someone already on the show. Otherwise book = false.',
+  "When booking, description is who they are, in one sentence, as the producer would brief it: their job on the film and one vivid trait (the lead actress who plays the queen, warm and theatrical). reason is the moment in the conversation that calls for them, at most ten words.",
+].join(' ');
+
+export function bookerUser(guests: string[], lines: { who: 'host' | 'guest'; text: string }[], guestName: string): string {
+  const name = (who: 'host' | 'guest') => (who === 'host' ? HOST.name : guestName);
+  return [`The show's guests so far: ${guests.join('; ')}`, '', 'The last lines, oldest first:', ...lines.map((l) => `${name(l.who)}: ${l.text}`)].join('\n');
+}
+
 /** A stalled conversation: the host picks it back up. */
 export const nudgeCue = (guest: Guest) => `Pick the conversation back up: ask ${firstName(guest.name)} a fresh, specific question about the design of ${FILM.title}.`;
 
