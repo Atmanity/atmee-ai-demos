@@ -8,6 +8,9 @@
 //   introducing  the greeting is over: the host speaks up on her own (commentary)
 //                to introduce tonight's film and roll its trailer
 //   trailer      the trailer plays (the page tells the booth when it is over)
+//   holding      the trailer is over but the guest is not ready yet (invented, still
+//                being built): the host keeps the viewers company, speaking up on
+//                her own every HOLD_MS, until the page says the guest is ready
 //   inviting     back in the studio, the host speaks up on her own (commentary) to
 //                react to the trailer and invite the guest onto the screen
 //   dialing   the invitation is over: the guest's session opens (its first words
@@ -20,8 +23,15 @@
 // follows it in its next reply and never mentions it. It is cleared once the
 // host has finished a turn that began after it. When the conversation has
 // stalled (both quiet for IDLE_MS), a cue is spoken at once as commentary.
+// A handover (a new guest) is a cue whose turn, once spoken, hands the show to
+// the page: it ends the old guest's line and puts the new one through.
+//
+// The texts may be functions, read when they are used: an invented guest's
+// name is only known once it has been written, after the show has begun.
 export type Role = 'host' | 'guest';
-export type Stage = 'greeting' | 'introducing' | 'trailer' | 'inviting' | 'dialing' | 'on-air' | 'closing' | 'over';
+export type Stage = 'greeting' | 'introducing' | 'trailer' | 'holding' | 'inviting' | 'dialing' | 'on-air' | 'closing' | 'over';
+export type Text = string | (() => string);
+const read = (t: Text) => (typeof t === 'function' ? t() : t);
 
 export type Delivery =
   | { to: Role; kind: 'directive'; text: string }   // '' clears it
@@ -33,6 +43,7 @@ export const GREETING_WAIT_MS = 15_000; // a host that has not greeted by then g
 export const GOODBYE_WAIT_MS = 15_000;  // a guest that has not said goodbye by then: the show is over anyway
 export const NUDGES = 3;                // prompts to pick a stalled conversation back up, before the booth gives up
 export const SPEAK_UP_MS = 6_000;
+export const HOLD_MS = 40_000;          // while holding for the guest: the host fills this often (25 s was a filler a breath)
 // A host turn that starts this soon after a directive was already being made
 // before it arrived: it does not count as the turn that follows it. (Live, a
 // wrap landed as a reply was starting; that reply was taken for the wrap and
@@ -48,12 +59,20 @@ export interface BoothOptions {
   /** Plays the trailer; the page calls trailerDone() when it is over. */
   rollTrailer(): void;
   /** Spoken by the host after the trailer: react, then invite the guest on. */
-  invite: string;
+  invite: Text;
+  /** Whether the guest can be put through now; absent, always. */
+  guestReady?(): boolean;
+  /** Spoken after the trailer when the guest is not ready: react, say they join in a moment. */
+  hold?: Text;
+  /** Spoken while still holding, every HOLD_MS. */
+  holdMore?: Text;
+  /** Spoken once the guest is ready after a hold: bring them on now. */
+  inviteNow?: Text;
   /** The host's direction once the guest is dialled: welcome them, first question. */
-  welcome: string;
+  welcome: Text;
   /** Spoken by the host when the conversation has stalled with nothing waiting. */
-  nudge: string;
-  wrap: string;
+  nudge: Text;
+  wrap: Text;
   goodbye: string;
   onStage?(stage: Stage): void;
   now?: () => number;
@@ -65,6 +84,10 @@ export interface Booth {
   guestLive(): void;
   /** The trailer has finished playing. */
   trailerDone(): void;
+  /** The guest the booth was holding for is ready to be put through. */
+  guestReady(): void;
+  /** On air: the host's next turn is this (thank the guest, bring on the next); when it is spoken, then(). */
+  handover(text: string, then: () => void): void;
   speaking(role: Role, on: boolean): void;
   cue(text: string): void;
   wrap(): void;
@@ -89,6 +112,8 @@ export function createBooth(opts: BoothOptions): Booth {
   let guestDirected = false;
   let nudges = 0;            // prompts in this stall; any voice resets it
   let goodbyeTimer: ReturnType<typeof setTimeout> | undefined;
+  let holdTimer: ReturnType<typeof setTimeout> | undefined;
+  let afterTurn: (() => void) | null = null;   // a handover's next step, once its turn is spoken
 
   const setStage = (next: Stage) => {
     if (stage === next) return;
@@ -133,8 +158,27 @@ export function createBooth(opts: BoothOptions): Booth {
   // The invitation is spoken: the guest comes on, and the host's next turn welcomes them.
   const dial = () => {
     setStage('dialing');
-    direct(opts.welcome);
+    direct(read(opts.welcome));
     opts.dialGuest();
+  };
+
+  // Holding for a guest still being made: a line now, and another every HOLD_MS of it.
+  const hold = () => {
+    setStage('holding');
+    speakUp(read(opts.hold ?? opts.invite));
+    const more = () => {
+      holdTimer = setTimeout(() => {
+        if (stage !== 'holding') return;
+        if (quiet()) speakUp(read(opts.holdMore ?? opts.hold ?? opts.invite), 1);
+        more();
+      }, HOLD_MS);
+    };
+    more();
+  };
+  const invite = (text: string) => {
+    clearTimeout(holdTimer);
+    setStage('inviting');
+    speakUp(text);
   };
 
   // A stalled conversation (both quiet for IDLE_MS on air): the waiting cue is spoken
@@ -148,7 +192,7 @@ export function createBooth(opts: BoothOptions): Booth {
     idleTimer = setTimeout(() => {
       if (stage !== 'on-air') return;
       if (!quiet() || now() - Math.max(lastSound, lastNudge) < IDLE_MS) return watchIdle();
-      opts.deliver({ to: 'host', kind: 'commentary', text: waiting ?? opts.nudge });
+      opts.deliver({ to: 'host', kind: 'commentary', text: waiting ?? read(opts.nudge) });
       waiting = null;
       nudges++;
       lastNudge = now();
@@ -174,6 +218,11 @@ export function createBooth(opts: BoothOptions): Booth {
         if (stage === 'inviting') {
           clearTimeout(speakUpTimer);
           return dial();
+        }
+        if (afterTurn && stage === 'on-air') {
+          const then = afterTurn;
+          afterTurn = null;
+          then();
         }
         if (wrapping && stage === 'on-air') {
           setStage('closing');
@@ -202,8 +251,18 @@ export function createBooth(opts: BoothOptions): Booth {
     },
     trailerDone() {
       if (stage !== 'trailer') return;
-      setStage('inviting');
-      speakUp(opts.invite);
+      if (opts.guestReady && !opts.guestReady()) return hold();
+      invite(read(opts.invite));
+    },
+    guestReady() {
+      if (stage === 'holding') invite(read(opts.inviteNow ?? opts.invite));
+    },
+    handover(text, then) {
+      if (stage !== 'on-air' || wrapping || !text.trim()) return;
+      afterTurn = then;
+      direct(text.trim());
+      waiting = text.trim();
+      watchIdle();
     },
     speaking(role, on) {
       if (talking[role] === on) return;
@@ -233,8 +292,9 @@ export function createBooth(opts: BoothOptions): Booth {
       if (wrapping || stage === 'closing' || stage === 'over') return;
       wrapping = true;
       if (stage !== 'on-air') return setStage('over');
-      direct(opts.wrap);
-      waiting = opts.wrap;
+      afterTurn = null;
+      direct(read(opts.wrap));
+      waiting = read(opts.wrap);
       watchIdle();
     },
     close() {
@@ -243,6 +303,7 @@ export function createBooth(opts: BoothOptions): Booth {
       clearTimeout(idleTimer);
       clearTimeout(goodbyeTimer);
       clearTimeout(speakUpTimer);
+      clearTimeout(holdTimer);
       clearTimeout(turnTimers.host);
       clearTimeout(turnTimers.guest);
     },

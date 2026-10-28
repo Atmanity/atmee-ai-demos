@@ -41,6 +41,21 @@ export const filmCue = () =>
 export const inviteCue = (guest: Guest) =>
   `The ${FILM.title} trailer has just finished playing. React to it in one sentence, then tell the viewers who tonight's guest is, ${guest.name}, ${guest.billing}, and end by saying you are bringing ${firstName(guest.name)} in on the screen now. Do not greet or welcome ${firstName(guest.name)} yet: ${firstName(guest.name)} is not on the line until you have said this, and will say hello first.`;
 
+/**
+ * An invented guest still being made when the trailer ends: she holds, never
+ * greeting them before they are on (they say hello first, as with the cast).
+ */
+export const holdCue = (guest: Guest | null) =>
+  `The ${FILM.title} trailer has just finished playing. React to it in one sentence, then tell the viewers that tonight's guest${guest ? `, ${guest.name}, ${guest.billing},` : ''} is joining in just a moment, and share one thing you love about the film's look while the line connects. Do not greet the guest yet.`;
+export const holdMoreCue = (guest: Guest | null) =>
+  `The call with ${guest ? firstName(guest.name) : 'your guest'} is still connecting. Keep the viewers company in one or two sentences about something in ${FILM.title} you have not mentioned yet (never repeat what you said while waiting), without saying again that the line is connecting. Do not greet the guest yet.`;
+export const inviteNowCue = (guest: Guest) =>
+  `The line is through: tell the viewers ${guest.name} is joining, and bring ${firstName(guest.name)} in on the screen now. Do not greet ${firstName(guest.name)} yet: ${firstName(guest.name)} will say hello first.`;
+
+/** The producer brings on a new guest mid-show: the host thanks the one on air, then brings the next one in. */
+export const handoverCue = (from: Guest, to: Guest) =>
+  `Wrap up with ${firstName(from.name)} now: thank ${firstName(from.name)} warmly in one sentence and say goodbye. Then tell the viewers who is joining next, ${to.name}, ${to.billing}, and that you are bringing ${firstName(to.name)} in on the screen. Do not greet ${firstName(to.name)} yet: ${firstName(to.name)} will say hello first.`;
+
 /** Once the guest is on the screen: welcome them, then the first topic. */
 export const welcomeCue = (guest: Guest, topic: string) =>
   `${firstName(guest.name)} is on the screen now. Welcome them warmly, then ask a first question about this: ${topic}.`;
@@ -61,8 +76,8 @@ export const JUDGE_SYSTEM = [
   'Give a reason of at most eight words, for the producer.',
 ].join(' ');
 
-export function judgeUser(guest: Guest, topic: string, lines: { who: 'host' | 'guest'; text: string }[]): string {
-  const name = (who: 'host' | 'guest') => (who === 'host' ? HOST.name : guest.name);
+export function judgeUser(guestName: string, topic: string, lines: { who: 'host' | 'guest'; text: string }[]): string {
+  const name = (who: 'host' | 'guest') => (who === 'host' ? HOST.name : guestName);
   return [`Current topic: ${topic}`, '', 'The last lines, oldest first:', ...lines.map((l) => `${name(l.who)}: ${l.text}`)].join('\n');
 }
 

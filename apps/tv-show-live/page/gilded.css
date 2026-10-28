@@ -329,3 +329,25 @@ button { font: inherit; }
 .gr-auto { display: flex; gap: 8px; align-items: center; margin: 2px 0 8px; font-size: 13px; color: var(--nc-muted); cursor: pointer; }
 .gr-auto input { accent-color: var(--gr-gold); }
 .gr .nc-btn.is-suggested { border-color: var(--gr-gold); color: var(--gr-gold-hi); animation: nc-pulse 1.6s ease-in-out infinite; }
+
+/* The TV's two guest slots: the one on air shows, the next one warms up behind it. */
+.gr-tv-slot { position: absolute; inset: 0; transition: opacity .6s; }
+.gr-tv-slot.is-off { opacity: 0; }
+
+/* Inventing a guest: the lobby's option, and the booth's progress cards. */
+.gr-invent-mark { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 10px; background: rgba(201, 169, 97, .12); color: var(--gr-gold); font-size: 22px; flex: none; }
+.gr-progress { display: flex; gap: 10px; align-items: flex-start; padding: 10px; margin-bottom: 8px; border: 1px solid var(--nc-line); border-radius: 10px; background: rgba(255, 255, 255, .02); }
+.gr-progress.is-ready { border-color: rgba(126, 224, 163, .5); }
+.gr-progress.is-failed { border-color: rgba(255, 110, 110, .5); }
+.gr-progress img, .gr-progress-blank { width: 52px; height: 52px; border-radius: 8px; object-fit: cover; flex: none; }
+.gr-progress-blank { display: grid; place-items: center; background: rgba(201, 169, 97, .12); color: var(--gr-gold); }
+.gr-progress strong { display: block; font-size: 14px; }
+.gr-progress small { display: block; font-size: 12px; color: var(--nc-muted); margin-bottom: 4px; }
+.gr-progress ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--nc-muted); }
+.gr-progress li::before { content: "○ "; }
+.gr-progress li.is-running { color: var(--gr-gold-hi); }
+.gr-progress li.is-running::before { content: "◐ "; }
+.gr-progress li.is-done { color: var(--nc-ink); }
+.gr-progress li.is-done::before { content: "● "; color: #7ee0a3; }
+.gr-progress li.is-failed { color: #ff8a8a; }
+.gr-lobby-progress { display: grid; gap: 6px; }

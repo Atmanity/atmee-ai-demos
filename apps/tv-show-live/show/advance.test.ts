@@ -109,4 +109,14 @@ describe('auto-advance', () => {
     await Promise.resolve();
     expect(s.judged).toEqual([]);
   });
+
+  it("does not count a new guest's hello as an answer", async () => {
+    const s = setup([]);
+    s.advancer.topic('A', true);
+    s.advancer.line({ who: 'guest', text: 'hello' });
+    await s.answer(MIN_ANSWERS - 1);
+    expect(s.judged).toEqual([]);
+    await s.answer();
+    expect(s.judged).toEqual(['A']);
+  });
 });

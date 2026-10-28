@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createBooth, DIRECTIVE_LEAD_MS, GOODBYE_WAIT_MS, GREETING_WAIT_MS, IDLE_MS, NUDGES, SPEAK_UP_MS, TURN_QUIET_MS, type Delivery } from './booth.ts';
+import { createBooth, DIRECTIVE_LEAD_MS, GOODBYE_WAIT_MS, GREETING_WAIT_MS, HOLD_MS, IDLE_MS, NUDGES, SPEAK_UP_MS, TURN_QUIET_MS, type BoothOptions, type Delivery } from './booth.ts';
 
 const REPLY_DELAY_MS = DIRECTIVE_LEAD_MS + 500;
 
-function setup() {
+function setup(extra: Partial<BoothOptions> = {}) {
   const sent: Delivery[] = [];
   const dial = vi.fn();
   const roll = vi.fn();
-  const booth = createBooth({ deliver: (d) => sent.push(d), dialGuest: dial, rollTrailer: roll, film: 'FILM', invite: 'INVITE', welcome: 'WELCOME', nudge: 'NUDGE', wrap: 'WRAP', goodbye: 'BYE' });
+  const booth = createBooth({ deliver: (d) => sent.push(d), dialGuest: dial, rollTrailer: roll, film: 'FILM', invite: 'INVITE', welcome: 'WELCOME', nudge: 'NUDGE', wrap: 'WRAP', goodbye: 'BYE', ...extra });
   // A turn: a moment to start (a reply takes a few seconds to make), speech, then quiet.
   const turn = (role: 'host' | 'guest') => {
     vi.advanceTimersByTime(REPLY_DELAY_MS);
@@ -246,5 +246,68 @@ describe('the wrap', () => {
     const { booth } = setup();
     booth.wrap();
     expect(booth.stage).toBe('over');
+  });
+});
+
+describe('a guest still being made', () => {
+  function atTrailer(ready: () => boolean, extra: Partial<BoothOptions> = {}) {
+    const s = setup({ guestReady: ready, hold: 'HOLD', holdMore: 'MORE', inviteNow: 'NOW', ...extra });
+    s.booth.hostLive();
+    s.turn('host');
+    s.turn('host');
+    s.sent.length = 0;
+    return s;
+  }
+
+  it('is invited straight after the trailer when ready', () => {
+    const s = atTrailer(() => true);
+    s.booth.trailerDone();
+    expect(s.booth.stage).toBe('inviting');
+    expect(s.sent).toEqual([{ to: 'host', kind: 'commentary', text: 'INVITE' }]);
+  });
+
+  it('is held for, with a line now and more while it lasts, then invited the moment it is ready', () => {
+    const s = atTrailer(() => false);
+    s.booth.trailerDone();
+    expect(s.booth.stage).toBe('holding');
+    expect(s.sent).toEqual([{ to: 'host', kind: 'commentary', text: 'HOLD' }]);
+    s.turn('host');
+    vi.advanceTimersByTime(HOLD_MS);
+    expect(s.sent.filter((d) => d.text === 'MORE')).toHaveLength(1);
+    s.booth.guestReady();
+    expect(s.booth.stage).toBe('inviting');
+    expect(s.sent.at(-1)).toEqual({ to: 'host', kind: 'commentary', text: 'NOW' });
+    s.turn('host');
+    expect(s.dial).toHaveBeenCalledOnce();
+  });
+
+  it('reads its texts when they are used, so they can name a guest written later', () => {
+    let name = '?';
+    const s = atTrailer(() => true, { invite: () => `INVITE ${name}` });
+    name = 'Torfi';
+    s.booth.trailerDone();
+    expect(s.sent).toEqual([{ to: 'host', kind: 'commentary', text: 'INVITE Torfi' }]);
+  });
+});
+
+describe('a handover to the next guest', () => {
+  it('directs the host, and hands over once she has spoken it', () => {
+    const s = onAir();
+    const then = vi.fn();
+    s.booth.handover('THANK AND BRING ON', then);
+    expect(s.sent).toEqual([{ to: 'host', kind: 'directive', text: 'THANK AND BRING ON' }]);
+    s.turn('guest');
+    expect(then).not.toHaveBeenCalled();
+    s.turn('host');
+    expect(then).toHaveBeenCalledOnce();
+  });
+
+  it('is dropped by the wrap', () => {
+    const s = onAir();
+    const then = vi.fn();
+    s.booth.handover('THANK AND BRING ON', then);
+    s.booth.wrap();
+    s.turn('host');
+    expect(then).not.toHaveBeenCalled();
   });
 });

@@ -30,8 +30,11 @@ export interface AdvanceOptions {
 }
 
 export interface Advancer {
-  /** The host has been given a topic (the first, the producer's, or a move). */
-  topic(topic: string): void;
+  /**
+   * The host has been given a topic (the first, the producer's, or a move). With a guest just
+   * put through, their hello is no answer: it does not count.
+   */
+  topic(topic: string, hello?: boolean): void;
   /** A line went on air. */
   line(line: Line): void;
   /** The guest's answer so far, as it is spoken. */
@@ -70,7 +73,7 @@ export function createAdvancer(opts: AdvanceOptions): Advancer {
   };
 
   return {
-    topic(topic) { current = topic; answers = 0; },
+    topic(topic, hello = false) { current = topic; answers = hello ? -1 : 0; askedThisAnswer = false; },
     line(line) {
       lines.push(line);
       if (lines.length > WINDOW * 2) lines.splice(0, lines.length - WINDOW);

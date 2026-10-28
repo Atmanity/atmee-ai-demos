@@ -20,30 +20,43 @@ import { avatarApi } from '../../server/atmee.ts';
 import { avatarFor } from '../../server/hosts.js';
 import { endRender, renderConfigured, startRender } from '../../server/render.ts';
 import { GUESTS, HOST, guestById, type Guest } from './show/cast.ts';
-import { structured } from '../../server/llm.ts';
+import { llmAvailable, structured } from '../../server/llm.ts';
+import { invent, invention } from './invent.ts';
 import { DELIVERY, HOST_USER, JUDGE_SYSTEM, guestScenario, hostScenario, judgeUser } from './show/script.ts';
 
 const ID = 'tv-show-live';
 const MAX_SECONDS = 900;
 
-/** host and guest each have a speech session and a face. */
-type Seat = 'host' | 'guest';
-interface Show { room: string; guest: Guest; renders: Map<string, Seat>; speech: Map<string, Seat>; at: number }
+/**
+ * A seat is the host (`host`) or a guest by id (`g-<guestId>`: a guest of the cast, or one
+ * invented and built during the show), so two guests can each have a face and a line at
+ * once: the next one warming up while the one on air talks.
+ */
+type Seat = string;
+interface Show { room: string; renders: Map<string, Seat>; speech: Map<string, Seat>; at: number }
 const shows = new Map<string, Show>();
 
 const guestAvatar = (g: Guest) => process.env[`AVATAR_TV_SHOW_LIVE_GUEST_${g.id.toUpperCase()}`] || g.avatarId;
-const avatarOf = (show: Show, seat: Seat) => (seat === 'host' ? avatarFor(ID) : guestAvatar(show.guest));
+/** A guest of the cast, or an invented one once it is built. */
+const guestOf = (id: string): Guest | undefined => {
+  const cast = guestById(id);
+  if (cast) return cast;
+  const inv = invention(id);
+  return inv?.ready ? inv.guest : undefined;
+};
 const maxSeconds = () => Number(process.env.MAX_SECONDS) || MAX_SECONDS;
 
-function showFor(req: { params: Record<string, string> }, res: Response): { show: Show; seat: Seat } | null {
+function showFor(req: { params: Record<string, string> }, res: Response): { show: Show; seat: Seat; guest?: Guest } | null {
   const show = shows.get(req.params.show);
   const seat = req.params.seat;
-  if (!show || (seat !== 'host' && seat !== 'guest')) {
+  const guest = seat.startsWith('g-') ? guestOf(seat.slice(2)) : undefined;
+  if (!show || (seat !== 'host' && !guest)) {
     res.status(404).json({ error: 'not_found' });
     return null;
   }
-  return { show, seat };
+  return { show, seat, guest };
 }
+const avatarOf = (seat: Seat, guest?: Guest) => (seat === 'host' ? avatarFor(ID) : guestAvatar(guest!));
 
 async function endSpeech(id: string) {
   return avatarApi('POST', `/v1/speech_sessions/${id}/end`);
@@ -72,26 +85,41 @@ const app: AppServer = {
       res.json(GUESTS.map(({ id, name, billing, from, rundown }) => ({ id, name, billing, from, rundown })));
     });
 
-    router.post('/shows', (req, res) => {
+    // Invent a guest: it is written, drawn, voiced and built in the background (invent.ts);
+    // the page follows its steps, and seats it (g-<id>) once it is ready.
+    router.post('/guests/invent', (req, res) => {
+      const description = String(req.body?.description ?? '').trim().slice(0, 400);
+      if (description.length < 3) return void res.status(400).json({ error: 'bad_request', message: 'Describe the guest.' });
+      if (!llmAvailable()) return void res.status(503).json({ error: 'no_model', message: 'Set GEMINI_API_KEY' });
+      const inv = invent(description);
+      console.log('[%s] inventing %s: %s', ID, inv.id, description);
+      res.status(202).json({ id: inv.id });
+    });
+    router.get('/guests/invent/:id', (req, res) => {
+      const inv = invention(req.params.id);
+      if (!inv) return void res.status(404).json({ error: 'not_found' });
+      const { id, steps, guest, portrait, ready, error, startedAt } = inv;
+      res.json({ id, steps, guest: guest && { id: guest.id, name: guest.name, billing: guest.billing, from: guest.from, rundown: guest.rundown }, portrait, ready, error, seconds: Math.round((Date.now() - startedAt) / 1000) });
+    });
+
+    router.post('/shows', (_req, res) => {
       if (!renderConfigured()) return void res.status(503).json({ error: 'livekit_not_configured', message: 'Set LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET' });
-      const guest = guestById(String(req.body?.guest ?? ''));
-      if (!guest) return void res.status(404).json({ error: 'unknown_guest' });
       if (!avatarFor(ID)) return void res.status(500).json({ error: 'no_avatar' });
       const showId = randomUUID();
-      shows.set(showId, { room: `gilded-reel-${showId}`, guest, renders: new Map(), speech: new Map(), at: Date.now() });
+      shows.set(showId, { room: `gilded-reel-${showId}`, renders: new Map(), speech: new Map(), at: Date.now() });
       // A show nobody ended is forgotten once its sessions can no longer run.
       setTimeout(() => shows.delete(showId), (maxSeconds() + 600) * 1000).unref();
-      console.log('[%s] show %s with guest %s', ID, showId.slice(0, 8), guest.id);
+      console.log('[%s] show %s', ID, showId.slice(0, 8));
       res.status(201).json({ showId });
     });
 
     router.post('/show/:show/:seat/render', async (req, res) => {
       const found = showFor(req, res);
       if (!found) return;
-      const { show, seat } = found;
+      const { show, seat, guest } = found;
       // A fresh identity per attempt: a start that timed out at the gateway may still join later,
       // and must not take the place of the face that did start.
-      const r = await startRender(avatarOf(show, seat), maxSeconds(), { app: 'atmee-usecase-demos', usecase: ID, seat },
+      const r = await startRender(avatarOf(seat, guest), maxSeconds(), { app: 'atmee-usecase-demos', usecase: ID, seat },
         { room: show.room, avatarIdentity: `face-${seat}-${randomUUID().slice(0, 6)}` });
       // The v2 pool can take minutes to start a second worker, longer than the gateway waits:
       // the page retries, as it does while a render warms up (the pool is starting by then).
@@ -119,13 +147,13 @@ const app: AppServer = {
     router.post('/show/:show/:seat/speech', async (req, res) => {
       const found = showFor(req, res);
       if (!found) return;
-      const { show, seat } = found;
+      const { show, seat, guest } = found;
       const settings = seat === 'host'
         // The session opens by greeting its user by name: the host's user is the viewers until her
         // guest is on (her scenario says who speaks after that), or she welcomes a guest not yet there.
         ? { scenario: hostScenario(), user_name: HOST_USER, instructions: DELIVERY }
-        : { scenario: guestScenario(show.guest), user_name: HOST.name, instructions: DELIVERY };
-      const r = await avatarApi('POST', '/v1/speech_sessions', { avatarId: avatarOf(show, seat), maxDurationSeconds: maxSeconds(), settings });
+        : { scenario: guestScenario(guest!), user_name: HOST.name, instructions: DELIVERY };
+      const r = await avatarApi('POST', '/v1/speech_sessions', { avatarId: avatarOf(seat, guest), maxDurationSeconds: maxSeconds(), settings });
       if (r.status !== 201) {
         console.warn('[%s] %s speech -> %d %s %s', ID, seat, r.status, r.json?.error ?? '', r.json?.message ?? '');
         return void res.status(r.status).json({ error: r.json?.error || `http_${r.status}`, retryAfter: r.retryAfter });
@@ -155,7 +183,7 @@ const app: AppServer = {
       try {
         const verdict = await structured<{ done: boolean; reason: string }>({
           system: JUDGE_SYSTEM,
-          user: judgeUser(show.guest, topic, lines),
+          user: judgeUser(String(req.body?.guest ?? 'the guest').slice(0, 100), topic, lines),
           schema: { type: 'object', properties: { done: { type: 'boolean' }, reason: { type: 'string' } }, required: ['done', 'reason'] },
           temperature: 0,
         });

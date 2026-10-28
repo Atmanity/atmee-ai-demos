@@ -18,7 +18,7 @@ import { createAdvancer, type Advancer, type Verdict } from '../show/advance.ts'
 import { createFloor } from '../show/floor.ts';
 import { createDirector, type Director, type Shot, type ShotMode } from '../show/director.ts';
 import { FILM, GUESTS, HOST, SHOW, firstName, type Guest } from '../show/cast.ts';
-import { filmCue, goodbyeCue, inviteCue, noteCue, nudgeCue, topicCue, welcomeCue, wrapCue } from '../show/script.ts';
+import { filmCue, goodbyeCue, handoverCue, holdCue, holdMoreCue, inviteCue, inviteNowCue, noteCue, nudgeCue, topicCue, welcomeCue, wrapCue } from '../show/script.ts';
 import { openSpeech, SpeechError, type SpeechLine } from '../show/speech.ts';
 import { createResampler, createVoice } from '../show/voice.ts';
 import cam2 from '../studio/cam2.jpg';
@@ -50,6 +50,7 @@ const STAGE_TEXT: Record<Stage, string> = {
   greeting: 'Jada is opening the show',
   introducing: 'Jada is introducing the film',
   trailer: 'Rolling the trailer',
+  holding: 'Holding for the guest',
   inviting: 'Jada is inviting the guest on',
   dialing: 'Putting the guest through…',
   'on-air': 'On air',
@@ -57,7 +58,22 @@ const STAGE_TEXT: Record<Stage, string> = {
   over: 'Off air',
 };
 
-interface LogLine { id: number; who: Role | 'booth'; text: string }
+interface LogLine { id: number; who: Role | 'booth'; text: string; name?: string }
+
+/** The server's view of a guest being invented (invent.ts). */
+interface InventionView {
+  id: string;
+  steps: Partial<Record<'character' | 'portrait' | 'voice' | 'avatar', { status: 'waiting' | 'running' | 'done' | 'failed'; ms?: number }>>;
+  guest?: Omit<Guest, 'avatarId'>;
+  portrait?: string;
+  ready: boolean;
+  error?: string;
+  seconds: number;
+}
+const isInvented = (id?: string) => Boolean(id?.startsWith('invented-'));
+const BLANK = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+/** A guest's still: the cast's own, or an invented guest's portrait. */
+const posterOf = (g: Guest | null, inventions: Record<string, InventionView>) => (g ? PORTRAITS[g.id] ?? inventions[g.id]?.portrait ?? BLANK : BLANK);
 
 // Each avatar's voice reaches its face as ONE stream for the whole show,
 // silence included. Measured live against the raw voice: a piece per stretch
@@ -101,9 +117,28 @@ function faceFeeder(face: () => AvatarOnly) {
 }
 
 export function App() {
+  // The lobby's choice: a guest of the cast, or one to invent from a description.
   const [guestId, setGuestId] = useState(GUESTS[0].id);
-  const guest = GUESTS.find((g) => g.id === guestId)!;
-  const [topics, setTopics] = useState<string[]>(guest.rundown);
+  const [inventText, setInventText] = useState('');
+  const castGuest = GUESTS.find((g) => g.id === guestId) ?? GUESTS[0];
+  // The guest on air (or about to be): the cast's, or an invented one once it is written.
+  const [current, setCurrent] = useState<Guest | null>(castGuest);
+  const guest: Guest = current ?? { id: 'pending', name: 'Tonight\'s guest', billing: 'joining shortly', from: '', avatarId: '', rundown: [] };
+  // Two guest slots, so the next guest's face warms up while the one on air talks: each holds a
+  // guest (seated once built), and onTv says which slot the TV shows.
+  const [slots, setSlots] = useState<(Guest | null)[]>([null, null]);
+  const slotsRef = useRef(slots);
+  slotsRef.current = slots;
+  const [onTv, setOnTv] = useState(0);
+  const onTvRef = useRef(0);
+  onTvRef.current = onTv;
+  // Guests being invented: the server's view of each, polled; and what each is for.
+  const [inventions, setInventions] = useState<Record<string, InventionView>>({});
+  const purpose = useRef<Record<string, { slot: number; opening: boolean }>>({});
+  // A guest can be invented from the lobby, before the show: go on air when it is ready, and
+  // Jada never has to hold for them (a build takes three to five minutes).
+  const [lobbyInvention, setLobbyInvention] = useState<string | null>(null);
+  const [topics, setTopics] = useState<string[]>(castGuest.rundown);
   // Auto-advance (show/advance.ts): the next topic goes to Jada when the conversation says the
   // current one has run its course. The advancer is made per show; refs keep its view current.
   const [autoAdvance, setAutoAdvance] = useState(true);
@@ -137,19 +172,22 @@ export function App() {
   const [shotMode, setShotMode] = useState<ShotMode>('auto');
   const director = useRef<Director | null>(null);
   const logId = useRef(0);
-  const addLog = (who: LogLine['who'], text: string) => setLog((l) => [...l.slice(-150), { id: ++logId.current, who, text }]);
+  const addLog = (who: LogLine['who'], text: string) => setLog((l) => [...l.slice(-150), { id: ++logId.current, who, text, name: who === 'guest' ? segment.current?.name : undefined }]);
 
   // A ref, not the state: the booth's callbacks are made before the show has its id.
   const showRef = useRef<string | null>(null);
-  const seatApi = (seat: Role) => `${API}/show/${showRef.current}/${seat}`;
+  // A seat: the host, or a guest by id (g-<id>), so two guests can each have a face and a line.
+  const seatApi = (seat: string) => `${API}/show/${showRef.current}/${seat}`;
   const face = (seat: string) => (showId ? `tv-show-live/show/${showId}/${seat}` : 'tv-show-live');
+  const slotFace = (i: number) => (slots[i] ? face(`g-${slots[i]!.id}`) : 'tv-show-live');
   // Jada's face is her camera-1 avatar (facing the lens); her speech session is her main avatar's.
   // Jada is one avatar: her conversation and her one render, turned toward the TV (a render's
   // pose is fixed by its picture).
   const hostFace = useAvatarOnly(face('host'));
-  const guestFace = useAvatarOnly(face('guest'));
-  const faces = useRef({ host: hostFace, guest: guestFace });
-  faces.current = { host: hostFace, guest: guestFace };
+  const slotFaces = [useAvatarOnly(slotFace(0)), useAvatarOnly(slotFace(1))];
+  const guestFace = slotFaces[onTv];
+  const faces = useRef({ host: hostFace, g0: slotFaces[0], g1: slotFaces[1] });
+  faces.current = { host: hostFace, g0: slotFaces[0], g1: slotFaces[1] };
 
   const booth = useRef<Booth | null>(null);
   const lines = useRef<Partial<Record<Role, SpeechLine>>>({});
@@ -165,7 +203,7 @@ export function App() {
 
   // Each avatar's voice: its face says it, the other avatar hears it, and the booth sees when it speaks.
   const voices = useMemo(() => {
-    const make = (role: Role, seats: ('host' | 'guest')[]) => {
+    const make = (role: Role, seats: ('host' | 'g0' | 'g1')[]) => {
       const feeders = seats.map((seat) => ({ seat, feeder: faceFeeder(() => faces.current[seat]) }));
       const resample = createResampler();
       const voice = createVoice({
@@ -201,6 +239,7 @@ export function App() {
           const pcm16 = resample(quiet ? new Int16Array(pcm.length) : pcm);
           // One stream per face for the whole show, from the first frame once that face is up.
           for (const { seat, feeder } of feeders) {
+            if (seat !== 'host' && seat !== `g${onTvRef.current}`) continue;   // the guest's voice: the slot on the TV
             if (!feeder.open && faces.current[seat].phase === 'live') feeder.start();
             feeder.frame(pcm16);
           }
@@ -208,13 +247,13 @@ export function App() {
         flush() { voice.flush(); for (const { feeder } of feeders) feeder.end(); },
       };
     };
-    return { host: make('host', ['host']), guest: make('guest', ['guest']) };
+    return { host: make('host', ['host']), guest: make('guest', ['g0', 'g1']) };
   }, []);
 
-  async function openSeat(role: Role) {
+  async function openSeat(role: Role, who?: Guest) {
     const other: Role = role === 'host' ? 'guest' : 'host';
     try {
-      const line = await openSpeech(seatApi(role), {
+      const line = await openSpeech(seatApi(role === 'host' ? 'host' : `g-${who!.id}`), {
         onAudio(b64, pcm) {
           voices[role].feed(pcm);
           if (!talking.current[other]) lines.current[other]?.hear(b64);
@@ -230,46 +269,53 @@ export function App() {
       lines.current[role] = line;
       if (role === 'host') booth.current?.hostLive();
       // The guest is on: the two-shot, Jada and the TV, until the booth or the director cuts.
-      else { setPatched(true); chooseShot('two'); booth.current?.guestLive(); advancer.current?.topic(firstTopic.current); }
+      else { setPatched(true); chooseShot('two'); booth.current?.guestLive(); advancer.current?.topic(firstTopic.current, true); }
+      return line;
     } catch (err) {
       offAir(`We couldn't open ${role === 'host' ? HOST.name : segment.current?.name}'s line: ${(err as SpeechError).code ?? (err as Error).message}`);
     }
   }
 
-  // Both faces start backstage (they take longest); the show starts, with Jada's line, only
-  // once both are up, so nothing on screen is still loading. The guest's face waits off
-  // screen until Jada invites them on.
-  useEffect(() => {
-    if (!showId) return;
-    void hostFace.start();
-    void guestFace.start();
-  }, [showId]);
+  // Jada's face starts backstage, and a guest's as soon as it is seated in a slot (a cast guest
+  // at once, an invented one once it is built); the show starts, with Jada's line, once her face
+  // and a cast guest's are up. The guest's face waits on the TV, hidden, until they are put through.
+  useEffect(() => { if (showId) void hostFace.start(); }, [showId]);
+  useEffect(() => { if (showId && slots[0] && (slotFaces[0].phase === 'idle' || slotFaces[0].phase === 'ended')) void slotFaces[0].start(); }, [showId, slots[0]]);
+  useEffect(() => { if (showId && slots[1] && (slotFaces[1].phase === 'idle' || slotFaces[1].phase === 'ended')) void slotFaces[1].start(); }, [showId, slots[1]]);
   const hostOpened = useRef(false);
   const [backstage, setBackstage] = useState(true);
   useEffect(() => {
-    if ([hostFace, guestFace].some((f) => f.phase !== 'live') || hostOpened.current || !booth.current) return;
+    const waitFor = [hostFace, ...(isInvented(slots[0]?.id) || !slots[0] ? [] : [slotFaces[0]])];
+    if (waitFor.some((f) => f.phase !== 'live') || hostOpened.current || !booth.current) return;
     hostOpened.current = true;
     setBackstage(false);
     void openSeat('host');
-  }, [hostFace.phase, guestFace.phase]);
+  }, [hostFace.phase, slotFaces[0].phase, slots[0]]);
   useEffect(() => {
     if (!onShow) return;
-    const failed = [hostFace, guestFace].find((f) => f.phase === 'failed');
+    const failed = [hostFace, ...slotFaces].find((f) => f.phase === 'failed');
     if (failed) offAir(failed.detail || 'A camera could not start.');
-  }, [hostFace.phase, guestFace.phase]);
+  }, [hostFace.phase, slotFaces[0].phase, slotFaces[1].phase]);
+  // A guest's face is up: the booth may put them through (held for, or handed over to).
+  useEffect(() => {
+    if (!onShow) return;
+    if (!patched && slotFaces[0].phase === 'live') booth.current?.guestReady();
+    const next = 1 - onTv;
+    if (patched && slots[next] && slotFaces[next].phase === 'live' && !handingOver.current) handOver(next);
+  }, [slotFaces[0].phase, slotFaces[1].phase, patched, onShow]);
   useEffect(() => {
     if (stage !== 'over' || !onShow) return;
     const id = setTimeout(() => void wrapUp(), END_AFTER_GOODBYE_MS);
     return () => clearTimeout(id);
   }, [stage, onShow]);
-  useEffect(() => { setTopics(guest.rundown); }, [guestId]);
+  useEffect(() => { if (!onShow) { setCurrent(castGuest); setTopics(castGuest.rundown); } }, [guestId]);
 
   // Both voices are heard whatever the shot; nobody in the studio during the trailer.
   useEffect(() => {
     const set = (f: AvatarOnly, on: boolean) => { if (f.audioRef.current) f.audioRef.current.muted = !on; };
     set(hostFace, !trailerUp);
-    set(guestFace, patched && !trailerUp);
-  }, [trailerUp, patched, hostFace.phase, guestFace.phase]);
+    slotFaces.forEach((f, i) => set(f, patched && i === onTv && !trailerUp));
+  }, [trailerUp, patched, onTv, hostFace.phase, slotFaces[0].phase, slotFaces[1].phase]);
 
   function offAir(why: string) {
     if (!booth.current) return;
@@ -285,18 +331,26 @@ export function App() {
     setTrailer(false);
     voices.host.flush();
     voices.guest.flush();
-    await Promise.allSettled([lines.current.host?.end(), lines.current.guest?.end(), faces.current.host.end(), faces.current.guest.end()]);
+    await Promise.allSettled([lines.current.host?.end(), lines.current.guest?.end(), faces.current.host.end(), faces.current.g0.end(), faces.current.g1.end()]);
     lines.current = {};
     if (showRef.current) void fetch(`${API}/show/${showRef.current}/end`, { method: 'POST', keepalive: true }).catch(() => {});
   }
 
-  async function goOnAir(first: string) {
-    setProblem(''); setLog([]); setUsed(new Set([first])); setPatched(false); setStage('greeting'); setTrailer(false); setTrailerLeaving(false); setShot('host-front'); setShotMode('auto'); setSuggestWrap(false);
+  async function goOnAir(first: string, describe?: string) {
+    const cast = describe ? null : castGuest;
+    // An invention begun in the lobby carries on: its guest, written or built already, is the opening guest.
+    const early = describe && lobbyInvention ? lobbyInvention : null;
+    const earlyView = early ? inventions[early] : undefined;
+    const earlyGuest = earlyView?.guest ? { ...earlyView.guest, avatarId: '' } : null;
+    setCurrent(cast ?? earlyGuest); setSlots([cast ?? (earlyView?.ready ? earlyGuest : null), null]); setOnTv(0); onTvRef.current = 0; handingOver.current = false;
+    if (!early) { setInventions({}); purpose.current = {}; }
+    if (earlyGuest) { first = earlyGuest.rundown[0] ?? ''; setTopics(earlyGuest.rundown); }
+    setProblem(''); setLog([]); setUsed(new Set(first ? [first] : [])); setPatched(false); setStage('greeting'); setTrailer(false); setTrailerLeaving(false); setShot('host-front'); setShotMode('auto'); setSuggestWrap(false);
     director.current?.close();
     director.current = createDirector({ onShot: setShot });
     firstTopic.current = first;
     live.current.wrapped = false;
-    live.current.used = new Set([first]);
+    live.current.used = new Set(first ? [first] : []);
     // Live while it is this show's: an advancer of an earlier show stays quiet. (Not the show's id:
     // that is only known once the server has made the show, after this.)
     const mine: Advancer = createAdvancer({
@@ -312,15 +366,21 @@ export function App() {
     });
     advancer.current = mine;
     hostOpened.current = false;
-    segment.current = guest;
+    segment.current = cast ?? earlyGuest;
     setBackstage(true);
+    // The texts are read when used: an invented guest is only written a few seconds into the show.
+    const now = () => segment.current ?? guest;
     booth.current = createBooth({
       film: filmCue(),
       rollTrailer: () => { hush.current = true; addLog('booth', `Roll the ${FILM.title} trailer`); const show = showRef.current; setTimeout(() => { if (showRef.current === show) setTrailer(true); }, FACE_LAG_MS); },
-      invite: inviteCue(guest),
-      welcome: welcomeCue(guest, first),
-      nudge: nudgeCue(guest),
-      wrap: wrapCue(guest),
+      invite: () => inviteCue(now()),
+      guestReady: () => faces.current.g0.phase === 'live' && Boolean(slotsRef.current[0]),
+      hold: () => holdCue(segment.current),
+      holdMore: () => holdMoreCue(segment.current),
+      inviteNow: () => inviteNowCue(now()),
+      welcome: () => welcomeCue(now(), firstTopic.current),
+      nudge: () => nudgeCue(now()),
+      wrap: () => wrapCue(now()),
       goodbye: goodbyeCue,
       deliver({ to, kind, text }) {
         // For tests and analytics: everything the booth hands either avatar, as a window event.
@@ -330,17 +390,120 @@ export function App() {
         if (kind === 'directive') line.directive(text);
         else line.commentary(text);
       },
-      dialGuest: () => void openSeat('guest'),
+      dialGuest: () => void openSeat('guest', slotsRef.current[0]!),
       onStage: (next) => { setStage(next); director.current?.stage(next); },
     });
-    addLog('booth', `First topic: ${first}`);
-    const res = await fetch(`${API}/shows`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ guest: guest.id }) }).catch(() => null);
+    if (first) addLog('booth', `First topic: ${first}`);
+    if (describe && !early) {
+      const id = await startInvention(describe);
+      if (!id) return;
+      purpose.current[id] = { slot: 0, opening: true };
+      addLog('booth', `Inventing tonight's guest: ${describe}`);
+    }
+    const res = await fetch(`${API}/shows`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => null);
     const json = res ? await res.json().catch(() => ({})) : {};
     if (!res?.ok) return setProblem(json.message || json.error || 'We could not book the studio.');
     showRef.current = json.showId;
     setOnShow(true);
     setShowId(json.showId);
   }
+
+  async function startInvention(description: string): Promise<string | null> {
+    const res = await fetch(`${API}/guests/invent`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ description }) }).catch(() => null);
+    const json = res ? await res.json().catch(() => ({})) : {};
+    if (!res?.ok) { setProblem(json.message || json.error || 'We could not start inventing the guest.'); return null; }
+    setInventions((all) => ({ ...all, [json.id]: { id: json.id, steps: {}, ready: false, seconds: 0 } }));
+    return json.id;
+  }
+
+  // Follow the guests being invented: written (the opening guest is named, their rundown is the
+  // booth's), then built (seated in their slot, whose face starts at once).
+  useEffect(() => {
+    if (!onShow && !lobbyInvention) return;
+    const id = setInterval(async () => {
+      for (const [inv, what] of Object.entries(purpose.current)) {
+        const known = inventionsRef.current[inv];
+        if (known?.ready || known?.error) continue;
+        const res = await fetch(`${API}/guests/invent/${inv}`).catch(() => null);
+        if (!res?.ok) continue;
+        const view = (await res.json()) as InventionView;
+        setInventions((all) => ({ ...all, [inv]: view }));
+        const written = view.guest && { ...view.guest, avatarId: '' };
+        if (written && what.opening && !segment.current) {
+          segment.current = written;
+          setCurrent(written);
+          setTopics(written.rundown);
+          firstTopic.current = written.rundown[0] ?? '';
+          live.current.used = new Set(firstTopic.current ? [firstTopic.current] : []);
+          setUsed(new Set(live.current.used));
+          addLog('booth', `Tonight's guest: ${written.name}, ${written.billing}. First topic: ${firstTopic.current}`);
+        }
+        if (view.ready && written) {
+          addLog('booth', `${written.name} is ready (${view.seconds} s); their camera is starting`);
+          if (onShowRef.current) setSlots((all) => all.map((g, i) => (i === what.slot ? written : g)));
+        }
+        if (view.error) {
+          addLog('booth', `Could not invent the guest: ${view.error}`);
+          if (what.opening) offAir(`We could not invent tonight's guest: ${view.error}`);
+        }
+      }
+    }, 2000);
+    return () => clearInterval(id);
+  }, [onShow, lobbyInvention]);
+  const inventInLobby = async (description: string) => {
+    const id = await startInvention(description);
+    if (!id) return;
+    purpose.current = { [id]: { slot: 0, opening: true } };
+    segment.current = null;
+    setLobbyInvention(id);
+  };
+  const onShowRef = useRef(onShow);
+  onShowRef.current = onShow;
+  const inventionsRef = useRef(inventions);
+  inventionsRef.current = inventions;
+
+  // A new guest mid-show: once their face is up, Jada thanks the guest on air and brings the next
+  // one in; once she has said it (and her face has too), the TV switches, the old line and face
+  // end, and the new guest's line opens, their welcome waiting as her next reply.
+  const handingOver = useRef(false);
+  function handOver(next: number) {
+    const to = slotsRef.current[next];
+    const from = segment.current;
+    if (!to || !from || !booth.current) return;
+    handingOver.current = true;
+    addLog('booth', `Bring on ${to.name}`);
+    booth.current.handover(handoverCue(from, to), () => {
+      const show = showRef.current;
+      setTimeout(async () => {
+        if (showRef.current !== show) return;
+        const old = onTvRef.current;
+        await lines.current.guest?.end();
+        lines.current.guest = undefined;
+        onTvRef.current = next;
+        setOnTv(next);
+        segment.current = to;
+        setCurrent(to);
+        setTopics(to.rundown);
+        firstTopic.current = to.rundown[0] ?? '';
+        live.current.used = new Set(firstTopic.current ? [firstTopic.current] : []);
+        setUsed(new Set(live.current.used));
+        setSuggestWrap(false);
+        await faces.current[old === 0 ? 'g0' : 'g1'].end();
+        setSlots((all) => all.map((g, i) => (i === old ? null : g)));
+        const line = await openSeat('guest', to);
+        if (line && firstTopic.current) booth.current?.cue(welcomeCue(to, firstTopic.current));
+        handingOver.current = false;
+      }, FACE_LAG_MS - 1_500);
+    });
+  }
+  const pendingInvite = Object.entries(purpose.current).some(([id, w]) => !w.opening && !inventions[id]?.error && !(slots[w.slot] && slots[w.slot]!.id === id && onTv === w.slot));
+  const inviteGuest = async (description: string) => {
+    if (!patched || pendingInvite) return;
+    const id = await startInvention(description);
+    if (!id) return;
+    purpose.current[id] = { slot: 1 - onTvRef.current, opening: false };
+    addLog('booth', `Inventing the next guest: ${description}`);
+  };
 
   // Shortly before the trailer ends, her line after it is cued (see INVITE_LEAD_MS); at its end it goes.
   const trailerEnding = () => { hush.current = false; booth.current?.trailerDone(); };
@@ -364,10 +527,10 @@ export function App() {
   const wrap = () => { booth.current?.wrap(); live.current.wrapped = true; setSuggestWrap(false); addLog('booth', 'Wrap it up'); };
   const chooseShot = (mode: ShotMode) => { setShotMode(mode); director.current?.mode(mode); };
   const endShow = () => { offAir(''); setStage('over'); };
-  const backToLobby = () => { booth.current = null; setOnShow(false); setShowId(null); };
+  const backToLobby = () => { booth.current = null; setOnShow(false); setShowId(null); setLobbyInvention(null); purpose.current = {}; setInventions({}); };
 
   const done = (p: AvatarOnly['phase']) => p === 'ended' || p === 'failed' || p === 'idle';
-  const allDone = done(hostFace.phase) && done(guestFace.phase);
+  const allDone = done(hostFace.phase) && slotFaces.every((f) => done(f.phase));
 
   return (
     <div className="nc-app gr">
@@ -383,10 +546,11 @@ export function App() {
       </header>
 
       {!onShow ? (
-        <Lobby guestId={guestId} setGuestId={setGuestId} topics={topics} setTopics={setTopics} onGo={goOnAir} problem={problem} />
+        <Lobby guestId={guestId} setGuestId={setGuestId} inventText={inventText} setInventText={setInventText} topics={topics} setTopics={setTopics} onGo={goOnAir} problem={problem}
+          invention={lobbyInvention ? inventions[lobbyInvention] : undefined} onInvent={inventInLobby} />
       ) : (
         <main className="nc-show">
-          <Program host={hostFace} guest={guestFace} guestInfo={guest} patched={patched} stage={stage}
+          <Program host={hostFace} tvFaces={slotFaces} onTv={onTv} posters={slots.map((g) => posterOf(g, inventions))} guestInfo={guest} patched={patched} stage={stage}
             backstage={backstage} shot={shot} trailer={trailer} trailerLeaving={trailerLeaving} onTrailerEnding={trailerEnding} onTrailerDone={trailerDone} />
           <section className="nc-booth" aria-label="The booth">
             <div className="nc-booth-head">
@@ -402,12 +566,13 @@ export function App() {
             ) : (
               <Console topics={topics} used={used} disabled={stage !== 'on-air'} onTopic={(t) => sendTopic(t)} onNote={sendNote}
                 onWrap={wrap} onEnd={endShow} guestFirst={firstName(guest.name)} shotMode={shotMode} onShot={chooseShot}
-                autoAdvance={autoAdvance} onAutoAdvance={setAutoAdvance} suggestWrap={suggestWrap} />
+                autoAdvance={autoAdvance} onAutoAdvance={setAutoAdvance} suggestWrap={suggestWrap}
+                inventions={Object.values(inventions)} canInvite={patched && !pendingInvite && stage === 'on-air'} onInvite={inviteGuest} />
             )}
           </section>
           <section className="nc-transcript" aria-label="On air">
             <h2>On air</h2>
-            <Transcript log={log} guest={guest} />
+            <Transcript log={log} />
           </section>
         </main>
       )}
@@ -436,17 +601,19 @@ function Face({ face, poster }: { face: AvatarOnly; poster: string }) {
 // the renderer's drift has no hard line to slip against); the guest plays on
 // the TV. The director's shots are camera
 // moves on that set: wide, pushed in on Jada, pushed in on the TV.
-function Program({ host, guest, guestInfo, patched, stage, backstage, shot, trailer, trailerLeaving, onTrailerEnding, onTrailerDone }: {
-  host: AvatarOnly; guest: AvatarOnly; guestInfo: Guest; patched: boolean; stage: Stage;
+function Program({ host, tvFaces, onTv, posters, guestInfo, patched, stage, backstage, shot, trailer, trailerLeaving, onTrailerEnding, onTrailerDone }: {
+  host: AvatarOnly; tvFaces: AvatarOnly[]; onTv: number; posters: string[]; guestInfo: Guest; patched: boolean; stage: Stage;
   backstage: boolean; shot: Shot; trailer: boolean; trailerLeaving: boolean; onTrailerEnding: () => void; onTrailerDone: () => void;
 }) {
   const live = stage === 'on-air' || stage === 'closing';
   const g = firstName(guestInfo.name);
-  const faces = [host, guest];
+  // Backstage waits on the faces that are starting: Jada's, and a cast guest's (an invented
+  // guest's face starts later, once it is built, while the show is on).
+  const faces = [host, ...tvFaces.filter((f) => f.phase !== 'idle')];
   const failed = faces.find((f) => f.phase === 'failed');
   const backstageText = failed ? failed.detail : faces.some((f) => f.phase === 'warming') ? 'Lighting the stage…' : 'Getting the studio ready…';
   // Which cameras are up, so a long wait says what it is waiting for.
-  const cameras: [string, AvatarOnly][] = [['Jada', host], [g, guest]];
+  const cameras: [string, AvatarOnly][] = [['Jada', host], ...(tvFaces[0].phase !== 'idle' ? [[g, tvFaces[0]] as [string, AvatarOnly]] : [])];
   // Until the guest is on, the camera stays wide on Jada and the key art on the TV.
   const camera = !patched ? 'wide' : shot === 'host-side' ? 'host' : shot === 'guest' ? 'tv' : 'wide';
   const third = camera === 'tv' ? { name: guestInfo.name, billing: guestInfo.billing } : camera === 'host' || !patched ? HOST : null;
@@ -455,7 +622,10 @@ function Program({ host, guest, guestInfo, patched, stage, backstage, shot, trai
       <div className="gr-set">
         <img className="gr-wall" src={wall} alt="" />
         <div className="gr-tv">
-          <div className={`gr-tv-feed ${patched ? 'is-on' : ''}`}><Face face={guest} poster={PORTRAITS[guestInfo.id]} /></div>
+          {/* Both guest slots stay in the TV (a video off screen is not sent): the one on air shows. */}
+          <div className={`gr-tv-feed ${patched ? 'is-on' : ''}`}>
+            {tvFaces.map((f, i) => <div key={i} className={`gr-tv-slot ${i === onTv ? '' : 'is-off'}`}><Face face={f} poster={posters[i]} /></div>)}
+          </div>
           {!patched && (
             <div className="gr-tv-card" aria-hidden="true">
               <img src={STILLS[5]} alt="" />
@@ -492,7 +662,7 @@ function Program({ host, guest, guestInfo, patched, stage, backstage, shot, trai
           )}
         </div>
       )}
-      {(host.audioBlocked || guest.audioBlocked) && (
+      {faces.some((f) => f.audioBlocked) && (
         <button type="button" className="nc-hear" onClick={() => faces.forEach((f) => f.resumeAudio())}>Tap to hear the show</button>
       )}
       <div className="nc-ticker gr-ticker" aria-hidden="true">
@@ -539,9 +709,13 @@ function Trailer({ leaving, onEnding, onDone }: { leaving: boolean; onEnding: ()
   );
 }
 
-function Lobby({ guestId, setGuestId, topics, setTopics, onGo, problem }: {
-  guestId: string; setGuestId: (id: string) => void; topics: string[]; setTopics: (t: string[]) => void; onGo: (first: string) => void; problem: string;
+const INVENT = 'invent';
+function Lobby({ guestId, setGuestId, inventText, setInventText, topics, setTopics, onGo, problem, invention, onInvent }: {
+  guestId: string; setGuestId: (id: string) => void; inventText: string; setInventText: (t: string) => void;
+  topics: string[]; setTopics: (t: string[]) => void; onGo: (first: string, describe?: string) => void; problem: string;
+  invention?: InventionView; onInvent: (description: string) => void;
 }) {
+  const inventing = guestId === INVENT;
   const [text, setText] = useState(topics.join('\n'));
   useEffect(() => { setText(topics.join('\n')); }, [topics]);
   const list = text.split('\n').map((t) => t.trim()).filter(Boolean);
@@ -564,25 +738,42 @@ function Lobby({ guestId, setGuestId, topics, setTopics, onGo, problem }: {
             <span><strong>{g.name}</strong><small>{g.billing}</small></span>
           </label>
         ))}
+        <label className={`nc-guest gr-invent ${inventing ? 'is-picked' : ''}`}>
+          <input type="radio" name="guest" value={INVENT} checked={inventing} onChange={() => setGuestId(INVENT)} />
+          <span className="gr-invent-mark" aria-hidden="true">✦</span>
+          <span><strong>Invent a guest</strong><small>Describe them; they are made while Jada opens the show</small></span>
+        </label>
       </fieldset>
-      <label className="nc-topics">
+      {inventing && (
+        <label className="nc-topics">
+          <span>Who is tonight's guest? One of {FILM.title}'s makers: a sentence is enough. Their name, look, voice and topics are invented for you.</span>
+          <textarea rows={3} value={inventText} onChange={(e) => setInventText(e.target.value)} disabled={Boolean(invention)} placeholder="e.g. the gruff Icelandic cinematographer who shot the sandstorms" />
+        </label>
+      )}
+      {inventing && (invention
+        ? <div className="gr-lobby-progress"><GuestProgress view={invention} /><p className="nc-fine">{invention.ready ? 'Ready: go on air, and Jada brings them on straight after the trailer.' : 'You can go on air now: Jada holds for them after the trailer if they are not ready yet.'}</p></div>
+        : <button type="button" className="nc-btn" disabled={inventText.trim().length < 3} onClick={() => onInvent(inventText.trim())}>Invent them now</button>)}
+      {!inventing && <label className="nc-topics">
         <span>The rundown: one topic per line. Jada opens with the first once the designer is on; send the rest from the booth.</span>
         <textarea rows={5} value={text} onChange={(e) => setText(e.target.value)} onBlur={() => setTopics(list)} />
-      </label>
+      </label>}
       {problem && <p className="nc-problem" role="alert">{problem}</p>}
-      <button type="button" className="nc-btn nc-primary nc-go" disabled={!list.length} onClick={() => { setTopics(list); onGo(list[0]); }}>
+      <button type="button" className="nc-btn nc-primary nc-go" disabled={inventing ? inventText.trim().length < 3 : !list.length}
+        onClick={() => { if (inventing) onGo('', inventText.trim()); else { setTopics(list); onGo(list[0]); } }}>
         Go on air
       </button>
-      <p className="nc-fine">Two speech sessions and three cameras run at once, up to 15 minutes.</p>
+      <p className="nc-fine">Two speech sessions and two cameras run at once (three for a moment when a new guest comes on), up to 15 minutes.</p>
     </main>
   );
 }
 
-function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guestFirst, shotMode, onShot, autoAdvance, onAutoAdvance, suggestWrap }: {
+function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guestFirst, shotMode, onShot, autoAdvance, onAutoAdvance, suggestWrap, inventions, canInvite, onInvite }: {
   topics: string[]; used: Set<string>; disabled: boolean; guestFirst: string; shotMode: ShotMode;
   onTopic: (t: string) => void; onNote: (t: string) => void; onWrap: () => void; onEnd: () => void; onShot: (m: ShotMode) => void;
   autoAdvance: boolean; onAutoAdvance: (on: boolean) => void; suggestWrap: boolean;
+  inventions: InventionView[]; canInvite: boolean; onInvite: (description: string) => void;
 }) {
+  const [invite, setInvite] = useState('');
   const [topic, setTopic] = useState('');
   const [note, setNote] = useState('');
   const extra = [...used].filter((t) => !topics.includes(t));
@@ -596,6 +787,15 @@ function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guest
             <button key={m} type="button" role="radio" aria-checked={shotMode === m} className={`nc-chip ${shotMode === m ? 'is-on' : ''}`} onClick={() => onShot(m)}>{label}</button>
           ))}
         </div>
+      </div>
+      <div className="nc-group">
+        <h3>Guests</h3>
+        {inventions.map((v) => <GuestProgress key={v.id} view={v} />)}
+        <form className="nc-row" onSubmit={(e) => { e.preventDefault(); const t = invite.trim(); if (t.length >= 3 && canInvite) { onInvite(t); setInvite(''); } }}>
+          <input className="nc-input" value={invite} onChange={(e) => setInvite(e.target.value)} disabled={!canInvite}
+            placeholder={canInvite ? 'Invite a guest, e.g. the actor who plays the queen' : 'Once a guest is on, invite the next one here'} aria-label="Invite a guest" />
+          <button type="submit" className="nc-btn" disabled={!canInvite || invite.trim().length < 3}>Invite</button>
+        </form>
       </div>
       <div className="nc-group">
         <h3>Next topic for Jada</h3>
@@ -633,7 +833,29 @@ function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guest
   );
 }
 
-function Transcript({ log, guest }: { log: LogLine[]; guest: Guest }) {
+// A guest being invented, step by step, as the booth follows it: written, drawn, voiced, built.
+const STEPS: [keyof InventionView['steps'], string][] = [['character', 'Character'], ['portrait', 'Portrait'], ['voice', 'Voice'], ['avatar', 'Avatar build']];
+function GuestProgress({ view }: { view: InventionView }) {
+  const g = view.guest;
+  return (
+    <div className={`gr-progress ${view.ready ? 'is-ready' : view.error ? 'is-failed' : ''}`}>
+      {view.portrait ? <img src={view.portrait} alt="" /> : <span className="gr-progress-blank" aria-hidden="true">✦</span>}
+      <div>
+        <strong>{g ? g.name : 'Inventing a guest…'}</strong>
+        {g && <small>{g.billing}</small>}
+        <ol>
+          {STEPS.map(([k, label]) => {
+            const st = view.steps[k]?.status ?? 'waiting';
+            return <li key={k} className={`is-${st}`}>{label}{view.steps[k]?.ms ? ` · ${Math.round(view.steps[k]!.ms! / 1000)} s` : st === 'running' ? '…' : ''}</li>;
+          })}
+          <li className={view.ready ? 'is-done' : 'is-waiting'}>{view.ready ? `Ready · ${view.seconds} s` : view.error ? `Failed: ${view.error}` : `${view.seconds} s so far`}</li>
+        </ol>
+      </div>
+    </div>
+  );
+}
+
+function Transcript({ log }: { log: LogLine[] }) {
   const list = useRef<HTMLOListElement>(null);
   useEffect(() => { list.current?.scrollTo({ top: list.current.scrollHeight, behavior: 'smooth' }); }, [log.length]);
   return (
@@ -641,7 +863,7 @@ function Transcript({ log, guest }: { log: LogLine[]; guest: Guest }) {
       {log.length === 0 && <li className="nc-empty">The show starts when Jada does.</li>}
       {log.map((line) => (
         <li key={line.id} className={`nc-line is-${line.who}`}>
-          <span className="nc-who">{line.who === 'host' ? 'Jada' : line.who === 'guest' ? firstName(guest.name) : 'Booth'}</span>
+          <span className="nc-who">{line.who === 'host' ? 'Jada' : line.who === 'guest' ? firstName(line.name ?? 'Guest') : 'Booth'}</span>
           <span>{line.text}</span>
         </li>
       ))}
