@@ -52,10 +52,13 @@ No platform changes.
   over: Auto, Jada, the guest, or both.
 - **Showtime only when everyone is in place.** Both faces start backstage behind one card;
   Jada's line opens, and the show starts, only once all are up.
-- **The trailer**: after Jada introduces AMBERFALL, the program cuts full frame to the trailer:
+- **The trailer**: after Jada introduces AMBERFALL, the program dissolves to the trailer, full frame:
   five generated stills, each held and pushed in on with a dissolve between, cards over them,
   letterbox bars (about 26 s). No video model is available on the site's Gemini key, so it is a
-  still-based trailer. The studio is muted while it plays.
+  still-based trailer. Jada watches it in a small window in the corner, silent: her voice is
+  kept off her faces from the roll. Her line after it is cued six seconds before it ends (her
+  session's start plus her face's 4.5 s delay), so she speaks as it dissolves back to the studio,
+  0.6 s into the dissolve when measured live, instead of after five seconds of silence.
 - **Two speech sessions, wired to each other.** The server reserves each one and pins its role
   (`scenario`, `user_name`, and a plain-delivery `instructions`). The page keeps each input fed in
   real time and forwards every frame of each avatar's voice to the other. Each face gets its voice

@@ -7,8 +7,7 @@ export interface Score {
   end(): void;
 }
 
-/** `level` is the score's loudness: lower when the host talks over it. */
-export function startScore(seconds: number, level = 0.9): Score | null {
+export function startScore(seconds: number): Score | null {
   const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!Ctx) return null;
   const ctx = new Ctx();
@@ -16,7 +15,7 @@ export function startScore(seconds: number, level = 0.9): Score | null {
   const t0 = ctx.currentTime;
   const master = ctx.createGain();
   master.gain.setValueAtTime(0, t0);
-  master.gain.linearRampToValueAtTime(level, t0 + 2.5);
+  master.gain.linearRampToValueAtTime(0.9, t0 + 2.5);
   master.connect(ctx.destination);
 
   // The drone: a low fifth, detuned, through a slowly opening filter.

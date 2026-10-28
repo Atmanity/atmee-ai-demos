@@ -17,7 +17,6 @@ import { startScore } from './score.ts';
 import { createFloor } from '../show/floor.ts';
 import { createDirector, hostPose, type Director, type Pose, type Shot, type ShotMode } from '../show/director.ts';
 import { FILM, GUESTS, HOST, SHOW, firstName, type Guest } from '../show/cast.ts';
-import { TRAILER_REMARKS } from '../show/script.ts';
 import { filmCue, goodbyeCue, inviteCue, noteCue, nudgeCue, topicCue, welcomeCue, wrapCue } from '../show/script.ts';
 import { openSpeech, SpeechError, type SpeechLine } from '../show/speech.ts';
 import { createResampler, createVoice } from '../show/voice.ts';
@@ -37,12 +36,15 @@ const API = '/api/apps/tv-show-live';
 const PORTRAITS: Record<string, string> = { ines };
 const STILLS: Record<number, string> = { 1: still1, 2: still2, 3: still3, 4: still4, 5: still5 };
 const END_AFTER_GOODBYE_MS = 4_000;
-type TrailerMode = 'react' | 'commentate';
-
 const SHOT_MS = 5_200;          // each trailer still, held and pushed in on
 // The booth hears Jada's line end in her speech session; viewers hear it from her face about
 // 4 s later (measured). The trailer rolls once the face is through it, not over her last words.
 const FACE_LAG_MS = 4_500;
+// Her line after the trailer is cued this long before the trailer ends, so that what she says
+// comes out of her face as it ends: her session takes a second or so to start the line, then
+// her face is FACE_LAG_MS behind. Cued at the end, she was silent on screen for five seconds.
+const INVITE_LEAD_MS = FACE_LAG_MS + 1_500;
+const TRAILER_FADE_MS = 900;   // the dissolve into the trailer and back out to the studio
 
 const STAGE_TEXT: Record<Stage, string> = {
   greeting: 'Jada is opening the show',
@@ -110,12 +112,18 @@ export function App() {
   const [problem, setProblem] = useState('');
   const [onShow, setOnShow] = useState(false);
   const [trailer, setTrailer] = useState(false);
+  // The trailer fades in over the studio, and out of it at its end: while it fades out it is
+  // still there, but the studio is back on air (her window back in her seat, her voice heard).
+  const [trailerLeaving, setTrailerLeaving] = useState(false);
+  const trailerUp = trailer && !trailerLeaving;
   // While the trailer plays the studio is off air: what Jada says then is neither heard nor logged.
-  // During the trailer Jada is in a corner window: she reacts silently, or she commentates
-  // (two cued remarks), heard over the score and logged.
-  const [trailerMode, setTrailerMode] = useState<TrailerMode>('react');
+  // During the trailer Jada watches it in a corner window, silent: what she says then is
+  // neither heard nor logged, and her faces get silence (see hush), so they never mouth it.
   const trailerOn = useRef(false);
-  trailerOn.current = trailer && trailerMode === 'react';
+  trailerOn.current = trailer;
+  // Her voice is kept off her faces from the roll until her line after the trailer is cued:
+  // with her face FACE_LAG_MS behind, that is the trailer's time on screen.
+  const hush = useRef(false);
   const [shot, setShot] = useState<Shot>('host-front');
   const [wrapping, setWrapping] = useState(false);
   const pose = hostPose(stage, wrapping);
@@ -178,8 +186,10 @@ export function App() {
       return {
         feed(pcm: Int16Array) {
           voice.feed(pcm);
-          // Off the floor, the face gets silence of the same length, so its stream keeps time.
-          const pcm16 = resample(floor.onAir(role) ? pcm : new Int16Array(pcm.length));
+          // Off the floor, or Jada during the trailer, the face gets silence of the same length,
+          // so its stream keeps time.
+          const quiet = !floor.onAir(role) || (role === 'host' && hush.current);
+          const pcm16 = resample(quiet ? new Int16Array(pcm.length) : pcm);
           // One stream per face for the whole show, from the first frame once that face is up.
           for (const { seat, feeder } of feeders) {
             if (!feeder.open && faces.current[seat].phase === 'live') feeder.start();
@@ -245,10 +255,10 @@ export function App() {
   // Both voices are heard whatever the shot; nobody in the studio during the trailer.
   useEffect(() => {
     const set = (f: AvatarOnly, on: boolean) => { if (f.audioRef.current) f.audioRef.current.muted = !on; };
-    set(frontFace, pose === 'front' && (!trailer || trailerMode === 'commentate'));
+    set(frontFace, pose === 'front' && !trailerUp);
     set(hostFace, pose === 'turned' && !trailer);
     set(guestFace, patched && !trailer);
-  }, [pose, trailer, trailerMode, patched, frontFace.phase, hostFace.phase, guestFace.phase]);
+  }, [pose, trailerUp, patched, frontFace.phase, hostFace.phase, guestFace.phase]);
 
   function offAir(why: string) {
     if (!booth.current) return;
@@ -270,7 +280,7 @@ export function App() {
   }
 
   async function goOnAir(first: string) {
-    setProblem(''); setLog([]); setUsed(new Set([first])); setPatched(false); setStage('greeting'); setTrailer(false); setShot('host-front'); setShotMode('auto'); setWrapping(false); remarked.current.clear();
+    setProblem(''); setLog([]); setUsed(new Set([first])); setPatched(false); setStage('greeting'); setTrailer(false); setTrailerLeaving(false); setShot('host-front'); setShotMode('auto'); setWrapping(false);
     director.current?.close();
     director.current = createDirector({ onShot: setShot });
     hostOpened.current = false;
@@ -278,7 +288,7 @@ export function App() {
     setBackstage(true);
     booth.current = createBooth({
       film: filmCue(),
-      rollTrailer: () => { addLog('booth', `Roll the ${FILM.title} trailer`); const show = showRef.current; setTimeout(() => { if (showRef.current === show) setTrailer(true); }, FACE_LAG_MS); },
+      rollTrailer: () => { hush.current = true; addLog('booth', `Roll the ${FILM.title} trailer`); const show = showRef.current; setTimeout(() => { if (showRef.current === show) setTrailer(true); }, FACE_LAG_MS); },
       invite: inviteCue(guest),
       welcome: welcomeCue(guest, first),
       nudge: nudgeCue(guest),
@@ -304,17 +314,15 @@ export function App() {
     setShowId(json.showId);
   }
 
-  const trailerDone = () => { setTrailer(false); booth.current?.trailerDone(); };
-  // Commentating: a cued remark at some of the trailer's shots (commentary, which she speaks at once).
-  // Each remark once per trailer: in development React runs the trailer's effects twice.
-  const remarked = useRef(new Set<number>());
-  const trailerShot = (i: number) => {
-    const remark = TRAILER_REMARKS[i];
-    if (trailerMode !== 'commentate' || !remark || remarked.current.has(i)) return;
-    remarked.current.add(i);
-    lines.current.host?.commentary(remark);
-    addLog('booth', `Trailer remark ${i === 0 ? 'one' : 'two'}`);
+  // Shortly before the trailer ends, her line after it is cued (see INVITE_LEAD_MS); at its end it goes.
+  const trailerEnding = () => { hush.current = false; booth.current?.trailerDone(); };
+  const trailerDone = () => {
+    trailerEnding();
+    setTrailerLeaving(true);
+    const show = showRef.current;
+    setTimeout(() => { if (showRef.current === show) { setTrailer(false); setTrailerLeaving(false); } }, TRAILER_FADE_MS);
   };
+  // Commentating: a cued remark at some of the trailer's shots (commentary, which she speaks at once).
   const sendTopic = (topic: string) => {
     if (!booth.current || !segment.current) return;
     booth.current.cue(topicCue(segment.current, topic));
@@ -348,7 +356,7 @@ export function App() {
       ) : (
         <main className="nc-show">
           <Program front={frontFace} host={hostFace} pose={pose} guest={guestFace} guestInfo={guest} patched={patched} stage={stage}
-            backstage={backstage} shot={shot} trailer={trailer} trailerMode={trailerMode} onTrailerShot={trailerShot} onTrailerDone={trailerDone} />
+            backstage={backstage} shot={shot} trailer={trailer} trailerLeaving={trailerLeaving} onTrailerEnding={trailerEnding} onTrailerDone={trailerDone} />
           <section className="nc-booth" aria-label="The booth">
             <div className="nc-booth-head">
               <h2>The booth</h2>
@@ -362,8 +370,7 @@ export function App() {
               </div>
             ) : (
               <Console topics={topics} used={used} disabled={stage !== 'on-air'} onTopic={sendTopic} onNote={sendNote}
-                onWrap={wrap} onEnd={endShow} guestFirst={firstName(guest.name)} shotMode={shotMode} onShot={chooseShot}
-                trailerMode={trailerMode} onTrailerMode={setTrailerMode} trailerLocked={stage !== 'greeting' && stage !== 'introducing'} />
+                onWrap={wrap} onEnd={endShow} guestFirst={firstName(guest.name)} shotMode={shotMode} onShot={chooseShot} />
             )}
           </section>
           <section className="nc-transcript" aria-label="On air">
@@ -397,9 +404,9 @@ function Face({ face, poster }: { face: AvatarOnly; poster: string }) {
 // the renderer's drift has no hard line to slip against); the guest plays on
 // the TV. The director's shots are camera
 // moves on that set: wide, pushed in on Jada, pushed in on the TV.
-function Program({ front, host, pose, guest, guestInfo, patched, stage, backstage, shot, trailer, trailerMode, onTrailerShot, onTrailerDone }: {
+function Program({ front, host, pose, guest, guestInfo, patched, stage, backstage, shot, trailer, trailerLeaving, onTrailerEnding, onTrailerDone }: {
   front: AvatarOnly; host: AvatarOnly; pose: Pose; guest: AvatarOnly; guestInfo: Guest; patched: boolean; stage: Stage;
-  backstage: boolean; shot: Shot; trailer: boolean; trailerMode: TrailerMode; onTrailerShot: (i: number) => void; onTrailerDone: () => void;
+  backstage: boolean; shot: Shot; trailer: boolean; trailerLeaving: boolean; onTrailerEnding: () => void; onTrailerDone: () => void;
 }) {
   const live = stage === 'on-air' || stage === 'closing';
   const g = firstName(guestInfo.name);
@@ -412,7 +419,7 @@ function Program({ front, host, pose, guest, guestInfo, patched, stage, backstag
   const camera = !patched ? 'wide' : shot === 'host-side' ? 'host' : shot === 'guest' ? 'tv' : 'wide';
   const third = camera === 'tv' ? { name: guestInfo.name, billing: guestInfo.billing } : camera === 'host' || !patched ? HOST : null;
   return (
-    <section className={`gr-program is-${camera} ${trailer ? 'is-trailer' : ''}`} aria-label="The show, as it goes out">
+    <section className={`gr-program is-${camera} ${trailer && !trailerLeaving ? 'is-trailer' : ''}`} aria-label="The show, as it goes out">
       <div className="gr-set">
         <img className="gr-wall" src={wall} alt="" />
         <div className="gr-tv">
@@ -439,7 +446,7 @@ function Program({ front, host, pose, guest, guestInfo, patched, stage, backstag
       {third && <div className="gr-third"><strong>{third.name}</strong><span>{third.billing}</span></div>}
       <div className="nc-bug gr-bug"><span className="gr-fan" aria-hidden="true" />The Gilded <b>Reel</b></div>
       <div className={`nc-tally ${live ? 'is-on' : ''}`}>{live ? 'Live' : 'Standby'}</div>
-      {trailer && <Trailer level={trailerMode === 'commentate' ? 0.45 : 0.9} onShot={onTrailerShot} onDone={onTrailerDone} />}
+      {trailer && <Trailer leaving={trailerLeaving} onEnding={onTrailerEnding} onDone={onTrailerDone} />}
       {backstage && (
         <div className="gr-backstage" role="status">
           {!failed && <span className="gr-spin" aria-hidden="true" />}
@@ -466,17 +473,20 @@ function Program({ front, host, pose, guest, guestInfo, patched, stage, backstag
 
 // The trailer, full frame: each still held and slowly pushed in on, cut with a
 // dissolve, its card over it, between letterbox bars.
-function Trailer({ level, onShot, onDone }: { level: number; onShot: (i: number) => void; onDone: () => void }) {
+function Trailer({ leaving, onEnding, onDone }: { leaving: boolean; onEnding: () => void; onDone: () => void }) {
   const [shot, setShot] = useState(0);
   const shots = FILM.trailer;
   const score = useRef<ReturnType<typeof startScore>>(null);
   useEffect(() => {
-    score.current = startScore((shots.length * SHOT_MS) / 1000, level);
+    const id = setTimeout(onEnding, Math.max(0, shots.length * SHOT_MS - INVITE_LEAD_MS));
+    return () => clearTimeout(id);
+  }, []);
+  useEffect(() => {
+    score.current = startScore((shots.length * SHOT_MS) / 1000);
     return () => score.current?.end();
   }, []);
   useEffect(() => {
     const s = shots[shot];
-    if (s) onShot(shot);
     if (s?.card) score.current?.hit(s.title === true);
     if (shot === shots.length - 1) setTimeout(() => score.current?.end(), SHOT_MS - 1_300);
   }, [shot]);
@@ -486,7 +496,7 @@ function Trailer({ level, onShot, onDone }: { level: number; onShot: (i: number)
     return () => clearTimeout(id);
   }, [shot]);
   return (
-    <div className="gr-trailer" role="img" aria-label={`The ${FILM.title} trailer`}>
+    <div className={`gr-trailer ${leaving ? 'is-leaving' : ''}`} role="img" aria-label={`The ${FILM.title} trailer`}>
       {shots.map((s, i) => (
         <div key={s.still} className={`gr-shot ${i === shot ? 'is-on' : ''} ${i < shot ? 'is-past' : ''}`}>
           <img src={STILLS[s.still]} alt="" />
@@ -537,10 +547,9 @@ function Lobby({ guestId, setGuestId, topics, setTopics, onGo, problem }: {
   );
 }
 
-function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guestFirst, shotMode, onShot, trailerMode, onTrailerMode, trailerLocked }: {
+function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guestFirst, shotMode, onShot }: {
   topics: string[]; used: Set<string>; disabled: boolean; guestFirst: string; shotMode: ShotMode;
   onTopic: (t: string) => void; onNote: (t: string) => void; onWrap: () => void; onEnd: () => void; onShot: (m: ShotMode) => void;
-  trailerMode: TrailerMode; onTrailerMode: (m: TrailerMode) => void; trailerLocked: boolean;
 }) {
   const [topic, setTopic] = useState('');
   const [note, setNote] = useState('');
@@ -553,14 +562,6 @@ function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guest
         <div className="gr-cams" role="radiogroup" aria-label="Shot">
           {cams.map(([m, label]) => (
             <button key={m} type="button" role="radio" aria-checked={shotMode === m} className={`nc-chip ${shotMode === m ? 'is-on' : ''}`} onClick={() => onShot(m)}>{label}</button>
-          ))}
-        </div>
-      </div>
-      <div className="nc-group">
-        <h3>During the trailer</h3>
-        <div className="gr-cams" role="radiogroup" aria-label="During the trailer">
-          {([['react', 'Jada reacts'], ['commentate', 'Jada commentates']] as [TrailerMode, string][]).map(([m, label]) => (
-            <button key={m} type="button" role="radio" aria-checked={trailerMode === m} disabled={trailerLocked} className={`nc-chip ${trailerMode === m ? 'is-on' : ''}`} onClick={() => onTrailerMode(m)}>{label}</button>
           ))}
         </div>
       </div>

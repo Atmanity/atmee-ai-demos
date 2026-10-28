@@ -274,8 +274,8 @@ button { font: inherit; }
 .gr-program .nc-ticker { bottom: 0; height: 4.2cqw; border-top-color: rgba(216, 177, 92, .6); background: rgba(10, 8, 5, .9); }
 .gr-program .nc-ticker span { font-size: 1.15cqw; }
 
-/* During the trailer, camera 1 is a window in the corner, over the trailer: close on Jada,
-   framed like a reaction camera, with her name on it. */
+/* During the trailer, camera 1 is a window in the corner, over the trailer: close on Jada
+   watching it, silent, framed like a reaction camera, with her name on it. */
 .gr-program.is-trailer .gr-host.is-front { left: auto; top: auto; right: 2%; bottom: 10.5%; width: 14%; height: auto; aspect-ratio: 1; z-index: 16;
   -webkit-mask-image: none; mask-image: none; opacity: 1; overflow: hidden; border-radius: .7cqw; background: #0c0a07;
   box-shadow: 0 .8cqw 2.4cqw rgba(0, 0, 0, .7), 0 0 0 .15cqw rgba(216, 177, 92, .7); }
@@ -284,7 +284,11 @@ button { font: inherit; }
   font: 600 .7cqw/1.2 var(--nc-display); letter-spacing: .08em; text-transform: uppercase; color: var(--nc-ink); background: linear-gradient(0deg, rgba(10, 8, 5, .85), transparent); }
 
 /* The trailer, full frame. */
-.gr-trailer { position: absolute; inset: 0; z-index: 15; background: #000; overflow: hidden; }
+.gr-trailer { position: absolute; inset: 0; z-index: 15; background: #000; overflow: hidden; animation: gr-fade-in .9s ease both; transition: opacity .9s ease; }
+/* Dissolves: the studio into the trailer, and the trailer back out to the studio. */
+.gr-trailer.is-leaving { opacity: 0; }
+@keyframes gr-fade-in { from { opacity: 0; } to { opacity: 1; } }
+.gr-program.is-trailer .gr-host.is-front { animation: gr-fade-in .9s ease both; }
 .gr-trailer::before, .gr-trailer::after { content: ""; position: absolute; left: 0; right: 0; height: 9%; background: #000; z-index: 3; }
 .gr-trailer::before { top: 0; } .gr-trailer::after { bottom: 0; }
 .gr-shot { position: absolute; inset: 0; opacity: 0; transition: opacity .9s ease; }

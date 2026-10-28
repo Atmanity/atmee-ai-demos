@@ -35,16 +35,6 @@ export const HOST_USER = 'the viewers at home';
 export const filmCue = () =>
   `Introduce tonight's film to the viewers in two sentences: ${FILM.title}, ${FILM.logline}. Then say that it is time to roll the trailer.`;
 
-/**
- * While the trailer plays, in the commentating version: a remark at a shot, one
- * sentence each, so a remark is over before the next shot's (and well before
- * the trailer ends and she is asked to invite her guest).
- */
-export const TRAILER_REMARKS: Record<number, string> = {
-  0: `The ${FILM.title} trailer is playing right now and the viewers are watching it with you. Say one short, excited sentence about the endless amber dunes on screen, like a fan watching along. One sentence only.`,
-  2: `Still watching the trailer together: one short sentence about the colossal salt-glass monoliths rising out of the sand. One sentence only.`,
-};
-
 /** The trailer has just played: back in the studio, she reacts and invites the guest on. */
 // She must not greet the guest here: the guest's line opens only once this is
 // said, and live she once ended it with "Welcome to the show!" to nobody.
