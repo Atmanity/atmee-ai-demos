@@ -229,7 +229,7 @@ button { font: inherit; }
 .gr-set { position: absolute; inset: 0; transform-origin: 50% 50%; }
 /* Cuts, not zooms: a studio camera is either on its shot or not. */
 /* Jada from the chest up; the TV's edge stays in frame (a video off screen is not sent). */
-.gr-program.is-host .gr-set { transform: scale(1.5); transform-origin: 4% 35%; }
+.gr-program.is-host .gr-set { transform: scale(1.5); transform-origin: 8% 35%; }
 .gr-program.is-tv .gr-set { transform: scale(1.9); transform-origin: 96.95% 52.22%; }
 .gr-wall { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; }
 
@@ -239,7 +239,7 @@ button { font: inherit; }
    into empty wall and window. */
 /* Her portrait is framed wide, so her right hand never leaves the render: laid over the set at 1/0.78 of
    that, she is back to her old size and place, the frame cropping its top and bottom. */
-.gr-host { position: absolute; left: -7.3%; top: -27.5%; width: 71.05%; height: 127.25%; z-index: 2;
+.gr-host { position: absolute; left: 6.51%; top: -2.04%; width: 56.82%; height: 101.76%; z-index: 2;
   /* Gone before its last 6%: the renderer draws a dark rim there, which showed as a dark band. */
   -webkit-mask-image: linear-gradient(to right, #000 80%, transparent 94%); mask-image: linear-gradient(to right, #000 80%, transparent 94%); }
 /* The desk's front, from just below her hands: cut from the set, laid over her render. */
@@ -283,7 +283,7 @@ button { font: inherit; }
 .gr-program.is-trailer .gr-host { left: auto; top: auto; right: 2%; bottom: 10.5%; width: 14%; height: auto; aspect-ratio: 1; z-index: 16;
   -webkit-mask-image: none; mask-image: none; opacity: 1; overflow: hidden; border-radius: .7cqw; background: #0c0a07;
   box-shadow: 0 .8cqw 2.4cqw rgba(0, 0, 0, .7), 0 0 0 .15cqw rgba(216, 177, 92, .7); }
-.gr-program.is-trailer .gr-host .ll-face { transform: scale(2.3); transform-origin: 45.6% 53.3%; }
+.gr-program.is-trailer .gr-host .ll-face { transform: scale(1.85); transform-origin: 43% 40%; }
 .gr-program.is-trailer .gr-host::after { content: attr(data-label); position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: .25cqw .5cqw;
   font: 600 .7cqw/1.2 var(--nc-display); letter-spacing: .08em; text-transform: uppercase; color: var(--nc-ink); background: linear-gradient(0deg, rgba(10, 8, 5, .85), transparent); }
 
