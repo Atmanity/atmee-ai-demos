@@ -47,7 +47,6 @@ const FACE_LAG_MS = 4_500;
 const INVITE_LEAD_MS = FACE_LAG_MS + 1_500;
 const TRAILER_FADE_MS = 900;
 const CAPTION_LINGER_MS = 3_000;
-const HOLD_EVERY_MS = 25_000;
 // `?prompts=off`: the faces get no free-form prompt, as in the regular chat room (to compare).
 const PROMPTS_ON = typeof location === 'undefined' || new URLSearchParams(location.search).get('prompts') !== 'off';   // waiting for a guest still on their way: Jada keeps the viewers company this often
 const SEGMENT_MS = 4 * 60_000;   // a guest's time on air before an auto-booked guest may take over   // the dissolve into the trailer and back out to the studio
@@ -626,10 +625,8 @@ export function App() {
   // one in; once she has said it (and her face has too), the TV switches, the old line and face
   // end, and the new guest's line opens, their welcome waiting as her next reply.
   const handingOver = useRef(false);
-  // `early`: the producer's invitation (id of the guest being made): the goodbye starts as soon as
-  // the guest has a name, and Jada holds with the viewers until their camera is up.
-  function handOver(next: number, early?: { id: string; to: Guest }) {
-    const to = early?.to ?? slotsRef.current[next];
+  function handOver(next: number) {
+    const to = slotsRef.current[next];
     const from = segment.current;
     if (!to || !from || !booth.current) return;
     handingOver.current = true;
@@ -652,27 +649,8 @@ export function App() {
         lines.current.guest = undefined;
         await faces.current[old === 0 ? 'g0' : 'g1'].end();
       }),
-      // Jada has introduced them: the new guest is put through, and says hello first. Called in
-      // early, they may still be on their way: she keeps the viewers company until they are up.
+      // Jada has introduced them: the new guest is put through, and says hello first.
       bringOn: () => later(async () => {
-        if (early) {
-          let lastHold = Date.now();
-          for (;;) {
-            if (showRef.current !== show) return;
-            const ready = slotsRef.current[next]?.id === early.id && faces.current[next === 0 ? 'g0' : 'g1'].phase === 'live';
-            if (ready) break;
-            const failed = inventionsRef.current[early.id]?.error || (slotsRef.current[next]?.id === early.id && faces.current[next === 0 ? 'g0' : 'g1'].phase === 'failed');
-            if (failed) {
-              addLog('booth', `${early.to.name} could not join`);
-              booth.current?.cue(`${firstName(early.to.name)} cannot join us tonight after all. Tell the viewers so warmly, thank them for watching, and say good night.`);
-              setTimeout(() => { if (showRef.current === show) endShow(); }, 25_000);
-              handingOver.current = false;
-              return;
-            }
-            if (Date.now() - lastHold > HOLD_EVERY_MS) { booth.current?.cue(holdMoreCue(early.to)); lastHold = Date.now(); }
-            await new Promise((ok) => setTimeout(ok, 1_000));
-          }
-        }
         const to = slotsRef.current[next]!;
         const old = onTvRef.current;
         onTvRef.current = next;
@@ -714,24 +692,7 @@ export function App() {
     if (!id) return;
     purpose.current[id] = { slot: 1 - onTvRef.current, opening: false };
     addLog('booth', `Inventing the next guest: ${description}`);
-    void startEarlyHandover(id);
   };
-  // The producer asked for someone new: once the guest has a name (a few seconds), Jada starts
-  // saying goodbye to the one on air rather than carrying on with the rundown.
-  async function startEarlyHandover(id: string) {
-    const show = showRef.current;
-    for (let i = 0; i < 90; i++) {
-      if (showRef.current !== show || handingOver.current) return;
-      const inv = inventionsRef.current[id];
-      if (inv?.error) return;
-      if (inv?.guest) {
-        const w = purpose.current[id];
-        if (!w) return;
-        return handOver(w.slot, { id, to: { ...inv.guest, avatarId: '' } as Guest });
-      }
-      await new Promise((ok) => setTimeout(ok, 1_000));
-    }
-  }
   // Auto-booking's choice: invented as the producer's would be, brought on at a natural moment.
   async function bookGuest(description: string, reason: string) {
     if (!patched) return;
@@ -785,8 +746,9 @@ export function App() {
       if (!id) return setCommandReply('Could not start inventing them.');
       purpose.current[id] = { slot: 1 - onTvRef.current, opening: false };
       addLog('booth', `Inviting the next guest: ${intent.description}`);
-      void startEarlyHandover(id);
-      return setCommandReply(`Inviting: ${intent.description}. Jada will wrap up with ${firstName(segment.current?.name ?? 'the guest')} now.`);
+      // Their camera takes minutes to build: the interview goes on meanwhile, and Jada hands over
+      // the moment it is up (the invited guest is not an auto-booking, so no natural pause is waited for).
+      return setCommandReply(`Inviting: ${intent.description}. Jada carries on with ${firstName(segment.current?.name ?? 'the guest')} while their camera is built, then hands over.`);
     }
     if (intent?.kind === 'topic' && intent.topic) {
       // Before the guest is on, a topic is the one Jada opens the interview with.
