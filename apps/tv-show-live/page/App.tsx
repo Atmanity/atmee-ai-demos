@@ -3,19 +3,19 @@
 // onto the screen in the studio wall, all on speech-to-speech. Each avatar has
 // a speech session (show/speech.ts); the faces are avatar-only renders in one
 // LiveKit room of the site's own: Jada twice (camera 1 facing the lens, camera
-// 2 turned toward the screen, both saying her one voice) and the guest. The
+// 2 turned toward her guest, both saying her one voice) and the guest. The
 // page wires them: each avatar's voice is what the other hears and what its
-// faces say, and it cuts between Jada's cameras like a director. The person
+// faces say; the director (show/director.ts) chooses the shot on air. The person
 // at the page is the producer: they never speak; they choose the topics, and
 // Jada opens each one with the guest.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BackToApps, clock, useAvatarOnly, type AvatarOnly, type SpeechWriter } from '../../../src/kit/index.ts';
 import { createBooth, type Booth, type Role, type Stage } from '../show/booth.ts';
-import { FILM, GUESTS, HOST, SHOW, STUDIO, firstName, type Guest } from '../show/cast.ts';
+import { createDirector, type Director, type Shot, type ShotMode } from '../show/director.ts';
+import { FILM, GUESTS, HOST, SHOW, firstName, type Guest } from '../show/cast.ts';
 import { filmCue, goodbyeCue, inviteCue, noteCue, nudgeCue, topicCue, welcomeCue, wrapCue } from '../show/script.ts';
 import { openSpeech, SpeechError, type SpeechLine } from '../show/speech.ts';
 import { createResampler, createVoice } from '../show/voice.ts';
-import plate from '../studio/plate.jpg';
 import cam1 from '../studio/cam1.jpg';
 import cam2 from '../studio/cam2.jpg';
 import ines from '../guests/ines.jpg';
@@ -42,15 +42,6 @@ const STAGE_TEXT: Record<Stage, string> = {
   closing: 'Wrapping up',
   over: 'Off air',
 };
-
-type Camera = 'front' | 'side';
-type CameraMode = 'auto' | Camera;
-
-/** Which of Jada's cameras the show is on, in auto: the lens when she speaks to the viewers, the guest's side once they are on. */
-export function autoCamera(stage: Stage, wrapping: boolean): Camera {
-  if (wrapping || stage === 'closing' || stage === 'over') return 'front';
-  return stage === 'dialing' || stage === 'on-air' ? 'side' : 'front';
-}
 
 interface LogLine { id: number; who: Role | 'booth'; text: string }
 
@@ -110,8 +101,9 @@ export function App() {
   // While the trailer plays the studio is off air: what Jada says then is neither heard nor logged.
   const trailerOn = useRef(false);
   trailerOn.current = trailer;
-  const [wrapping, setWrapping] = useState(false);
-  const [cameraMode, setCameraMode] = useState<CameraMode>('auto');
+  const [shot, setShot] = useState<Shot>('host-front');
+  const [shotMode, setShotMode] = useState<ShotMode>('auto');
+  const director = useRef<Director | null>(null);
   const logId = useRef(0);
   const addLog = (who: LogLine['who'], text: string) => setLog((l) => [...l.slice(-150), { id: ++logId.current, who, text }]);
 
@@ -138,10 +130,11 @@ export function App() {
       const resample = createResampler();
       const voice = createVoice({
         // The voice's stretches say when the avatar speaks, for the booth and the transcript.
-        onStart() { booth.current?.speaking(role, true); },
+        onStart() { booth.current?.speaking(role, true); director.current?.speaking(role, true); },
         onFrame() {},
         onEnd() {
           booth.current?.speaking(role, false);
+          director.current?.speaking(role, false);
           const said = words.current[role].trim();
           words.current[role] = '';
           if (said && !trailerOn.current) addLog(role, said);
@@ -212,14 +205,14 @@ export function App() {
   }, [stage, onShow]);
   useEffect(() => { setTopics(guest.rundown); }, [guestId]);
 
-  // The cut: which of Jada's cameras is on air. Only that face's voice is heard, and none during the trailer.
-  const camera: Camera = cameraMode === 'auto' ? autoCamera(stage, wrapping) : cameraMode;
+  // Jada's voice is heard from one of her cameras (both say it, in sync): camera 1 while it is
+  // the shot, camera 2 otherwise. Nobody in the studio is heard during the trailer.
   useEffect(() => {
     const set = (f: AvatarOnly, on: boolean) => { if (f.audioRef.current) f.audioRef.current.muted = !on; };
-    set(hostFace, camera === 'side' && !trailer);
-    set(frontFace, camera === 'front' && !trailer);
+    set(hostFace, shot !== 'host-front' && !trailer);
+    set(frontFace, shot === 'host-front' && !trailer);
     set(guestFace, patched && !trailer);
-  }, [camera, trailer, patched, hostFace.phase, frontFace.phase, guestFace.phase]);
+  }, [shot, trailer, patched, hostFace.phase, frontFace.phase, guestFace.phase]);
 
   function offAir(why: string) {
     if (!booth.current) return;
@@ -231,6 +224,7 @@ export function App() {
 
   async function wrapUp() {
     booth.current?.close();
+    director.current?.close();
     setTrailer(false);
     voices.host.flush();
     voices.guest.flush();
@@ -240,7 +234,9 @@ export function App() {
   }
 
   async function goOnAir(first: string) {
-    setProblem(''); setLog([]); setUsed(new Set([first])); setPatched(false); setStage('greeting'); setTrailer(false); setWrapping(false); setCameraMode('auto');
+    setProblem(''); setLog([]); setUsed(new Set([first])); setPatched(false); setStage('greeting'); setTrailer(false); setShot('host-front'); setShotMode('auto');
+    director.current?.close();
+    director.current = createDirector({ onShot: setShot });
     hostOpened.current = false;
     segment.current = guest;
     setBackstage(true);
@@ -261,7 +257,7 @@ export function App() {
         else line.commentary(text);
       },
       dialGuest: () => void openSeat('guest'),
-      onStage: setStage,
+      onStage: (next) => { setStage(next); director.current?.stage(next); },
     });
     addLog('booth', `First topic: ${first}`);
     const res = await fetch(`${API}/shows`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ guest: guest.id }) }).catch(() => null);
@@ -280,7 +276,8 @@ export function App() {
     addLog('booth', `Topic for Jada: ${topic}`);
   };
   const sendNote = (text: string) => { booth.current?.cue(noteCue(text)); addLog('booth', `Note for Jada: ${text}`); };
-  const wrap = () => { booth.current?.wrap(); setWrapping(true); addLog('booth', 'Wrap it up'); };
+  const wrap = () => { booth.current?.wrap(); addLog('booth', 'Wrap it up'); };
+  const chooseShot = (mode: ShotMode) => { setShotMode(mode); director.current?.mode(mode); };
   const endShow = () => { offAir(''); setStage('over'); };
   const backToLobby = () => { booth.current = null; setOnShow(false); setShowId(null); };
 
@@ -305,7 +302,7 @@ export function App() {
       ) : (
         <main className="nc-show">
           <Program host={hostFace} front={frontFace} guest={guestFace} guestInfo={guest} patched={patched} stage={stage}
-            backstage={backstage} camera={camera} trailer={trailer} onTrailerDone={trailerDone} />
+            backstage={backstage} shot={shot} trailer={trailer} onTrailerDone={trailerDone} />
           <section className="nc-booth" aria-label="The booth">
             <div className="nc-booth-head">
               <h2>The booth</h2>
@@ -319,7 +316,7 @@ export function App() {
               </div>
             ) : (
               <Console topics={topics} used={used} disabled={stage !== 'on-air'} onTopic={sendTopic} onNote={sendNote}
-                onWrap={wrap} onEnd={endShow} guestFirst={firstName(guest.name)} cameraMode={cameraMode} onCamera={setCameraMode} />
+                onWrap={wrap} onEnd={endShow} guestFirst={firstName(guest.name)} shotMode={shotMode} onShot={chooseShot} />
             )}
           </section>
           <section className="nc-transcript" aria-label="On air">
@@ -346,47 +343,57 @@ function Face({ face, poster }: { face: AvatarOnly; poster: string }) {
   );
 }
 
-const box = (r: { left: number; top: number; width: number; height: number }) =>
-  ({ left: `${r.left}%`, top: `${r.top}%`, width: `${r.width}%`, height: `${r.height}%` });
-
-// The program picture: the studio is one photograph, and everything live is
-// set into it where it belongs. Jada's two cameras are crops of the same
-// photograph at the same spot, so a cut only changes where she looks; the
-// screen in the back wall shows the film's key art, then the guest.
-function Program({ host, front, guest, guestInfo, patched, stage, backstage, camera, trailer, onTrailerDone }: {
+// The program picture: every shot is a whole render, framed as a box on the
+// show's backdrop (never cropped, never set into a photograph), and the boxes
+// glide between layouts as the director cuts: Jada alone, the guest alone, or
+// both side by side.
+function Program({ host, front, guest, guestInfo, patched, stage, backstage, shot, trailer, onTrailerDone }: {
   host: AvatarOnly; front: AvatarOnly; guest: AvatarOnly; guestInfo: Guest; patched: boolean; stage: Stage;
-  backstage: boolean; camera: Camera; trailer: boolean; onTrailerDone: () => void;
+  backstage: boolean; shot: Shot; trailer: boolean; onTrailerDone: () => void;
 }) {
   const live = stage === 'on-air' || stage === 'closing';
   const g = firstName(guestInfo.name);
   const faces = [host, front, guest];
   const failed = faces.find((f) => f.phase === 'failed');
   const backstageText = failed ? failed.detail : faces.some((f) => f.phase === 'warming') ? 'Lighting the stage…' : 'Getting the studio ready…';
-  const onScreen = patched && guest.phase === 'live';
+  // Which cameras are up, so a long wait says what it is waiting for.
+  const cameras: [string, AvatarOnly][] = [['Camera 1', front], ['Camera 2', host], [g, guest]];
+  // Until the guest is on, the layout keeps Jada alone whatever the director says.
+  const layout = patched ? shot : 'host-front';
+  const hostCam = layout === 'host-front' ? 'front' : 'side';
   return (
-    <section className="gr-program" aria-label="The show, as it goes out">
-      <img className="gr-plate" src={plate} alt="" aria-hidden="true" />
-      <div className={`gr-host is-${camera}`} style={box(STUDIO.host)}>
+    <section className={`gr-program is-${layout}`} aria-label="The show, as it goes out">
+      <div className="gr-backdrop" aria-hidden="true"><span className="gr-fan" /></div>
+      <figure className={`gr-box is-host is-${hostCam}`}>
         <div className="gr-cam is-side"><Face face={host} poster={cam2} /></div>
         <div className="gr-cam is-front"><Face face={front} poster={cam1} /></div>
-      </div>
-      <div className={`gr-screen ${onScreen ? 'is-guest' : ''}`} style={box(STUDIO.screen)}>
-        <div className="gr-keyart" aria-hidden="true" style={{ backgroundImage: `url(${STILLS[5]})` }}><span>{FILM.title}</span></div>
-        <div className="gr-feed"><Face face={guest} poster={PORTRAITS[guestInfo.id]} /></div>
-        {stage === 'dialing' && !onScreen && <div className="gr-calling" role="status">Calling {g}…</div>}
-        {onScreen && <span className="tv-live"><span className="nc-rec" />Live · via video call</span>}
-        {onScreen && <span className="tv-name"><strong>{guestInfo.name}</strong><span>{guestInfo.billing}</span></span>}
-        <span className="gr-glass" aria-hidden="true" />
-      </div>
+        <figcaption className="gr-third"><strong>{HOST.name}</strong><span>{HOST.billing}</span></figcaption>
+      </figure>
+      <figure className="gr-box is-guest">
+        <Face face={guest} poster={PORTRAITS[guestInfo.id]} />
+        <span className="tv-live"><span className="nc-rec" />Live · via video call</span>
+        <figcaption className="gr-third"><strong>{guestInfo.name}</strong><span>{guestInfo.billing}</span></figcaption>
+      </figure>
+      <aside className="gr-card-side" aria-hidden="true">
+        <span className="gr-kicker">Tonight</span>
+        <strong>{FILM.title}</strong>
+        <span>{stage === 'dialing' ? `Calling ${g}…` : patched ? `with ${guestInfo.name}` : 'Behind the frame'}</span>
+      </aside>
       <div className="nc-bug gr-bug"><span className="gr-fan" aria-hidden="true" />The Gilded <b>Reel</b></div>
       <div className={`nc-tally ${live ? 'is-on' : ''}`}>{live ? 'Live' : 'Standby'}</div>
-      <div className="gr-third"><strong>{HOST.name}</strong><span>{HOST.billing}</span></div>
       {trailer && <Trailer onDone={onTrailerDone} />}
       {backstage && (
         <div className="gr-backstage" role="status">
           {!failed && <span className="gr-spin" aria-hidden="true" />}
           <strong>{backstageText}</strong>
           {!failed && <span>The show starts as soon as Jada and {g} are in place.</span>}
+          {!failed && (
+            <ul className="gr-ready" aria-label="Cameras">
+              {cameras.map(([name, f]) => (
+                <li key={name} className={f.phase === 'live' ? 'is-up' : ''}>{name}: {f.phase === 'live' ? 'ready' : f.phase === 'warming' ? 'waiting for a worker' : 'starting'}</li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
       {(host.audioBlocked || front.audioBlocked || guest.audioBlocked) && (
@@ -461,21 +468,21 @@ function Lobby({ guestId, setGuestId, topics, setTopics, onGo, problem }: {
   );
 }
 
-function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guestFirst, cameraMode, onCamera }: {
-  topics: string[]; used: Set<string>; disabled: boolean; guestFirst: string; cameraMode: CameraMode;
-  onTopic: (t: string) => void; onNote: (t: string) => void; onWrap: () => void; onEnd: () => void; onCamera: (m: CameraMode) => void;
+function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guestFirst, shotMode, onShot }: {
+  topics: string[]; used: Set<string>; disabled: boolean; guestFirst: string; shotMode: ShotMode;
+  onTopic: (t: string) => void; onNote: (t: string) => void; onWrap: () => void; onEnd: () => void; onShot: (m: ShotMode) => void;
 }) {
   const [topic, setTopic] = useState('');
   const [note, setNote] = useState('');
   const extra = [...used].filter((t) => !topics.includes(t));
-  const cams: [CameraMode, string][] = [['auto', 'Auto'], ['front', 'Jada to camera'], ['side', 'Jada to guest']];
+  const cams: [ShotMode, string][] = [['auto', 'Auto'], ['host', 'Jada'], ['guest', guestFirst], ['two', 'Both']];
   return (
     <div className="nc-console">
       <div className="nc-group">
-        <h3>Camera</h3>
-        <div className="gr-cams" role="radiogroup" aria-label="Camera">
+        <h3>Shot</h3>
+        <div className="gr-cams" role="radiogroup" aria-label="Shot">
           {cams.map(([m, label]) => (
-            <button key={m} type="button" role="radio" aria-checked={cameraMode === m} className={`nc-chip ${cameraMode === m ? 'is-on' : ''}`} onClick={() => onCamera(m)}>{label}</button>
+            <button key={m} type="button" role="radio" aria-checked={shotMode === m} className={`nc-chip ${shotMode === m ? 'is-on' : ''}`} onClick={() => onShot(m)}>{label}</button>
           ))}
         </div>
       </div>

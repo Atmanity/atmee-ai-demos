@@ -208,7 +208,7 @@ button { font: inherit; }
 .tv-idle .ll-mark { width: 2.4cqw; height: 2.4cqw; opacity: .8; }
 
 /* ---------- The Gilded Reel ---------- */
-.gr { --gr-gold: #d8b15c; --gr-gold-hi: #f3d891; --gr-deco: "Poiret One", "Josefin Sans", serif; }
+.gr { --gr-gold: #c9a961; --gr-gold-hi: #e6cf96; --gr-deco: "Poiret One", "Josefin Sans", serif; }
 .gr .nc-logo, .gr .nc-lobby-intro h1 { font-family: var(--gr-deco); font-weight: 400; letter-spacing: .08em; }
 .gr .nc-lobby-intro h1 { font-size: clamp(30px, 5.5vw, 48px); color: var(--gr-gold-hi); }
 .gr-logo b { color: var(--gr-gold); font-weight: 400; }
@@ -222,43 +222,51 @@ button { font: inherit; }
 .gr-cams { display: flex; flex-wrap: wrap; gap: 8px; }
 .nc-chip.is-on { background: var(--gr-gold); color: #14110b; border-color: transparent; }
 
-/* The program: one photograph of the studio, with everything live set into it. */
-.gr-program { grid-area: program; position: relative; aspect-ratio: 1376 / 768; overflow: hidden; border-radius: 14px; background: #000; container-type: inline-size; isolation: isolate;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, .5), 0 0 0 1px var(--nc-line); }
-.gr-plate { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.gr-host { position: absolute; z-index: 2;
-  /* A soft edge only (3%), so a hand moving inside the shot is never faded out. */
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent), linear-gradient(180deg, transparent, #000 3%, #000 97%, transparent);
-  -webkit-mask-composite: source-in; mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent), linear-gradient(180deg, transparent, #000 3%, #000 97%, transparent); mask-composite: intersect; }
+/* The program: whole shots in boxes on the show's backdrop, gliding between
+   layouts as the director cuts. Sizes in cqw of the program's width (16:9). */
+.gr-program { grid-area: program; position: relative; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 14px; container-type: inline-size; isolation: isolate;
+  background: radial-gradient(120% 90% at 30% 20%, #2a2117 0%, #15110c 55%, #0c0a07 100%); box-shadow: 0 20px 60px rgba(0, 0, 0, .45), 0 0 0 1px var(--nc-line); }
+.gr-backdrop { position: absolute; inset: 0; display: grid; place-items: center; opacity: .07; pointer-events: none;
+  background: repeating-linear-gradient(90deg, rgba(216, 177, 92, .5) 0 1px, transparent 1px 4.5cqw); }
+.gr-backdrop .gr-fan { width: 40cqw; height: 22cqw; }
+.gr-box { position: absolute; margin: 0; aspect-ratio: 1; border-radius: .9cqw; overflow: hidden; background: #0a0806; z-index: 2;
+  box-shadow: 0 1.4cqw 3cqw rgba(0, 0, 0, .55), 0 0 0 .12cqw rgba(216, 177, 92, .35);
+  transition: left .6s cubic-bezier(.3, .7, .2, 1), top .6s cubic-bezier(.3, .7, .2, 1), width .6s cubic-bezier(.3, .7, .2, 1), opacity .45s; }
 .gr-cam { position: absolute; inset: 0; transition: opacity .22s ease; }
-.gr-host.is-side .gr-cam.is-front, .gr-host.is-front .gr-cam.is-side { opacity: 0; }
+.gr-box.is-side .gr-cam.is-front, .gr-box.is-front .gr-cam.is-side { opacity: 0; }
 .ll-face { position: absolute; inset: 0; overflow: hidden; background: transparent; }
 .ll-face img, .ll-face video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 
-/* The screen in the back wall: the film's key art, then the guest. */
-.gr-screen { position: absolute; z-index: 2; overflow: hidden; background: #050505; box-shadow: inset 0 0 1.2cqw rgba(0, 0, 0, .8); }
-.gr-keyart { position: absolute; inset: 0; background-size: cover; background-position: center; display: grid; place-items: center; transition: opacity .7s; }
-.gr-keyart span { font: 400 2.6cqw/1 var(--gr-deco); letter-spacing: .35em; color: var(--gr-gold-hi); text-shadow: 0 0 1cqw rgba(0, 0, 0, .7); padding-left: .35em; }
-.gr-feed { position: absolute; inset: 0; opacity: 0; transition: opacity .7s; }
-.gr-feed .ll-face img, .gr-feed .ll-face video { object-position: center 30%; }
-.gr-screen.is-guest .gr-feed { opacity: 1; }
-.gr-screen.is-guest .gr-keyart { opacity: 0; }
-.gr-calling { position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; background: rgba(0, 0, 0, .55); font: 600 1.1cqw var(--nc-body); letter-spacing: .14em; text-transform: uppercase; color: var(--gr-gold-hi); }
-.gr-glass { position: absolute; inset: 0; z-index: 6; pointer-events: none;
-  background: linear-gradient(118deg, rgba(255, 245, 220, .10) 0%, rgba(255, 245, 220, .03) 26%, transparent 42%); }
-.gr-screen .tv-live { font-size: .75cqw; }
-.gr-screen .tv-name strong { font-size: 1.05cqw; }
-.gr-screen .tv-name span { font-size: .72cqw; }
+/* Jada alone */
+.gr-program.is-host-front .gr-box.is-host, .gr-program.is-host-side .gr-box.is-host { left: 4cqw; top: 2.6cqw; width: 50cqw; }
+.gr-program.is-host-front .gr-box.is-guest, .gr-program.is-host-side .gr-box.is-guest { left: 104cqw; top: 2.6cqw; width: 50cqw; opacity: 0; }
+/* The guest alone */
+.gr-program.is-guest .gr-box.is-guest { left: 46cqw; top: 2.6cqw; width: 50cqw; }
+.gr-program.is-guest .gr-box.is-host { left: -54cqw; top: 2.6cqw; width: 50cqw; opacity: 0; }
+/* Both, side by side */
+.gr-program.is-two .gr-box.is-host { left: 6cqw; top: 6.5cqw; width: 42cqw; }
+.gr-program.is-two .gr-box.is-guest { left: 52cqw; top: 6.5cqw; width: 42cqw; }
+
+/* The card beside a single shot. */
+.gr-card-side { position: absolute; top: 17cqw; width: 34cqw; z-index: 3; display: grid; gap: .8cqw; transition: left .6s cubic-bezier(.3, .7, .2, 1), opacity .4s; }
+.gr-program.is-host-front .gr-card-side, .gr-program.is-host-side .gr-card-side { left: 59cqw; }
+.gr-program.is-guest .gr-card-side { left: 7cqw; }
+.gr-program.is-two .gr-card-side { left: 33cqw; opacity: 0; }
+.gr-kicker { font: 600 1.1cqw var(--nc-body); letter-spacing: .3em; text-transform: uppercase; color: var(--nc-muted); }
+.gr-card-side strong { font: 400 4.4cqw/1 var(--gr-deco); letter-spacing: .22em; color: var(--gr-gold-hi); }
+.gr-card-side span:last-child { font-size: 1.5cqw; color: var(--nc-ink); opacity: .8; }
+
+.gr-third { position: absolute; left: 3%; bottom: 4%; z-index: 4; margin: 0; display: grid; padding: .5cqw 1.2cqw .6cqw .9cqw; border-left: .3cqw solid var(--gr-gold);
+  background: rgba(10, 8, 5, .82); }
+.gr-third strong { font: 600 1.4cqw/1.2 var(--nc-display); letter-spacing: .06em; text-transform: uppercase; color: var(--nc-ink); }
+.gr-third span { font-size: .95cqw; color: var(--nc-muted); }
+.gr-box .tv-live { position: absolute; top: 3%; left: 3%; z-index: 4; font-size: .85cqw; }
 
 .gr-bug { font-family: var(--gr-deco); font-weight: 400; letter-spacing: .1em; }
 .gr-bug b { color: var(--gr-gold); font-weight: 400; }
 .gr-bug .gr-fan { width: 2cqw; height: 1.1cqw; }
-.gr-third { position: absolute; left: 3%; bottom: 12%; z-index: 8; display: grid; padding: .7cqw 1.6cqw .8cqw 1.2cqw; border-left: .35cqw solid var(--gr-gold);
-  background: linear-gradient(90deg, rgba(12, 10, 6, .94), rgba(12, 10, 6, .78)); }
-.gr-third strong { font: 400 2cqw/1.15 var(--gr-deco); letter-spacing: .1em; text-transform: uppercase; color: var(--gr-gold-hi); }
-.gr-third span { font-size: 1.15cqw; color: var(--nc-muted); }
-.gr-program .nc-ticker { bottom: 0; height: 5.5%; border-top-color: var(--gr-gold); background: rgba(12, 10, 6, .92); }
-.gr-program .nc-ticker span { font-size: 1.2cqw; }
+.gr-program .nc-ticker { bottom: 0; height: 4.2cqw; border-top-color: rgba(216, 177, 92, .6); background: rgba(10, 8, 5, .9); }
+.gr-program .nc-ticker span { font-size: 1.15cqw; }
 
 /* The trailer, full frame. */
 .gr-trailer { position: absolute; inset: 0; z-index: 15; background: #000; overflow: hidden; }
@@ -283,3 +291,18 @@ button { font: inherit; }
 .gr-backstage span:not(.gr-spin) { font-size: 1.2cqw; color: var(--nc-muted); }
 .gr-spin { width: 3cqw; height: 3cqw; border-radius: 50%; border: .3cqw solid rgba(216, 177, 92, .25); border-top-color: var(--gr-gold); animation: call-spin 1s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .gr-shot img, .gr-card { animation: none !important; opacity: 1; } .gr-spin { animation-duration: 3s; } }
+
+.gr-ready { list-style: none; margin: .6cqw 0 0; padding: 0; display: flex; gap: 1.6cqw; font-size: 1.05cqw; color: var(--nc-muted); }
+.gr-ready li::before { content: ""; display: inline-block; width: .7cqw; height: .7cqw; border-radius: 50%; margin-right: .5cqw; background: rgba(216, 177, 92, .3); vertical-align: middle; }
+.gr-ready li.is-up { color: var(--nc-ink); }
+.gr-ready li.is-up::before { background: #7ee0a3; }
+
+/* The control room: the program on the left; the booth and what went out on a panel at the right. */
+.gr .nc-show { grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); grid-template-areas: "program booth" "program transcript"; grid-template-rows: auto minmax(0, 1fr); align-items: start; }
+.gr .nc-app, .gr.nc-app { max-width: 1600px; }
+.gr .nc-booth { grid-area: booth; }
+.gr .nc-transcript { grid-area: transcript; max-height: 46vh; }
+@media (max-width: 980px) {
+  .gr .nc-show { grid-template-columns: minmax(0, 1fr); grid-template-areas: "program" "booth" "transcript"; grid-template-rows: auto; }
+  .gr .nc-transcript { max-height: 420px; }
+}

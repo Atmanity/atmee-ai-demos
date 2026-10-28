@@ -1,10 +1,8 @@
 // The Gilded Reel's cast and tonight's film. Everything here is invented: the
 // show, the host, the film AMBERFALL and its designer.
 //
-// The studio is one picture (studio/plate.jpg): an art-deco set with the host
-// at her desk and a screen built into the back wall. Both of the host's faces
-// are crops of that picture at STUDIO.host, so her live video sits exactly
-// where she sits in the set; the screen's picture goes in at STUDIO.screen.
+// Jada has two cameras, two avatars of the same set: camera 1 facing the lens
+// (studio/cam1.jpg), camera 2 turned toward her guest (studio/cam2.jpg).
 // AVATAR_TV_SHOW_LIVE swaps the host (avatar.json), AVATAR_TV_SHOW_LIVE_GUEST_<ID> a guest.
 export interface Guest {
   id: string;
@@ -24,14 +22,6 @@ export const HOST = { name: 'Jada Monroe', billing: 'Host, The Gilded Reel' };
  * AVATAR_TV_SHOW_LIVE_FRONT swaps it.
  */
 export const HOST_FRONT_AVATAR = 'bdaf5bd3-1698-4bc2-abfe-a26c69156794';
-
-/** Where things are in the studio picture, in percent of its width and height. */
-export const STUDIO = {
-  /** The host's square: the crop both of her portraits were cut from (130, 250, 320 of 1376 × 768). */
-  host: { left: 9.448, top: 32.552, width: 23.256, height: 41.667 },
-  /** The screen in the back wall (748–1145 × 222–456 of 1376 × 768), grown a pixel each way to cover its edge. */
-  screen: { left: 54.29, top: 28.78, width: 29.07, height: 30.86 },
-};
 
 export const FILM = {
   title: 'AMBERFALL',

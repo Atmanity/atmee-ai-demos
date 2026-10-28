@@ -31,16 +31,17 @@ No platform changes.
         Atmee speech server                     face-host-…, face-front-…, face-guest-…
 ```
 
-- **The studio is one photograph** (`studio/plate.jpg`): an art-deco set with Jada at her desk and
-  a screen built into the back wall. Jada's two avatars were made from crops of that photograph at
-  the same spot (`STUDIO.host` in `show/cast.ts`), so her live video sits exactly where she sits in
-  the set, with only a 3% soft edge; the screen's picture (the film's key art, then Inès) goes in
-  at the screen's measured rectangle (`STUDIO.screen`, found from a pure-green screen in the
-  generated set). Nothing is pasted over a blur: the set around both is the real picture.
-- **Two cameras on Jada.** Camera 1 faces the lens (her greeting, the film, the invitation, the
-  wrap); camera 2 is turned toward the screen (once the guest is on). Both are separate avatars fed
-  the same voice, so both are always lip-synced; the page cuts between them (a 0.2 s dissolve) and
-  plays only the one on air. The booth can override: Auto, Jada to camera, Jada to guest.
+- **Whole shots, cut like a broadcast.** Every shot is a whole render: Jada's camera 1 (facing the
+  lens), her camera 2 (turned toward her guest) and the guest's camera. They are framed as boxes on
+  the show's backdrop and glide between layouts as the director cuts: Jada alone with a card for
+  tonight's film, the guest alone, or both side by side. Nothing is cropped and no face is set into
+  a photograph: the v2 renderer moves its camera on its own (zooms and drifts), and an earlier
+  version that set Jada's face into a studio photograph showed the seam as soon as it did.
+- **The director** (`show/director.ts`, tested in `director.test.ts`): Jada on camera 1 until the
+  guest is on; then it follows the speaker (Jada on camera 2, the guest on theirs, both when they
+  talk over each other), holding each shot at least 3 s; the two-shot for the goodbyes. The booth
+  can take over: Auto, Jada, the guest, or both. Jada's two cameras are separate avatars fed the
+  same voice, so either is always in sync; only one is heard.
 - **Showtime only when everyone is in place.** All three faces start backstage behind one card;
   Jada's line opens, and the show starts, only once all are up.
 - **The trailer**: after Jada introduces AMBERFALL, the program cuts full frame to the trailer:
@@ -74,7 +75,7 @@ On each speech WebSocket: `session.start`, `session.input_audio.append`, `sessio
 ## The cast (staging, the demo account)
 
 - **Jada Monroe** `307b2aba` (camera 2 and her speech session) and **Jada Monroe (camera 1)**
-  `bdaf5bd3` (a face only), both cut from the studio photograph; a designed voice.
+  `bdaf5bd3` (a face only), the same calm walnut set from two angles; a designed voice.
 - **Inès Valcour** `5190aed1`, AMBERFALL's costume and production designer, at her atelier.
 
 ## Limitations
@@ -82,9 +83,9 @@ On each speech WebSocket: `session.start`, `session.input_audio.append`, `sessio
 - **Five things bill at once**: two speech sessions and three renders.
 - **The show plays about 4 s late** (both renders equally, like a broadcast delay); each avatar
   hears the other's raw voice as it is made.
-- **A hand that moves past Jada's crop disappears there**: the crop is all the renderer draws.
-- **The camera is the renderer's**: there is no setting for a locked-off camera or a fixed render
-  prompt per avatar (checked in the renderer's code); background drift inside her crop is possible.
+- **The camera is the renderer's**: it zooms and drifts on its own, and there is no setting for a
+  locked-off camera or a fixed render prompt per avatar (checked in the renderer's code). Whole
+  shots in boxes keep that from showing.
 - **Check-ins and the speech server's idle mode stay on** (a public session may not change them).
 - **No audience**: the room holds the faces; a broadcast would record this page.
 - **Staging only**: `/v1/speech_sessions` is not on prod yet.
