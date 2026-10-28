@@ -506,7 +506,8 @@ export function App() {
         setSuggestWrap(true);
         addLog('booth', "That was the last topic on the rundown: wrap it up when you're ready");
       },
-      enabled: () => advancer.current === mine && live.current.auto && !live.current.wrapped && booth.current?.stage === 'on-air',
+      // Never during a handover: a topic cued into Jada's goodbye derailed it, and the next guest never came on.
+      enabled: () => advancer.current === mine && live.current.auto && !live.current.wrapped && !handingOver.current && booth.current?.stage === 'on-air',
     });
     advancer.current = mine;
     // Live while it is this show's, as the advancer.
@@ -517,7 +518,7 @@ export function App() {
         return (await res.json()) as Booking;
       },
       book: (description, reason) => void bookGuest(description, reason),
-      enabled: () => booker.current === myBooker && autoBookRef.current && !live.current.wrapped && booth.current?.stage === 'on-air'
+      enabled: () => booker.current === myBooker && autoBookRef.current && !live.current.wrapped && !handingOver.current && booth.current?.stage === 'on-air'
         && !handingOver.current && !Object.keys(purpose.current).some((id) => !inventionsRef.current[id]?.ready && !inventionsRef.current[id]?.error),
       guests: () => showGuests(),
     });
@@ -726,6 +727,7 @@ export function App() {
   // A topic for Jada: the producer's, or auto-advance's (with the judge's reason).
   const sendTopic = (topic: string, reason?: string) => {
     if (!booth.current || !segment.current) return;
+    if (reason !== undefined && handingOver.current) return;   // auto-advance's, decided before a handover began
     booth.current.cue(topicCue(segment.current, topic));
     live.current.used.add(topic);
     setUsed((u) => new Set(u).add(topic));
