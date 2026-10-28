@@ -351,3 +351,8 @@ button { font: inherit; }
 .gr-progress li.is-done::before { content: "● "; color: #7ee0a3; }
 .gr-progress li.is-failed { color: #ff8a8a; }
 .gr-lobby-progress { display: grid; gap: 6px; }
+/* The roster: who is on air, waiting, or gone. */
+.gr-status { display: inline-block; margin: 2px 0 4px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: .04em; background: rgba(255, 255, 255, .06); color: var(--nc-muted); }
+.gr-progress.is-on-air { border-color: rgba(255, 90, 80, .6); }
+.gr-progress.is-on-air .gr-status { background: var(--nc-red); color: #fff; }
+.gr-progress.is-gone { opacity: .55; }

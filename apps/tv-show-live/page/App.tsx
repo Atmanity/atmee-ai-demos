@@ -151,6 +151,9 @@ export function App() {
   // A guest can be invented from the lobby, before the show: go on air when it is ready, and
   // Jada never has to hold for them (a build takes three to five minutes).
   const [lobbyInvention, setLobbyInvention] = useState<string | null>(null);
+  // The cast guest the show opened with, if any, for the booth's roster of guests.
+  const [castOnShow, setCastOnShow] = useState<Guest | null>(null);
+  const [gone, setGone] = useState<string[]>([]);
   const [topics, setTopics] = useState<string[]>(castGuest.rundown);
   // Auto-advance (show/advance.ts): the next topic goes to Jada when the conversation says the
   // current one has run its course. The advancer is made per show; refs keep its view current.
@@ -364,6 +367,7 @@ export function App() {
     const earlyView = early ? inventions[early] : undefined;
     const earlyGuest = earlyView?.guest ? { ...earlyView.guest, avatarId: '' } : null;
     goneGuests.current = [];
+    setCastOnShow(cast); setGone([]);
     setCurrent(cast ?? earlyGuest); setSlots([cast ?? (earlyView?.ready ? earlyGuest : null), null]); setOnTv(0); onTvRef.current = 0; handingOver.current = false;
     if (!early) { setInventions({}); purpose.current = {}; }
     if (earlyGuest) { first = earlyGuest.rundown[0] ?? ''; setTopics(earlyGuest.rundown); }
@@ -518,7 +522,7 @@ export function App() {
       setTimeout(async () => {
         if (showRef.current !== show) return;
         const old = onTvRef.current;
-        if (from) goneGuests.current.push(`${from.name}, ${from.billing}`);
+        if (from) { goneGuests.current.push(`${from.name}, ${from.billing}`); setGone((g) => [...g, from.id]); }
         await lines.current.guest?.end();
         lines.current.guest = undefined;
         onTvRef.current = next;
@@ -538,6 +542,15 @@ export function App() {
       }, FACE_LAG_MS - 1_500);
     });
   }
+  /** Where a guest of the show is: on air, waiting with their camera, or gone. */
+  const statusOf = (id: string): string | null => {
+    if (gone.includes(id)) return 'Gone';
+    const slot = slots.findIndex((g) => g?.id === id);
+    if (slot < 0) return null;
+    if (patched && slot === onTv && segment.current?.id === id) return 'On air';
+    const phase = slotFaces[slot].phase;
+    return phase === 'live' ? 'Camera ready' : phase === 'failed' ? 'Camera failed' : 'Camera starting';
+  };
   const pendingInvite = Object.entries(purpose.current).some(([id, w]) => !w.opening && !inventions[id]?.error && !(slots[w.slot] && slots[w.slot]!.id === id && onTv === w.slot));
   const inviteGuest = async (description: string) => {
     if (!patched || pendingInvite) return;
@@ -629,6 +642,8 @@ export function App() {
               <Console topics={topics} used={used} disabled={stage !== 'on-air'} onTopic={(t) => sendTopic(t)} onNote={sendNote}
                 onWrap={wrap} onEnd={endShow} guestFirst={firstName(guest.name)} shotMode={shotMode} onShot={chooseShot}
                 autoAdvance={autoAdvance} onAutoAdvance={setAutoAdvance} suggestWrap={suggestWrap}
+                cast={castOnShow ? [{ guest: castOnShow, poster: PORTRAITS[castOnShow.id], status: statusOf(castOnShow.id) ?? 'Waiting' }] : []}
+                statusOf={statusOf}
                 inventions={Object.values(inventions)} canInvite={patched && !pendingInvite && stage === 'on-air'} onInvite={inviteGuest}
                 autoBook={autoBook} onAutoBook={setAutoBook} />
             )}
@@ -719,7 +734,7 @@ function Program({ host, tvFaces, onTv, posters, guestInfo, patched, stage, back
           {!failed && (
             <ul className="gr-ready" aria-label="Cameras">
               {cameras.map(([name, f]) => (
-                <li key={name} className={f.phase === 'live' ? 'is-up' : ''}>{name}: {f.phase === 'live' ? 'ready' : f.phase === 'warming' ? 'waiting for a worker' : 'starting'}</li>
+                <li key={name} className={f.phase === 'live' ? 'is-up' : ''}>{name}: {f.phase === 'live' ? 'ready' : f.phase === 'warming' ? 'waiting for a worker' : 'starting (a minute or two when the render pool is spinning up)'}</li>
               ))}
             </ul>
           )}
@@ -830,10 +845,11 @@ function Lobby({ guestId, setGuestId, inventText, setInventText, topics, setTopi
   );
 }
 
-function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guestFirst, shotMode, onShot, autoAdvance, onAutoAdvance, suggestWrap, inventions, canInvite, onInvite, autoBook, onAutoBook }: {
+function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guestFirst, shotMode, onShot, autoAdvance, onAutoAdvance, suggestWrap, cast, statusOf, inventions, canInvite, onInvite, autoBook, onAutoBook }: {
   topics: string[]; used: Set<string>; disabled: boolean; guestFirst: string; shotMode: ShotMode;
   onTopic: (t: string) => void; onNote: (t: string) => void; onWrap: () => void; onEnd: () => void; onShot: (m: ShotMode) => void;
   autoAdvance: boolean; onAutoAdvance: (on: boolean) => void; suggestWrap: boolean;
+  cast: { guest: Guest; poster: string; status: string }[]; statusOf: (id: string) => string | null;
   inventions: InventionView[]; canInvite: boolean; onInvite: (description: string) => void;
   autoBook: boolean; onAutoBook: (on: boolean) => void;
 }) {
@@ -858,7 +874,17 @@ function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guest
           <input type="checkbox" checked={autoBook} onChange={(e) => onAutoBook(e.target.checked)} />
           <span>Auto-book: the show books the next guest when the conversation calls for one</span>
         </label>
-        {inventions.map((v) => <GuestProgress key={v.id} view={v} />)}
+        {cast.map((c) => (
+          <div key={c.guest.id} className={`gr-progress ${c.status === 'On air' ? 'is-on-air' : c.status === 'Gone' ? 'is-gone' : ''}`}>
+            <img src={c.poster} alt="" />
+            <div>
+              <strong>{c.guest.name}</strong>
+              <small>{c.guest.billing}</small>
+              <span className="gr-status">{c.status}</span>
+            </div>
+          </div>
+        ))}
+        {inventions.map((v) => <GuestProgress key={v.id} view={v} status={statusOf(v.id)} />)}
         <form className="nc-row" onSubmit={(e) => { e.preventDefault(); const t = invite.trim(); if (t.length >= 3 && canInvite) { onInvite(t); setInvite(''); } }}>
           <input className="nc-input" value={invite} onChange={(e) => setInvite(e.target.value)} disabled={!canInvite}
             placeholder={canInvite ? 'Invite a guest, e.g. the actor who plays the queen' : 'Once a guest is on, invite the next one here'} aria-label="Invite a guest" />
@@ -903,14 +929,15 @@ function Console({ topics, used, disabled, onTopic, onNote, onWrap, onEnd, guest
 
 // A guest being invented, step by step, as the booth follows it: written, drawn, voiced, built.
 const STEPS: [keyof InventionView['steps'], string][] = [['character', 'Character'], ['portrait', 'Portrait'], ['voice', 'Voice'], ['avatar', 'Avatar build']];
-function GuestProgress({ view }: { view: InventionView }) {
+function GuestProgress({ view, status }: { view: InventionView; status?: string | null }) {
   const g = view.guest;
   return (
-    <div className={`gr-progress ${view.ready ? 'is-ready' : view.error ? 'is-failed' : ''}`}>
+    <div className={`gr-progress ${status === 'On air' ? 'is-on-air' : status === 'Gone' ? 'is-gone' : view.ready ? 'is-ready' : view.error ? 'is-failed' : ''}`}>
       {view.portrait ? <img src={view.portrait} alt="" /> : <span className="gr-progress-blank" aria-hidden="true">✦</span>}
       <div>
         <strong>{g ? g.name : 'Inventing a guest…'}</strong>
         {g && <small>{g.billing}</small>}
+        {status && <span className="gr-status">{status}</span>}
         <ol>
           {STEPS.map(([k, label]) => {
             const st = view.steps[k]?.status ?? 'waiting';
