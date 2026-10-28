@@ -14,9 +14,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { BackToApps, clock, useAvatarOnly, type AvatarOnly, type SpeechWriter } from '../../../src/kit/index.ts';
 import { createBooth, TURN_QUIET_MS, type Booth, type Role, type Stage } from '../show/booth.ts';
 import { startScore } from './score.ts';
+import { startStabilizer } from './stabilize.ts';
 import { createAdvancer, type Advancer, type Verdict } from '../show/advance.ts';
 import { createBooker, type Booker, type Booking } from '../show/booker.ts';
 import { createFloor } from '../show/floor.ts';
+import { createFillerGate, DELAY_MS as FILLER_DELAY_MS } from '../show/fillers.ts';
 import { createDirector, type Director, type Shot, type ShotMode } from '../show/director.ts';
 import { FILM, GUESTS, HOST, SHOW, firstName, type Guest } from '../show/cast.ts';
 import { bridgeCue, farewellCue, filmCue, goodbyeCue, guestFarewellCue, holdCue, holdMoreCue, inviteCue, inviteNowCue, noteCue, nudgeCue, topicCue, welcomeCue, wrapCue } from '../show/script.ts';
@@ -40,7 +42,8 @@ const END_AFTER_GOODBYE_MS = 4_000;
 const SHOT_MS = 5_200;          // each trailer still, held and pushed in on
 // The booth hears Jada's line end in her speech session; viewers hear it from her face about
 // 4 s later (measured). The trailer rolls once the face is through it, not over her last words.
-const FACE_LAG_MS = 4_500;
+// Plus the filler gate's fixed delay (show/fillers.ts), which every voice passes on its way to its face.
+const FACE_LAG_MS = 4_500 + FILLER_DELAY_MS;
 // Her line after the trailer is cued this long before the trailer ends, so that what she says
 // comes out of her face as it ends: her session takes a second or so to start the line, then
 // her face is FACE_LAG_MS behind. Cued at the end, she was silent on screen for five seconds.
@@ -205,6 +208,7 @@ export function App() {
   }, [speaking]);
   // The booth and what went out on air fold away; the show can go full screen.
   const [boothOpen, setBoothOpen] = useState(true);
+  const [captionsOn, setCaptionsOn] = useState(true);
   const [transcriptOpen, setTranscriptOpen] = useState(true);
   const toggleFullScreen = () => { if (document.fullscreenElement) void document.exitFullscreen(); else void document.documentElement.requestFullscreen().catch(() => {}); };
 
@@ -220,6 +224,12 @@ export function App() {
   const hostFace = useAvatarOnly(face('host'));
   const slotFaces = [useAvatarOnly(slotFace(0)), useAvatarOnly(slotFace(1))];
   const guestFace = slotFaces[onTv];
+  // Jada's frame held still against her portrait while her face is up (page/stabilize.ts).
+  useEffect(() => {
+    const v = hostFace.videoRef.current;
+    if (hostFace.phase !== 'live' || !v) return;
+    return startStabilizer(v, cam2);
+  }, [hostFace.phase]);
   const faces = useRef({ host: hostFace, g0: slotFaces[0], g1: slotFaces[1] });
   faces.current = { host: hostFace, g0: slotFaces[0], g1: slotFaces[1] };
 
@@ -244,9 +254,12 @@ export function App() {
     const make = (role: Role, seats: ('host' | 'g0' | 'g1')[]) => {
       const feeders = seats.map((seat) => ({ seat, feeder: faceFeeder(() => faces.current[seat]) }));
       const resample = createResampler();
+      // The voice reaches the face through the filler gate: "yeah uh ummm oh" never said or mouthed.
+      const gate = createFillerGate();
       const voice = createVoice({
         // The voice's stretches say when the avatar speaks, for the booth and the transcript.
         onStart() {
+          gate.stretch();
           clearTimeout(talkingUntil.current[role]);
           talking.current[role] = true;
           floor.speaking(role, true);
@@ -284,12 +297,15 @@ export function App() {
           const quiet = !floor.audible(role) || (role === 'host' && hush.current);
           const pcm16 = resample(quiet ? new Int16Array(pcm.length) : pcm);
           // One stream per face for the whole show, from the first frame once that face is up.
-          for (const { seat, feeder } of feeders) {
-            if (seat !== 'host' && seat !== `g${onTvRef.current}`) continue;   // the guest's voice: the slot on the TV
-            if (!feeder.open && faces.current[seat].phase === 'live') feeder.start();
-            feeder.frame(pcm16);
+          for (const due of gate.push(pcm16, performance.now())) {
+            for (const { seat, feeder } of feeders) {
+              if (seat !== 'host' && seat !== `g${onTvRef.current}`) continue;   // the guest's voice: the slot on the TV
+              if (!feeder.open && faces.current[seat].phase === 'live') feeder.start();
+              feeder.frame(due);
+            }
           }
         },
+        words(delta: string) { gate.words(delta, performance.now()); },
         flush() { voice.flush(); for (const { feeder } of feeders) feeder.end(); },
       };
     };
@@ -309,6 +325,7 @@ export function App() {
         },
         onWords(delta) {
           words.current[role] += delta;
+          voices[role].words(delta);
           if (!trailerOn.current && floor.onAir(role)) {
             const name = role === 'guest' ? segment.current?.name : undefined;
             setTimeout(() => setSpeaking((l) => ({ ...l, [role]: { name, text: (l[role]?.text ?? '') + delta } })), FACE_LAG_MS);
@@ -730,7 +747,7 @@ export function App() {
           invention={lobbyInvention ? inventions[lobbyInvention] : undefined} onInvent={inventInLobby} />
       ) : (
         <main className={`nc-show ${boothOpen ? '' : 'is-booth-closed'} ${transcriptOpen ? '' : 'is-transcript-closed'}`}>
-          <Program host={hostFace} tvFaces={slotFaces} onTv={onTv} tvCard={tvCard} caption={trailerUp || backstage ? null : caption} posters={slots.map((g) => posterOf(g, inventions))} guestInfo={guest} patched={patched} stage={stage}
+          <Program host={hostFace} tvFaces={slotFaces} onTv={onTv} tvCard={tvCard} caption={trailerUp || backstage || !captionsOn ? null : caption} captionsOn={captionsOn} onCaptions={() => setCaptionsOn((c) => !c)} posters={slots.map((g) => posterOf(g, inventions))} guestInfo={guest} patched={patched} stage={stage}
             backstage={backstage} shot={shot} trailer={trailer} trailerLeaving={trailerLeaving} onTrailerEnding={trailerEnding} onTrailerDone={trailerDone} />
           {!boothOpen && (
             <button type="button" className="gr-rail" onClick={() => setBoothOpen(true)} aria-label="Open the booth">
@@ -793,8 +810,8 @@ function Face({ face, poster }: { face: AvatarOnly; poster: string }) {
 // the renderer's drift has no hard line to slip against); the guest plays on
 // the TV. The director's shots are camera
 // moves on that set: wide, pushed in on Jada, pushed in on the TV.
-function Program({ host, tvFaces, onTv, tvCard, caption, posters, guestInfo, patched, stage, backstage, shot, trailer, trailerLeaving, onTrailerEnding, onTrailerDone }: {
-  host: AvatarOnly; tvFaces: AvatarOnly[]; onTv: number; tvCard: string | null; caption: { who: Role; name: string; text: string } | null; posters: string[]; guestInfo: Guest; patched: boolean; stage: Stage;
+function Program({ host, tvFaces, onTv, tvCard, caption, captionsOn, onCaptions, posters, guestInfo, patched, stage, backstage, shot, trailer, trailerLeaving, onTrailerEnding, onTrailerDone }: {
+  host: AvatarOnly; tvFaces: AvatarOnly[]; onTv: number; tvCard: string | null; caption: { who: Role; name: string; text: string } | null; captionsOn: boolean; onCaptions: () => void; posters: string[]; guestInfo: Guest; patched: boolean; stage: Stage;
   backstage: boolean; shot: Shot; trailer: boolean; trailerLeaving: boolean; onTrailerEnding: () => void; onTrailerDone: () => void;
 }) {
   const live = stage === 'on-air' || stage === 'closing';
@@ -836,10 +853,11 @@ function Program({ host, tvFaces, onTv, tvCard, caption, posters, guestInfo, pat
             behind a desk that stays put, and the desk runs on unbroken. */}
         <img className="gr-desk" src={desk} alt="" />
       </div>
+      <button type="button" className={`gr-cc ${captionsOn ? 'is-on' : ''}`} onClick={onCaptions} aria-pressed={captionsOn} aria-label="Subtitles">CC</button>
       {caption && (
         <div className={`gr-caption is-${caption.who}`} aria-live="off">
           <span className="gr-caption-name">{firstName(caption.name)}</span>
-          <span className="gr-caption-text">{captionTail(caption.text)}</span>
+          <span className="gr-caption-text">{captionTail(clean(caption.text))}</span>
         </div>
       )}
       {third && !caption && <div className="gr-third"><strong>{third.name}</strong><span>{third.billing}</span></div>}
@@ -1068,7 +1086,7 @@ function Transcript({ log, live, poster }: { log: LogLine[]; live: Partial<Recor
       <img src={poster(who, name)} alt="" />
       <div>
         <span className="gr-turn-name">{who === 'host' ? 'Jada' : firstName(name ?? 'Guest')}</span>
-        <p>{text}{isLive && <span className="gr-caret" aria-hidden="true" />}</p>
+        <p>{clean(text)}{isLive && <span className="gr-caret" aria-hidden="true" />}</p>
       </div>
     </li>
   );
@@ -1096,6 +1114,16 @@ function Transcript({ log, live, poster }: { log: LogLine[]; live: Partial<Recor
         : speaker(e.who, e.name, e.text, e.key, e.live)))}
     </ol>
   );
+}
+/**
+ * The speech model's fillers, out of what is read: "hmm", "uh", "ummm", "erm", "mm", and an
+ * "I mean" or "you know" left trailing after them.
+ */
+const FILLER = /(^|[\s,.!?…—-])(?:u+h+m*|u+m+|h+m+|m+h*m+|e+r+m+|e+h+|a+h+|o+h{2,})(?=$|[\s,.!?…—-])[,.]?/gi;
+export function clean(text: string): string {
+  let t = text.replace(FILLER, '$1');
+  t = t.replace(/(?:[\s,]+(?:i mean|you know|well|so|ok|okay|right|but|yeah|oh|ah|ha|haha))+[\s,.…!]*$/i, (m) => (/[.!?]\s*$/.test(t.slice(0, t.length - m.length)) ? '' : m));
+  return t.replace(/\s{2,}/g, ' ').replace(/\s+([,.!?])/g, '$1').trim();
 }
 /** A caption's last words: about two lines' worth, from a word boundary. */
 function captionTail(text: string, max = 150) {
