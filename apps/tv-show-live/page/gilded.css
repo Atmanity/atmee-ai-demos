@@ -239,12 +239,15 @@ button { font: inherit; }
 .ll-face { position: absolute; inset: 0; overflow: hidden; background: transparent; }
 .ll-face img, .ll-face video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 
+/* A box off the shot fades out where it stands, inside the frame: LiveKit's adaptive
+   stream stops sending video to an element outside the viewport, and a face that
+   never receives a frame never counts as ready. */
 /* Jada alone */
 .gr-program.is-host-front .gr-box.is-host, .gr-program.is-host-side .gr-box.is-host { left: 4cqw; top: 2.6cqw; width: 50cqw; }
-.gr-program.is-host-front .gr-box.is-guest, .gr-program.is-host-side .gr-box.is-guest { left: 104cqw; top: 2.6cqw; width: 50cqw; opacity: 0; }
+.gr-program.is-host-front .gr-box.is-guest, .gr-program.is-host-side .gr-box.is-guest { left: 46cqw; top: 2.6cqw; width: 50cqw; opacity: 0; z-index: 1; }
 /* The guest alone */
 .gr-program.is-guest .gr-box.is-guest { left: 46cqw; top: 2.6cqw; width: 50cqw; }
-.gr-program.is-guest .gr-box.is-host { left: -54cqw; top: 2.6cqw; width: 50cqw; opacity: 0; }
+.gr-program.is-guest .gr-box.is-host { left: 4cqw; top: 2.6cqw; width: 50cqw; opacity: 0; z-index: 1; }
 /* Both, side by side */
 .gr-program.is-two .gr-box.is-host { left: 6cqw; top: 6.5cqw; width: 42cqw; }
 .gr-program.is-two .gr-box.is-guest { left: 52cqw; top: 6.5cqw; width: 42cqw; }
