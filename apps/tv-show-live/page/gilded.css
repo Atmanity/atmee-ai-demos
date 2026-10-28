@@ -229,23 +229,24 @@ button { font: inherit; }
 .gr-set { position: absolute; inset: 0; transform-origin: 50% 50%; }
 /* Cuts, not zooms: a studio camera is either on its shot or not. */
 /* Jada from the chest up; the TV's edge stays in frame (a video off screen is not sent). */
-.gr-program.is-host .gr-set { transform: scale(1.5); transform-origin: 0% 54.8%; }
-.gr-program.is-tv .gr-set { transform: scale(1.9); transform-origin: 94.9% 39.7%; }
+.gr-program.is-host .gr-set { transform: scale(1.5); transform-origin: 4% 35%; }
+.gr-program.is-tv .gr-set { transform: scale(1.9); transform-origin: 95.36% 19.4%; }
 .gr-wall { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; }
 
-/* Jada: her whole render, laid exactly over her still in the set (the set was outpainted from
-   that still, and her place in it measured), so the desk and wall run on past her edges. Only
-   the edges inside the frame fade, narrowly: the still under them is her too. */
-.gr-host { position: absolute; left: 0.208%; top: 12.189%; width: 49.167%; height: 88.06%; z-index: 2;
-  -webkit-mask-image: linear-gradient(to right, #000 72%, transparent 100%), linear-gradient(to bottom, transparent 0, #000 14%);
-  -webkit-mask-composite: source-in; mask-image: linear-gradient(to right, #000 72%, transparent 100%), linear-gradient(to bottom, transparent 0, #000 14%); mask-composite: intersect; }
+/* Jada: her whole render, laid exactly over her place in the set (the set was outpainted from
+   her still and she was then removed from it; her place was measured by matching the two). It
+   fills the frame's height, so only its right edge lies inside the frame, and that edge fades
+   into empty wall and window. */
+.gr-host { position: absolute; left: 0.486%; top: 0.498%; width: 55.417%; height: 99.254%; z-index: 2;
+  -webkit-mask-image: linear-gradient(to right, #000 86%, transparent 100%); mask-image: linear-gradient(to right, #000 86%, transparent 100%); }
 /* The desk's front, from just below her hands: cut from the set, laid over her render. */
-.gr-desk { position: absolute; left: 0; top: 87.5%; width: 100%; height: 12.5%; z-index: 3; pointer-events: none; }
+.gr-host.is-off { opacity: 0; }
+.gr-desk { position: absolute; left: 0; top: 86%; width: 100%; height: 14%; z-index: 3; pointer-events: none; }
 .ll-face { position: absolute; inset: 0; overflow: hidden; background: transparent; }
 .ll-face img, .ll-face video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 
 /* The TV on the wall: the screen measured from the backdrop's green. */
-.gr-tv { position: absolute; left: 59.084%; top: 24.089%; width: 36.919%; height: 38.151%; overflow: hidden; z-index: 1; background: #0e0d0c; }
+.gr-tv { position: absolute; left: 61.483%; top: 14.453%; width: 34.738%; height: 36.328%; overflow: hidden; z-index: 1; background: #0e0d0c; }
 .gr-tv-feed { position: absolute; inset: 0; opacity: 0; transition: opacity .5s; }
 .gr-tv-feed.is-on { opacity: 1; }
 /* The top of the guest's frame: her face and the film's art behind her (her hands fall below the TV). */

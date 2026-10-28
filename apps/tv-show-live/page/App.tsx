@@ -15,12 +15,13 @@ import { BackToApps, clock, useAvatarOnly, type AvatarOnly, type SpeechWriter } 
 import { createBooth, type Booth, type Role, type Stage } from '../show/booth.ts';
 import { startScore } from './score.ts';
 import { createFloor } from '../show/floor.ts';
-import { createDirector, type Director, type Shot, type ShotMode } from '../show/director.ts';
+import { createDirector, hostPose, type Director, type Pose, type Shot, type ShotMode } from '../show/director.ts';
 import { FILM, GUESTS, HOST, SHOW, firstName, type Guest } from '../show/cast.ts';
 import { filmCue, goodbyeCue, inviteCue, noteCue, nudgeCue, topicCue, welcomeCue, wrapCue } from '../show/script.ts';
 import { openSpeech, SpeechError, type SpeechLine } from '../show/speech.ts';
 import { createResampler, createVoice } from '../show/voice.ts';
 import cam1 from '../studio/cam1.jpg';
+import cam2 from '../studio/cam2.jpg';
 import wall from '../studio/wall.jpg';
 import desk from '../studio/desk.webp';
 import ines from '../guests/ines.jpg';
@@ -110,6 +111,8 @@ export function App() {
   const trailerOn = useRef(false);
   trailerOn.current = trailer;
   const [shot, setShot] = useState<Shot>('host-front');
+  const [wrapping, setWrapping] = useState(false);
+  const pose = hostPose(stage, wrapping);
   const [shotMode, setShotMode] = useState<ShotMode>('auto');
   const director = useRef<Director | null>(null);
   const logId = useRef(0);
@@ -120,10 +123,13 @@ export function App() {
   const seatApi = (seat: Role) => `${API}/show/${showRef.current}/${seat}`;
   const face = (seat: string) => (showId ? `tv-show-live/show/${showId}/${seat}` : 'tv-show-live');
   // Jada's face is her camera-1 avatar (facing the lens); her speech session is her main avatar's.
-  const hostFace = useAvatarOnly(face('front'));
+  // Jada twice, one pose each (a render's pose is fixed): camera 1 facing the lens, for the
+  // viewers, and her main avatar turned to the TV, for her guest. Both say her one voice.
+  const frontFace = useAvatarOnly(face('front'));
+  const hostFace = useAvatarOnly(face('host'));
   const guestFace = useAvatarOnly(face('guest'));
-  const faces = useRef({ host: hostFace, guest: guestFace });
-  faces.current = { host: hostFace, guest: guestFace };
+  const faces = useRef({ front: frontFace, host: hostFace, guest: guestFace });
+  faces.current = { front: frontFace, host: hostFace, guest: guestFace };
 
   const booth = useRef<Booth | null>(null);
   const lines = useRef<Partial<Record<Role, SpeechLine>>>({});
@@ -139,7 +145,7 @@ export function App() {
 
   // Each avatar's voice: its face says it, the other avatar hears it, and the booth sees when it speaks.
   const voices = useMemo(() => {
-    const make = (role: Role, seats: ('host' | 'guest')[]) => {
+    const make = (role: Role, seats: ('front' | 'host' | 'guest')[]) => {
       const feeders = seats.map((seat) => ({ seat, feeder: faceFeeder(() => faces.current[seat]) }));
       const resample = createResampler();
       const voice = createVoice({
@@ -177,7 +183,7 @@ export function App() {
         flush() { voice.flush(); for (const { feeder } of feeders) feeder.end(); },
       };
     };
-    return { host: make('host', ['host']), guest: make('guest', ['guest']) };
+    return { host: make('host', ['front', 'host']), guest: make('guest', ['guest']) };
   }, []);
 
   async function openSeat(role: Role) {
@@ -206,22 +212,23 @@ export function App() {
   // screen until Jada invites them on.
   useEffect(() => {
     if (!showId) return;
+    void frontFace.start();
     void hostFace.start();
     void guestFace.start();
   }, [showId]);
   const hostOpened = useRef(false);
   const [backstage, setBackstage] = useState(true);
   useEffect(() => {
-    if ([hostFace, guestFace].some((f) => f.phase !== 'live') || hostOpened.current || !booth.current) return;
+    if ([frontFace, hostFace, guestFace].some((f) => f.phase !== 'live') || hostOpened.current || !booth.current) return;
     hostOpened.current = true;
     setBackstage(false);
     void openSeat('host');
-  }, [hostFace.phase, guestFace.phase]);
+  }, [frontFace.phase, hostFace.phase, guestFace.phase]);
   useEffect(() => {
     if (!onShow) return;
-    const failed = [hostFace, guestFace].find((f) => f.phase === 'failed');
+    const failed = [frontFace, hostFace, guestFace].find((f) => f.phase === 'failed');
     if (failed) offAir(failed.detail || 'A camera could not start.');
-  }, [hostFace.phase, guestFace.phase]);
+  }, [frontFace.phase, hostFace.phase, guestFace.phase]);
   useEffect(() => {
     if (stage !== 'over' || !onShow) return;
     const id = setTimeout(() => void wrapUp(), END_AFTER_GOODBYE_MS);
@@ -232,9 +239,10 @@ export function App() {
   // Both voices are heard whatever the shot; nobody in the studio during the trailer.
   useEffect(() => {
     const set = (f: AvatarOnly, on: boolean) => { if (f.audioRef.current) f.audioRef.current.muted = !on; };
-    set(hostFace, !trailer);
+    set(frontFace, pose === 'front' && !trailer);
+    set(hostFace, pose === 'turned' && !trailer);
     set(guestFace, patched && !trailer);
-  }, [trailer, patched, hostFace.phase, guestFace.phase]);
+  }, [pose, trailer, patched, frontFace.phase, hostFace.phase, guestFace.phase]);
 
   function offAir(why: string) {
     if (!booth.current) return;
@@ -250,13 +258,13 @@ export function App() {
     setTrailer(false);
     voices.host.flush();
     voices.guest.flush();
-    await Promise.allSettled([lines.current.host?.end(), lines.current.guest?.end(), faces.current.host.end(), faces.current.guest.end()]);
+    await Promise.allSettled([lines.current.host?.end(), lines.current.guest?.end(), faces.current.front.end(), faces.current.host.end(), faces.current.guest.end()]);
     lines.current = {};
     if (showRef.current) void fetch(`${API}/show/${showRef.current}/end`, { method: 'POST', keepalive: true }).catch(() => {});
   }
 
   async function goOnAir(first: string) {
-    setProblem(''); setLog([]); setUsed(new Set([first])); setPatched(false); setStage('greeting'); setTrailer(false); setShot('host-front'); setShotMode('auto');
+    setProblem(''); setLog([]); setUsed(new Set([first])); setPatched(false); setStage('greeting'); setTrailer(false); setShot('host-front'); setShotMode('auto'); setWrapping(false);
     director.current?.close();
     director.current = createDirector({ onShot: setShot });
     hostOpened.current = false;
@@ -298,13 +306,13 @@ export function App() {
     addLog('booth', `Topic for Jada: ${topic}`);
   };
   const sendNote = (text: string) => { booth.current?.cue(noteCue(text)); addLog('booth', `Note for Jada: ${text}`); };
-  const wrap = () => { booth.current?.wrap(); addLog('booth', 'Wrap it up'); };
+  const wrap = () => { booth.current?.wrap(); setWrapping(true); addLog('booth', 'Wrap it up'); };
   const chooseShot = (mode: ShotMode) => { setShotMode(mode); director.current?.mode(mode); };
   const endShow = () => { offAir(''); setStage('over'); };
   const backToLobby = () => { booth.current = null; setOnShow(false); setShowId(null); };
 
   const done = (p: AvatarOnly['phase']) => p === 'ended' || p === 'failed' || p === 'idle';
-  const allDone = done(hostFace.phase) && done(guestFace.phase);
+  const allDone = done(frontFace.phase) && done(hostFace.phase) && done(guestFace.phase);
 
   return (
     <div className="nc-app gr">
@@ -323,7 +331,7 @@ export function App() {
         <Lobby guestId={guestId} setGuestId={setGuestId} topics={topics} setTopics={setTopics} onGo={goOnAir} problem={problem} />
       ) : (
         <main className="nc-show">
-          <Program host={hostFace} guest={guestFace} guestInfo={guest} patched={patched} stage={stage}
+          <Program front={frontFace} host={hostFace} pose={pose} guest={guestFace} guestInfo={guest} patched={patched} stage={stage}
             backstage={backstage} shot={shot} trailer={trailer} onTrailerDone={trailerDone} />
           <section className="nc-booth" aria-label="The booth">
             <div className="nc-booth-head">
@@ -372,17 +380,17 @@ function Face({ face, poster }: { face: AvatarOnly; poster: string }) {
 // the renderer's drift has no hard line to slip against); the guest plays on
 // the TV. The director's shots are camera
 // moves on that set: wide, pushed in on Jada, pushed in on the TV.
-function Program({ host, guest, guestInfo, patched, stage, backstage, shot, trailer, onTrailerDone }: {
-  host: AvatarOnly; guest: AvatarOnly; guestInfo: Guest; patched: boolean; stage: Stage;
+function Program({ front, host, pose, guest, guestInfo, patched, stage, backstage, shot, trailer, onTrailerDone }: {
+  front: AvatarOnly; host: AvatarOnly; pose: Pose; guest: AvatarOnly; guestInfo: Guest; patched: boolean; stage: Stage;
   backstage: boolean; shot: Shot; trailer: boolean; onTrailerDone: () => void;
 }) {
   const live = stage === 'on-air' || stage === 'closing';
   const g = firstName(guestInfo.name);
-  const faces = [host, guest];
+  const faces = [front, host, guest];
   const failed = faces.find((f) => f.phase === 'failed');
   const backstageText = failed ? failed.detail : faces.some((f) => f.phase === 'warming') ? 'Lighting the stage…' : 'Getting the studio ready…';
   // Which cameras are up, so a long wait says what it is waiting for.
-  const cameras: [string, AvatarOnly][] = [['Jada', host], [g, guest]];
+  const cameras: [string, AvatarOnly][] = [['Camera 1', front], ['Camera 2', host], [g, guest]];
   // Until the guest is on, the camera stays wide on Jada and the key art on the TV.
   const camera = !patched ? 'wide' : shot === 'host-side' ? 'host' : shot === 'guest' ? 'tv' : 'wide';
   const third = camera === 'tv' ? { name: guestInfo.name, billing: guestInfo.billing } : camera === 'host' || !patched ? HOST : null;
@@ -403,7 +411,9 @@ function Program({ host, guest, guestInfo, patched, stage, backstage, shot, trai
           {patched && <span className="tv-live"><span className="nc-rec" />Live · via video call</span>}
           <span className="gr-tv-glass" aria-hidden="true" />
         </div>
-        <div className="gr-host"><Face face={host} poster={cam1} /></div>
+        {/* Both of Jada's renders stay in frame (a video off screen is not sent); the other one is hidden. */}
+        <div className={`gr-host ${pose === 'front' ? '' : 'is-off'}`}><Face face={front} poster={cam1} /></div>
+        <div className={`gr-host ${pose === 'turned' ? '' : 'is-off'}`}><Face face={host} poster={cam2} /></div>
         {/* The front of the desk, in front of her: when the renderer zooms in, her arms go
             behind a desk that stays put, and the desk runs on unbroken. */}
         <img className="gr-desk" src={desk} alt="" />
@@ -426,7 +436,7 @@ function Program({ host, guest, guestInfo, patched, stage, backstage, shot, trai
           )}
         </div>
       )}
-      {(host.audioBlocked || guest.audioBlocked) && (
+      {(front.audioBlocked || host.audioBlocked || guest.audioBlocked) && (
         <button type="button" className="nc-hear" onClick={() => faces.forEach((f) => f.resumeAudio())}>Tap to hear the show</button>
       )}
       <div className="nc-ticker gr-ticker" aria-hidden="true">

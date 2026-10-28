@@ -70,3 +70,12 @@ export function createDirector(opts: { onShot(shot: Shot): void; now?: () => num
     close() { clearTimeout(timer); },
   };
 }
+
+/**
+ * Which of Jada's renders is on (a render's pose is fixed, so she has one per
+ * pose): turned to the TV while her guest is on, facing the lens when she
+ * speaks to the viewers, from the opening to the trailer and the invitation,
+ * and again from the wrap.
+ */
+export type Pose = 'front' | 'turned';
+export const hostPose = (stage: Stage, wrapping: boolean): Pose => (stage === 'on-air' && !wrapping ? 'turned' : 'front');

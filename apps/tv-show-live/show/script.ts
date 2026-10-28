@@ -61,9 +61,10 @@ export const wrapCue = (guest: Guest) =>
  * voice performs (laughter among them), and on air they laughed far too often.
  * Naming a sound plants it, so this describes the delivery instead.
  */
-// English only: the guest's persona opens with a French "Bonsoir!", and live the guest went on in
-// French and the host followed. Silence: while nobody spoke to her, the host filled the air with
+// English only, with no allowance: the guest is French, and live she went on in French and the
+// host followed; allowed "a word now and then", she still opened with "Bonsoir" and closed with
+// "Au revoir". Silence: while nobody spoke to her, the host filled the air with
 // hesitations.
-export const DELIVERY = 'Speak English only, whatever language the other person uses; a single word of another language now and then is fine. Speak in plain words only: put no cues in brackets or stage directions into what you say. Keep your delivery warm, even and conversational, and let your words carry the humour. When nobody is speaking to you and you have nothing to say, stay silent rather than thinking aloud.';
+export const DELIVERY = 'Speak English only, from your first word to your last, whatever language the other person uses: no words or phrases of another language, not even a hello, thanks or goodbye. Speak in plain words only: put no cues in brackets or stage directions into what you say. Keep your delivery warm, even and conversational, and let your words carry the humour. When nobody is speaking to you and you have nothing to say, stay silent rather than thinking aloud.';
 
 export const goodbyeCue = `${HOST.name} is wrapping up the show: say a short, warm goodbye to her and the viewers.`;
