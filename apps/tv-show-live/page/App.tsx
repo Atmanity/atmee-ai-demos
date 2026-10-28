@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { BackToApps, clock, useAvatarOnly, type AvatarOnly, type SpeechWriter } from '../../../src/kit/index.ts';
 import { createBooth, type Booth, type Role, type Stage } from '../show/booth.ts';
 import { startScore } from './score.ts';
+import { createFloor } from '../show/floor.ts';
 import { createDirector, type Director, type Shot, type ShotMode } from '../show/director.ts';
 import { FILM, GUESTS, HOST, SHOW, firstName, type Guest } from '../show/cast.ts';
 import { filmCue, goodbyeCue, inviteCue, noteCue, nudgeCue, topicCue, welcomeCue, wrapCue } from '../show/script.ts';
@@ -133,6 +134,8 @@ export function App() {
   // or "hmm" cut the host off mid-sentence again and again. A pause longer than the voice's
   // stretch still lets the other answer.
   const talking = useRef<Record<Role, boolean>>({ host: false, guest: false });
+  // And what goes on air: the listener's "mm-hmm" and "ok" over the speaker are kept off it (show/floor.ts).
+  const floor = useMemo(() => createFloor(), []);
 
   // Each avatar's voice: its face says it, the other avatar hears it, and the booth sees when it speaks.
   const voices = useMemo(() => {
@@ -141,21 +144,30 @@ export function App() {
       const resample = createResampler();
       const voice = createVoice({
         // The voice's stretches say when the avatar speaks, for the booth and the transcript.
-        onStart() { talking.current[role] = true; booth.current?.speaking(role, true); director.current?.speaking(role, true); },
+        onStart() {
+          talking.current[role] = true;
+          floor.speaking(role, true);
+          if (!floor.onAir(role)) return;   // a backchannel: neither the booth nor the director sees it
+          booth.current?.speaking(role, true);
+          director.current?.speaking(role, true);
+        },
         onFrame() {},
         onEnd() {
           talking.current[role] = false;
+          const aired = floor.wentOnAir(role);
+          floor.speaking(role, false);
           booth.current?.speaking(role, false);
           director.current?.speaking(role, false);
           const said = words.current[role].trim();
           words.current[role] = '';
-          if (said && !trailerOn.current) addLog(role, said);
+          if (said && aired && !trailerOn.current) addLog(role, said);
         },
       });
       return {
         feed(pcm: Int16Array) {
           voice.feed(pcm);
-          const pcm16 = resample(pcm);
+          // Off the floor, the face gets silence of the same length, so its stream keeps time.
+          const pcm16 = resample(floor.onAir(role) ? pcm : new Int16Array(pcm.length));
           // One stream per face for the whole show, from the first frame once that face is up.
           for (const { seat, feeder } of feeders) {
             if (!feeder.open && faces.current[seat].phase === 'live') feeder.start();
