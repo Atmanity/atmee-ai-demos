@@ -14,7 +14,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { BackToApps, clock, useAvatarOnly, type AvatarOnly, type SpeechWriter } from '../../../src/kit/index.ts';
 import { createBooth, TURN_QUIET_MS, type Booth, type Role, type Stage } from '../show/booth.ts';
 import { startScore } from './score.ts';
-import { startStabilizer } from './stabilize.ts';
 import { createAdvancer, type Advancer, type Verdict } from '../show/advance.ts';
 import { createBooker, type Booker, type Booking } from '../show/booker.ts';
 import { createFloor } from '../show/floor.ts';
@@ -224,12 +223,6 @@ export function App() {
   const hostFace = useAvatarOnly(face('host'));
   const slotFaces = [useAvatarOnly(slotFace(0)), useAvatarOnly(slotFace(1))];
   const guestFace = slotFaces[onTv];
-  // Jada's frame held still against her portrait while her face is up (page/stabilize.ts).
-  useEffect(() => {
-    const v = hostFace.videoRef.current;
-    if (hostFace.phase !== 'live' || !v) return;
-    return startStabilizer(v, cam2);
-  }, [hostFace.phase]);
   const faces = useRef({ host: hostFace, g0: slotFaces[0], g1: slotFaces[1] });
   faces.current = { host: hostFace, g0: slotFaces[0], g1: slotFaces[1] };
 
