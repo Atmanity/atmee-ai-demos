@@ -183,6 +183,14 @@ export function App() {
   // still there, but the studio is back on air (her window back in her seat, her voice heard).
   const [trailerLeaving, setTrailerLeaving] = useState(false);
   const trailerUp = trailer && !trailerLeaving;
+  // Jada moves to her corner window only once the trailer has faded in over the studio: moved at
+  // once, her empty seat showed the set's still of her for the length of the fade.
+  const [trailerCovers, setTrailerCovers] = useState(false);
+  useEffect(() => {
+    if (!trailerUp) { setTrailerCovers(false); return; }
+    const id = setTimeout(() => setTrailerCovers(true), TRAILER_FADE_MS);
+    return () => clearTimeout(id);
+  }, [trailerUp]);
   // While the trailer plays the studio is off air: what Jada says then is neither heard nor logged.
   // During the trailer Jada watches it in a corner window, silent: what she says then is
   // neither heard nor logged, and her faces get silence (see hush), so they never mouth it.
@@ -830,7 +838,7 @@ export function App() {
       ) : (
         <main className={`nc-show ${view === 'full' ? 'is-full' : ''}`}>
           <Program host={hostFace} tvFaces={slotFaces} onTv={onTv} tvCard={tvCard} caption={trailerUp || backstage || !captionsOn ? null : caption} captionsOn={captionsOn} onCaptions={() => setCaptionsOn((c) => !c)} posters={slots.map((g) => posterOf(g, inventions))} guestInfo={guest} patched={patched} stage={stage}
-            backstage={backstage} shot={shot} trailer={trailer} trailerLeaving={trailerLeaving} onTrailerEnding={trailerEnding} onTrailerDone={trailerDone} />
+            backstage={backstage} shot={shot} trailer={trailer} trailerLeaving={trailerLeaving} trailerCovers={trailerCovers} onTrailerEnding={trailerEnding} onTrailerDone={trailerDone} />
           <section className="nc-booth" aria-label="The booth" hidden={view === 'full'}>
             <div className="nc-booth-head">
               <h2>The booth</h2>
@@ -881,9 +889,9 @@ function Face({ face, poster }: { face: AvatarOnly; poster: string }) {
 // the renderer's drift has no hard line to slip against); the guest plays on
 // the TV. The director's shots are camera
 // moves on that set: wide, pushed in on Jada, pushed in on the TV.
-function Program({ host, tvFaces, onTv, tvCard, caption, captionsOn, onCaptions, posters, guestInfo, patched, stage, backstage, shot, trailer, trailerLeaving, onTrailerEnding, onTrailerDone }: {
+function Program({ host, tvFaces, onTv, tvCard, caption, captionsOn, onCaptions, posters, guestInfo, patched, stage, backstage, shot, trailer, trailerLeaving, trailerCovers, onTrailerEnding, onTrailerDone }: {
   host: AvatarOnly; tvFaces: AvatarOnly[]; onTv: number; tvCard: string | null; caption: { who: Role; name: string; text: string } | null; captionsOn: boolean; onCaptions: () => void; posters: string[]; guestInfo: Guest; patched: boolean; stage: Stage;
-  backstage: boolean; shot: Shot; trailer: boolean; trailerLeaving: boolean; onTrailerEnding: () => void; onTrailerDone: () => void;
+  backstage: boolean; shot: Shot; trailer: boolean; trailerLeaving: boolean; trailerCovers: boolean; onTrailerEnding: () => void; onTrailerDone: () => void;
 }) {
   const live = stage === 'on-air' || stage === 'closing';
   const g = firstName(guestInfo.name);
@@ -898,7 +906,7 @@ function Program({ host, tvFaces, onTv, tvCard, caption, captionsOn, onCaptions,
   const camera = !patched ? 'wide' : shot === 'host-side' ? 'host' : shot === 'guest' ? 'tv' : 'wide';
   const third = camera === 'tv' ? { name: guestInfo.name, billing: guestInfo.billing } : camera === 'host' || !patched ? HOST : null;
   return (
-    <section className={`gr-program is-${camera} ${trailer && !trailerLeaving ? 'is-trailer' : ''}`} aria-label="The show, as it goes out">
+    <section className={`gr-program is-${camera} ${trailer && !trailerLeaving && trailerCovers ? 'is-trailer' : ''}`} aria-label="The show, as it goes out">
       <div className="gr-set">
         <img className="gr-wall" src={wall} alt="" />
         <div className="gr-tv">
