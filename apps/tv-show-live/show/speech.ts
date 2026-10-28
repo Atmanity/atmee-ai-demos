@@ -25,6 +25,7 @@ export interface SpeechHandlers {
   onAudio(b64: string, pcm: Int16Array): void;
   /** The avatar's words as they are spoken. */
   onWords?(delta: string): void;
+  /** The line closed on its own (dropped, timed out, ended by the server); not called after end(). */
   onClosed?(reason: string): void;
   onError?(message: string): void;
 }
@@ -72,12 +73,12 @@ export async function openSpeech(api: string, handlers: SpeechHandlers): Promise
   const onHide = () => { if (!closed) void endOnServer(); };
   addEventListener('pagehide', onHide);
 
-  const finish = (reason: string) => {
+  const finish = (reason: string, ours = false) => {
     if (closed) return;
     closed = true;
     clearInterval(ticker);
     removeEventListener('pagehide', onHide);
-    handlers.onClosed?.(reason);
+    if (!ours) handlers.onClosed?.(reason);
   };
 
   await new Promise<void>((resolve, reject) => {
@@ -126,7 +127,8 @@ export async function openSpeech(api: string, handlers: SpeechHandlers): Promise
     commentary(text) { send({ type: 'session.commentary.append', content: text }); },
     async end() {
       if (closed) return;
-      finish('ended');
+      // Ended by us (a handover, the end of the show): not a line that dropped.
+      finish('ended', true);
       ws.close();
       await endOnServer();
     },

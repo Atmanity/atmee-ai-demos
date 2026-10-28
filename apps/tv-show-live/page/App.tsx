@@ -267,8 +267,11 @@ export function App() {
     return { host: make('host', ['host']), guest: make('guest', ['g0', 'g1']) };
   }, []);
 
-  async function openSeat(role: Role, who?: Guest) {
+  // rejoin: a guest whose line dropped, put back through once (their face is still up), the
+  // conversation carrying on where it was.
+  async function openSeat(role: Role, who?: Guest, rejoin = false): Promise<SpeechLine | undefined> {
     const other: Role = role === 'host' ? 'guest' : 'host';
+    let opened: SpeechLine | undefined;
     try {
       const line = await openSpeech(seatApi(role === 'host' ? 'host' : `g-${who!.id}`), {
         onAudio(b64, pcm) {
@@ -280,10 +283,26 @@ export function App() {
           // Auto-advance judges the guest's answer while it is still being given (show/advance.ts).
           if (role === 'guest' && floor.onAir('guest')) advancer.current?.hearing(words.current.guest);
         },
-        onClosed(reason) { if (booth.current && booth.current.stage !== 'over') offAir(`${role === 'host' ? HOST.name : segment.current?.name} left the line (${reason}).`); },
+        onClosed(reason) {
+          if (!booth.current || booth.current.stage === 'over' || lines.current[role] !== opened) return;
+          // A guest who dropped is put back through once; the show goes on. Jada cannot be replaced.
+          if (role === 'guest' && who && !rejoin) {
+            lines.current.guest = undefined;
+            addLog('booth', `${who.name}'s line dropped (${reason}): putting them back through`);
+            void openSeat('guest', who, true);
+            return;
+          }
+          offAir(`${role === 'host' ? HOST.name : who?.name ?? 'The guest'} left the line (${reason}).`);
+        },
         onError(message) { console.warn('[gilded-reel] %s: %s', role, message); },
       });
+      opened = line;
       lines.current[role] = line;
+      if (rejoin) {
+        addLog('booth', `${who!.name} is back on the line`);
+        booth.current?.cue(`${firstName(who!.name)}'s video call dropped for a moment and is back now: say so lightly in a few words, then carry on where you were.`);
+        return line;
+      }
       if (role === 'host') booth.current?.hostLive();
       // The guest is on: the two-shot, Jada and the TV, until the booth or the director cuts.
       else {
