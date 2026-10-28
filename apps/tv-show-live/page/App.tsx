@@ -280,9 +280,9 @@ function Logo() {
   return <span className="nc-logo"><span className="ll-mark" aria-hidden="true" />The Late <b>Line</b></span>;
 }
 
-function Face({ face, poster, className }: { face: AvatarOnly; poster: string; className?: string }) {
+function Face({ face, poster }: { face: AvatarOnly; poster: string }) {
   return (
-    <div className={`ll-face ${face.speaking ? 'is-speaking' : ''} ${className ?? ''}`}>
+    <div className="ll-face">
       <img className="ll-poster" src={poster} alt="" aria-hidden="true" />
       <video ref={face.videoRef} playsInline muted autoPlay />
       <audio ref={face.audioRef} autoPlay />
@@ -294,35 +294,33 @@ const PHASE: Partial<Record<AvatarOnly['phase'], string>> = {
   starting: 'Booking the studio…', warming: 'Warming up the cameras…', connecting: 'Connecting…', arriving: 'Almost there…',
 };
 
-// The program picture: Jada's shot is the studio; the set carries on to her left, where the guest's screen hangs.
+// The program picture: one studio, two shots side by side. Jada on the left,
+// turned toward her guest; the guest on the right, turned toward her. The
+// shots overlap a little and the seam is feathered, so the set reads as one
+// room; each shot clips at its own edges.
 function Program({ host, guest, guestInfo, patched, stage, next }: {
   host: AvatarOnly; guest: AvatarOnly; guestInfo: Guest; patched: boolean; stage: Stage; next?: string;
 }) {
   const g = firstName(guestInfo.name);
   const live = stage === 'on-air' || stage === 'closing';
-  const hostCover = host.phase !== 'live' ? (host.phase === 'failed' ? host.detail : PHASE[host.phase]) : null;
-  const screen = patched && guest.phase === 'live' ? null
-    : guest.phase === 'failed' ? `Couldn't reach ${g}` : guest.phase === 'live' ? `Calling ${g}…` : `Getting ${g} ready…`;
+  const cover = (face: AvatarOnly, waiting: string) => (face.phase === 'failed' ? face.detail : face.phase !== 'live' ? PHASE[face.phase] ?? waiting : null);
+  const hostCover = cover(host, 'Getting Jada ready…');
+  // The guest's seat stays dark until they are introduced.
+  const guestCover = patched && guest.phase === 'live' ? null : cover(guest, '') ?? `${g} is in the wings`;
   return (
-    <section className="nc-program" aria-label="The show, as it goes out">
-      <div className="nc-set" aria-hidden="true" style={{ backgroundImage: `url(${jada})` }} />
-      <div className="nc-desk" aria-hidden="true" />
-      <div className="nc-monitor">
-        <div className="nc-screen">
-          <Face face={guest} poster={PORTRAITS[guestInfo.id]} className="nc-feed" />
-          {screen && <div className="nc-cover" role="status">{guest.phase !== 'failed' && <span className="call-spinner" aria-hidden="true" />}<strong>{screen}</strong></div>}
-          <span className="nc-feed-tag"><span className="nc-rec" />Live via video call</span>
-          {patched && <span className="nc-feed-name"><strong>{guestInfo.name}</strong><span>{guestInfo.billing}</span></span>}
-          <span className="nc-glare" aria-hidden="true" />
-        </div>
-      </div>
-      <div className="nc-hostcam">
-        <Face face={host} poster={jada} className="nc-feed" />
+    <section className="ll-program" aria-label="The show, as it goes out">
+      <div className="ll-shot is-host">
+        <Face face={host} poster={jada} />
         {hostCover && <div className="nc-cover" role="status"><span className="call-spinner" aria-hidden="true" /><strong>{hostCover}</strong></div>}
+      </div>
+      <div className="ll-shot is-guest">
+        <Face face={guest} poster={PORTRAITS[guestInfo.id]} />
+        {guestCover && <div className="nc-cover" role="status">{guest.phase !== 'failed' && <span className="call-spinner" aria-hidden="true" />}<strong>{guestCover}</strong></div>}
       </div>
       <div className="nc-bug"><span className="ll-mark" aria-hidden="true" />The Late <b>Line</b></div>
       <div className={`nc-tally ${live ? 'is-on' : ''}`}>{live ? 'Live' : 'Standby'}</div>
-      <div className="nc-third"><strong>{HOST.name}</strong><span>{HOST.billing}</span></div>
+      <div className="ll-third is-host"><strong>{HOST.name}</strong><span>{HOST.billing}</span></div>
+      {patched && <div className="ll-third is-guest"><strong>{guestInfo.name}</strong><span>{guestInfo.billing}</span></div>}
       {(host.audioBlocked || guest.audioBlocked) && (
         <button type="button" className="nc-hear" onClick={() => { host.resumeAudio(); guest.resumeAudio(); }}>Tap to hear the show</button>
       )}

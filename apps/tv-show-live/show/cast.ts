@@ -1,11 +1,12 @@
-// The Late Line's cast: invented characters made for this show. The host's
-// portrait is the studio, turned toward the guest's screen; the guests are on
-// a video call from home. AVATAR_TV_SHOW_LIVE swaps the host (avatar.json),
+// The Late Line's cast: invented characters made for this show. All three
+// portraits are shots of the same studio: the host on the left, turned toward
+// her guest; each guest on the right, turned toward her, hands on the desk and
+// clear of the inner edge where the two shots meet. AVATAR_TV_SHOW_LIVE swaps the host (avatar.json),
 // AVATAR_TV_SHOW_LIVE_GUEST_<ID> a guest.
 export interface Guest {
   id: string;
   name: string;
-  /** How the host bills them, and where they are calling from. */
+  /** How the host bills them, and where they came in from. */
   billing: string;
   from: string;
   avatarId: string;

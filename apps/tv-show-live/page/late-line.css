@@ -162,3 +162,27 @@ button { font: inherit; }
 .ll-mark { width: 1.1em; height: 1.1em; border-radius: 3px; background: linear-gradient(135deg, var(--nc-amber) 0 45%, transparent 45% 55%, var(--nc-amber) 55%); flex: none; }
 .nc-bug .ll-mark { width: 1.5cqw; height: 1.5cqw; }
 .nc-hostcam .nc-cover strong { font-size: 1.6cqw; }
+
+/* The program: one studio in two square shots, side by side (2:1). The shots
+   overlap by 4% at the seam and the guest's inner edge fades in, so the two
+   halves of the set read as one room. */
+.nc-show { grid-template-areas: "program program" "booth transcript"; }
+@media (max-width: 820px) { .nc-show { grid-template-areas: "program" "booth" "transcript"; } }
+.ll-program { grid-area: program; position: relative; aspect-ratio: 2 / 1; overflow: hidden; border-radius: 14px; background: #071313; container-type: inline-size; box-shadow: 0 20px 60px rgba(0, 0, 0, .45), 0 0 0 1px var(--nc-line); isolation: isolate; }
+.ll-shot { position: absolute; top: 0; height: 100%; aspect-ratio: 1; overflow: hidden; }
+.ll-shot.is-host { left: 0; z-index: 1; }
+.ll-shot.is-guest { right: 0; z-index: 2; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 8%); mask-image: linear-gradient(90deg, transparent 0, #000 8%); }
+/* Each shot is a little wider than half, so they overlap at the seam. */
+.ll-shot { width: 52%; height: auto; }
+.ll-program .nc-cover strong { font-size: 1.6cqw; }
+.ll-program .nc-cover .call-spinner { width: 2.4cqw; height: 2.4cqw; border-width: .25cqw; }
+.ll-third { position: absolute; bottom: 11%; z-index: 8; display: grid; padding: .6cqw 1.4cqw .7cqw 1.1cqw; background: linear-gradient(90deg, rgba(5, 20, 20, .94), rgba(5, 20, 20, .8)); }
+.ll-third strong { font: 850 1.6cqw/1.15 var(--nc-display); text-transform: uppercase; letter-spacing: .03em; }
+.ll-third span { font-size: 1cqw; color: var(--nc-muted); }
+.ll-third.is-host { left: 2.5%; border-left: .4cqw solid var(--nc-amber); border-radius: 0 .5cqw .5cqw 0; }
+.ll-third.is-guest { right: 2.5%; text-align: right; border-right: .4cqw solid var(--nc-amber); border-radius: .5cqw 0 0 .5cqw; }
+.ll-program .nc-ticker { bottom: 0; height: 6%; }
+.ll-program .nc-ticker span { font-size: 1.05cqw; }
+.ll-program .nc-bug { font-size: 1.4cqw; }
+.ll-program .nc-bug .ll-mark { width: 1.2cqw; height: 1.2cqw; }
+.ll-program .nc-tally { font-size: .95cqw; }

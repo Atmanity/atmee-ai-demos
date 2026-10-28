@@ -20,7 +20,7 @@ import { avatarApi } from '../../server/atmee.ts';
 import { avatarFor } from '../../server/hosts.js';
 import { endRender, renderConfigured, startRender } from '../../server/render.ts';
 import { GUESTS, HOST, guestById, type Guest } from './show/cast.ts';
-import { guestScenario, hostScenario } from './show/script.ts';
+import { DELIVERY, guestScenario, hostScenario } from './show/script.ts';
 
 const ID = 'tv-show-live';
 const MAX_SECONDS = 900;
@@ -119,8 +119,8 @@ const app: AppServer = {
       if (!found) return;
       const { show, seat } = found;
       const settings = seat === 'host'
-        ? { scenario: hostScenario(show.guest), user_name: show.guest.name }
-        : { scenario: guestScenario(show.guest), user_name: HOST.name };
+        ? { scenario: hostScenario(show.guest), user_name: show.guest.name, instructions: DELIVERY }
+        : { scenario: guestScenario(show.guest), user_name: HOST.name, instructions: DELIVERY };
       const r = await avatarApi('POST', '/v1/speech_sessions', { avatarId: avatarOf(show, seat), maxDurationSeconds: maxSeconds(), settings });
       if (r.status !== 201) {
         console.warn('[%s] %s speech -> %d %s %s', ID, seat, r.status, r.json?.error ?? '', r.json?.message ?? '');

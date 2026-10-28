@@ -1,6 +1,6 @@
 # The Late Line: a talk show on speech-to-speech
 
-Jada Monroe hosts a late-night talk show and video-calls a guest; both are Atmee avatars. Unlike
+Jada Monroe hosts a late-night talk show with a guest beside her at the desk; both are Atmee avatars. Unlike
 [Nightcap Live](../tv-show/README.md), the two hear each other **directly**: each avatar has a
 speech-to-speech session, and each one's voice is what the other one hears. Both faces are in
 **one** LiveKit room, the studio's. The person at the page is the producer: they never speak; they
@@ -36,6 +36,11 @@ Built the speech-to-speech way (`POST /v1/speech_sessions`), with each face an a
   token, keeps its input fed in real time (a frame of silence whenever nothing else is due), and
   forwards every frame of each avatar's voice into the other's input. Turn-taking is theirs: they
   listen to each other as to a person.
+- **One studio, two shots.** All three portraits are shots of the same set: Jada on the left,
+  turned toward her guest; each guest on the right, turned toward her, hands on the desk and clear
+  of the inner edge. The page lays the two square faces side by side in a 2:1 picture, overlapping
+  a little with the seam feathered, so they read as one room. The pose is the portrait's (there is
+  no pose control), so a big gesture can still reach the seam, where each shot clips.
 - **One room, two faces.** The server starts both renders into the show's room, each under its own
   identity; the page joins the room twice, once as each face's agent. Each avatar's whole voice is
   resampled from 24 kHz to 16 kHz and streamed to its face as **one** piece for the show, silence
@@ -73,11 +78,14 @@ several faces can share a room.
 
 All three are invented characters, made for this show (staging, the demo account):
 
-- **Jada Monroe** `307b2aba`, the host: a portrait at the studio desk with her whole body turned
-  toward the guest's screen (generated facing her right, then mirrored), a designed voice.
-- **Otto Brandt** `9b4228cf`, an inventor of magnificent, mostly useless machines, calling from
-  his workshop.
-- **Rosa Quintero** `8c20336d`, a big-wave surfer turned taco-stand owner, calling from the beach.
+- **Jada Monroe** `307b2aba`, the host: at the studio desk, her whole body turned toward her
+  guest (generated facing her right, then mirrored), a designed voice.
+- **Otto Brandt** `9b4228cf`, an inventor of magnificent, mostly useless machines.
+- **Rosa Quintero** `8c20336d`, a big-wave surfer turned taco-stand owner.
+
+The guests' portraits were made from Jada's shot (for the set) and their own first portraits (for
+their faces), so all three are the same studio. Both sessions also carry a pinned delivery
+instruction (plain words, no bracketed cues), since the voices laughed far too often.
 
 `AVATAR_TV_SHOW_LIVE` swaps the host; `AVATAR_TV_SHOW_LIVE_GUEST_<ID>` a guest.
 
