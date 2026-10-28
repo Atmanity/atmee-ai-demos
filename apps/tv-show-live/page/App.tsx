@@ -598,7 +598,22 @@ export function App() {
     advancer.current?.topic(topic);
     addLog('booth', reason === undefined ? `Topic for Jada: ${topic}` : `Moving on: ${topic} (${reason})`);
   };
-  const sendNote = (text: string) => { booth.current?.cue(noteCue(text)); addLog('booth', `Note for Jada: ${text}`); };
+  // A note may ask for a new guest ("we need to invite the camera man too"): read first; a
+  // booking is invented like the Invite box's, anything else goes to Jada as a note.
+  const sendNote = async (text: string) => {
+    const res = await fetch(`${API}/show/${showRef.current}/intent`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) }).catch(() => null);
+    const intent = res?.ok ? await res.json().catch(() => null) : null;
+    if (intent?.invite && intent.description) {
+      if (!patched) return addLog('booth', `A new guest can come once ${firstName(guest.name)} is on: ${text}`);
+      if (pendingInvite) return addLog('booth', `A guest is already being invented; try again once they are on: ${text}`);
+      const id = await startInvention(intent.description);
+      if (!id) return;
+      purpose.current[id] = { slot: 1 - onTvRef.current, opening: false };
+      return addLog('booth', `Inviting the next guest: ${intent.description} (from your note)`);
+    }
+    booth.current?.cue(noteCue(text));
+    addLog('booth', `Note for Jada: ${text}`);
+  };
   const wrap = () => { booth.current?.wrap(); live.current.wrapped = true; setSuggestWrap(false); addLog('booth', 'Wrap it up'); };
   const chooseShot = (mode: ShotMode) => { setShotMode(mode); director.current?.mode(mode); };
   const endShow = () => { offAir(''); setStage('over'); };

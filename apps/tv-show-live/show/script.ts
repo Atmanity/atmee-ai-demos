@@ -100,6 +100,16 @@ export function bookerUser(guests: string[], lines: { who: 'host' | 'guest'; tex
   return [`The show's guests so far: ${guests.join('; ')}`, '', 'The last lines, oldest first:', ...lines.map((l) => `${name(l.who)}: ${l.text}`)].join('\n');
 }
 
+/**
+ * The producer's note, read for an invitation: "we need to invite the camera
+ * man too" is a booking, not something for the host to say.
+ */
+export const INTENT_SYSTEM = [
+  `You read what the producer of ${SHOW}, a live TV talk show about the art of film, typed into the booth's note box; tonight's film is ${FILM.title}.`,
+  'Say invite = true when the note asks to bring a new guest onto the show (invite, book, get, bring on, have someone join), and false for anything else (a question for the host to ask, a direction, a remark).',
+  "When invite is true, description is the guest in one sentence, as one of the film's makers, from the producer's words (\"the camera man\" is the cinematographer of the film), with one vivid trait.",
+].join(' ');
+
 /** A stalled conversation: the host picks it back up. */
 export const nudgeCue = (guest: Guest) => `Pick the conversation back up: ask ${firstName(guest.name)} a fresh, specific question about the design of ${FILM.title}.`;
 

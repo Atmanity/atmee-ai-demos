@@ -22,7 +22,7 @@ import { endRender, renderConfigured, startRender } from '../../server/render.ts
 import { GUESTS, HOST, guestById, type Guest } from './show/cast.ts';
 import { llmAvailable, structured } from '../../server/llm.ts';
 import { invent, invention } from './invent.ts';
-import { BOOKER_SYSTEM, DELIVERY, HOST_USER, JUDGE_SYSTEM, bookerUser, guestScenario, hostScenario, judgeUser } from './show/script.ts';
+import { BOOKER_SYSTEM, DELIVERY, HOST_USER, INTENT_SYSTEM, JUDGE_SYSTEM, bookerUser, guestScenario, hostScenario, judgeUser } from './show/script.ts';
 
 const ID = 'tv-show-live';
 const MAX_SECONDS = 900;
@@ -214,6 +214,25 @@ const app: AppServer = {
       } catch (err) {
         console.warn('[%s] booker failed: %s', ID, (err as Error).message);
         res.status(502).json({ error: 'booker_failed' });
+      }
+    });
+
+    // The producer's note, read for an invitation: { invite, description }
+    router.post('/show/:show/intent', async (req, res) => {
+      if (!shows.get(req.params.show)) return void res.status(404).json({ error: 'not_found' });
+      const text = String(req.body?.text ?? '').trim().slice(0, 500);
+      if (!text) return void res.status(400).json({ error: 'bad_request' });
+      try {
+        const r = await structured<{ invite: boolean; description: string }>({
+          system: INTENT_SYSTEM,
+          user: text,
+          schema: { type: 'object', properties: { invite: { type: 'boolean' }, description: { type: 'string' } }, required: ['invite', 'description'] },
+          temperature: 0,
+        });
+        res.json({ invite: r.invite === true, description: String(r.description ?? '').slice(0, 300) });
+      } catch (err) {
+        console.warn('[%s] intent failed: %s', ID, (err as Error).message);
+        res.status(502).json({ error: 'intent_failed' });
       }
     });
 
