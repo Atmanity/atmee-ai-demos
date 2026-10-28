@@ -37,11 +37,11 @@ beforeEach(() => { vi.useFakeTimers(); });
 afterEach(() => { vi.useRealTimers(); });
 
 describe('the opening', () => {
-  it('directs the film after the greeting and rolls the trailer once she has introduced it', () => {
+  it('has her speak up for the film after the greeting, and rolls the trailer once she has introduced it', () => {
     const { booth, sent, roll, dial, turn } = setup();
     booth.hostLive();
     turn('host');
-    expect(sent).toEqual([{ to: 'host', kind: 'directive', text: 'FILM' }]);
+    expect(sent).toEqual([{ to: 'host', kind: 'commentary', text: 'FILM' }]);
     expect(booth.stage).toBe('introducing');
     turn('host');
     expect(sent.at(-1)).toEqual({ to: 'host', kind: 'directive', text: '' });
@@ -108,7 +108,22 @@ describe('the opening', () => {
     const { booth, sent } = setup();
     booth.hostLive();
     vi.advanceTimersByTime(GREETING_WAIT_MS);
-    expect(sent).toEqual([{ to: 'host', kind: 'directive', text: 'FILM' }]);
+    expect(sent).toEqual([{ to: 'host', kind: 'commentary', text: 'FILM' }]);
+  });
+
+  it('asks again when she does not speak up for the film, three times in all, and not once she has', () => {
+    const { booth, sent, turn } = setup();
+    booth.hostLive();
+    turn('host');
+    vi.advanceTimersByTime(SPEAK_UP_MS * 5);
+    expect(sent.filter((d) => d.text === 'FILM')).toHaveLength(3);
+
+    const second = setup();
+    second.booth.hostLive();
+    second.turn('host');
+    second.turn('host');
+    vi.advanceTimersByTime(SPEAK_UP_MS * 5);
+    expect(second.sent.filter((d) => d.text === 'FILM')).toHaveLength(1);
   });
 });
 

@@ -5,8 +5,8 @@
 //
 // Stages:
 //   greeting     the host greets the viewers; the guest's session is not open yet
-//   introducing  the greeting is over: the host is directed to introduce tonight's
-//                film and roll its trailer
+//   introducing  the greeting is over: the host speaks up on her own (commentary)
+//                to introduce tonight's film and roll its trailer
 //   trailer      the trailer plays (the page tells the booth when it is over)
 //   inviting     back in the studio, the host speaks up on her own (commentary) to
 //                react to the trailer and invite the guest onto the screen
@@ -43,7 +43,7 @@ export interface BoothOptions {
   deliver(delivery: Delivery): void;
   /** Opens the guest's session; the booth is told when it is up (guestLive). */
   dialGuest(): void;
-  /** The host's direction after the greeting: introduce the film, roll the trailer. */
+  /** Spoken by the host after the greeting: introduce the film, roll the trailer. */
   film: string;
   /** Plays the trailer; the page calls trailerDone() when it is over. */
   rollTrailer(): void;
@@ -105,18 +105,14 @@ export function createBooth(opts: BoothOptions): Booth {
     opts.deliver({ to: 'host', kind: 'directive', text });
   };
 
-  const greeted = () => {
-    if (stage !== 'greeting') return;
-    clearTimeout(greetingTimer);
-    setStage('introducing');
-    direct(opts.film);
-  };
-
-  // After the trailer nobody has spoken, so the host speaks up on her own. The
-  // commentary is refused while a turn is open (a check-in during the trailer),
-  // so it is sent again until she starts speaking, three tries in all.
+  // After her greeting, as after the trailer, nobody else has spoken, so the host
+  // speaks up on her own: a directive would wait for a next turn that only her
+  // session's check-in brings, a long silence on air. The commentary is refused
+  // while a turn is open, so it is sent again until she starts speaking, three
+  // tries in all.
   let speakUpTimer: ReturnType<typeof setTimeout> | undefined;
   const speakUp = (text: string, tries = 3) => {
+    const at = stage;
     directed = true;
     begun = false;
     // Commentary makes her speak at once: the very next turn is hers.
@@ -124,7 +120,14 @@ export function createBooth(opts: BoothOptions): Booth {
     lead = 0;
     opts.deliver({ to: 'host', kind: 'commentary', text });
     clearTimeout(speakUpTimer);
-    if (tries > 1) speakUpTimer = setTimeout(() => { if (stage === 'inviting' && !begun) speakUp(text, tries - 1); }, SPEAK_UP_MS);
+    if (tries > 1) speakUpTimer = setTimeout(() => { if (stage === at && !begun) speakUp(text, tries - 1); }, SPEAK_UP_MS);
+  };
+
+  const greeted = () => {
+    if (stage !== 'greeting') return;
+    clearTimeout(greetingTimer);
+    setStage('introducing');
+    speakUp(opts.film);
   };
 
   // The invitation is spoken: the guest comes on, and the host's next turn welcomes them.
@@ -164,6 +167,7 @@ export function createBooth(opts: BoothOptions): Booth {
         waiting = null;
         opts.deliver({ to: 'host', kind: 'directive', text: '' });
         if (stage === 'introducing') {
+          clearTimeout(speakUpTimer);
           setStage('trailer');
           return opts.rollTrailer();
         }
