@@ -12,6 +12,8 @@ export interface Guest {
   from: string;
   avatarId: string;
   rundown: string[];
+  /** On call: not an opening guest, but ready to join when the booth invites someone in this role. */
+  onCall?: boolean;
 }
 
 export const SHOW = 'The Gilded Reel';
@@ -39,7 +41,22 @@ export const GUESTS: Guest[] = [
     avatarId: '5190aed1-124c-4447-adb8-7045d8b35fb1',
     rundown: ["The queen's amber veil", 'Four hundred caravan robes', 'Building the salt-glass monoliths', 'The glass palace and its lanterns'],
   },
+  {
+    // Built ahead of the show: an avatar built during it shares the render GPUs with the faces on air,
+    // and their pictures jump and drift while it builds.
+    id: 'mireille',
+    name: 'Mireille Sunder',
+    billing: `director of ${FILM.title}`,
+    from: 'her stone workshop in Biarritz',
+    avatarId: 'a779f510-caaf-4307-aa5d-4a933a9310b8',
+    rundown: ['Taming the shifting amber dunes', 'Sculpting monoliths from rock salt', 'Filming in the twilight windows', "The queen's caravan in motion"],
+    onCall: true,
+  },
 ];
+
+/** The on-call guest an invitation names, by the role in their billing ("the director"). */
+export const onCallFor = (description: string, exclude: string[] = []) =>
+  GUESTS.find((g) => g.onCall && !exclude.includes(g.id) && description.toLowerCase().includes(g.billing.split(' of ')[0].toLowerCase().split(' ').pop()!));
 
 export const guestById = (id: string) => GUESTS.find((g) => g.id === id);
 export const firstName = (name: string) => name.split(' ')[0];

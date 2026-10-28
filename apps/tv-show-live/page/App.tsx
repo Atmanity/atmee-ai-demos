@@ -18,7 +18,7 @@ import { createAdvancer, type Advancer, type Verdict } from '../show/advance.ts'
 import { createBooker, type Booker, type Booking } from '../show/booker.ts';
 import { createFloor } from '../show/floor.ts';
 import { createDirector, type Director, type Shot, type ShotMode } from '../show/director.ts';
-import { FILM, GUESTS, HOST, SHOW, firstName, type Guest } from '../show/cast.ts';
+import { FILM, GUESTS, HOST, SHOW, firstName, onCallFor, type Guest } from '../show/cast.ts';
 import { bridgeCue, facingAt, farewellCue, filmCue, goodbyeCue, guestFarewellCue, guestPrompts, holdCue, hostPrompts, LISTENING_EVERY_MS, type Facing, holdMoreCue, inviteCue, inviteNowCue, noteCue, nudgeCue, topicCue, welcomeCue, wrapCue } from '../show/script.ts';
 import { openSpeech, SpeechError, type SpeechLine } from '../show/speech.ts';
 import { createResampler, createVoice, FACE_RATE } from '../show/voice.ts';
@@ -26,6 +26,7 @@ import cam2 from '../studio/cam2.jpg';
 import wall from '../studio/wall.jpg';
 import desk from '../studio/desk.webp';
 import theo from '../guests/theo.jpg';
+import mireille from '../guests/mireille.jpg';
 import still1 from '../film/still-1.jpg';
 import still2 from '../film/still-2.jpg';
 import still3 from '../film/still-3.jpg';
@@ -34,7 +35,7 @@ import still5 from '../film/still-5.jpg';
 import './gilded.css';
 
 const API = '/api/apps/tv-show-live';
-const PORTRAITS: Record<string, string> = { theo };
+const PORTRAITS: Record<string, string> = { theo, mireille };
 const STILLS: Record<number, string> = { 1: still1, 2: still2, 3: still3, 4: still4, 5: still5 };
 const END_AFTER_GOODBYE_MS = 4_000;
 const SHOT_MS = 5_200;          // each trailer still, held and pushed in on
@@ -157,6 +158,8 @@ export function App() {
   const [lobbyInvention, setLobbyInvention] = useState<string | null>(null);
   // The cast guest the show opened with, if any, for the booth's roster of guests.
   const [castOnShow, setCastOnShow] = useState<Guest | null>(null);
+  // On-call cast guests the booth has invited tonight.
+  const [calledIn, setCalledIn] = useState<Guest[]>([]);
   const [gone, setGone] = useState<string[]>([]);
   // What the TV says between two guests (the key art, and who is next).
   const [tvCard, setTvCard] = useState<string | null>(null);
@@ -482,7 +485,7 @@ export function App() {
     const earlyGuest = earlyView?.guest ? { ...earlyView.guest, avatarId: '' } : null;
     goneGuests.current = [];
     setCastOnShow(cast); setGone([]); setTvCard(null); setSpeaking({});
-    setCurrent(cast ?? earlyGuest); setSlots([cast ?? (earlyView?.ready ? earlyGuest : null), null]); setOnTv(0); onTvRef.current = 0; handingOver.current = false;
+    setCurrent(cast ?? earlyGuest); setSlots([cast ?? (earlyView?.ready ? earlyGuest : null), null]); setCalledIn([]); setOnTv(0); onTvRef.current = 0; handingOver.current = false;
     if (!early) { setInventions({}); purpose.current = {}; }
     if (earlyGuest) { first = earlyGuest.rundown[0] ?? ''; setTopics(earlyGuest.rundown); }
     setProblem(''); setLog([]); setUsed(new Set(first ? [first] : [])); setPatched(false); setStage('greeting'); facing.current = 'viewers'; setTrailer(false); setTrailerLeaving(false); setShot('host-front'); setShotMode('auto'); setSuggestWrap(false);
@@ -744,6 +747,16 @@ export function App() {
     if (intent?.kind === 'invite' && intent.description) {
       if (!patched) return setCommandReply(`A new guest can come once ${firstName(guest.name)} is on.`);
       if (pendingInvite) return setCommandReply('A guest is already being made: try again once they are on.');
+      // Someone on call in that role joins at once: their camera starts now, and Jada hands over once it is up.
+      const onCall = onCallFor(intent.description, [castOnShow?.id ?? '', ...calledIn.map((g) => g.id), ...gone]);
+      if (onCall) {
+        const slot = 1 - onTvRef.current;
+        purpose.current[onCall.id] = { slot, opening: false };
+        setCalledIn((all) => [...all, onCall]);
+        setSlots((all) => all.map((g, i) => (i === slot ? onCall : g)));
+        addLog('booth', `Inviting ${onCall.name}, ${onCall.billing}: their camera is starting`);
+        return setCommandReply(`Inviting ${onCall.name}. Jada carries on with ${firstName(segment.current?.name ?? 'the guest')} until their camera is up, then hands over.`);
+      }
       const id = await startInvention(intent.description);
       if (!id) return setCommandReply('Could not start inventing them.');
       purpose.current[id] = { slot: 1 - onTvRef.current, opening: false };
@@ -818,7 +831,7 @@ export function App() {
               <Console topics={topics} used={used} disabled={stage !== 'on-air'} commandDisabled={stage === 'over'} onTopic={(t) => sendTopic(t)} onCommand={sendCommand} commandReply={commandReply}
                 onWrap={wrap} onEnd={endShow}
                 autoAdvance={autoAdvance} onAutoAdvance={setAutoAdvance} autoBook={autoBook} onAutoBook={setAutoBook} suggestWrap={suggestWrap}
-                cast={castOnShow ? [{ guest: castOnShow, poster: PORTRAITS[castOnShow.id], status: statusOf(castOnShow.id) ?? 'Waiting' }] : []}
+                cast={[castOnShow, ...calledIn].filter((g): g is Guest => Boolean(g)).map((g) => ({ guest: g, poster: PORTRAITS[g.id], status: statusOf(g.id) ?? 'Waiting' }))}
                 statusOf={statusOf} inventions={Object.values(inventions)} />
             )}
           </section>
@@ -990,7 +1003,7 @@ function Lobby({ guestId, setGuestId, inventText, setInventText, topics, setTopi
       </figure>
       <fieldset className="nc-guests">
         <legend>Tonight's guest</legend>
-        {GUESTS.map((g) => (
+        {GUESTS.filter((g) => !g.onCall).map((g) => (
           <label key={g.id} className={`nc-guest ${g.id === guestId ? 'is-picked' : ''}`}>
             <input type="radio" name="guest" value={g.id} checked={g.id === guestId} onChange={() => setGuestId(g.id)} />
             <img src={PORTRAITS[g.id]} alt="" />
