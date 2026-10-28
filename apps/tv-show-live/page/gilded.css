@@ -1,17 +1,17 @@
-/* The Late Line: a late-night set in deep teal, a brass lamp gold and an
+/* The Gilded Reel: an art-deco late-night set: black lacquer, gilt and
    on-air red, cooler than Nightcap. The studio and the call sit side by side like a split screen on
    air, each with its lower-third; under them the booth and what went out. On
    a phone: the two faces, then the booth, then the transcript. */
 :root {
-  --nc-night: #071a1b;
-  --nc-set: #0d2526;
-  --nc-panel: #11312f;
-  --nc-line: #24504c;
-  --nc-ink: #eefaf7;
-  --nc-muted: #9fc4bd;
-  --nc-amber: #f2c14e;
+  --nc-night: #0b0a08;
+  --nc-set: #13110d;
+  --nc-panel: #1a1712;
+  --nc-line: #3d3424;
+  --nc-ink: #f5eedb;
+  --nc-muted: #b8aa88;
+  --nc-amber: #d8b15c;
   --nc-red: #ff4d5e;
-  --nc-display: "Archivo", "Avenir Next Condensed", "Segoe UI", sans-serif;
+  --nc-display: "Josefin Sans", "Avenir Next", "Segoe UI", sans-serif;
   --nc-body: "Inter", "Segoe UI", system-ui, sans-serif;
 
   --call-accent: var(--nc-amber);
@@ -27,7 +27,7 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; background: radial-gradient(120% 80% at 50% -10%, #123f3d 0%, var(--nc-night) 60%) fixed, var(--nc-night); color: var(--nc-ink); font: 15px/1.5 var(--nc-body); }
+body { margin: 0; background: radial-gradient(120% 80% at 50% -10%, #2a2414 0%, var(--nc-night) 60%) fixed, var(--nc-night); color: var(--nc-ink); font: 15px/1.5 var(--nc-body); }
 h1, h2, h3 { font-family: var(--nc-display); margin: 0; }
 button { font: inherit; }
 
@@ -118,7 +118,7 @@ button { font: inherit; }
 .nc-set::after { content: ""; position: absolute; inset: 0; background: radial-gradient(60% 70% at 30% 40%, rgba(255, 181, 71, .14), transparent 70%); }
 .nc-desk { position: absolute; left: 0; right: 0; bottom: 0; height: 4.2%; background: linear-gradient(180deg, #6a2f22, #3b1912 60%, #24100b); box-shadow: 0 -1px 0 rgba(255, 210, 170, .35); z-index: 2; }
 .nc-hostcam { position: absolute; left: 0; top: 0; height: 100%; aspect-ratio: 1; z-index: 1;
-  -webkit-mask-image: linear-gradient(90deg, #000 86%, transparent); mask-image: linear-gradient(90deg, #000 86%, transparent); }
+  -webkit-mask-image: linear-gradient(90deg, #000 97%, transparent); mask-image: linear-gradient(90deg, #000 97%, transparent); }
 .nc-feed { position: absolute; inset: 0; border-radius: 0; }
 .nc-feed::after { display: none; }
 .nc-hostcam .call-status { background: radial-gradient(circle at 50% 35%, rgba(255, 255, 255, .05), rgba(0, 0, 0, .55)); }
@@ -206,3 +206,80 @@ button { font: inherit; }
 /* Before the invitation the screen shows the network's slate, nothing of the guest. */
 .tv-idle { background: radial-gradient(circle at 50% 45%, #10302e, #030808 75%); }
 .tv-idle .ll-mark { width: 2.4cqw; height: 2.4cqw; opacity: .8; }
+
+/* ---------- The Gilded Reel ---------- */
+.gr { --gr-gold: #d8b15c; --gr-gold-hi: #f3d891; --gr-deco: "Poiret One", "Josefin Sans", serif; }
+.gr .nc-logo, .gr .nc-lobby-intro h1 { font-family: var(--gr-deco); font-weight: 400; letter-spacing: .08em; }
+.gr .nc-lobby-intro h1 { font-size: clamp(30px, 5.5vw, 48px); color: var(--gr-gold-hi); }
+.gr-logo b { color: var(--gr-gold); font-weight: 400; }
+.gr-fan { width: 1.15em; height: .62em; flex: none; border-radius: 1.2em 1.2em 0 0; align-self: center;
+  background: repeating-conic-gradient(from -90deg at 50% 100%, var(--gr-gold) 0 9deg, transparent 9deg 18deg); }
+.gr-poster { margin: 0; position: relative; border-radius: 14px; overflow: hidden; aspect-ratio: 21 / 8; }
+.gr-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gr-poster figcaption { position: absolute; inset: auto 0 0 0; padding: 14px 18px; display: grid; background: linear-gradient(0deg, rgba(0, 0, 0, .75), transparent); }
+.gr-poster strong { font: 400 clamp(22px, 4vw, 34px)/1 var(--gr-deco); letter-spacing: .3em; color: var(--gr-gold-hi); }
+.gr-poster span { font-size: 13px; color: var(--nc-muted); }
+.gr-cams { display: flex; flex-wrap: wrap; gap: 8px; }
+.nc-chip.is-on { background: var(--gr-gold); color: #14110b; border-color: transparent; }
+
+/* The program: one photograph of the studio, with everything live set into it. */
+.gr-program { grid-area: program; position: relative; aspect-ratio: 1376 / 768; overflow: hidden; border-radius: 14px; background: #000; container-type: inline-size; isolation: isolate;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .5), 0 0 0 1px var(--nc-line); }
+.gr-plate { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.gr-host { position: absolute; z-index: 2;
+  /* A soft edge only (3%), so a hand moving inside the shot is never faded out. */
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent), linear-gradient(180deg, transparent, #000 3%, #000 97%, transparent);
+  -webkit-mask-composite: source-in; mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent), linear-gradient(180deg, transparent, #000 3%, #000 97%, transparent); mask-composite: intersect; }
+.gr-cam { position: absolute; inset: 0; transition: opacity .22s ease; }
+.gr-host.is-side .gr-cam.is-front, .gr-host.is-front .gr-cam.is-side { opacity: 0; }
+.ll-face { position: absolute; inset: 0; overflow: hidden; background: transparent; }
+.ll-face img, .ll-face video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* The screen in the back wall: the film's key art, then the guest. */
+.gr-screen { position: absolute; z-index: 2; overflow: hidden; background: #050505; box-shadow: inset 0 0 1.2cqw rgba(0, 0, 0, .8); }
+.gr-keyart { position: absolute; inset: 0; background-size: cover; background-position: center; display: grid; place-items: center; transition: opacity .7s; }
+.gr-keyart span { font: 400 2.6cqw/1 var(--gr-deco); letter-spacing: .35em; color: var(--gr-gold-hi); text-shadow: 0 0 1cqw rgba(0, 0, 0, .7); padding-left: .35em; }
+.gr-feed { position: absolute; inset: 0; opacity: 0; transition: opacity .7s; }
+.gr-feed .ll-face img, .gr-feed .ll-face video { object-position: center 30%; }
+.gr-screen.is-guest .gr-feed { opacity: 1; }
+.gr-screen.is-guest .gr-keyart { opacity: 0; }
+.gr-calling { position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; background: rgba(0, 0, 0, .55); font: 600 1.1cqw var(--nc-body); letter-spacing: .14em; text-transform: uppercase; color: var(--gr-gold-hi); }
+.gr-glass { position: absolute; inset: 0; z-index: 6; pointer-events: none;
+  background: linear-gradient(118deg, rgba(255, 245, 220, .10) 0%, rgba(255, 245, 220, .03) 26%, transparent 42%); }
+.gr-screen .tv-live { font-size: .75cqw; }
+.gr-screen .tv-name strong { font-size: 1.05cqw; }
+.gr-screen .tv-name span { font-size: .72cqw; }
+
+.gr-bug { font-family: var(--gr-deco); font-weight: 400; letter-spacing: .1em; }
+.gr-bug b { color: var(--gr-gold); font-weight: 400; }
+.gr-bug .gr-fan { width: 2cqw; height: 1.1cqw; }
+.gr-third { position: absolute; left: 3%; bottom: 12%; z-index: 8; display: grid; padding: .7cqw 1.6cqw .8cqw 1.2cqw; border-left: .35cqw solid var(--gr-gold);
+  background: linear-gradient(90deg, rgba(12, 10, 6, .94), rgba(12, 10, 6, .78)); }
+.gr-third strong { font: 400 2cqw/1.15 var(--gr-deco); letter-spacing: .1em; text-transform: uppercase; color: var(--gr-gold-hi); }
+.gr-third span { font-size: 1.15cqw; color: var(--nc-muted); }
+.gr-program .nc-ticker { bottom: 0; height: 5.5%; border-top-color: var(--gr-gold); background: rgba(12, 10, 6, .92); }
+.gr-program .nc-ticker span { font-size: 1.2cqw; }
+
+/* The trailer, full frame. */
+.gr-trailer { position: absolute; inset: 0; z-index: 15; background: #000; overflow: hidden; }
+.gr-trailer::before, .gr-trailer::after { content: ""; position: absolute; left: 0; right: 0; height: 9%; background: #000; z-index: 3; }
+.gr-trailer::before { top: 0; } .gr-trailer::after { bottom: 0; }
+.gr-shot { position: absolute; inset: 0; opacity: 0; transition: opacity .9s ease; }
+.gr-shot.is-on { opacity: 1; }
+.gr-shot img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.02); }
+.gr-shot.is-on img, .gr-shot.is-past img { animation: gr-push 6s linear forwards; }
+@keyframes gr-push { from { transform: scale(1.02); } to { transform: scale(1.14) translate(-1.5%, -1%); } }
+.gr-card { position: absolute; left: 0; right: 0; bottom: 18%; z-index: 2; text-align: center; font: 400 2.6cqw/1.2 var(--gr-deco); letter-spacing: .3em; text-transform: uppercase; color: #f6ecd2;
+  text-shadow: 0 0 1.4cqw rgba(0, 0, 0, .8); opacity: 0; animation: gr-card 5.2s ease forwards; animation-delay: .6s; }
+.gr-card.is-title { bottom: auto; top: 40%; font-size: 6cqw; letter-spacing: .45em; color: var(--gr-gold-hi); }
+@keyframes gr-card { 0% { opacity: 0; letter-spacing: .5em; } 25%, 80% { opacity: 1; } 100% { opacity: 0; } }
+.gr-shot:not(.is-on) .gr-card { animation: none; opacity: 0; }
+.gr-rating { position: absolute; right: 3%; bottom: 11.5%; z-index: 4; font: 600 .95cqw var(--nc-body); letter-spacing: .2em; text-transform: uppercase; color: rgba(246, 236, 210, .7); }
+
+/* Backstage: one card over the whole studio until all three cameras are up. */
+.gr-backstage { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.2cqw; text-align: center;
+  background: radial-gradient(circle at 50% 40%, rgba(40, 33, 18, .95), rgba(6, 5, 3, .98)); color: var(--nc-ink); }
+.gr-backstage strong { font: 400 2.4cqw/1.2 var(--gr-deco); letter-spacing: .12em; text-transform: uppercase; color: var(--gr-gold-hi); }
+.gr-backstage span:not(.gr-spin) { font-size: 1.2cqw; color: var(--nc-muted); }
+.gr-spin { width: 3cqw; height: 3cqw; border-radius: 50%; border: .3cqw solid rgba(216, 177, 92, .25); border-top-color: var(--gr-gold); animation: call-spin 1s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .gr-shot img, .gr-card { animation: none !important; opacity: 1; } .gr-spin { animation-duration: 3s; } }

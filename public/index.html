@@ -301,10 +301,10 @@
         <h4>How it works</h4>
         <ol>
           <li>Your server calls <code>POST /v1/speech_sessions</code> (pinning what the client may not change) and gets a WebSocket address and a token good for one minute.</li>
-          <li>Your client connects, starts the session and streams what the avatar hears: a user's microphone, or another avatar's voice, as in <a href="/apps/tv-show-live/">The Late Line</a>.</li>
+          <li>Your client connects, starts the session and streams what the avatar hears: a user's microphone, or another avatar's voice, as in <a href="/apps/tv-show-live/">The Gilded Reel</a>.</li>
           <li>Answers stream back as audio in the avatar's voice. When the model calls one of your tools, your client runs it and sends the result.</li>
         </ol>
-        <p class="note">Voice only for now. For a face today, hand its audio to an avatar-only render in your own room, as The Late Line does for both its avatars; a face built into the session comes next.</p>
+        <p class="note">Voice only for now. For a face today, hand its audio to an avatar-only render in your own room, as The Gilded Reel does for all three of its faces; a face built into the session comes next.</p>
         <button type="button" class="show" data-show-way="speech-to-speech">Show the speech-to-speech apps</button>
       </article>
       <article class="way-card" aria-labelledby="way-face">
@@ -351,7 +351,7 @@
     "parcel-help-desk": ["📦", ["Support", "Own agent"], "Talk to Tess", "work"],
     "presenter-studio": ["🎙️", ["Studio", "Any audio"], "Put Remy on air", "work"],
     "tv-show": ["📺", ["Talk show", "Two avatars"], "Run the booth", "play"],
-    "tv-show-live": ["🎬", ["Talk show", "Two avatars", "One room"], "Run the booth", "play"],
+    "tv-show-live": ["🎞️", ["Talk show", "Film craft", "Trailer"], "Run the booth", "play"],
   };
   const KINDS = [["all", "All"], ["learn", "Learn"], ["play", "Play"], ["advice", "Advice"], ["work", "Work and live"]];
   // How each app is built: the five above are full-stack; the list says for the others.

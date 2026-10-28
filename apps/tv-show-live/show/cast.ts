@@ -1,7 +1,11 @@
-// The Late Line's cast: invented characters made for this show. The host's
-// portrait is the studio, turned toward the big screen at her left; the guests
-// call in from home and appear on that screen. AVATAR_TV_SHOW_LIVE swaps the host (avatar.json),
-// AVATAR_TV_SHOW_LIVE_GUEST_<ID> a guest.
+// The Gilded Reel's cast and tonight's film. Everything here is invented: the
+// show, the host, the film AMBERFALL and its designer.
+//
+// The studio is one picture (studio/plate.jpg): an art-deco set with the host
+// at her desk and a screen built into the back wall. Both of the host's faces
+// are crops of that picture at STUDIO.host, so her live video sits exactly
+// where she sits in the set; the screen's picture goes in at STUDIO.screen.
+// AVATAR_TV_SHOW_LIVE swaps the host (avatar.json), AVATAR_TV_SHOW_LIVE_GUEST_<ID> a guest.
 export interface Guest {
   id: string;
   name: string;
@@ -12,25 +16,44 @@ export interface Guest {
   rundown: string[];
 }
 
-export const HOST = { name: 'Jada Monroe', billing: 'Host, The Late Line' };
-export const SHOW = 'The Late Line';
+export const SHOW = 'The Gilded Reel';
+export const HOST = { name: 'Jada Monroe', billing: 'Host, The Gilded Reel' };
+/**
+ * Camera 1: Jada facing the lens, for when she speaks to the viewers. A face
+ * only (a render of her voice; her conversation runs on the host avatar).
+ * AVATAR_TV_SHOW_LIVE_FRONT swaps it.
+ */
+export const HOST_FRONT_AVATAR = 'bdaf5bd3-1698-4bc2-abfe-a26c69156794';
+
+/** Where things are in the studio picture, in percent of its width and height. */
+export const STUDIO = {
+  /** The host's square: the crop both of her portraits were cut from (130, 250, 320 of 1376 × 768). */
+  host: { left: 9.448, top: 32.552, width: 23.256, height: 41.667 },
+  /** The screen in the back wall (748–1145 × 222–456 of 1376 × 768), grown a pixel each way to cover its edge. */
+  screen: { left: 54.29, top: 28.78, width: 29.07, height: 30.86 },
+};
+
+export const FILM = {
+  title: 'AMBERFALL',
+  logline: 'a desert epic on a world of moving amber dunes and colossal salt-glass monoliths, where a queen leads her caravan across the desert to the glass palace of her ancestors',
+  /** The trailer: each still is held and pushed in on, with its card (if any) over it. */
+  trailer: [
+    { still: 1, card: '' },
+    { still: 2, card: 'This winter' },
+    { still: 3, card: 'Every empire' },
+    { still: 4, card: 'is made of sand' },
+    { still: 5, card: 'AMBERFALL', title: true },
+  ],
+};
 
 export const GUESTS: Guest[] = [
   {
-    id: 'otto',
-    name: 'Otto Brandt',
-    billing: 'inventor of magnificent, mostly useless machines',
-    from: 'his workshop above a bakery',
-    avatarId: '9b4228cf-ca32-4b2a-8ac3-4cba3cd4e7c7',
-    rundown: ['The Singing Toaster', 'The Umbrella That Remembers', 'Bernoulli the cat and his office', 'Fifty years of magnificent failure'],
-  },
-  {
-    id: 'rosa',
-    name: 'Rosa Quintero',
-    billing: 'big-wave surfer turned taco-stand owner',
-    from: 'her taco stand on Playa Larga',
-    avatarId: '8c20336d-cbf8-4054-8013-be5b2af38835',
-    rundown: ['The wave they called La Bestia', 'Why she quit competing', 'The secret mango salsa', 'Chancla, the napkin guard'],
+    id: 'ines',
+    name: 'Inès Valcour',
+    billing: `costume and production designer of ${FILM.title}`,
+    from: 'her atelier',
+    avatarId: '5190aed1-124c-4447-adb8-7045d8b35fb1',
+    rundown: ["The queen's amber veil", 'Four hundred caravan robes', 'Building the salt-glass monoliths', 'The glass palace and its lanterns'],
   },
 ];
 

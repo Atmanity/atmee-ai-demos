@@ -1,5 +1,5 @@
-// The Late Line's server side. A show is one LiveKit room of this site's own
-// with two faces in it, the host's and the guest's, each an avatar-only render
+// The Gilded Reel's server side. A show is one LiveKit room of this site's own
+// with three faces in it: the host's two cameras and the guest's, each an avatar-only render
 // under its own identity, and two speech-to-speech sessions, one per avatar,
 // that the page wires to each other: each one's voice is the other's ears, and
 // each one's voice is its face's speech. The API key and the LiveKit secret
@@ -10,7 +10,7 @@
 //   POST /api/apps/tv-show-live/show/<show>/<seat>/speech    the seat's speech session: { url, token }
 //   POST .../render/<id>/end, .../speech/<id>/end, /show/<show>/end
 //
-// <seat> is host or guest. Each speech session is pinned to its role on the
+// <seat> is host, guest or front (camera 1: a second face of the host, render only). Each speech session is pinned to its role on the
 // show (scenario, user_name): the page cannot change who an avatar thinks it
 // is talking to.
 import { randomUUID } from 'node:crypto';
@@ -19,24 +19,26 @@ import type { AppServer } from '../../server/app-server.ts';
 import { avatarApi } from '../../server/atmee.ts';
 import { avatarFor } from '../../server/hosts.js';
 import { endRender, renderConfigured, startRender } from '../../server/render.ts';
-import { GUESTS, HOST, guestById, type Guest } from './show/cast.ts';
+import { GUESTS, HOST, HOST_FRONT_AVATAR, guestById, type Guest } from './show/cast.ts';
 import { DELIVERY, guestScenario, hostScenario } from './show/script.ts';
 
 const ID = 'tv-show-live';
 const MAX_SECONDS = 900;
 
-type Seat = 'host' | 'guest';
+/** host and guest each have a speech session and a face; front is a second face of the host (camera 1). */
+type Seat = 'host' | 'guest' | 'front';
 interface Show { room: string; guest: Guest; renders: Map<string, Seat>; speech: Map<string, Seat>; at: number }
 const shows = new Map<string, Show>();
 
 const guestAvatar = (g: Guest) => process.env[`AVATAR_TV_SHOW_LIVE_GUEST_${g.id.toUpperCase()}`] || g.avatarId;
-const avatarOf = (show: Show, seat: Seat) => (seat === 'host' ? avatarFor(ID) : guestAvatar(show.guest));
+const avatarOf = (show: Show, seat: Seat) => (seat === 'host' ? avatarFor(ID)
+  : seat === 'front' ? process.env.AVATAR_TV_SHOW_LIVE_FRONT || HOST_FRONT_AVATAR : guestAvatar(show.guest));
 const maxSeconds = () => Number(process.env.MAX_SECONDS) || MAX_SECONDS;
 
 function showFor(req: { params: Record<string, string> }, res: Response): { show: Show; seat: Seat } | null {
   const show = shows.get(req.params.show);
   const seat = req.params.seat;
-  if (!show || (seat !== 'host' && seat !== 'guest')) {
+  if (!show || (seat !== 'host' && seat !== 'guest' && seat !== 'front')) {
     res.status(404).json({ error: 'not_found' });
     return null;
   }
@@ -60,9 +62,9 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 
 const app: AppServer = {
   id: ID,
-  title: 'The Late Line',
-  tagline: 'A talk show on speech-to-speech: Jada and her guest hear each other directly, in one room.',
-  brand: { color: '#0d2b2b', ink: '#ffffff' },
+  title: 'The Gilded Reel',
+  tagline: 'A late-night show on the art of film: a trailer, then the designer on the studio screen, live on speech-to-speech.',
+  brand: { color: '#14110b', ink: '#e7c873' },
   way: 'speech-to-speech',
   maxSeconds: MAX_SECONDS,
   routes(router) {
@@ -76,7 +78,7 @@ const app: AppServer = {
       if (!guest) return void res.status(404).json({ error: 'unknown_guest' });
       if (!avatarFor(ID)) return void res.status(500).json({ error: 'no_avatar' });
       const showId = randomUUID();
-      shows.set(showId, { room: `late-line-${showId}`, guest, renders: new Map(), speech: new Map(), at: Date.now() });
+      shows.set(showId, { room: `gilded-reel-${showId}`, guest, renders: new Map(), speech: new Map(), at: Date.now() });
       // A show nobody ended is forgotten once its sessions can no longer run.
       setTimeout(() => shows.delete(showId), (maxSeconds() + 600) * 1000).unref();
       console.log('[%s] show %s with guest %s', ID, showId.slice(0, 8), guest.id);
@@ -118,6 +120,7 @@ const app: AppServer = {
       const found = showFor(req, res);
       if (!found) return;
       const { show, seat } = found;
+      if (seat === 'front') return void res.status(404).json({ error: 'not_found' });
       const settings = seat === 'host'
         ? { scenario: hostScenario(show.guest), user_name: show.guest.name, instructions: DELIVERY }
         : { scenario: guestScenario(show.guest), user_name: HOST.name, instructions: DELIVERY };

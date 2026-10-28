@@ -1,134 +1,90 @@
-# The Late Line: a talk show on speech-to-speech
+# The Gilded Reel: a late-night show on the art of film, on speech-to-speech
 
-Jada Monroe hosts a late-night talk show and invites a guest onto the studio's big screen; both are Atmee avatars. Unlike
-[Nightcap Live](../tv-show/README.md), the two hear each other **directly**: each avatar has a
-speech-to-speech session, and each one's voice is what the other one hears. Both faces are in
-**one** LiveKit room, the studio's. The person at the page is the producer: they never speak; they
-book the guest, write the rundown, and send Jada topics and notes, which she opens with the guest.
+Jada Monroe hosts a late-night show about how films are designed and made. She introduces tonight's
+film, rolls its trailer, then invites its costume and production designer onto the screen in the
+studio wall; the two talk craft. Both are Atmee avatars and they hear each other **directly**: each
+has a speech-to-speech session, and each one's voice is what the other hears. The person at the
+page is the producer: they never speak; they write the rundown, send Jada topics and notes, cut
+between her cameras if they want, and wrap the show.
 
-Built the speech-to-speech way (`POST /v1/speech_sessions`), with each face an avatar-only render
-(`POST /v1/avatars/{id}/avatar_sessions`) of that voice. No platform changes.
+Everything is invented: the show, the host, the film **AMBERFALL** (a desert epic of amber dunes
+and salt-glass monoliths) and its designer, Inès Valcour.
+
+Built the speech-to-speech way (`POST /v1/speech_sessions`), with every face an avatar-only render
+(`POST /v1/avatars/{id}/avatar_sessions`) of a voice, all in one LiveKit room of the site's own.
+No platform changes.
 
 ## How it works
 
 ```
-                         producer (types only)
-                                │ topics, notes, wrap
-                                ▼
-┌──────────────────── page (apps/tv-show-live/page) ─────────────────────┐
-│ booth (show/booth.ts): stages; cues → causeur.directive.set / commentary │
-│                                                                          │
-│  Jada's speech session ── her voice ──► Otto's session (what he hears)   │
-│          ▲                     │                                         │
-│          └──── his voice ──────┼──────── Otto's speech session           │
-│                                ▼                     │                   │
-│              Jada's face ◄─ 16 kHz pieces      pieces ─► Otto's face      │
-└──────────────┬──────────────────────────────────────────────┬───────────┘
-               │ WebSockets (token per seat)                  │ one LiveKit room, the site's own
-       Atmee speech server                         two avatar-only renders, `face-host-…`, `face-guest-…`
-               ▲                                              ▲
-               └──── server.ts: /v1/speech_sessions × 2, /v1/avatars/{id}/avatar_sessions × 2 ────┘
+                        producer (types only): topics, notes, camera, wrap
+                                       │
+┌────────────────────── page (apps/tv-show-live/page) ──────────────────────┐
+│ booth (show/booth.ts): greeting → film → trailer → invite → on air → wrap   │
+│                                                                             │
+│  Jada's speech session ── her voice ──► Inès's session (what she hears)     │
+│        ▲                      │ └──────► camera 1 + camera 2 (Jada's faces) │
+│        └─── Inès's voice ─────┼────────── Inès's speech session             │
+│                               └────────► Inès's face (the studio screen)    │
+└──────────────┬───────────────────────────────────────────┬────────────────┘
+               │ WebSockets (token per seat)               │ one LiveKit room, three renders
+        Atmee speech server                     face-host-…, face-front-…, face-guest-…
 ```
 
-- **Two speech sessions, wired to each other.** The server reserves each one (the API key stays
-  there) and **pins its role**: `scenario` and `user_name`, so Jada's session knows the user is
-  her guest and the guest's knows the user is Jada. The page connects to each WebSocket with its
-  token, keeps its input fed in real time (a frame of silence whenever nothing else is due), and
-  forwards every frame of each avatar's voice into the other's input. Turn-taking is theirs: they
-  listen to each other as to a person.
-- **The studio and its TV.** Jada's portrait is the studio, her whole body turned toward the big
-  screen at her left. The page carries the set on past her square shot and hangs a flat-panel TV
-  on the wall, angled toward her: thin bezel, glass glare, a faint pixel grid, the screen's light
-  on the wall, the network's live tag and name strip on the guest's feed. The guests call in from
-  home (their own portraits).
-- **Showtime only when everyone is in place.** Both faces start backstage, behind one card; Jada's
-  line opens, and the show starts, only once both are up. The guest's face waits with the TV on
-  standby until Jada invites them on.
-- **One room, two faces.** The server starts both renders into the show's room, each under its own
-  identity; the page joins the room twice, once as each face's agent. Each avatar's whole voice is
-  resampled from 24 kHz to 16 kHz and streamed to its face as **one** piece for the show, silence
-  included, in 100 ms writes; the face publishes the face and the voice in sync. (Measured live
-  against the raw voice: cutting it into a piece per stretch of speech lost 1.3 s of 13.8 s to
-  dropouts, since every new piece starts the renderer cold; one stream lost 0.05 s of 13.4 s.)
-  `show/voice.ts` also finds the stretches of speech, which tell the booth who is speaking. The
-  page plays the faces' voices, not the raw speech.
-- **The booth** (`show/booth.ts`, tested in `booth.test.ts`): Jada greets the viewers alone; then
-  she is directed to say who tonight's guest is and invite them onto the big screen; once she has,
-  the guest's line opens and the TV comes on, the guest's first words reach her, and she is
-  directed to welcome them with a first question. A conversation that stalls (both quiet 10 s) gets
-  a prompt for Jada to pick it back up, up to three times; a guest who never says goodbye does not
-  keep the show open past 15 s. A
-  producer's cue is a directive on Jada's session (`causeur.directive.set`), taken off once she
-  has finished a turn that began after it; on a floor quiet for 10 s it is also spoken at once as
-  commentary (`session.commentary.append`). The wrap directs Jada to close, then the guest to say
-  goodbye, and the show ends itself.
+- **The studio is one photograph** (`studio/plate.jpg`): an art-deco set with Jada at her desk and
+  a screen built into the back wall. Jada's two avatars were made from crops of that photograph at
+  the same spot (`STUDIO.host` in `show/cast.ts`), so her live video sits exactly where she sits in
+  the set, with only a 3% soft edge; the screen's picture (the film's key art, then Inès) goes in
+  at the screen's measured rectangle (`STUDIO.screen`, found from a pure-green screen in the
+  generated set). Nothing is pasted over a blur: the set around both is the real picture.
+- **Two cameras on Jada.** Camera 1 faces the lens (her greeting, the film, the invitation, the
+  wrap); camera 2 is turned toward the screen (once the guest is on). Both are separate avatars fed
+  the same voice, so both are always lip-synced; the page cuts between them (a 0.2 s dissolve) and
+  plays only the one on air. The booth can override: Auto, Jada to camera, Jada to guest.
+- **Showtime only when everyone is in place.** All three faces start backstage behind one card;
+  Jada's line opens, and the show starts, only once all are up.
+- **The trailer**: after Jada introduces AMBERFALL, the program cuts full frame to the trailer:
+  five generated stills, each held and pushed in on with a dissolve between, cards over them,
+  letterbox bars (about 26 s). No video model is available on the site's Gemini key, so it is a
+  still-based trailer. Jada's cameras are muted while it plays.
+- **Two speech sessions, wired to each other.** The server reserves each one and pins its role
+  (`scenario`, `user_name`, and a plain-delivery `instructions`). The page keeps each input fed in
+  real time and forwards every frame of each avatar's voice to the other. Each face gets its voice
+  as one unbroken stream, resampled to 16 kHz (a piece per stretch of speech lost 1.3 s of 13.8 s
+  to dropouts; one stream lost 0.05 s).
+- **The booth** (`show/booth.ts`, tested in `booth.test.ts`): Jada greets the viewers; she is
+  directed to introduce the film and roll the trailer; once the trailer is over she speaks up on
+  her own (commentary, retried until she does) to react and invite Inès on; Inès's line opens, her
+  first words reach Jada, and Jada welcomes her with the first topic. Producer cues are a one-turn
+  `causeur.directive.set` on Jada's next turn; a conversation stalled for 10 s gets a prompt to
+  pick it back up (three tries); the wrap has Jada close and Inès say goodbye, and the show ends
+  even if she does not.
 
 ## The API
 
 | Call | What for |
 |---|---|
-| `POST /v1/speech_sessions` × 2 | each avatar's session, `maxDurationSeconds` 900, with `settings` pinning `scenario` and `user_name` |
-| `POST /v1/avatars/{id}/avatar_sessions` × 2 | each face, into the show's room under its own identity (`face-host-…`, `face-guest-…`, fresh per attempt); a gateway timeout while the v2 pool starts a worker is retried as warming |
-| `POST /v1/speech_sessions/{id}/end`, `POST /v1/avatar_sessions/{id}/end` | all four, at the end, from End the show, or when any one drops |
+| `POST /v1/speech_sessions` × 2 | Jada's and Inès's sessions, `settings` pinning `scenario`, `user_name`, `instructions` |
+| `POST /v1/avatars/{id}/avatar_sessions` × 3 | Jada's two cameras and Inès's face, into the show's room under fresh identities; a gateway timeout while the v2 pool starts a worker is retried as warming |
+| `POST /v1/speech_sessions/{id}/end`, `POST /v1/avatar_sessions/{id}/end` | all five, at the end, from End the show, or when one drops |
 
-On each speech WebSocket: `session.start`, `session.input_audio.append` (what the avatar hears),
-`session.output_audio.delta` and `session.output_transcript.delta` (what it says),
-`causeur.directive.set` and `session.commentary.append` (the producer's cues).
+On each speech WebSocket: `session.start`, `session.input_audio.append`, `session.output_audio.delta`,
+`session.output_transcript.delta`, `causeur.directive.set`, `session.commentary.append`.
 
-Routes (`server.ts`): `POST /api/apps/tv-show-live/shows`, then per seat (`host`, `guest`)
-`/show/<show>/<seat>/render` and `/show/<show>/<seat>/speech`, each with `/<id>/end`, and
-`/show/<show>/end`. `server/render.ts`'s `startRender` gained a room and an avatar identity, so
-several faces can share a room.
+## The cast (staging, the demo account)
 
-## The cast
-
-All three are invented characters, made for this show (staging, the demo account):
-
-- **Jada Monroe** `307b2aba`, the host: at the studio desk, her whole body turned toward her
-  guest (generated facing her right, then mirrored), a designed voice.
-- **Otto Brandt** `9b4228cf`, an inventor of magnificent, mostly useless machines.
-- **Rosa Quintero** `8c20336d`, a big-wave surfer turned taco-stand owner.
-
-Both sessions carry a pinned delivery instruction (plain words, no bracketed cues), since the
-voices laughed far too often.
-
-`AVATAR_TV_SHOW_LIVE` swaps the host; `AVATAR_TV_SHOW_LIVE_GUEST_<ID>` a guest.
-
-## Running it
-
-Needs the site's own LiveKit project (`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, in
-`.env.local` locally; the deployment reads the `livekit-demos` secret) and a key with the
-`sessions` scope on an account whose avatars these are. Without LiveKit, booking a show answers
-`livekit_not_configured`.
+- **Jada Monroe** `307b2aba` (camera 2 and her speech session) and **Jada Monroe (camera 1)**
+  `bdaf5bd3` (a face only), both cut from the studio photograph; a designed voice.
+- **Inès Valcour** `5190aed1`, AMBERFALL's costume and production designer, at her atelier.
 
 ## Limitations
 
-- **Four things bill at once**: two speech sessions and two renders.
-- **The show plays about 4 s late**: each avatar hears the other's raw voice as it is made, while
-  the viewer sees and hears it from the faces about 4 s later (both equally, like a broadcast delay).
-- **Speech recognition sits between them**, so a misheard word or an overlap is still possible.
-- **Check-ins stay on** (a public session may not change them), which is harmless while the two
-  hear each other.
-- **No audience yet**: the room holds the show, so a broadcast is a recording of that room
-  (LiveKit egress); this app does not start one.
+- **Five things bill at once**: two speech sessions and three renders.
+- **The show plays about 4 s late** (both renders equally, like a broadcast delay); each avatar
+  hears the other's raw voice as it is made.
+- **A hand that moves past Jada's crop disappears there**: the crop is all the renderer draws.
+- **The camera is the renderer's**: there is no setting for a locked-off camera or a fixed render
+  prompt per avatar (checked in the renderer's code); background drift inside her crop is possible.
+- **Check-ins and the speech server's idle mode stay on** (a public session may not change them).
+- **No audience**: the room holds the faces; a broadcast would record this page.
 - **Staging only**: `/v1/speech_sessions` is not on prod yet.
-
-## Live runs
-
-2026-10-28, staging:
-
-- Headless, two speech sessions piped into each other (the studio Nico and Lumi) held a natural
-  back-and-forth for 75 s with no relay and no check-ins.
-- The page, driven headless as the producer, with Otto: both faces in one room, Jada greeted on
-  camera, introduced Otto and asked about the Singing Toaster; a topic (the Umbrella That
-  Remembers) and a note ("which invention exploded": the butter churn that coated the ceiling)
-  each landed on her next turn and were cleared after it; the wrap, Otto's goodbye ("Do mind the
-  ceiling butter"), and the show ended itself at 206 s.
-- With the TV and the invitation, Otto: Jada greeted the viewers alone, invited him onto the big
-  screen, welcomed him; a topic and a note each landed on her next turn; the wrap and goodbyes; the
-  show ended itself at 212 s. An earlier run stalled: Jada cut into a pause with "hold on", Otto's
-  session took it as a request to wait and went quiet (the speech server's idle module, which a
-  public session cannot turn off). Jada now waits through pauses, and a stall gets a prompt.
-- Found and fixed live: two faces at once need a second v2 worker, whose start outlasted the
-  gateway (524), so a gateway timeout is now retried as warming; and Jada said "my producers tell
-  me", so her scenario no longer names who sends the topics.

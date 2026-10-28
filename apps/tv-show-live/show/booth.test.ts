@@ -1,23 +1,30 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createBooth, GOODBYE_WAIT_MS, GREETING_WAIT_MS, IDLE_MS, NUDGES, TURN_QUIET_MS, type Delivery } from './booth.ts';
+import { createBooth, DIRECTIVE_LEAD_MS, GOODBYE_WAIT_MS, GREETING_WAIT_MS, IDLE_MS, NUDGES, SPEAK_UP_MS, TURN_QUIET_MS, type Delivery } from './booth.ts';
+
+const REPLY_DELAY_MS = DIRECTIVE_LEAD_MS + 500;
 
 function setup() {
   const sent: Delivery[] = [];
   const dial = vi.fn();
-  const booth = createBooth({ deliver: (d) => sent.push(d), dialGuest: dial, invite: 'INVITE', welcome: 'WELCOME', nudge: 'NUDGE', wrap: 'WRAP', goodbye: 'BYE' });
+  const roll = vi.fn();
+  const booth = createBooth({ deliver: (d) => sent.push(d), dialGuest: dial, rollTrailer: roll, film: 'FILM', invite: 'INVITE', welcome: 'WELCOME', nudge: 'NUDGE', wrap: 'WRAP', goodbye: 'BYE' });
+  // A turn: a moment to start (a reply takes a few seconds to make), speech, then quiet.
   const turn = (role: 'host' | 'guest') => {
+    vi.advanceTimersByTime(REPLY_DELAY_MS);
     booth.speaking(role, true);
     vi.advanceTimersByTime(2000);
     booth.speaking(role, false);
     vi.advanceTimersByTime(TURN_QUIET_MS);
   };
-  return { booth, sent, dial, turn };
+  return { booth, sent, dial, roll, turn };
 }
 
 function onAir() {
   const s = setup();
   s.booth.hostLive();
   s.turn('host');            // the greeting
+  s.turn('host');            // the film, "roll the trailer"
+  s.booth.trailerDone();
   s.turn('host');            // the invitation
   s.booth.guestLive();
   s.turn('guest');           // "can you hear me?"
@@ -30,22 +37,57 @@ beforeEach(() => { vi.useFakeTimers(); });
 afterEach(() => { vi.useRealTimers(); });
 
 describe('the opening', () => {
-  it('directs the invitation after the greeting, and dials the guest only once it is spoken', () => {
+  it('directs the film after the greeting and rolls the trailer once she has introduced it', () => {
+    const { booth, sent, roll, dial, turn } = setup();
+    booth.hostLive();
+    turn('host');
+    expect(sent).toEqual([{ to: 'host', kind: 'directive', text: 'FILM' }]);
+    expect(booth.stage).toBe('introducing');
+    turn('host');
+    expect(sent.at(-1)).toEqual({ to: 'host', kind: 'directive', text: '' });
+    expect(roll).toHaveBeenCalledOnce();
+    expect(booth.stage).toBe('trailer');
+    expect(dial).not.toHaveBeenCalled();
+  });
+
+  it('has her speak up after the trailer, then dials the guest once the invitation is spoken', () => {
     const { booth, sent, dial, turn } = setup();
     booth.hostLive();
     turn('host');
-    expect(sent).toEqual([{ to: 'host', kind: 'directive', text: 'INVITE' }]);
+    turn('host');
+    sent.length = 0;
+    booth.trailerDone();
     expect(booth.stage).toBe('inviting');
-    expect(dial).not.toHaveBeenCalled();
+    expect(sent).toEqual([{ to: 'host', kind: 'commentary', text: 'INVITE' }]);
     turn('host');
     expect(sent.slice(1)).toEqual([
       { to: 'host', kind: 'directive', text: '' },
       { to: 'host', kind: 'directive', text: 'WELCOME' },
     ]);
     expect(dial).toHaveBeenCalledOnce();
-    expect(booth.stage).toBe('dialing');
     booth.guestLive();
     expect(booth.stage).toBe('on-air');
+  });
+
+  it('asks again when she does not speak up after the trailer, three times in all', () => {
+    const { booth, sent, turn } = setup();
+    booth.hostLive();
+    turn('host');
+    turn('host');
+    sent.length = 0;
+    booth.trailerDone();
+    vi.advanceTimersByTime(SPEAK_UP_MS * 5);
+    expect(sent.filter((d) => d.text === 'INVITE')).toHaveLength(3);
+  });
+
+  it('pays no attention to her talking during the trailer', () => {
+    const { booth, dial, turn } = setup();
+    booth.hostLive();
+    turn('host');
+    turn('host');
+    turn('host');            // a check-in while the trailer plays
+    expect(booth.stage).toBe('trailer');
+    expect(dial).not.toHaveBeenCalled();
   });
 
   it('takes the welcome directive off after the host has welcomed the guest', () => {
@@ -53,17 +95,20 @@ describe('the opening', () => {
     booth.hostLive();
     turn('host');
     turn('host');
+    booth.trailerDone();
+    turn('host');
     booth.guestLive();
     turn('guest');
+    expect(sent.at(-1)).toEqual({ to: 'host', kind: 'directive', text: 'WELCOME' });
     turn('host');
     expect(sent.at(-1)).toEqual({ to: 'host', kind: 'directive', text: '' });
   });
 
-  it('gets on with the invitation when the host never greets', () => {
+  it('gets on with the film when the host never greets', () => {
     const { booth, sent } = setup();
     booth.hostLive();
     vi.advanceTimersByTime(GREETING_WAIT_MS);
-    expect(sent).toEqual([{ to: 'host', kind: 'directive', text: 'INVITE' }]);
+    expect(sent).toEqual([{ to: 'host', kind: 'directive', text: 'FILM' }]);
   });
 });
 
@@ -103,10 +148,9 @@ describe("the producer's cues", () => {
 
   it('are not spoken over a reply that is only slow to start', () => {
     const { booth, sent, turn } = onAir();
-    vi.advanceTimersByTime(5000);
+    vi.advanceTimersByTime(2000);
     booth.cue('TOPIC');
-    vi.advanceTimersByTime(3000);
-    turn('host');
+    turn('host');             // her reply starts a few seconds later, inside the idle window
     vi.advanceTimersByTime(IDLE_MS);
     // The host took the cue in her turn: it is never spoken over it (a later stall gets a prompt of its own).
     expect(sent.filter((d) => d.kind === 'commentary' && d.text === 'TOPIC')).toEqual([]);
@@ -140,6 +184,21 @@ describe('a stalled conversation', () => {
 });
 
 describe('the wrap', () => {
+  it('is not taken by a reply that was already starting when it landed', () => {
+    const { booth, sent, turn } = onAir();
+    booth.wrap();
+    vi.advanceTimersByTime(DIRECTIVE_LEAD_MS - 1000);
+    booth.speaking('host', true);   // the reply already in flight when the wrap landed: not the wrap
+    vi.advanceTimersByTime(2000);
+    booth.speaking('host', false);
+    vi.advanceTimersByTime(TURN_QUIET_MS);
+    expect(booth.stage).toBe('on-air');
+    expect(sent.at(-1)).toEqual({ to: 'host', kind: 'directive', text: 'WRAP' });
+    turn('guest');
+    turn('host');            // her next turn is the wrap
+    expect(booth.stage).toBe('closing');
+  });
+
   it('ends the show when the guest never says goodbye', () => {
     const { booth, turn } = onAir();
     booth.speaking('guest', true);
