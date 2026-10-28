@@ -137,7 +137,9 @@ export const STABLE_PICTURE =
   'lighting, and background stable throughout the video. Avoid sudden motion changes, unnatural expression shifts, frame-to-frame appearance variation, ' +
   'flickering, jitter, ghosting, texture instability, temporal artifacts, or deformation. All ' +
   'motion should be coherent, fluid, stable, and naturally driven by the audio.';
-const prompt = (state: string, setting: string) => `${state}\n\n${setting}\n\n${STABLE_PICTURE}`;
+// The framing, said outright: Causeur's "fixed camera" alone left this renderer zooming in and out.
+const FRAMING = 'The camera is locked off on a tripod: one fixed medium shot, exactly as framed at the start, the whole upper body and the desk always in frame. The camera never zooms in or out, never pushes in, never pans or tilts.';
+const prompt = (state: string, setting: string) => `${state}\n\n${setting}\n\n${FRAMING} ${STABLE_PICTURE}`;
 const STUDIO = 'The setting is a late-night TV studio: walnut wall panels, a brass art-deco fan, a tall window onto a city at night, warm low light.';
 /**
  * While listening, small reactions, which the page rotates every LISTENING_EVERY_MS so the face
