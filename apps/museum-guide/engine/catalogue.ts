@@ -204,10 +204,12 @@ const keyWords = (text: string) => words(text).split(' ').filter((w) => w && !ST
  */
 export function findExhibit(text: string): Exhibit | null {
   // A name in another language (Edmund says the works' titles as the visitor's language does): its title, or its artist.
+  // Another script is tried first; a Latin one ("Die Nachtwache", "La ronda de noche") once the English names have not matched.
   const spoken = letters(text);
+  const local = () => (spoken ? EXHIBITS.find((e) => localNames.get(e.id)?.some((n) => spoken === n || (n.length >= 2 && spoken.includes(n)) || (n.length >= 3 && n.includes(spoken)))) ?? null : null);
   if (spoken && /[^a-z0-9]/.test(spoken)) {
-    const local = EXHIBITS.find((e) => localNames.get(e.id)?.some((n) => spoken === n || (n.length >= 2 && spoken.includes(n)) || (n.length >= 3 && n.includes(spoken))));
-    if (local) return local;
+    const found = local();
+    if (found) return found;
   }
   const asked = words(text);
   if (!asked) return null;
@@ -223,7 +225,7 @@ export function findExhibit(text: string): Exhibit | null {
     const score = hits / Math.max(1, wanted.size);
     if (hits && (!best || score > best.score)) best = { exhibit, score };
   }
-  return best && best.score >= 0.34 ? best.exhibit : null;
+  return best && best.score >= 0.34 ? best.exhibit : local();
 }
 
 /** A work's catalogue record as Edmund is given it. */

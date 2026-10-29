@@ -193,6 +193,32 @@ describe('a guest warmed up ahead', () => {
     expect(calls.guestApp).toBe('museum-guide/guest/wanderer');
   });
 
+  it('does not take a call the page hung up for a dropped one', async () => {
+    const { update } = await onTour();
+    act(() => calls.label!(pearl()));
+    update();
+    await act(async () => {});
+    guestArrives(update);
+    fireEvent.click(screen.getByRole('button', { name: 'Back to camera' }));
+    // Moving on to the wanderer hangs the girl up; her end arrives once the wanderer is chosen.
+    act(() => calls.label!(exhibitById('wanderer')!));
+    update();
+    await act(async () => {});
+    calls.guest.phase = 'ended';
+    act(() => { calls.handlers.guest.onEnded?.(); });
+    update();
+    calls.guest.phase = 'idle';
+    await act(async () => {});
+    const starts = (calls.guest.start as ReturnType<typeof vi.fn>).mock.calls.length;
+    calls.guest.phase = 'connecting';
+    update();
+    // Meet while the wanderer is still joining waits for that call: it is not hung up and placed again.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Meet the wanderer' })[0]);
+    await act(async () => {});
+    expect(calls.guest.start).toHaveBeenCalledTimes(starts);
+    expect(calls.guest.end).toHaveBeenCalledTimes(1);
+  });
+
   it('is placed again at Meet when their warm call dropped meanwhile', async () => {
     const { update } = await onTour();
     act(() => calls.label!(pearl()));

@@ -133,9 +133,13 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
   const starting = useRef(false);   // set before the first await: a second click while the mic prompt is up starts nothing
   // end() while a call is still being placed: the call is ended as soon as it connects, so it never bills unseen.
   const endWanted = useRef(false);
+  // Settles once the start under way has finished (and, when end() was asked for meanwhile, hung up): end() waits for it.
+  const startDone = useRef<Promise<void>>(Promise.resolve());
   const start = useCallback(async ({ mic = false, micMuted = false, camera = null, language }: { mic?: boolean; micMuted?: boolean; camera?: MediaStreamTrack | null; language?: string } = {}) => {
     if (sessionRef.current || starting.current) return;
     starting.current = true;
+    let settle!: () => void;
+    startDone.current = new Promise<void>((resolve) => { settle = resolve; });
     endWanted.current = false;
     betweenCalls.current = false;
     setErrorCode(undefined); setDetail(''); setLines([]); setCaption(''); setHeard(''); setFilesAccepted(false);
@@ -227,11 +231,17 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
       }
     } finally {
       starting.current = false;
+      settle();
     }
   }, [app, addLine]);
 
   const end = useCallback(async () => {
-    if (!sessionRef.current && starting.current) endWanted.current = true;
+    // Still being placed: resolves once it has connected and been hung up, so a start() after it is not a no-op.
+    if (!sessionRef.current && starting.current) {
+      endWanted.current = true;
+      await startDone.current;
+      return;
+    }
     await sessionRef.current?.end();
   }, []);
 

@@ -125,7 +125,14 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   const warmTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // The last guest call being hung up: the next one starts once it has (the guests share one call, whose start does nothing while one is still up).
   const guestGone = useRef<Promise<unknown>>(Promise.resolve());
-  const endGuest = () => { guestGone.current = guestRef.current?.end() ?? Promise.resolve(); };
+  // Hung up by the page (moving on, Edmund back): its end is not a dropped call.
+  const guestHungUp = useRef(false);
+  const endGuest = () => {
+    if (guestRef.current && guestRef.current.phase !== 'idle' && guestRef.current.phase !== 'ended' && guestRef.current.phase !== 'failed') guestHungUp.current = true;
+    guestGone.current = guestRef.current?.end() ?? Promise.resolve();
+  };
+  // The wait for Edmund's goodbye before a warm guest comes on.
+  const meetTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const mode = useRef<Mode>('host');
   // "Point the camera at a work…": a first hint, gone once a work is found or after a little while.
   const [pointHintGone, setPointHintGone] = useState(false);
@@ -247,6 +254,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     if (mode.current !== 'host') return false;
     setMode('to-guest');
     clearTimeout(warmTimer.current);
+    clearInterval(meetTimer.current);
     setInfo(null);
     if (how === 'button') hostRef.current?.event(said.handOverPressed(g), 20);
     if (guestNow.current?.id === g.id && guestReady.current) {
@@ -257,7 +265,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
       let spoke = false;
       let quietSince = 0;
       const id = setInterval(() => {
-        if (mode.current !== 'to-guest') { clearInterval(id); return; }
+        if (mode.current !== 'to-guest' || meetTimer.current !== id) { clearInterval(id); return; }
         const now = Date.now();
         if (hostRef.current?.speaking) { spoke = true; quietSince = 0; }
         else if (!quietSince) quietSince = now;
@@ -266,6 +274,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
         clearInterval(id);
         guestOnStage();
       }, 200);
+      meetTimer.current = id;
       return true;
     }
     // Still joining: on stage the moment the call is live. Not started (or another's): start it now.
@@ -446,12 +455,13 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     onEnded: () => {
       if (ending.current) { callGen.current++; setScreen((s) => (s === 'tour' ? 'visit' : s)); return; }
       guestReady.current = false;
+      if (guestHungUp.current) { guestHungUp.current = false; return; }
       // Dropped while talking: Edmund comes back (and is told whom the visitor met).
       if (mode.current === 'guest') callHostBack('dropped');
       // Dropped while waiting to be met (or still joining for Meet): placed again when asked for.
       else if (guestNow.current) {
         guestDropped.current = true;
-        if (mode.current === 'to-guest') { const g = guestNow.current; setMode('host'); handOver(g, 'tool'); }
+        if (mode.current === 'to-guest') { clearInterval(meetTimer.current); const g = guestNow.current; setMode('host'); handOver(g, 'tool'); }
       }
     },
   });
@@ -590,6 +600,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     ending.current = true;
     clearInterval(backTimer.current);
     clearTimeout(warmTimer.current);
+    clearInterval(meetTimer.current);
     void host.end();
     void guestCall.end();
   };

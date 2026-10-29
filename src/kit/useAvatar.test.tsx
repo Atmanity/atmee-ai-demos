@@ -133,3 +133,13 @@ test('ending while the call is still being placed ends it as soon as it connects
   expect(joins[0].session.ended).toBe(true);
   expect(result.current.phase).toBe('ended');
 });
+
+test('ending a call still being placed resolves once it has hung up, so a start right after places a new call', async () => {
+  const { result } = renderHook(() => useAvatar('demo'));
+  act(() => { void result.current.start(); });
+  await act(async () => { await result.current.end(); });
+  expect(joins[0].session.ended).toBe(true);
+  await act(async () => { await result.current.start(); });
+  expect(joins).toHaveLength(2);
+  expect(joins[1].session.ended).toBe(false);
+});
