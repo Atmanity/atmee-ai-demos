@@ -164,9 +164,14 @@ a { color: inherit; }
 .mr-nowline span { color: var(--mr-ivory-2); }
 .mr-nowline.is-guest, .mr-nowline.is-empty { cursor: default; color: var(--mr-ivory-2); white-space: normal; }
 /* A hand-over under way: the one coming shows in the tile, a ring turning round them, the panel's edge shimmering. */
-.mr-tile-coming { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(23, 18, 14, .55); animation: mr-fade .3s ease-out; }
-.mr-tile-coming img { position: absolute; inset: 14px; width: calc(100% - 28px); height: calc(100% - 28px); border-radius: 50%; object-fit: cover; filter: saturate(.85); }
-.mr-tile-ring { position: absolute; inset: 9px; border-radius: 50%; border: 2.5px solid rgba(201, 162, 90, .25); border-top-color: var(--mr-brass); animation: mr-spin 1.1s linear infinite; }
+.mr-tile-coming { position: absolute; inset: 0; overflow: hidden; animation: mr-fade .3s ease-out; }
+.mr-tile-coming img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: brightness(.72) saturate(.8); }
+/* A band of light passing over the portrait while they are on the way. */
+.mr-tile-coming::after { content: ""; position: absolute; inset: -20% -60%; background: linear-gradient(105deg, transparent 40%, rgba(241, 231, 212, .22) 50%, transparent 60%); animation: mr-sweep 1.8s ease-in-out infinite; }
+@keyframes mr-sweep { from { transform: translateX(-45%); } to { transform: translateX(45%); } }
+/* And the frame breathing in brass, like a line ringing. */
+.mr-tile.is-waiting { animation: mr-ringing 1.6s ease-in-out infinite; }
+@keyframes mr-ringing { 0%, 100% { box-shadow: 0 0 0 1px rgba(201, 162, 90, .25); } 50% { box-shadow: 0 0 0 2px var(--mr-brass), 0 0 18px rgba(201, 162, 90, .35); } }
 .mr-nowline.is-coming { display: flex; align-items: center; gap: 8px; color: var(--mr-ivory); cursor: default; white-space: normal; }
 .mr-panel.is-handing::before { content: ""; position: absolute; left: 22px; right: 22px; top: 0; height: 2px; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--mr-brass), transparent); background-size: 40% 100%; background-repeat: no-repeat; animation: mr-shimmer 1.4s ease-in-out infinite; }
 @keyframes mr-shimmer { from { background-position: -40% 0; } to { background-position: 140% 0; } }
@@ -217,7 +222,7 @@ a { color: inherit; }
 @keyframes mr-up { from { transform: translateY(30px); opacity: 0; } }
 @keyframes mr-spin { to { transform: rotate(360deg); } }
 @keyframes mr-pulse { 50% { opacity: .3; } }
-@media (prefers-reduced-motion: reduce) { .mr-toast, .mr-map, .mr-ptt.is-open .mr-dock-ico, .mr-pin-here, .mr-dock-btn.is-busy .mr-dock-ico, .mr-subs-said, .mr-tile-ring, .mr-panel.is-handing::before { animation: none; } .mr-subs-said span { transition: none; } .mr-spinner, .mr-dot { animation-duration: 3s; } }
+@media (prefers-reduced-motion: reduce) { .mr-toast, .mr-map, .mr-ptt.is-open .mr-dock-ico, .mr-pin-here, .mr-dock-btn.is-busy .mr-dock-ico, .mr-subs-said, .mr-tile-coming::after, .mr-tile.is-waiting, .mr-panel.is-handing::before { animation: none; } .mr-subs-said span { transition: none; } .mr-spinner, .mr-dot { animation-duration: 3s; } }
 
 .mr-chip.is-dark { background: var(--mr-ink); color: var(--mr-ivory); border-color: transparent; }
 .mr-link { border: 0; background: none; padding: 6px 0; color: var(--mr-brass); font-weight: 650; font-size: 14.5px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }

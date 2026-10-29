@@ -622,7 +622,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
         ) : (
           <div className={`mr-guide ${big ? 'is-big' : ''}`}>
             {/* The guides: a video tile of their own, never over the camera. Both calls play in it; the one on stage shows. Tapped, it grows (the panel with it). */}
-            <div className={`mr-tile ${active.speaking ? 'is-speaking' : ''}`} role="button" tabIndex={0} aria-pressed={big}
+            <div className={`mr-tile ${active.speaking ? 'is-speaking' : ''} ${coming || status?.busy ? 'is-waiting' : ''}`} role="button" tabIndex={0} aria-pressed={big}
               aria-label={big ? t('smaller', { name: activeName }) : t('larger', { name: activeName })}
               onClick={() => setBig((b) => !b)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setBig((b) => !b); } }}>
               <img className="mr-tile-poster" src={hostPortrait} alt="" />
@@ -633,7 +633,6 @@ function Tour({ opening }: { opening: Exhibit | null }) {
               {(coming || status?.busy) && (
                 <div className="mr-tile-coming" aria-hidden="true">
                   <img src={coming ? coming.image : hostPortrait} alt="" />
-                  <span className="mr-tile-ring" />
                 </div>
               )}
               <span className="mr-tile-name">{coming ? coming.name : activeName}</span>
