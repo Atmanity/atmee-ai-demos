@@ -182,9 +182,11 @@ button { font: inherit; color: inherit; }
 /* Every record in line, in one row that scrolls sideways, card by card. */
 .cr-upnext ol { margin: 0; padding: 0 0 6px; list-style: none; display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
 .cr-upnext ol::-webkit-scrollbar { display: none; }
-.cr-upnext li { flex: 0 0 min(220px, 72%); scroll-snap-align: start; display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px; border-radius: 14px; background: color-mix(in srgb, var(--surface) 70%, transparent); backdrop-filter: blur(10px); animation: cr-fade-in .5s ease; }
+.cr-upnext li { flex: 0 0 min(220px, 72%); scroll-snap-align: start; min-width: 0; }
+.cr-upnext button { width: 100%; border: 0; color: inherit; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px; border-radius: 14px; background: color-mix(in srgb, var(--surface) 70%, transparent); backdrop-filter: blur(10px); animation: cr-fade-in .5s ease; }
 .cr-upnext img, .cr-upnext .cr-blank { width: 40px; height: 40px; border-radius: 8px; flex: none; object-fit: cover; }
-.cr-upnext li > span { min-width: 0; }
+.cr-upnext button > span { min-width: 0; }
+.cr-upnext button:hover { background: color-mix(in srgb, var(--surface) 95%, var(--ink) 5%); }
 .cr-upnext b, .cr-upnext small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .cr-upnext small { color: var(--dim); font-size: 12px; }
 

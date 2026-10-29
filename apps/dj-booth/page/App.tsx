@@ -584,6 +584,15 @@ export function App() {
   useEffect(() => { if (engine === 'speech') console.info('[crate] face %s', face.phase); }, [face.phase]);
   useEffect(() => { if (engine === 'speech') console.info('[crate] face %s', face.speaking ? 'plays her words' : 'idle'); }, [face.speaking]);
 
+  /** A record from the line, chosen by the listener: it leaves the line and comes on now, introduced by Nova. */
+  function playFromQueue(track: Track) {
+    lastListenerAt.current = Date.now();
+    const d = deckRef.current;
+    const from = { ...d, queue: d.queue.filter((t) => t.id !== track.id) };
+    changeOver(track, from);
+    cutIn(`put on ${label(track)} from the line`, track);
+  }
+
   /** The listener changed the record by hand: Nova stops mid-sentence (silent at once) and talks about the new one. */
   function cutIn(what: string, track: Track) {
     if (!live) return;
@@ -761,8 +770,10 @@ export function App() {
               <ol>
                 {deck.queue.map((t, i) => (
                   <li key={`${t.id}-${i}`}>
-                    {t.art ? <img src={t.art} alt="" /> : <span className="cr-blank" />}
-                    <span><b>{t.title}</b><small>{t.artist}</small></span>
+                    <button type="button" onClick={() => playFromQueue(t)} aria-label={`Play ${t.title} by ${t.artist} now`}>
+                      {t.art ? <img src={t.art} alt="" /> : <span className="cr-blank" />}
+                      <span><b>{t.title}</b><small>{t.artist}</small></span>
+                    </button>
                   </li>
                 ))}
               </ol>
@@ -785,7 +796,7 @@ export function App() {
           </div>
           <div className="cr-panel" hidden={tab !== 'next'}>
             {deck.queue.length ? (
-              <ol className="cr-rows">{deck.queue.map((t, i) => <TrackRow key={`${t.id}-${i}`} track={t} />)}</ol>
+              <ol className="cr-rows">{deck.queue.map((t, i) => <TrackRow key={`${t.id}-${i}`} track={t} onPlay={() => playFromQueue(t)} />)}</ol>
             ) : <p className="cr-empty">Nova lines records up here as the set builds.</p>}
           </div>
           <div className="cr-panel" hidden={tab !== 'crate'}>
