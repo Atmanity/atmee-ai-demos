@@ -4,7 +4,7 @@
 // previews), keeps Nova's picture of the deck current and gives her a break
 // near the end of every record: the music ducks under her, and the next
 // record waits until she has finished introducing it.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { BackToApps, CallStatus, clock as kitClock, ChatPanel, HangUpIcon, HostVideo, useAvatar, useCaptionToggle, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
 import { advance, dig, label, lined, nowBecomesNext, pick, playNow, queueNext, setPaused } from '../engine/deck.ts';
 import { crateText, deckState, said } from '../engine/director.ts';
@@ -130,7 +130,11 @@ function TuningIn({ avatar }: { avatar: Avatar }) {
 const HEARD_SHOWN_MS = 3000;
 
 function PushToTalk({ avatar }: { avatar: Avatar }) {
+  const onAir = avatar.phase === 'live';
   const [held, setHeld] = useState(false);
+  // Whether the words overflow the button's two lines: only then does the top fade in.
+  const words = useRef<HTMLSpanElement>(null);
+  const [long, setLong] = useState(false);
   // The words as they are recognised while the button is held, then the final line for a moment.
   const [said, setSaid] = useState('');
   const lineCount = useRef(avatar.lines.length);
@@ -151,6 +155,7 @@ function PushToTalk({ avatar }: { avatar: Avatar }) {
   const mic = useRef(avatar);
   mic.current = avatar;
   const down = useCallback(() => {
+    if (mic.current.phase !== 'live') return;
     clearTimeout(closing.current);
     holding.current = true;
     setHeld(true);
@@ -173,19 +178,26 @@ function PushToTalk({ avatar }: { avatar: Avatar }) {
     addEventListener('keyup', keyup);
     return () => { removeEventListener('keydown', keydown); removeEventListener('keyup', keyup); clearTimeout(closing.current); };
   }, [down, up]);
+  const shown = held ? avatar.heard : said;
+  useLayoutEffect(() => {
+    const el = words.current;
+    setLong(Boolean(el && el.scrollHeight > el.clientHeight + 1));
+  }, [shown, held]);
   return (
     <button
-      type="button" className={`cr-ptt ${held ? 'is-held' : ''}`} aria-pressed={held}
+      type="button" className={`cr-ptt ${held ? 'is-held' : ''}`} aria-pressed={held} disabled={!onAir}
       onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); down(); }}
       onPointerUp={up} onPointerCancel={up} onContextMenu={(e) => e.preventDefault()}
     >
       <span className="cr-ptt-dot" aria-hidden="true" />
-      {held
-        ? <span className="cr-ptt-words" aria-live="polite">{avatar.heard || 'Listening…'}</span>
+      {!onAir
+        ? <span className="cr-ptt-words"><span>Getting Nova on air…</span></span>
+        : held
+        ? <span ref={words} className={`cr-ptt-words ${long ? 'is-long' : ''}`} aria-live="polite"><span>{avatar.heard || 'Listening…'}</span></span>
         : said
-          ? <span className="cr-ptt-words is-said">“{said}”</span>
-          : <span className="cr-ptt-words">Hold to talk to Nova</span>}
-      <small>{held ? 'let go to send' : said ? 'sent to Nova' : 'or hold the space bar'}</small>
+          ? <span ref={words} className={`cr-ptt-words is-said ${long ? 'is-long' : ''}`}><span>“{said}”</span></span>
+          : <span className="cr-ptt-words"><span>Hold to talk to Nova</span></span>}
+      <small>{!onAir ? 'the mic opens in a moment' : held ? 'let go to send' : said ? 'sent to Nova' : 'or hold the space bar'}</small>
     </button>
   );
 }
@@ -482,7 +494,7 @@ export function App() {
   const kicker = holding ? 'Up after Nova' : deck.playing ? (deck.paused ? 'Paused' : onBreak ? 'Nova on the mic' : 'Now playing') : 'The decks are quiet';
 
   return (
-    <div className="cr-app" style={themeStyle(theme)} data-backdrop={theme.backdrop}>
+    <div className={`cr-app is-booth ${live ? 'is-live' : ''}`} style={themeStyle(theme)} data-backdrop={theme.backdrop}>
       <Backdrop theme={theme} cover={deck.playing?.cover ?? null} />
       <header className="cr-top">
         <BackToApps avatar={avatar} name={HOST} /><Logo />
@@ -517,8 +529,9 @@ export function App() {
             </div>
           )}
         </div>
-        {live && <span className="cr-onair">On air</span>}
-        {live && <button type="button" className="cr-end" onClick={() => void avatar.end()} title="End the show"><HangUpIcon /></button>}
+        {/* In place from the first frame, so nothing shifts when the call goes live; they fade in then. */}
+        <span className="cr-onair cr-when-live">On air</span>
+        <button type="button" className="cr-end" onClick={() => void avatar.end()} title="End the show" disabled={avatar.phase === 'ended' || avatar.phase === 'failed'}><HangUpIcon /></button>
       </header>
 
       <main className={`cr-main ${tab === null ? 'is-solo' : ''}`}>
@@ -540,8 +553,9 @@ export function App() {
 
           <div className="cr-meta">
             <p className="cr-kicker">{kicker}</p>
-            <h1 className="cr-title">{deck.playing ? deck.playing.title : 'Ask Nova for a record'}</h1>
-            {deck.playing && <p className="cr-artist">{deck.playing.artist}{deck.playing.year ? ` · ${deck.playing.year}` : ''}</p>}
+            {/* Keyed by the record, so a new one fades in rather than swapping in place. */}
+            <h1 className="cr-title" key={`t-${deck.playing?.id ?? 'none'}`}><span>{deck.playing ? deck.playing.title : 'Ask Nova for a record'}</span></h1>
+            <p className="cr-artist" key={`a-${deck.playing?.id ?? 'none'}`}>{deck.playing ? `${deck.playing.artist}${deck.playing.year ? ` · ${deck.playing.year}` : ''}` : '\u00a0'}</p>
             <div className="cr-time">
               <span>{progress && !holding ? mmss(progress.position) : '0:00'}</span>
               <div className="cr-bar" role="progressbar" aria-label="Time in the record" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(holding ? 0 : pct)}>
@@ -557,7 +571,7 @@ export function App() {
                 void (deck.paused ? player.resume() : player.pause());
                 update(setPaused(deckRef.current, !deck.paused));
               })}>{deck.paused ? <PlayIcon /> : <PauseIcon />}</button>
-            {live && pushToTalk ? <PushToTalk avatar={avatar} /> : <p className="cr-typing">Type your requests in the chat</p>}
+            {pushToTalk ? <PushToTalk avatar={avatar} /> : <p className="cr-typing">Type your requests in the chat</p>}
             <button type="button" className="cr-icon" disabled={!deck.playing} title="Skip" onClick={() => {
               const next = advance(deckRef.current);
               const skippedWhat = `skipped ${deckRef.current.playing ? label(deckRef.current.playing) : 'the record'}`;

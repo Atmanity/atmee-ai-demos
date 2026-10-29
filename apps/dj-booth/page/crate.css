@@ -152,8 +152,10 @@ button { font: inherit; color: inherit; }
 .cr-ptt { flex: 1; max-width: 340px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 14px 20px; border-radius: 999px; border: 0; background: var(--accent); color: var(--bg); font-weight: 800; font-size: 16px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; box-shadow: 0 10px 30px color-mix(in srgb, var(--accent) 35%, transparent); transition: transform .12s ease, box-shadow .2s ease; }
 .cr-ptt small { font-weight: 500; font-size: 12px; opacity: .75; }
 /* What was heard sits on the button: two lines at most, so the button never changes height. */
-.cr-ptt { min-height: 66px; justify-content: center; }
-.cr-ptt-words { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 100%; line-height: 1.25; text-align: center; overflow-wrap: anywhere; }
+.cr-ptt { height: 72px; justify-content: center; }
+/* A fixed two-line window that keeps the newest words in view: older lines slide up out of it, under a fade. */
+.cr-ptt-words { display: flex; flex-direction: column; justify-content: flex-end; max-height: 2.5em; overflow: hidden; max-width: 100%; line-height: 1.25; text-align: center; overflow-wrap: anywhere; }
+.cr-ptt-words.is-long { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 .9em); mask-image: linear-gradient(to bottom, transparent 0, #000 .9em); }
 .cr-ptt.is-held .cr-ptt-words, .cr-ptt-words.is-said { font-weight: 600; font-size: 15px; }
 .cr-ptt-dot { display: none; }
 .cr-ptt.is-held { transform: scale(.97); box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 30%, transparent), 0 10px 30px color-mix(in srgb, var(--accent) 45%, transparent); }
@@ -225,3 +227,28 @@ button { font: inherit; color: inherit; }
   .cr-pill { padding: 6px 11px; }
   .cr-pill.is-first { margin-left: auto; }
 }
+
+/* Entering the booth: the parts rise in, a beat apart, instead of snapping in at once. */
+@keyframes cr-rise { from { opacity: 0; transform: translateY(10px); } }
+.is-booth .cr-top { animation: cr-rise .5s ease both; }
+.is-booth .cr-stage { animation: cr-rise .6s .08s ease both; }
+.is-booth .cr-meta { animation: cr-rise .6s .16s ease both; }
+.is-booth .cr-dock { animation: cr-rise .6s .24s ease both; }
+/* What waits for the call: in place all along, brought up when Nova is on air. */
+.cr-when-live, .cr-end { transition: opacity .5s ease; }
+.is-booth:not(.is-live) .cr-when-live { opacity: 0; }
+.is-booth:not(.is-live) .cr-end { opacity: .45; }
+.cr-ptt { transition: transform .12s ease, box-shadow .2s ease, opacity .5s ease, filter .5s ease; }
+.cr-ptt:disabled { opacity: .55; filter: saturate(.6); cursor: default; box-shadow: none; }
+/* A new record's title and artist fade in. */
+.cr-title, .cr-artist { animation: cr-fade-in .6s ease; }
+.cr-upnext li { animation: cr-rise .45s ease both; }
+@media (prefers-reduced-motion: reduce) {
+  .is-booth .cr-top, .is-booth .cr-stage, .is-booth .cr-meta, .is-booth .cr-dock, .cr-upnext li, .cr-title, .cr-artist { animation: none; }
+}
+
+/* The title keeps two lines' room and never takes more, so a long title never pushes the controls down. */
+.cr-title { display: flex; align-items: center; justify-content: center; min-height: 2.16em; }
+.cr-title span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* No captions button on phones. */
+@media (max-width: 600px) { .cr-stage .call-cc { display: none; } }
