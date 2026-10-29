@@ -251,6 +251,11 @@ export function App() {
   // A Premium player that fails (no Premium, an old token) falls back to the embed for the rest of the visit.
   const [sdkFailed, setSdkFailed] = useState(false);
   const useSdk = spotify.connected && Boolean(spotify.clientId) && !sdkFailed;
+  // The player is chosen once per show, as it goes on air (Spotify's config and token can arrive
+  // after the first paint, and must not switch a show already playing on the embed); only a Premium
+  // failure switches it, to the embed.
+  const [sdkForShow, setSdkForShow] = useState(false);
+  const showOnSdk = sdkForShow && !sdkFailed;
 
   // The radio clock: each record's break near its end, its end, and the next record held until Nova finishes.
   const clock = useRef<Clock>(freshClock());
@@ -290,8 +295,8 @@ export function App() {
   // Which player drives the radio clock: the Premium one while it is in use, else the embed. It
   // switches the moment Premium fails, before the page re-renders, so no leftover update from the
   // failed player moves the clock.
-  const sdkLive = useRef(useSdk);
-  sdkLive.current = useSdk;
+  const sdkLive = useRef(showOnSdk);
+  sdkLive.current = showOnSdk;
   const holdingNow = useRef<Track | null>(null);
   holdingNow.current = holding;
   const embed = useSpotifyPlayer((p) => { if (!sdkLive.current) onPlayback(p); });
@@ -310,7 +315,7 @@ export function App() {
       void embed.load(d.playing);
     }
   });
-  const player = useSdk ? sdk : embed;
+  const player = showOnSdk ? sdk : embed;
   // The player a record starts on, read when it starts (a hold set before a switch uses the new one).
   const playerRef = useRef(player);
   playerRef.current = player;
@@ -706,7 +711,8 @@ export function App() {
 
   if (avatar.phase === 'idle') {
     return <Lobby spotify={spotify} onStart={(mic) => {
-      player.prepare();
+      setSdkForShow(useSdk);
+      (useSdk ? sdk : embed).prepare();
       setPushToTalk(mic);
       // Push to talk: the microphone joins muted and opens only while the button is held.
       void avatar.start({ mic, micMuted: mic });
@@ -773,7 +779,11 @@ export function App() {
               <TuningIn avatar={avatar} />
               {/* After a call ends or fails: the kit's card, with its way back in. */}
               {(avatar.phase === 'ended' || avatar.phase === 'failed') && (
-                <CallStatus avatar={avatar} name={HOST} again="Call Nova back" onAgain={() => void avatar.start({ mic: pushToTalk, micMuted: pushToTalk })} />
+                <CallStatus avatar={avatar} name={HOST} again="Call Nova back" onAgain={() => {
+                  setSdkForShow(useSdk);
+                  (useSdk ? sdk : embed).prepare();
+                  void avatar.start({ mic: pushToTalk, micMuted: pushToTalk });
+                }} />
               )}
             </HostVideo>
             {deck.playing?.cover && (
