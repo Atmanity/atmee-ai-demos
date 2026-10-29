@@ -176,6 +176,13 @@ export const hostPrompts = (facing: Facing) => ({
   talking: prompt(`${JADA}, ${LOOK[facing]}, speaking warmly.`, STUDIO),
   listening: REACTIONS.map((r) => prompt(`${JADA}, ${LOOK[facing]}, ${r}.`, STUDIO)),
 });
+/**
+ * Her hands only, said plainly and nothing else: the framing, studio and stillness sentences made
+ * the faces drift and wash out, and with no prompt at all her gestures grew and her hands warped.
+ * One text for talking and listening, so the renderer never switches conditioning mid-show.
+ */
+const HANDS = 'A woman with curly black hair and gold hoop earrings, in an emerald-green blazer, sits at a walnut desk, her hands resting calmly on the desk, making only small, slow gestures.';
+export const hostHandsPrompts = () => ({ talking: HANDS, listening: [HANDS] });
 /** Whom Jada addresses at each stage of the show; during a handover, the page decides. */
 export const facingAt = (stage: Stage): Facing => (stage === 'on-air' ? 'guest' : 'viewers');
 export const guestPrompts = (guest: Guest) => {

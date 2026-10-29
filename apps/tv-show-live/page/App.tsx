@@ -19,7 +19,7 @@ import { createBooker, type Booker, type Booking } from '../show/booker.ts';
 import { createFloor } from '../show/floor.ts';
 import { createDirector, type Director, type Shot, type ShotMode } from '../show/director.ts';
 import { FILM, GUESTS, HOST, SHOW, firstName, onCallFor, type Guest } from '../show/cast.ts';
-import { bridgeCue, facingAt, farewellCue, filmCue, goodbyeCue, guestFarewellCue, guestPrompts, holdCue, hostPrompts, LISTENING_EVERY_MS, type Facing, holdMoreCue, inviteCue, inviteNowCue, noteCue, nudgeCue, topicCue, welcomeCue, wrapCue } from '../show/script.ts';
+import { bridgeCue, facingAt, farewellCue, filmCue, goodbyeCue, guestFarewellCue, guestPrompts, holdCue, hostHandsPrompts, hostPrompts, LISTENING_EVERY_MS, type Facing, holdMoreCue, inviteCue, inviteNowCue, noteCue, nudgeCue, topicCue, welcomeCue, wrapCue } from '../show/script.ts';
 import { openSpeech, SpeechError, type SpeechLine } from '../show/speech.ts';
 import { createResampler, createVoice, FACE_RATE } from '../show/voice.ts';
 import cam2 from '../studio/cam2.jpg';
@@ -48,7 +48,8 @@ const FACE_LAG_MS = 4_500;
 const INVITE_LEAD_MS = FACE_LAG_MS + 1_500;
 const TRAILER_FADE_MS = 900;
 const CAPTION_LINGER_MS = 3_000;
-// `?prompts=off`: no face gets a free-form prompt, as in the regular chat room; `?prompts=host`: only Jada's.
+// `?prompts=off`: no face gets a free-form prompt, as in the regular chat room; `?prompts=host`: only Jada's;
+// `?prompts=hands`: Jada's hands only (hostHandsPrompts).
 const PROMPTS = typeof location === 'undefined' ? 'all' : (new URLSearchParams(location.search).get('prompts') ?? 'all');
 const PROMPTS_ON = PROMPTS !== 'off';
 const GUEST_PROMPTS = PROMPTS === 'all';
@@ -247,7 +248,7 @@ export function App() {
     setTimeout(() => {
       if (showRef.current !== show || facing.current === to) return;
       facing.current = to;
-      if (PROMPTS_ON && faces.current.host.phase === 'live') void faces.current.host.setPrompt(pickPrompts(hostPrompts(to)));
+      if (PROMPTS_ON && PROMPTS !== 'hands' && faces.current.host.phase === 'live') void faces.current.host.setPrompt(pickPrompts(hostPrompts(to)));
     }, after);
   };
   const pickPrompts = (p: { talking: string; listening: string[] }) => ({ talking: p.talking, listening: p.listening[promptTurn.current % p.listening.length] });
@@ -260,7 +261,7 @@ export function App() {
     const pick = pickPrompts;
     const f0 = faces.current;
     if (f0.host.phase === 'live') {
-      const host = hostPrompts(facing.current);
+      const host = PROMPTS === 'hands' ? hostHandsPrompts() : hostPrompts(facing.current);
       void f0.host.setPrompt(first ? pick(host) : { listening: pick(host).listening })
         .then((a) => { if (first) console.info('[gilded-reel] Jada prompt: renders_prompts=%s', a?.renders_prompts); });
     }
