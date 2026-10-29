@@ -40,9 +40,6 @@ const SPEECH_MAX_SECONDS = 900;
 const speechTools = TOOLS.map(({ type, name, description, parameters }) => ({ type, name, description, parameters }));
 
 const endSpeech = (id: string) => avatarApi('POST', `/v1/speech_sessions/${id}/end`);
-for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.once(signal, () => { void Promise.allSettled([...speaking].map(endSpeech)); });
-}
 
 const spotify = new Spotify(process.env.SPOTIFY_CLIENT_ID, process.env.SPOTIFY_CLIENT_SECRET);
 if (!spotify.configured) console.warn('[%s] SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET unset: the DJ cannot search', ID);
@@ -55,6 +52,12 @@ const app: AppServer = {
   maxSeconds: 900,
   appTools: { instructions: INSTRUCTIONS, tools: TOOLS },
   rendersFace: true,
+  // On shutdown (the server awaits this before it exits): every speech session still live is ended.
+  async shutdown() {
+    const ids = [...speaking];
+    speaking.clear();
+    await Promise.allSettled(ids.map(endSpeech));
+  },
   routes(router) {
     // The app's client id is public: the page signs a Premium listener in with it (PKCE, no secret)
     // to play through Spotify's Web Playback SDK, the player with a volume.

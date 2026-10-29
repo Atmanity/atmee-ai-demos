@@ -30,6 +30,8 @@ export interface AppServer {
    */
   appTools?: AppTools;
   routes?: (router: Router) => void;
+  /** Ends whatever the app's own routes started that still bills (on shutdown, before the process exits). */
+  shutdown?: () => Promise<unknown>;
 }
 
 /** One function tool in the OpenAI function-tool shape, plus how its calls are delivered. */

@@ -13,7 +13,9 @@ export const dig = (deck: Deck, dug: string, crate: Track[]): Deck => ({ ...deck
 const retire = (deck: Deck): Track[] =>
   deck.playing && !deck.played.some((t) => songOf(t) === songOf(deck.playing!)) ? [...deck.played, deck.playing] : deck.played;
 
-export const playNow = (deck: Deck, track: Track): Deck => ({ ...deck, played: retire(deck), playing: track, paused: false });
+/** A record on now: the one before goes into what has played, and this one leaves the line if it was in it. */
+export const playNow = (deck: Deck, track: Track): Deck =>
+  ({ ...deck, played: retire(deck), playing: track, paused: false, queue: deck.queue.filter((t) => t.id !== track.id) });
 
 /** A song as people know it: the title without its edit, remaster or mix, and the lead artist. */
 export const songOf = (t: Track) =>

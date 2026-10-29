@@ -142,7 +142,10 @@ export async function endLiveSessions() {
   const renders = [...rendering.keys()];
   started.clear();
   rendering.clear();
-  await Promise.allSettled([...ids.map((id) => endSession(id)), ...renders.map((id) => endRender(id))]);
+  await Promise.allSettled([
+    ...ids.map((id) => endSession(id)), ...renders.map((id) => endRender(id)),
+    ...[...apps.values()].map((app) => app.shutdown?.()),
+  ]);
 }
 
 api.post('/apps/:app/session/:id/end', async (req, res) => {

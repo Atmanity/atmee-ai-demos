@@ -14,7 +14,7 @@ import { useSpotifyPlayer, type Playback } from './player.ts';
 import { useSpeechCall } from './speech.ts';
 import { useSdkPlayer } from './sdk-player.ts';
 import { accessToken, connect, connected, disconnect, finishConnect } from './spotify-auth.ts';
-import { answering, freshClock, heard, HOLD_MAX_MS, INTRO_TALK_MS, INTRO_WAIT_MS, musicLevel, QUIET_MS, tick, type Clock, type Hold } from '../engine/booth.ts';
+import { answering, breakLead, freshClock, heard, HOLD_MAX_MS, INTRO_TALK_MS, INTRO_WAIT_MS, musicLevel, QUIET_MS, tick, type Clock, type Hold } from '../engine/booth.ts';
 import nova from '../host/portrait.jpg';
 import './crate.css';
 
@@ -24,6 +24,8 @@ const FACE_LISTENER_MS = 30_000;
 const FACE_IDLE_MS = 45_000;
 // How far into a record a short line is filled, past the time she may talk over it.
 const TOP_UP_AT_MS = 25_000;
+// A top-up needs at least this long before the break, and expires before it.
+const TOP_UP_CLEAR_MS = 8_000;
 // The music's fades: a change of record fades the old one out over this, a duck dips over the same.
 const FADE_MS = 1200;
 const FADE_STEPS = 12;
@@ -264,9 +266,12 @@ export function App() {
     clock.current = next;
     // The line is filled early in each record, so her break never finds it empty.
     const d = deckRef.current;
-    if (!p.isPaused && p.position >= TOP_UP_AT_MS && d.queue.length < LINE_LOW && toppedUp.current !== on.id) {
+    // Only well before the break (a 30-second preview never gets one: its break fills the line), and
+    // short-lived, so a late delivery can never land in the break or on the next record.
+    const beforeBreak = p.duration - p.position - breakLead(p.duration);
+    if (!p.isPaused && p.position >= TOP_UP_AT_MS && beforeBreak > TOP_UP_CLEAR_MS && d.queue.length < LINE_LOW && toppedUp.current !== on.id) {
       toppedUp.current = on.id;
-      avatarRef.current?.event(said.topUp(on, d.queue.length), 20);
+      avatarRef.current?.event(said.topUp(on, d.queue.length), Math.min(10, Math.floor((beforeBreak - TOP_UP_CLEAR_MS / 2) / 1000)));
     }
     if (cue === 'break') {
       setOnBreak(true);
@@ -287,6 +292,12 @@ export function App() {
     console.warn('[crate] spotify player: %s', problem);
     setSdkFailed(true);
     setSpotify((s) => ({ ...s, problem: `${problem}. Playing previews instead.` }));
+    // The record that failed to play goes on the embed now, so the show does not go silent.
+    const on = deckRef.current.playing;
+    if (on && !deckRef.current.paused) {
+      clock.current = freshClock(on.id);
+      void embed.load(on);
+    }
   });
   const player = useSdk ? sdk : embed;
 
@@ -584,6 +595,20 @@ export function App() {
   useEffect(() => { if (engine === 'speech') console.info('[crate] face %s', face.phase); }, [face.phase]);
   useEffect(() => { if (engine === 'speech') console.info('[crate] face %s', face.speaking ? 'plays her words' : 'idle'); }, [face.speaking]);
 
+  /**
+   * A record from the crate, chosen by the listener: the same rules as their request (a record in
+   * line plays from the line, the one on now is left alone, a vibe change clears Nova's picks).
+   */
+  function playFromCrate(track: Track) {
+    const d = deckRef.current;
+    if (d.playing?.id === track.id) return;
+    if (d.queue.some((t) => t.id === track.id)) return playFromQueue(track);
+    lastListenerAt.current = Date.now();
+    put(track, 'now', true);
+    // Refused (another release of a song on or in line): nothing changed, so Nova is not cut in.
+    if (deckRef.current.playing?.id === track.id) cutIn(`put on ${label(track)}`, track);
+  }
+
   /** A record from the line, chosen by the listener: it leaves the line and comes on now, introduced by Nova. */
   function playFromQueue(track: Track) {
     lastListenerAt.current = Date.now();
@@ -620,7 +645,23 @@ export function App() {
   }, [musicVolume, ducked, player, Boolean(holding)]);
   useEffect(() => { if (avatar.audioRef.current) avatar.audioRef.current.volume = muffled ? 0 : novaVolume; }, [novaVolume, muffled, avatar.phase]);
 
-  useEffect(() => { if (avatar.phase === 'starting') avatar.event(said.start(), 60); }, [avatar.phase]);
+  // Every show starts from an empty booth: the previous show's deck, opening, timers and asks go
+  // ("Call Nova back" starts a new session on the same page).
+  useEffect(() => {
+    if (avatar.phase !== 'starting') return;
+    void player.pause();
+    update(emptyDeck);
+    opened.current = false;
+    clock.current = freshClock();
+    setHolding(null);
+    setOnBreak(false);
+    setProgress(null);
+    lastListenerAt.current = 0;
+    askUsedAt.current = 0;
+    askedFor.current.clear();
+    toppedUp.current = null;
+    avatar.event(said.start(), 60);
+  }, [avatar.phase]);
   // Nova's picture of the deck follows the deck.
   useEffect(() => { avatar.state(deckState(deck)); }, [deck]);
   // The music stops with the show.
@@ -697,6 +738,11 @@ export function App() {
                     <span>{HOST}</span>
                     <input type="range" min={0} max={1} step={0.05} value={novaVolume} onChange={(e) => setNovaVolume(Number(e.target.value))} aria-label={`${HOST}'s volume`} />
                   </label>
+              {spotify.clientId && !useSdk && (
+                <button type="button" className="cr-mixer-spotify" onClick={() => { if (confirm('Connecting Spotify Premium ends this show; start a new one after. Connect now?')) { void avatar.end().finally(() => void connect(spotify.clientId!)); } }}>
+                  <SpotifyIcon /> Connect Spotify Premium
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -712,7 +758,9 @@ export function App() {
             <HostVideo avatar={avatar} captions={cc.on && !muffled} onToggleCaptions={cc.toggle} name={HOST} poster={nova} className="cr-host-video">
               <TuningIn avatar={avatar} />
               {/* After a call ends or fails: the kit's card, with its way back in. */}
-              {(avatar.phase === 'ended' || avatar.phase === 'failed') && <CallStatus avatar={avatar} name={HOST} again="Call Nova back" />}
+              {(avatar.phase === 'ended' || avatar.phase === 'failed') && (
+                <CallStatus avatar={avatar} name={HOST} again="Call Nova back" onAgain={() => void avatar.start({ mic: pushToTalk, micMuted: pushToTalk })} />
+              )}
             </HostVideo>
             {deck.playing?.cover && (
               <div className="cr-record" aria-hidden={stage === 'face'}>
@@ -804,11 +852,7 @@ export function App() {
             {deck.crate.length ? (
               <ol className="cr-rows">
                 {deck.crate.map((t, i) => (
-                  <TrackRow key={t.id} track={t} number={i + 1} onPlay={() => {
-                    lastListenerAt.current = Date.now();
-                    changeOver(t);
-                    cutIn(`put on ${label(t)}`, t);
-                  }} />
+                  <TrackRow key={t.id} track={t} number={i + 1} onPlay={() => playFromCrate(t)} />
                 ))}
               </ol>
             ) : <p className="cr-empty">Records Nova digs up land here. Tap one to put it on yourself.</p>}

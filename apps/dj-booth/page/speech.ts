@@ -73,6 +73,8 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
   const live = useRef(false);
   const micGate = useRef(false);
   const stopMic = useRef<(() => Promise<void>) | null>(null);
+  // The microphone itself, released on hangup (stopping the tap alone leaves the tab holding the mic).
+  const micStream = useRef<MediaStream | null>(null);
   const silenceTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const outBuf = useRef<Int16Array[]>([]);
   const lineId = useRef(0);
@@ -139,6 +141,16 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
     p.setGain(faceRef.current.audioRef.current?.volume ?? 1);
     p.push(pcm, silent);
   }, []);
+  // Her words held while a face writer opens, and where they go if it cannot open: here, at once.
+  const heldForFace = useRef<Int16Array[]>([]);
+  const toPage = useCallback((why: string) => {
+    writerOpening.current = false;
+    console.warn('[speech] the face would not take her words (%s): they play here', why);
+    setVoiceVia(voiced.current ? 'page' : null);
+    for (const held of heldForFace.current) play(held, false);
+    heldForFace.current = [];
+  }, [play]);
+
   const onAudio = useCallback((pcm: Int16Array) => {
     const now = Date.now();
     const loud = rms(pcm) > VOICED_RMS;
@@ -148,13 +160,20 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
       // An utterance goes to the face when it is up as she starts, else it plays here.
       if (faceRef.current.phase === 'live' && !faceOffRef.current && !writer.current && !writerOpening.current) {
         writerOpening.current = true;
+        heldForFace.current = [];
         setVoiceVia('face');
         console.info('[speech] her words go to the face');
         resampler.current = new Resampler24to16();
-        void faceRef.current.open().then((w) => { writer.current = w; writerOpening.current = false; }, (err) => {
+        void faceRef.current.open().then((w) => {
           writerOpening.current = false;
-          console.warn('[speech] the face would not take her words: %s', (err as Error).message);
-        });
+          if (!w) return toPage('the face is gone');
+          writer.current = w;
+          // What came while it opened goes first: nothing of her words is dropped.
+          for (const held of heldForFace.current) { const pcm16 = resampler.current?.push(held); if (pcm16?.length) void w.write(pcm16); }
+          heldForFace.current = [];
+          // An utterance that ended while the face opened is closed now.
+          if (!voiced.current) { writer.current = null; void w.end(); }
+        }, (err) => toPage((err as Error).message));
       } else if (!writer.current) {
         setVoiceVia('page');
         console.info('[speech] her words play here (face %s)', faceRef.current.phase);
@@ -173,11 +192,12 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
       setCaption('');
       if (text) { addLine({ who: 'avatar', text }); handlersRef.current.onAvatarSaid?.(text); }
     }
-    if (writer.current || writerOpening.current) {
+    if (writer.current) {
       const pcm16 = resampler.current?.push(pcm);
-      if (writer.current && pcm16?.length) void writer.current.write(pcm16);
-    } else play(pcm, !loud && !voiced.current);
-  }, [addLine, play]);
+      if (pcm16?.length) void writer.current.write(pcm16);
+    } else if (writerOpening.current) heldForFace.current.push(pcm);
+    else play(pcm, !loud && !voiced.current);
+  }, [addLine, play, toPage]);
 
   // ---- Tool calls: run each, then hand back every result and let her go on ----
   const round = useRef<Promise<[string, string]>[]>([]);
@@ -273,6 +293,7 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
   const cleanup = useCallback(() => {
     live.current = false;
     void stopMic.current?.(); stopMic.current = null;
+    micStream.current?.getTracks().forEach((t) => t.stop()); micStream.current = null;
     if (silenceTimer.current) clearInterval(silenceTimer.current);
     silenceTimer.current = null;
     void player.current?.close(); player.current = null;
@@ -297,6 +318,7 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
       try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
       catch { setDetail('No microphone: you can type instead.'); }
     }
+    micStream.current = stream;
     micGate.current = Boolean(stream) && !micMuted;
     setMicOn(micGate.current);
     // The face first, so her greeting comes through it. One not up in time does not hold the show:

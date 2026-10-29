@@ -149,3 +149,9 @@ test('early in a record with a short line, the host is asked to fill it to ten q
   expect(said.topUp(a, 3)).toContain('Say nothing at all');
   expect(said.linedUp([b], ['nope'], 4)).toBe('Lined up: "Bravo" by Artist (1999). Not found, or already on, in line or played tonight: nope. 4 in line now.');
 });
+
+test('a record put on now leaves the line, so it never plays twice', () => {
+  const d = playNow(queueNext(queueNext(playNow(emptyDeck, a), b), c), b);
+  expect(d.playing).toBe(b);
+  expect(d.queue).toEqual([c]);
+});
