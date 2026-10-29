@@ -44,6 +44,9 @@ export const TURN_QUIET_MS = 1_500;     // quiet this long after speaking: the s
 export const IDLE_MS = 10_000;          // both quiet this long: the conversation has stalled
 export const GREETING_WAIT_MS = 15_000; // a host that has not greeted by then gets on with the intro
 export const GOODBYE_WAIT_MS = 15_000;  // a guest that has not said goodbye by then: the show is over anyway
+// Her introduction of the next guest, not begun by then (refused, or never spoken): they are put
+// through anyway, and their hello gives her something to answer.
+export const BRIDGE_WAIT_MS = 25_000;
 export const NUDGES = 3;                // prompts to pick a stalled conversation back up, before the booth gives up
 export const SPEAK_UP_MS = 6_000;
 export const HOLD_MS = 40_000;          // while holding for the guest: the host fills this often (25 s was a filler a breath)
@@ -137,6 +140,7 @@ export function createBooth(opts: BoothOptions): Booth {
   // A handover under way: its steps, and which one it is at.
   let handing: { steps: HandoverSteps; at: 'farewell' | 'goodbye' | 'bridge' } | null = null;
   let handTimer: ReturnType<typeof setTimeout> | undefined;
+  let bridgeTimer: ReturnType<typeof setTimeout> | undefined;
   const afterGoodbye = () => {
     if (!handing || handing.at !== 'goodbye') return;
     clearTimeout(handTimer);
@@ -144,6 +148,15 @@ export function createBooth(opts: BoothOptions): Booth {
     handing.at = 'bridge';
     handing.steps.retire();
     speakUp(handing.steps.bridge);
+    const steps = handing.steps;
+    bridgeTimer = setTimeout(() => {
+      if (handing?.steps !== steps || begun) return;
+      clearTimeout(speakUpTimer);
+      handing = null;
+      directed = false;
+      waiting = null;
+      steps.bringOn();
+    }, BRIDGE_WAIT_MS);
   };
 
   const setStage = (next: Stage) => {
@@ -271,6 +284,7 @@ export function createBooth(opts: BoothOptions): Booth {
             handTimer = setTimeout(afterGoodbye, GOODBYE_WAIT_MS);
           } else if (handing.at === 'bridge') {
             clearTimeout(speakUpTimer);
+            clearTimeout(bridgeTimer);
             const steps = handing.steps;
             handing = null;
             steps.bringOn();

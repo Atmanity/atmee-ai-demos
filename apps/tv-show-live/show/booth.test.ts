@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createBooth, DIRECTIVE_LEAD_MS, GOODBYE_WAIT_MS, GREETING_WAIT_MS, HOLD_MS, IDLE_MS, NUDGES, SPEAK_UP_MS, TURN_QUIET_MS, type BoothOptions, type Delivery } from './booth.ts';
+import { createBooth, DIRECTIVE_LEAD_MS, GOODBYE_WAIT_MS, BRIDGE_WAIT_MS, GREETING_WAIT_MS, HOLD_MS, IDLE_MS, NUDGES, SPEAK_UP_MS, TURN_QUIET_MS, type BoothOptions, type Delivery } from './booth.ts';
 
 const REPLY_DELAY_MS = DIRECTIVE_LEAD_MS + 500;
 
@@ -353,6 +353,19 @@ describe('a handover to the next guest', () => {
     expect(s.sent).toContainEqual({ to: 'guest', kind: 'directive', text: 'GUEST BYE' });
     s.turn('guest');
     expect(h.retire).toHaveBeenCalledOnce();
+  });
+
+  it('brings the next guest on when her introduction never comes', () => {
+    const s = onAir();
+    const h = steps();
+    s.booth.handover(h);
+    s.turn('host');
+    s.turn('guest');
+    expect(h.retire).toHaveBeenCalledOnce();
+    vi.advanceTimersByTime(BRIDGE_WAIT_MS);           // her bridge refused, or never spoken
+    expect(h.bringOn).toHaveBeenCalledOnce();
+    s.turn('host');
+    expect(h.bringOn).toHaveBeenCalledOnce();
   });
 
   it('is dropped by the wrap before it has begun', () => {
