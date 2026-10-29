@@ -87,11 +87,13 @@ export const guestSaid = {
 };
 
 /** What a guest knows: who they are, and their painting's record (in the visitor's language). */
-export function guestState(guest: Guest, lang: Lang = 'en'): string {
+export function guestState(guest: Guest, lang: Lang = 'en', waiting = false): string {
   const e = localize(exhibitById(guest.exhibit)!, lang);
   return [
+    // Warmed up ahead of the visitor: muted, they would still speak, so they are told to wait in silence.
+    waiting ? 'ON HOLD: the visitor has not come to meet you yet and cannot hear you. Say nothing at all until the app tells you they have arrived.' : '',
     `You are ${guest.name} from "${e.title}" by ${e.artist}. The visitor is standing at your painting.`,
     `Its catalogue record:\n${recordText(e)}`,
     'Edmund, the chairman, comes back whenever the visitor asks: call call_host_back.',
-  ].join('\n\n');
+  ].filter(Boolean).join('\n\n');
 }

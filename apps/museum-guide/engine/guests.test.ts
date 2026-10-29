@@ -32,4 +32,11 @@ describe('guests', () => {
     expect(said.noGuest(exhibitById('night-watch'))).toMatch(/^No guest: "The Night Watch" has no guest/);
     expect(said.welcomeBack(guestById('girl')!, exhibitById('pearl-earring'))).toContain('talked with the girl at "Girl with a Pearl Earring"');
   });
+  it('tells a hidden guide to keep quiet: muted, they would still speak', () => {
+    const girl = GUESTS.find((g) => g.id === 'girl')!;
+    expect(tourState({ current: null, seen: [], camera: true, away: girl })).toMatch(/^ON HOLD: the visitor is talking with the girl/i);
+    expect(tourState({ current: null, seen: [], camera: true })).not.toContain('ON HOLD');
+    expect(guestState(girl, 'en', true)).toMatch(/^ON HOLD: the visitor has not come to meet you yet/);
+    expect(guestState(girl)).not.toContain('ON HOLD');
+  });
 });

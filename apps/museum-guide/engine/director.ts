@@ -65,9 +65,11 @@ export const roomsText = () => {
 };
 
 /** What is true on the visitor's screen now (the session's state). */
-export function tourState(at: { current: Exhibit | null; seen: Exhibit[]; camera: boolean }): string {
+export function tourState(at: { current: Exhibit | null; seen: Exhibit[]; camera: boolean; away?: Guest | null }): string {
   const guestHere = guestFor(at.current);
   return [
+    // Muted, he still speaks (Causeur's mute only silences what he hears): told to keep quiet instead.
+    at.away ? `ON HOLD: the visitor is talking with ${at.away.name} and cannot hear you. Say nothing at all, not even a check-in, until the app tells you the visitor is back.` : '',
     at.camera ? 'The visitor\'s camera is on: you see what they point it at.' : 'The visitor\'s camera is off: you cannot see anything.',
     at.current ? `They are at: "${at.current.title}". Its catalogue record:\n${recordText(at.current)}` : 'They are not at any work yet.',
     guestHere ? `This work has a guest: ${guestHere.who}. Offer once to introduce them (introduce_guest).` : '',

@@ -131,11 +131,46 @@ describe('a guest warmed up ahead', () => {
     expect(calls.guest.mute).toHaveBeenCalled();
     expect(screen.queryByText('Talking with')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Meet the girl' }));
+    // Edmund says his goodbye, then falls quiet.
+    calls.host.speaking = true; update();
+    await act(async () => { await new Promise((r) => setTimeout(r, 400)); });
+    calls.host.speaking = false; update();
     await waitFor(() => expect(screen.getByText('Talking with')).toBeTruthy(), { timeout: 4000 });
     expect(calls.host.mute).toHaveBeenCalled();
     expect(calls.guest.unmute).toHaveBeenCalled();
     expect(events(calls.guest).some((e) => e.startsWith('The visitor has just come to meet you'))).toBe(true);
     expect(calls.guest.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('is not heard while warming up, even before their call says it is live', async () => {
+    const { update } = await onTour();
+    act(() => calls.label!(pearl()));
+    update();
+    const [hostAudio, guestAudio] = Array.from(document.querySelectorAll<HTMLAudioElement>('.mr-tile audio'));
+    expect(guestAudio.muted).toBe(true);
+    expect(hostAudio.muted).toBe(false);
+  });
+
+  it('waits for Edmund to finish his goodbye before coming on', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const { update } = await onTour();
+      act(() => calls.label!(pearl()));
+      update();
+      guestArrives(update);
+      fireEvent.click(screen.getByRole('button', { name: 'Meet the girl' }));
+      // His goodbye starts late and runs on: she waits through it.
+      await act(async () => { vi.advanceTimersByTime(3000); });
+      calls.host.speaking = true; update();
+      await act(async () => { vi.advanceTimersByTime(4000); });
+      expect(screen.queryByText('Talking with')).toBeNull();
+      calls.host.speaking = false; update();
+      await act(async () => { vi.advanceTimersByTime(1600); });
+      update();
+      expect(screen.getByText('Talking with')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('is let go when the visitor moves on to a work without a guest', async () => {
@@ -156,6 +191,17 @@ describe('a guest warmed up ahead', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Meet the girl' }));
     update();
     expect(screen.getAllByText(/The girl is on the way/).length).toBeGreaterThan(0);
+  });
+});
+
+describe('the call starting', () => {
+  it('stops showing the call as on its way as soon as Edmund speaks', async () => {
+    const { update } = await onTour();
+    calls.host.phase = 'arriving'; update();
+    expect(screen.getByText(/Edmund is joining/)).toBeTruthy();
+    calls.host.speaking = true; update();
+    expect(screen.queryByText(/Edmund is joining/)).toBeNull();
+    expect(document.querySelector('.mr-tile.is-waiting')).toBeNull();
   });
 });
 

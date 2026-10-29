@@ -43,6 +43,10 @@ const API = '/api/apps/museum-guide';
 
 /** The same work again within this long is the visitor still standing at it, not arriving. */
 const STILL_HERE_MS = 90_000;
+/** Edmund's goodbye before a warm guest comes on: quiet this long after speaking, or nothing said in the wait, at most the max. */
+const GOODBYE_QUIET_MS = 1200;
+const GOODBYE_WAIT_MS = 8000;
+const GOODBYE_MAX_MS = 15_000;
 /** How long a guest warmed up for a work waits to be met before their call is let go. */
 const WARM_GUEST_MS = 4 * 60_000;
 
@@ -237,14 +241,22 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     setInfo(null);
     if (how === 'button') hostRef.current?.event(said.handOverPressed(g), 20);
     if (guestNow.current?.id === g.id && guestReady.current) {
-      // Warm and waiting: on stage once Edmund has said his goodbye (a few seconds at most).
+      // Warm and waiting: on stage once Edmund has said his goodbye. His goodbye can start
+      // seconds after the press (live: 12 s), so wait for him to speak and then fall quiet;
+      // if he says nothing in 8 s, go on; never more than 15 s.
       const started = Date.now();
+      let spoke = false;
+      let quietSince = 0;
       const id = setInterval(() => {
-        const saying = Date.now() - started < 1500 || hostRef.current?.speaking;
-        if (saying && Date.now() - started < 6000 && mode.current === 'to-guest') return;
+        if (mode.current !== 'to-guest') { clearInterval(id); return; }
+        const now = Date.now();
+        if (hostRef.current?.speaking) { spoke = true; quietSince = 0; }
+        else if (!quietSince) quietSince = now;
+        const done = spoke ? quietSince && now - quietSince >= GOODBYE_QUIET_MS : now - started >= GOODBYE_WAIT_MS;
+        if (!done && now - started < GOODBYE_MAX_MS) return;
         clearInterval(id);
-        if (mode.current === 'to-guest') guestOnStage();
-      }, 250);
+        guestOnStage();
+      }, 200);
       return true;
     }
     // Still joining: on stage the moment the call is live. Not started (or another's): start it now.
@@ -261,6 +273,8 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   /** The guest takes the stage; Edmund steps aside, still on the line. */
   const guestOnStage = () => {
     setMode('guest');
+    const g = guestNow.current;
+    if (g) guestRef.current?.state(guestState(g, langRef.current));
     guestAside(false);
     hostAside(true);
     setSpeaker('guest');
@@ -406,8 +420,8 @@ function Tour({ opening }: { opening: Exhibit | null }) {
       const g = guestNow.current;
       if (!g) return;
       guestReady.current = true;
-      guestRef.current?.state(guestState(g, langRef.current));
-      if (mode.current === 'to-guest') { guestOnStage(); return; }
+      if (mode.current === 'to-guest') { guestRef.current?.state(guestState(g, langRef.current)); guestOnStage(); return; }
+      guestRef.current?.state(guestState(g, langRef.current, true));
       // Warmed up ahead of the visitor: waits unheard (its greeting goes unheard: asked again on stage).
       greetedUnheard.current = true;
       guestAside(true);
@@ -483,7 +497,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   useEffect(() => { if (screen === 'visit') camera.stop(); }, [screen]);
 
   // Edmund's picture of the tour, kept current (the same text twice is sent once).
-  useEffect(() => { host.state(tourState(toldTour())); }, [host, current, seen, camera.state, lang]);
+  useEffect(() => { host.state(tourState({ ...toldTour(), away: speaker === 'guest' ? guestNow.current : null })); }, [host, current, seen, camera.state, lang, speaker]);
 
   const begin = async () => {
     setScreen('tour');
@@ -563,7 +577,8 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   const coming = modeView === 'to-guest' && guest
     ? { name: guestLabel(guest, lang).name, image: guestImage(guest.id), line: t('onTheWay', { name: guestLabel(guest, lang).name }) }
     : modeView === 'to-host' ? { name: HOST, image: hostPortrait, line: t('hostOnTheWay', { name: HOST }) } : null;
-  const status = busy ? null : statusCopy(active, activeName, t);
+  // Once the guide is talking the call has arrived, whatever its phase still says (it can still say "arriving" through his greeting).
+  const status = busy || active.speaking ? null : statusCopy(active, activeName, t);
   const openMap = (where: Exhibit | null = null) => { setMapAt(where); setMap(true); setTalk(false); };
   const infoGuest = guestFor(info);
   return (
@@ -627,9 +642,10 @@ function Tour({ opening }: { opening: Exhibit | null }) {
               onClick={() => setBig((b) => !b)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setBig((b) => !b); } }}>
               <img className="mr-tile-poster" src={hostPortrait} alt="" />
               <video ref={host.videoRef} className={speaker === 'host' ? 'is-on' : ''} playsInline muted />
-              <audio ref={host.audioRef} autoPlay />
+              {/* Only the guide on stage is heard, from the first moment: a guest warming up started talking before their call said it was live. */}
+              <audio ref={host.audioRef} autoPlay muted={speaker !== 'host'} />
               <video ref={guestCall.videoRef} className={speaker === 'guest' ? 'is-on' : ''} playsInline muted />
-              <audio ref={guestCall.audioRef} autoPlay />
+              <audio ref={guestCall.audioRef} autoPlay muted={speaker !== 'guest'} />
               {(coming || status?.busy) && (
                 <div className="mr-tile-coming" aria-hidden="true">
                   <img src={coming ? coming.image : hostPortrait} alt="" />
