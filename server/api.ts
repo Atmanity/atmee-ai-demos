@@ -105,7 +105,7 @@ const rendering = new Map<string, string>(); // avatar session id -> app id
 
 api.post('/apps/:app/render', async (req, res) => {
   const app = apps.get(req.params.app);
-  if (!app || app.way !== 'avatar-only') return void res.status(404).json({ error: 'unknown_app' });
+  if (!app || (app.way !== 'avatar-only' && !app.rendersFace)) return void res.status(404).json({ error: 'unknown_app' });
   if (!renderConfigured()) return void res.status(503).json({ error: 'livekit_not_configured', message: 'Set LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET' });
   const avatarId = avatarFor(app.id);
   if (!avatarId) return void res.status(500).json({ error: 'no_avatar', message: `Set avatarId in apps/${app.id}/avatar.json, ${avatarEnvName(app.id)} or AVATAR_DEFAULT` });

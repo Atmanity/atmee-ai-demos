@@ -1,6 +1,8 @@
 // Crate's server side: Spotify search, signed in as the app. The page owns
 // the player and answers the DJ's tools; it comes here only to dig for records.
 import type { AppServer } from '../../server/app-server.ts';
+import { avatarApi } from '../../server/atmee.ts';
+import { avatarFor } from '../../server/hosts.js';
 import { llmAvailable, structured } from '../../server/llm.ts';
 import { INSTRUCTIONS, TOOLS } from './engine/director.ts';
 import { Spotify } from './engine/spotify.ts';
@@ -30,6 +32,18 @@ async function themeFor(track: Track): Promise<Theme> {
   const raw = await Promise.race([ask, new Promise((_, reject) => setTimeout(() => reject(new Error('timed out')), THEME_MS))]);
   return themeFrom(raw);
 }
+// Speech sessions this server started, ended on shutdown so a rollout leaves nothing billing.
+const speaking = new Set<string>();
+const SPEECH_MAX_SECONDS = 900;
+
+/** The tools in the speech API's shape: the OpenAI function shape, without the full-stack x-atmee delivery. */
+const speechTools = TOOLS.map(({ type, name, description, parameters }) => ({ type, name, description, parameters }));
+
+const endSpeech = (id: string) => avatarApi('POST', `/v1/speech_sessions/${id}/end`);
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.once(signal, () => { void Promise.allSettled([...speaking].map(endSpeech)); });
+}
+
 const spotify = new Spotify(process.env.SPOTIFY_CLIENT_ID, process.env.SPOTIFY_CLIENT_SECRET);
 if (!spotify.configured) console.warn('[%s] SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET unset: the DJ cannot search', ID);
 
@@ -40,6 +54,7 @@ const app: AppServer = {
   brand: { color: '#14110f', ink: '#ffb547' },
   maxSeconds: 900,
   appTools: { instructions: INSTRUCTIONS, tools: TOOLS },
+  rendersFace: true,
   routes(router) {
     // The app's client id is public: the page signs a Premium listener in with it (PKCE, no secret)
     // to play through Spotify's Web Playback SDK, the player with a volume.
@@ -58,6 +73,33 @@ const app: AppServer = {
         if (themes.size > 500) themes.delete(themes.keys().next().value!);
       }
       res.json({ theme: await themes.get(track.id) });
+    });
+
+    // A voice-only conversation (the speech API): Nova's instructions and tools are pinned here, so
+    // the page cannot change them; it gets a 60-second, one-connection token for the WebSocket.
+    router.post('/speech', async (_req, res) => {
+      const avatarId = avatarFor(ID);
+      if (!avatarId) return void res.status(500).json({ error: 'no_avatar' });
+      const r = await avatarApi('POST', '/v1/speech_sessions', {
+        avatarId, language: 'en', maxDurationSeconds: SPEECH_MAX_SECONDS,
+        settings: { instructions: INSTRUCTIONS, delegation: { type: 'responses', responses: { tools: speechTools } } },
+      });
+      if (r.status !== 201 && r.status !== 200) {
+        console.warn('[%s] POST /v1/speech_sessions -> %d %s %s', ID, r.status, r.json?.error ?? '', r.json?.message ?? '');
+        return void res.status(r.status).json({ error: r.json?.error || `http_${r.status}`, retryAfter: r.retryAfter });
+      }
+      const { sessionId, url, token, actualDurationSeconds } = r.json;
+      speaking.add(sessionId);
+      setTimeout(() => speaking.delete(sessionId), (SPEECH_MAX_SECONDS + 120) * 1000).unref();
+      console.log('[%s] speech session %s on avatar %s', ID, sessionId, avatarId.slice(0, 8));
+      res.status(201).json({ sessionId, url, token, maxSeconds: actualDurationSeconds ?? SPEECH_MAX_SECONDS });
+    });
+
+    router.post('/speech/:id/end', async (req, res) => {
+      if (!speaking.has(req.params.id)) return void res.status(404).json({ error: 'not_found' });
+      const r = await endSpeech(req.params.id);
+      if (r.status < 300) speaking.delete(req.params.id);
+      res.status(r.status).json(r.json);
     });
 
     router.post('/search', async (req, res) => {

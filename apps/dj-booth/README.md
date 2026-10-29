@@ -4,6 +4,21 @@
 records, puts them on, lines up what is next and talks the listener in and out of every
 track. The music is Spotify's own embed on the page; Nova works it through app tools.
 
+## Two engines
+
+- **Speech (default):** Nova over the speech API (`POST /v1/speech_sessions`), voice only, in one
+  WebSocket from the page (`page/speech.ts`): 24 kHz PCM both ways, her tools as
+  `function_call` items, the live deck as `causeur.directive.set`, cues and typed turns as
+  `session.commentary.append` (a typed turn carries Causeur's typed-reply prefix, which also cuts
+  her off). Her **face is rendered on demand** into the site's own LiveKit room
+  (`POST /api/apps/dj-booth/render`, the avatar-only way): up for her breaks, a held record, the
+  opening and whenever the listener starts talking (the talk button, or their first words), down
+  after 20 s of music with nobody talking. While it is up her voice streams into it (16 kHz) and
+  the face plays it in sync; otherwise it plays in the page. Without LiveKit for the site
+  (`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`) she goes on by voice and the stage shows
+  her portrait.
+- **Full-stack (`?engine=session`):** the earlier `POST /v1/session`, face always rendered.
+
 ## How it works
 
 ```

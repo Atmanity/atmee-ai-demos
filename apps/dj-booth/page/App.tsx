@@ -4,13 +4,14 @@
 // previews), keeps Nova's picture of the deck current and gives her a break
 // near the end of every record: the music ducks under her, and the next
 // record waits until she has finished introducing it.
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { BackToApps, CallStatus, clock as kitClock, ChatPanel, HangUpIcon, HostVideo, useAvatar, useCaptionToggle, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
 import { advance, askOpen, clearHostPicks, dig, label, lined, playedTonight, pick, playNow, queueNext, setPaused } from '../engine/deck.ts';
 import { crateText, deckState, said } from '../engine/director.ts';
 import { emptyDeck, type Deck, type Track } from '../engine/types.ts';
 import { DEFAULT_THEME, type Theme } from '../engine/theme.ts';
 import { useSpotifyPlayer, type Playback } from './player.ts';
+import { useSpeechCall } from './speech.ts';
 import { useSdkPlayer } from './sdk-player.ts';
 import { accessToken, connect, connected, disconnect, finishConnect } from './spotify-auth.ts';
 import { answering, freshClock, heard, HOLD_MAX_MS, INTRO_TALK_MS, INTRO_WAIT_MS, musicLevel, QUIET_MS, tick, type Clock, type Hold } from '../engine/booth.ts';
@@ -18,6 +19,9 @@ import nova from '../host/portrait.jpg';
 import './crate.css';
 
 const API = '/api/apps/dj-booth';
+// The face on demand: kept up this long after the listener spoke, and ended after this long unneeded.
+const FACE_LISTENER_MS = 30_000;
+const FACE_IDLE_MS = 20_000;
 // The music's fades: a change of record fades the old one out over this, a duck dips over the same.
 const FADE_MS = 1200;
 const FADE_STEPS = 12;
@@ -147,7 +151,7 @@ function fitTail(el: HTMLElement, text: string): string {
 // How long the button keeps showing what was heard, once the words are final.
 const HEARD_SHOWN_MS = 3000;
 
-function PushToTalk({ avatar }: { avatar: Avatar }) {
+function PushToTalk({ avatar, onPress }: { avatar: Avatar; onPress?: () => void }) {
   const onAir = avatar.phase === 'live';
   const [held, setHeld] = useState(false);
   // What fits the button's two lines: the whole line, or "…" and as much of its end as fits.
@@ -172,8 +176,11 @@ function PushToTalk({ avatar }: { avatar: Avatar }) {
   const closing = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const mic = useRef(avatar);
   mic.current = avatar;
+  const press = useRef(onPress);
+  press.current = onPress;
   const down = useCallback(() => {
     if (mic.current.phase !== 'live') return;
+    press.current?.();
     clearTimeout(closing.current);
     holding.current = true;
     setHeld(true);
@@ -444,7 +451,13 @@ export function App() {
   }, [deck.playing?.id]);
   useEffect(() => { if (deck.queue[0]) void themeOf(deck.queue[0]); }, [deck.queue[0]?.id]);
   const [pushToTalk, setPushToTalk] = useState(false);
-  const avatar = useAvatar('dj-booth', { onToolCall, onUserSaid: () => { lastListenerAt.current = Date.now(); } });
+  // Two engines with one shape: Nova over the speech API with her face rendered on demand (the
+  // default), or the full-stack session (?engine=session), whose face is always rendered.
+  const engine = useMemo(() => (new URLSearchParams(location.search).get('engine') === 'session' ? 'session' : 'speech'), []);
+  const avatarHandlers = { onToolCall, onUserSaid: () => { lastListenerAt.current = Date.now(); } };
+  const fullStack = useAvatar('dj-booth', avatarHandlers);
+  const speechCall = useSpeechCall('dj-booth', avatarHandlers);
+  const avatar: Avatar = engine === 'speech' ? speechCall : fullStack;
   avatarRef.current = avatar;
   const live = avatar.phase === 'live';
 
@@ -506,6 +519,41 @@ export function App() {
     }
   }, [avatar.speaking, musicOn, onBreak, (progress?.position ?? 0) < INTRO_TALK_MS]);
   const voiced = avatar.speaking && !muffled;
+
+  // The face on demand (speech engine): up for her breaks, a held record, the opening and the listener
+  // talking to her; down after a while of music with nobody talking. One that cannot run here (no
+  // LiveKit for the site) is not asked for again; the stage then shows her portrait while she talks.
+  const face = speechCall.face;
+  const faceDisabled = useRef(false);
+  // The listener starting to talk (the talk button down, or their first words heard) warms the face up,
+  // so it is there by the time Nova answers.
+  const [faceWantedUntil, setFaceWantedUntil] = useState(0);
+  const warmFace = useCallback(() => setFaceWantedUntil(Date.now() + FACE_LISTENER_MS), []);
+  useEffect(() => { if (avatar.heard) warmFace(); }, [Boolean(avatar.heard)]);
+  const needFace = engine === 'speech' && live
+    && (onBreak || Boolean(holding) || !opened.current || Date.now() < faceWantedUntil || Date.now() - lastListenerAt.current < FACE_LISTENER_MS || avatar.speaking);
+  // Re-checked when the warm-up window runs out.
+  useEffect(() => {
+    if (faceWantedUntil <= Date.now()) return;
+    const id = setTimeout(() => setFaceWantedUntil((t) => t), faceWantedUntil - Date.now() + 50);
+    return () => clearTimeout(id);
+  }, [faceWantedUntil]);
+  useEffect(() => {
+    if (face.phase === 'failed' && !faceDisabled.current) {
+      faceDisabled.current = true;
+      console.warn('[crate] the face could not start; Nova goes on by voice');
+    }
+  }, [face.phase]);
+  useEffect(() => {
+    if (!needFace || faceDisabled.current) return;
+    if (face.phase === 'idle' || face.phase === 'ended') void face.start();
+  }, [needFace, face.phase]);
+  useEffect(() => {
+    if (engine !== 'speech' || needFace || face.phase !== 'live') return;
+    const id = setTimeout(() => void face.end(), FACE_IDLE_MS);
+    return () => clearTimeout(id);
+  }, [needFace, face.phase]);
+  useEffect(() => { if (!live && face.phase === 'live') void face.end(); }, [live]);
 
   /** The listener changed the record by hand: Nova stops mid-sentence (silent at once) and talks about the new one. */
   function cutIn(what: string, track: Track) {
@@ -655,7 +703,7 @@ export function App() {
                 void (deck.paused ? player.resume() : player.pause());
                 update(setPaused(deckRef.current, !deck.paused));
               })}>{deck.paused ? <PlayIcon /> : <PauseIcon />}</button>
-            {pushToTalk ? <PushToTalk avatar={avatar} /> : <p className="cr-typing">Type your requests in the chat</p>}
+            {pushToTalk ? <PushToTalk avatar={avatar} onPress={warmFace} /> : <p className="cr-typing">Type your requests in the chat</p>}
             <button type="button" className="cr-icon" disabled={!deck.playing} title="Skip" onClick={() => {
               const next = advance(deckRef.current);
               const skippedWhat = `skipped ${deckRef.current.playing ? label(deckRef.current.playing) : 'the record'}`;

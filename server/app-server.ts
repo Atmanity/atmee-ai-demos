@@ -14,6 +14,11 @@ export interface AppServer {
    * rendered into the app's own LiveKit room (POST /v1/avatars/{id}/avatar_sessions).
    */
   way?: 'full-stack' | 'avatar-only';
+  /**
+   * The app also renders its avatar into the site's own LiveKit room on demand (POST
+   * /api/apps/<id>/render), as the face of a voice it gets elsewhere (a speech session).
+   */
+  rendersFace?: boolean;
   /** A conductor graph, or null to make sure the avatar runs none. */
   conductor?: { graph: unknown; speakAfterS?: number } | null;
   /** Longest session to ask for. */
