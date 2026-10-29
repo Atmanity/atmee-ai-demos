@@ -352,3 +352,4 @@ a { color: inherit; }
 .mr-info-close::before { content: "◉  "; color: var(--mr-red); }
 .mr-meet { background: var(--mr-ink); color: var(--mr-ivory); }
 
+.mr-sheet-brand { display: flex; align-items: center; gap: 12px; }

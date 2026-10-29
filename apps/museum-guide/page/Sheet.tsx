@@ -10,6 +10,7 @@ import { EXHIBITS, type Exhibit } from '../engine/catalogue.ts';
 import { labelUrl, TOUR_PATH } from '../engine/labels.ts';
 import { exhibitImage } from './images.ts';
 import { Wordmark } from './Lobby.tsx';
+import { BackToApps } from '../../../src/kit/index.ts';
 
 type Show = 'work' | 'label' | 'code';
 const SHOWS: [Show, string][] = [['work', 'Painting'], ['label', 'With label'], ['code', 'Code only']];
@@ -135,7 +136,7 @@ export function Sheet() {
   return (
     <div className={`mr-sheet is-${show}`}>
       <header className="mr-sheet-top">
-        <Wordmark />
+        <div className="mr-sheet-brand"><BackToApps /><Wordmark /></div>
         <div className="mr-sheet-intro">
           <h1>Gallery labels</h1>
           <p>Open the tour on your phone (scan this code), begin it, then point the phone at a label's code, or at a painting and ask Edmund what it is. Click a work to fill the window with it.</p>

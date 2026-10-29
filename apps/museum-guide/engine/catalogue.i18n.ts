@@ -2,9 +2,14 @@
 // field a visitor reads or a guide is told, with the same facts and each work's
 // established title in that language. `looks` (for matching a photo), `aka`
 // and `next` stay English.
-import { EXHIBITS, type Exhibit } from './catalogue.ts';
+import { addLocalNames, EXHIBITS, type Exhibit } from './catalogue.ts';
 import type { Lang } from './lang.ts';
 import { TRANSLATIONS } from './translations.ts';
+
+// show_exhibit finds a work by the title Edmund says, in any language.
+for (const tr of Object.values(TRANSLATIONS)) {
+  for (const [id, w] of Object.entries(tr.works)) addLocalNames(id, [w.title, w.artist]);
+}
 
 /** A work in a language: its own record for English, the translated fields otherwise. */
 export function localize(e: Exhibit, lang: Lang): Exhibit {

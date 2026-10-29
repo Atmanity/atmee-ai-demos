@@ -1,6 +1,7 @@
 // After the tour: the works the visitor saw, to remember them by, and the map
 // with them ticked (each work's full entry a tap away).
 import { useState } from 'react';
+import { BackToApps } from '../../../src/kit/index.ts';
 import type { Exhibit } from '../engine/catalogue.ts';
 import { exhibitImage } from './images.ts';
 import { Wordmark } from './Lobby.tsx';
@@ -13,7 +14,7 @@ export function Visit({ seen, onAgain }: { seen: Exhibit[]; onAgain: () => void 
   const { lang, t } = useLang();
   return (
     <div className="mr-lobby mr-visit">
-      <header className="mr-lobby-top"><Wordmark /></header>
+      <header className="mr-lobby-top"><BackToApps /><span className="mr-lobby-end"><Wordmark /></span></header>
       <main className="mr-visit-main">
         <p className="mr-eyebrow">{t('thanks')}</p>
         <h1>{seen.length ? (seen.length === 1 ? t('visitOne') : t('visitMany', { n: seen.length })) : t('comeBack')}</h1>

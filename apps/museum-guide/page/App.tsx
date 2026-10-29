@@ -47,6 +47,8 @@ const STILL_HERE_MS = 90_000;
 const GOODBYE_QUIET_MS = 1200;
 const GOODBYE_WAIT_MS = 8000;
 const GOODBYE_MAX_MS = 15_000;
+/** How long the first "point the camera" hint stays after the call is live. */
+const POINT_HINT_MS = 15_000;
 /** How long a guest warmed up for a work waits to be met before their call is let go. */
 const WARM_GUEST_MS = 4 * 60_000;
 
@@ -115,11 +117,18 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   const [speaker, setSpeaker] = useState<'host' | 'guest'>('host');
   // Each start of a guest's call (warming one up, or one asked for at once): the call is on the guest's path, so it starts on the next render.
   const [guestStarts, setGuestStarts] = useState(0);
+  // The guest's call ended on its own (not hung up by the page) before they were met.
+  const guestDropped = useRef(false);
   // The guest's call is live (warm, hidden, or on stage), and whether its greeting went unheard while warm.
   const guestReady = useRef(false);
   const greetedUnheard = useRef(false);
   const warmTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // The last guest call being hung up: the next one starts once it has (the guests share one call, whose start does nothing while one is still up).
+  const guestGone = useRef<Promise<unknown>>(Promise.resolve());
+  const endGuest = () => { guestGone.current = guestRef.current?.end() ?? Promise.resolve(); };
   const mode = useRef<Mode>('host');
+  // "Point the camera at a work…": a first hint, gone once a work is found or after a little while.
+  const [pointHintGone, setPointHintGone] = useState(false);
   // The guide's tile, enlarged by a tap.
   const [big, setBig] = useState(false);
   // The same, for the screen: who is on the way shows while a hand-over is under way.
@@ -260,8 +269,10 @@ function Tour({ opening }: { opening: Exhibit | null }) {
       return true;
     }
     // Still joining: on stage the moment the call is live. Not started (or another's): start it now.
-    if (guestNow.current?.id !== g.id) {
-      if (guestNow.current) void guestRef.current?.end();
+    // A warm guest whose call dropped before Meet is placed again.
+    if (guestNow.current?.id !== g.id || guestDropped.current) {
+      guestDropped.current = false;
+      if (guestNow.current) endGuest();
       guestReady.current = false;
       greetedUnheard.current = false;
       setGuest(g);
@@ -283,8 +294,9 @@ function Tour({ opening }: { opening: Exhibit | null }) {
 
   /** A work's guest, started hidden while Edmund tells its story. */
   const warmGuest = (g: Guest) => {
-    if (mode.current !== 'host' || guestNow.current?.id === g.id) return;
-    if (guestNow.current) void guestRef.current?.end();
+    if (mode.current !== 'host' || (guestNow.current?.id === g.id && !guestDropped.current)) return;
+    guestDropped.current = false;
+    if (guestNow.current) endGuest();
     guestReady.current = false;
     greetedUnheard.current = false;
     setGuest(g);
@@ -298,7 +310,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   const coolGuest = () => {
     clearTimeout(warmTimer.current);
     if (mode.current !== 'host' || !guestNow.current) return;
-    void guestRef.current?.end();
+    endGuest();
     guestReady.current = false;
     setGuest(null);
   };
@@ -335,7 +347,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     hostAside(false);
     setSpeaker('host');
     if (g) hostRef.current?.event(said.welcomeBack(g, at.current.current && L(at.current.current)), 60);
-    void guestRef.current?.end();
+    endGuest();
     guestReady.current = false;
     setGuest(null);
   };
@@ -382,14 +394,17 @@ function Tour({ opening }: { opening: Exhibit | null }) {
       if (opened) warmGuest(opened);
       // The camera opens once he is on the line (not while the call is still being placed), and he sees it from then on.
       void camera.start().then((track) => {
-        if (track) void hostRef.current?.setCamera?.(track);
-        else flash(translator(langRef.current)('cameraOffAtStart', { name: HOST_NAME[langRef.current] }));
+        if (track) {
+          void hostRef.current?.setCamera?.(track);
+          // A guest warmed up before the camera opened sees it too.
+          if (guestRef.current?.phase === 'live') void guestRef.current.setCamera?.(track);
+        } else flash(translator(langRef.current)('cameraOffAtStart', { name: HOST_NAME[langRef.current] }));
       });
     },
     onEnded: () => {
       // Ended while a guest has the visitor (his session ran out): the tour goes on; calling him back starts a new one.
       if (!ending.current && (mode.current === 'to-guest' || mode.current === 'guest')) return;
-      if (!ending.current && mode.current === 'to-host') { setMode('guest'); return; }
+      if (!ending.current && mode.current === 'to-host') { clearInterval(backTimer.current); setMode('guest'); return; }
       callGen.current++;
       setLooking(false);
       setScreen((s) => (s === 'tour' ? 'visit' : s));
@@ -420,6 +435,8 @@ function Tour({ opening }: { opening: Exhibit | null }) {
       const g = guestNow.current;
       if (!g) return;
       guestReady.current = true;
+      // The camera may have opened while this call was joining.
+      if (camera.track) void guestRef.current?.setCamera?.(camera.track);
       if (mode.current === 'to-guest') { guestRef.current?.state(guestState(g, langRef.current)); guestOnStage(); return; }
       guestRef.current?.state(guestState(g, langRef.current, true));
       // Warmed up ahead of the visitor: waits unheard (its greeting goes unheard: asked again on stage).
@@ -431,6 +448,11 @@ function Tour({ opening }: { opening: Exhibit | null }) {
       guestReady.current = false;
       // Dropped while talking: Edmund comes back (and is told whom the visitor met).
       if (mode.current === 'guest') callHostBack('dropped');
+      // Dropped while waiting to be met (or still joining for Meet): placed again when asked for.
+      else if (guestNow.current) {
+        guestDropped.current = true;
+        if (mode.current === 'to-guest') { const g = guestNow.current; setMode('host'); handOver(g, 'tool'); }
+      }
     },
   });
   guestRef.current = guestCall;
@@ -438,9 +460,14 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   // A guest's call asked for (warming up, or met at once), on the guest's path (this render has it).
   useEffect(() => {
     if (!guestStarts) return;
-    const rule = languageRule(langRef.current);
-    if (rule) guestCall.note(rule);
-    void guestCall.start({ mic: true, micMuted: true, camera: camera.track, language: langRef.current });
+    let stale = false;
+    void guestGone.current.then(() => {
+      if (stale) return;
+      const rule = languageRule(langRef.current);
+      if (rule) guestCall.note(rule);
+      void guestCall.start({ mic: true, micMuted: true, camera: camera.track, language: langRef.current });
+    });
+    return () => { stale = true; };
   }, [guestStarts]);
   // The guest could not come: Edmund carries on.
   useEffect(() => {
@@ -492,6 +519,12 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     fit();
     return () => { watch.disconnect(); clearInterval(tick); events.forEach((e) => video.removeEventListener(e, fit)); };
   }, [screen]);
+
+  useEffect(() => {
+    if (host.phase !== 'live' || pointHintGone) return;
+    const id = setTimeout(() => setPointHintGone(true), POINT_HINT_MS);
+    return () => clearTimeout(id);
+  }, [host.phase, pointHintGone]);
 
   // The tour is over: the camera goes off with it (the visit card does not show it).
   useEffect(() => { if (screen === 'visit') camera.stop(); }, [screen]);
@@ -669,9 +702,9 @@ function Tour({ opening }: { opening: Exhibit | null }) {
                 <button type="button" className="mr-nowline" onClick={() => setInfo(card.exhibit)}>
                   <small>{card.here ? t('youAreAt') : L(card.exhibit).gallery.split(/[,，]/)[0]}</small> <b>{L(card.exhibit).title}</b> <span aria-hidden="true">›</span>
                 </button>
-              ) : (
+              ) : !pointHintGone && !seen.length ? (
                 <p className="mr-nowline is-empty">{t('pointHint')}</p>
-              )}
+              ) : null}
               {!status && <Subtitles key={speaker} text={active.caption} speaking={active.speaking} name={activeName} heard={active.heard}
                 hint={live ? t('askHint', { name: activeName }) : ''} />}
             </div>

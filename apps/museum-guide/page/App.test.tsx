@@ -124,6 +124,7 @@ describe('a guest warmed up ahead', () => {
     const { update } = await onTour();
     act(() => calls.label!(pearl()));
     update();
+    await act(async () => {});
     // Started as soon as the visitor reached the work, before anyone asked.
     expect(calls.guestApp).toBe('museum-guide/guest/girl');
     expect(calls.guest.start).toHaveBeenCalledTimes(1);
@@ -173,10 +174,53 @@ describe('a guest warmed up ahead', () => {
     }
   });
 
+  it('starts the next guest only once the last one has hung up (they share one call)', async () => {
+    let hungUp!: () => void;
+    calls.guest.end = vi.fn(() => new Promise<void>((r) => { hungUp = r; }));
+    const { update } = await onTour();
+    act(() => calls.label!(pearl()));
+    update();
+    await act(async () => {});
+    expect(calls.guest.start).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Back to camera' }));
+    act(() => calls.label!(exhibitById('wanderer')!));
+    update();
+    await act(async () => {});
+    expect(calls.guest.end).toHaveBeenCalled();
+    expect(calls.guest.start).toHaveBeenCalledTimes(1);
+    await act(async () => { hungUp(); });
+    expect(calls.guest.start).toHaveBeenCalledTimes(2);
+    expect(calls.guestApp).toBe('museum-guide/guest/wanderer');
+  });
+
+  it('is placed again at Meet when their warm call dropped meanwhile', async () => {
+    const { update } = await onTour();
+    act(() => calls.label!(pearl()));
+    update();
+    await act(async () => {});
+    guestArrives(update);
+    calls.guest.phase = 'ended';
+    act(() => { calls.handlers.guest.onEnded?.(); });
+    update();
+    fireEvent.click(screen.getByRole('button', { name: 'Meet the girl' }));
+    update();
+    await act(async () => {});
+    expect(calls.guest.start).toHaveBeenCalledTimes(2);
+  });
+
+  it('is shown the camera when it opened while their call was joining', async () => {
+    const { update } = await onTour();
+    act(() => calls.label!(pearl()));
+    update();
+    guestArrives(update);
+    expect(calls.guest.setCamera).toHaveBeenCalledWith(track);
+  });
+
   it('is let go when the visitor moves on to a work without a guest', async () => {
     const { update } = await onTour();
     act(() => calls.label!(pearl()));
     update();
+    await act(async () => {});
     expect(calls.guest.start).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: 'Back to camera' }));
     act(() => calls.label!(exhibitById('night-watch')!));
@@ -191,6 +235,17 @@ describe('a guest warmed up ahead', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Meet the girl' }));
     update();
     expect(screen.getAllByText(/The girl is on the way/).length).toBeGreaterThan(0);
+  });
+});
+
+describe('the first hint', () => {
+  it('points at the works until the first one is found', async () => {
+    const { update } = await onTour();
+    expect(screen.getByText(/Point the camera at a work/)).toBeTruthy();
+    act(() => calls.label!(pearl()));
+    update();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to camera' }));
+    expect(screen.queryByText(/Point the camera at a work/)).toBeNull();
   });
 });
 

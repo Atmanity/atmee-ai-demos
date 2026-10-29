@@ -187,6 +187,13 @@ const byId = new Map(EXHIBITS.map((e) => [e.id, e]));
 export const exhibitById = (id: string | null | undefined): Exhibit | null => (id ? byId.get(id) ?? null : null);
 
 const words = (text: string) => text.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+/** Letters of any script, for names in other languages ("蒙娜麗莎", "Мона Лиза"): no spaces, no punctuation. */
+const letters = (text: string) => text.toLowerCase().normalize('NFKC').replace(/[^\p{L}\p{N}]+/gu, '');
+/** Each work's title and artist in the tour's other languages (set by catalogue.i18n.ts, which reads the translations). */
+const localNames = new Map<string, string[]>();
+export function addLocalNames(id: string, names: string[]) {
+  localNames.set(id, [...(localNames.get(id) ?? []), ...names.map(letters).filter(Boolean)]);
+}
 const STOP = new Set(['the', 'a', 'an', 'of', 'off', 'by', 'with', 'above', 'under', 'painting', 'picture', 'print', 'one', 'that', 'this']);
 const keyWords = (text: string) => words(text).split(' ').filter((w) => w && !STOP.has(w));
 
@@ -196,6 +203,12 @@ const keyWords = (text: string) => words(text).split(' ').filter((w) => w && !ST
  * words that matter wins. Null when nothing fits.
  */
 export function findExhibit(text: string): Exhibit | null {
+  // A name in another language (Edmund says the works' titles as the visitor's language does): its title, or its artist.
+  const spoken = letters(text);
+  if (spoken && /[^a-z0-9]/.test(spoken)) {
+    const local = EXHIBITS.find((e) => localNames.get(e.id)?.some((n) => spoken === n || (n.length >= 2 && spoken.includes(n)) || (n.length >= 3 && n.includes(spoken))));
+    if (local) return local;
+  }
   const asked = words(text);
   if (!asked) return null;
   if (byId.has(asked.replace(/ /g, '-'))) return byId.get(asked.replace(/ /g, '-'))!;
