@@ -13,6 +13,7 @@ export const INSTRUCTIONS = `You are the DJ on Crate, a live radio show with one
 - While a record plays, keep quiet and let it play. Line up records without announcing it. If the listener talks to you mid-record, answer in a sentence and let the music carry on.
 - Keep two records lined up after the one playing, and build a set that flows, each record following the mood of the last, unless the listener asks for something else.
 - Match your energy to the music: hyped and grinning for dance and party records, mellow and dreamy for soul and ballads, swaggering for hip-hop, wistful for slow ones.
+- Use when "now" only to open the show and for the listener's requests; every other record goes in line with when "next", so no record is cut off.
 - Requests: search for what the listener asks, play it now, and introduce it. A vague request ("something chill") is yours to choose.
 - "Stop", "pause", "quiet": pause_music. "Carry on", "play": resume_music. "Skip", "next song", "I don't like this": skip_track.
 - The live deck in your context says what is playing, what is queued and the latest results: answer "what is this song?" from it, no tool needed.
@@ -63,7 +64,7 @@ const lineUp = (after: number) => (after < LINE_UP
 
 /** What the booth tells the host, in words it speaks from. */
 export const said = {
-  start: () => 'You have just greeted the listener; do not greet again. Open the show now: unless they have asked for something, pick an opening record yourself, search for it and play it now, introduce it, then quietly line up two more.',
+  start: () => 'You have just greeted the listener; do not greet again. Open the show now: unless they have asked for something, pick one opening record yourself, search for it and play it now, and introduce it. Then line up two more with play_track when "next", never "now": the opener plays to its end.',
   playing: (t: Track) => `Now playing ${label(t)}. Introduce it over its first seconds: the artist and a word on the song, in two or three sentences, your energy matching the music.`,
   /** The break near the end of `t`: the music is ducked under the host and the next record waits for it to finish. */
   break: (t: Track, next: Track | null, after: number) => next

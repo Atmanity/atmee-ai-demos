@@ -16,6 +16,7 @@ export function tracksFrom(json: any): Track[] {
     year: String(t.album?.release_date ?? '').slice(0, 4),
     durationMs: Number(t.duration_ms) || 0,
     art: t.album?.images?.at(-2)?.url ?? t.album?.images?.[0]?.url ?? null,
+    cover: t.album?.images?.[0]?.url ?? null,
   }));
 }
 

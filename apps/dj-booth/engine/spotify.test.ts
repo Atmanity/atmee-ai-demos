@@ -7,7 +7,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 describe('tracksFrom', () => {
   test('maps a search response to the booth\'s tracks', () => {
     expect(tracksFrom({ tracks: { items: [item] } })).toEqual([
-      { id: 'abc', title: 'One More Time', artist: 'Daft Punk', album: 'Discovery', year: '2001', durationMs: 320000, art: 'mid' },
+      { id: 'abc', title: 'One More Time', artist: 'Daft Punk', album: 'Discovery', year: '2001', durationMs: 320000, art: 'mid', cover: 'big' },
     ]);
   });
 

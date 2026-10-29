@@ -5,7 +5,10 @@ export interface Track {
   album: string;
   year: string;
   durationMs: number;
+  /** A small cover for lists (about 300 px). */
   art: string | null;
+  /** The biggest cover (about 640 px), for the stage. */
+  cover: string | null;
 }
 
 /** The booth as the page holds it: the last search, the record on, and what is lined up. */

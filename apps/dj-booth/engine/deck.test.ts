@@ -3,7 +3,7 @@ import { advance, dig, pick, playNow, queueNext, setPaused } from './deck.ts';
 import { crateText, deckState, said, TOOLS, INSTRUCTIONS } from './director.ts';
 import { emptyDeck, type Track } from './types.ts';
 
-const track = (id: string, title = id): Track => ({ id, title, artist: 'Artist', album: '', year: '1999', durationMs: 1, art: null });
+const track = (id: string, title = id): Track => ({ id, title, artist: 'Artist', album: '', year: '1999', durationMs: 1, art: null, cover: null });
 const a = track('a', 'Alpha');
 const b = track('b', 'Bravo');
 const c = track('c', 'Charlie');
@@ -77,6 +77,7 @@ describe('the host keeps the show going', () => {
   });
 
   test('the show opens on the host\'s own pick, unasked', () => {
-    expect(said.start()).toContain('pick an opening record yourself');
+    expect(said.start()).toContain('pick one opening record yourself');
+    expect(said.start()).toContain('never "now": the opener plays to its end');
   });
 });

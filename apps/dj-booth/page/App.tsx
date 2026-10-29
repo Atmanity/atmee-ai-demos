@@ -9,6 +9,7 @@ import { BackToApps, CallStatus, ChatPanel, HangUpIcon, HostVideo, useAvatar, us
 import { advance, dig, label, pick, playNow, queueNext, setPaused } from '../engine/deck.ts';
 import { crateText, deckState, said } from '../engine/director.ts';
 import { emptyDeck, type Deck, type Track } from '../engine/types.ts';
+import { DEFAULT_THEME, type Theme } from '../engine/theme.ts';
 import { useSpotifyPlayer, type Playback } from './player.ts';
 import { useSdkPlayer } from './sdk-player.ts';
 import { accessToken, connect, connected, disconnect, finishConnect } from './spotify-auth.ts';
@@ -17,6 +18,10 @@ import nova from '../host/portrait.jpg';
 import './crate.css';
 
 const API = '/api/apps/dj-booth';
+// A break's cue goes stale fast: one Nova hears late would introduce a record that already played.
+const BREAK_TTL_S = 15;
+// Nova's face stays up this long after she stops, so the stage does not flicker between sentences.
+const FACE_LINGER_MS = 1500;
 const HOST = 'Nova';
 
 function Logo() {
@@ -24,8 +29,8 @@ function Logo() {
     <a className="cr-logo" href="./" aria-label="Crate home">
       <svg viewBox="0 0 40 40" width="30" height="30" aria-hidden="true">
         <circle cx="20" cy="20" r="17" fill="currentColor" />
-        <circle cx="20" cy="20" r="11" fill="none" stroke="var(--cr-bg)" strokeWidth="1" opacity=".5" />
-        <circle cx="20" cy="20" r="5" fill="var(--cr-bg)" />
+        <circle cx="20" cy="20" r="11" fill="none" stroke="var(--bg)" strokeWidth="1" opacity=".5" />
+        <circle cx="20" cy="20" r="5" fill="var(--bg)" />
       </svg>
       <span>Crate</span>
     </a>
@@ -37,7 +42,8 @@ interface SpotifyLink { clientId: string | null; connected: boolean; problem: st
 
 function Lobby({ onStart, spotify }: { onStart: (mic: boolean) => void; spotify: SpotifyLink }) {
   return (
-    <div className="cr-lobby">
+    <div className="cr-app cr-lobby" style={themeStyle(DEFAULT_THEME)}>
+      <Backdrop theme={DEFAULT_THEME} cover={null} />
       <header className="cr-top"><BackToApps /><Logo /></header>
       <main className="cr-hero">
         <img className="cr-hero-face" src={nova} alt="" />
@@ -137,7 +143,7 @@ export function App() {
     if (cue === 'break') {
       setOnBreak(true);
       const d = deckRef.current;
-      avatarRef.current?.event(said.break(on, d.queue[0] ?? null, Math.max(0, d.queue.length - 1)), 30);
+      avatarRef.current?.event(said.break(on, d.queue[0] ?? null, Math.max(0, d.queue.length - 1)), BREAK_TTL_S);
     } else if (cue === 'ended') {
       const after = advance(deckRef.current);
       update(after);
@@ -215,6 +221,26 @@ export function App() {
   }, [search, spin, player]);
 
   const cc = useCaptionToggle('dj-booth', false);
+  const [tab, setTab] = useState<'chat' | 'next' | 'crate'>('chat');
+
+  // The look follows the record: each one's theme is asked for when it is lined up, so it is ready as it plays.
+  const [theme, setTheme] = useState<Theme>(DEFAULT_THEME);
+  const themes = useRef(new Map<string, Promise<Theme>>());
+  const themeOf = useCallback((t: Track) => {
+    if (!themes.current.has(t.id)) {
+      themes.current.set(t.id, fetch(`${API}/theme`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ track: t }) })
+        .then((r) => r.json()).then((j) => j.theme as Theme).catch(() => DEFAULT_THEME));
+    }
+    return themes.current.get(t.id)!;
+  }, []);
+  useEffect(() => {
+    const on = deck.playing;
+    if (!on) return;
+    let current = true;
+    void themeOf(on).then((t) => { if (current) setTheme(t); });
+    return () => { current = false; };
+  }, [deck.playing?.id]);
+  useEffect(() => { if (deck.queue[0]) void themeOf(deck.queue[0]); }, [deck.queue[0]?.id]);
   const [pushToTalk, setPushToTalk] = useState(false);
   const avatar = useAvatar('dj-booth', { onToolCall });
   avatarRef.current = avatar;
@@ -263,6 +289,15 @@ export function App() {
     if (live) avatar.event(said.pressed(what), 20);
   }
 
+  // The stage shows Nova only when she is on the mic; the rest of the time, the record.
+  const wantFace = !live || avatar.speaking || onBreak || Boolean(holding) || !deck.playing || deck.paused;
+  const [showFace, setShowFace] = useState(true);
+  useEffect(() => {
+    if (wantFace) return void setShowFace(true);
+    const id = setTimeout(() => setShowFace(false), FACE_LINGER_MS);
+    return () => clearTimeout(id);
+  }, [wantFace]);
+
   if (avatar.phase === 'idle') {
     return <Lobby spotify={spotify} onStart={(mic) => {
       player.prepare();
@@ -276,46 +311,54 @@ export function App() {
   const kicker = holding ? 'Up after Nova' : deck.playing ? (deck.paused ? 'Paused' : onBreak ? 'Nova on the mic' : 'Now playing') : 'The decks are quiet';
 
   return (
-    <div className="cr-app">
+    <div className="cr-app" style={themeStyle(theme)} data-backdrop={theme.backdrop}>
+      <Backdrop theme={theme} cover={deck.playing?.cover ?? null} />
       <header className="cr-top">
         <BackToApps avatar={avatar} name={HOST} /><Logo />
+        <span className="cr-mood" title="This look was made by AI for the record playing">✦ {theme.mood}</span>
         {live && <span className="cr-onair">On air</span>}
-        {live && <button type="button" className="call-round is-end cr-controls" onClick={() => void avatar.end()} title="End the show"><HangUpIcon /></button>}
+        {live && <button type="button" className="cr-end" onClick={() => void avatar.end()} title="End the show"><HangUpIcon /></button>}
       </header>
 
       <main className="cr-main">
-        <aside className="cr-host" aria-label={`${HOST}, your DJ`}>
-          <HostVideo avatar={avatar} captions={cc.on} onToggleCaptions={cc.toggle} name={HOST} poster={nova} className="cr-host-video">
-            <CallStatus avatar={avatar} name={HOST} again="Call Nova back" />
-          </HostVideo>
-          <p className="cr-nameplate"><b>{HOST}</b> on the decks</p>
-          {live && pushToTalk && <PushToTalk avatar={avatar} />}
-        </aside>
-
-        <section className="cr-decks" aria-label="The decks">
-          <div className="cr-now">
-            {deck.playing?.art ? <img src={deck.playing.art} alt="" /> : <div className="cr-blank" aria-hidden="true" />}
-            <div>
-              <p className="cr-kicker">{kicker}</p>
-              <p className="cr-title">{deck.playing ? deck.playing.title : 'Ask Nova for a record'}</p>
-              {deck.playing && <p className="cr-artist">{deck.playing.artist}</p>}
-              <div className="cr-bar" aria-hidden="true"><span style={{ width: `${holding ? 0 : pct}%` }} /></div>
-            </div>
+        <section className="cr-center" aria-label="The booth">
+          <div className={`cr-stage ${showFace ? 'is-face' : 'is-record'}`}>
+            {/* Mounted all along: the call's video plays into it, shown or not. */}
+            <HostVideo avatar={avatar} captions={cc.on} onToggleCaptions={cc.toggle} name={HOST} poster={nova} className="cr-host-video">
+              <CallStatus avatar={avatar} name={HOST} again="Call Nova back" />
+            </HostVideo>
+            {deck.playing?.cover && (
+              <div className="cr-record" aria-hidden={showFace}>
+                <div className={`cr-vinyl ${deck.paused || holding ? 'is-still' : ''}`}><img src={deck.playing.cover} alt={`${deck.playing.title} cover`} /></div>
+              </div>
+            )}
+            <span className="cr-stage-tag">{showFace ? `${HOST} on the mic` : `${HOST} on the decks`}</span>
           </div>
-          <div className="cr-buttons">
-            <button type="button" disabled={!deck.playing} onClick={() => press(deck.paused ? 'resumed the music' : 'paused the music', () => {
-              void (deck.paused ? player.resume() : player.pause());
-              update(setPaused(deckRef.current, !deck.paused));
-            })}>{deck.paused ? 'Resume' : 'Pause'}</button>
-            <button type="button" disabled={!deck.playing} onClick={() => {
+
+          <div className="cr-meta">
+            <p className="cr-kicker">{kicker}</p>
+            <h1 className="cr-title">{deck.playing ? deck.playing.title : 'Ask Nova for a record'}</h1>
+            {deck.playing && <p className="cr-artist">{deck.playing.artist}{deck.playing.year ? ` · ${deck.playing.year}` : ''}</p>}
+            <div className="cr-bar" aria-hidden="true"><span style={{ width: `${holding ? 0 : pct}%` }} /></div>
+          </div>
+
+          <div className="cr-dock">
+            <button type="button" className="cr-icon" disabled={!deck.playing} title={deck.paused ? 'Resume' : 'Pause'}
+              onClick={() => press(deck.paused ? 'resumed the music' : 'paused the music', () => {
+                void (deck.paused ? player.resume() : player.pause());
+                update(setPaused(deckRef.current, !deck.paused));
+              })}>{deck.paused ? <PlayIcon /> : <PauseIcon />}</button>
+            {live && pushToTalk ? <PushToTalk avatar={avatar} /> : <p className="cr-typing">Type your requests in the chat</p>}
+            <button type="button" className="cr-icon" disabled={!deck.playing} title="Skip" onClick={() => {
               const next = advance(deckRef.current);
               press(`skipped ${deckRef.current.playing ? label(deckRef.current.playing) : 'the record'}${next.playing ? `; ${label(next.playing)} is on now` : ''}`, () => {
                 if (next.playing) spin(next.playing, next); else { update(next); void player.pause(); }
               });
-            }}>Skip</button>
+            }}><SkipIcon /></button>
           </div>
+
           <div className="cr-mixer">
-            <label title={player.canVolume ? undefined : 'Connect Spotify Premium (on the start page) for a music volume'}>
+            <label title={player.canVolume ? undefined : 'Connect Spotify Premium on the start page for a music volume'}>
               <span>Music</span>
               <input type="range" min={0} max={1} step={0.05} value={musicVolume} disabled={!player.canVolume}
                 onChange={(e) => setMusicVolume(Number(e.target.value))} aria-label="Music volume" />
@@ -324,36 +367,73 @@ export function App() {
               <span>{HOST}</span>
               <input type="range" min={0} max={1} step={0.05} value={novaVolume} onChange={(e) => setNovaVolume(Number(e.target.value))} aria-label={`${HOST}'s volume`} />
             </label>
-            {!player.canVolume && <small>Previews play at your system volume: connect Spotify Premium for a music volume.</small>}
           </div>
           <div ref={player.host} className="cr-embed" />
+        </section>
 
-          {deck.queue.length > 0 && (
-            <div className="cr-list">
-              <h2>Up next</h2>
-              <ol>{deck.queue.map((t, i) => <li key={`${t.id}-${i}`}><span>{t.title}</span> <small>{t.artist}</small></li>)}</ol>
-            </div>
-          )}
-
-          <div className="cr-list">
-            <h2>{deck.dug ? <>The crate: <em>{deck.dug}</em></> : 'The crate'}</h2>
+        <aside className="cr-side">
+          <nav className="cr-tabs" role="tablist">
+            {(['chat', 'next', 'crate'] as const).map((t) => (
+              <button key={t} type="button" role="tab" aria-selected={tab === t} className={tab === t ? 'is-on' : ''} onClick={() => setTab(t)}>
+                {t === 'chat' ? 'Chat' : t === 'next' ? `Up next${deck.queue.length ? ` · ${deck.queue.length}` : ''}` : 'Crate'}
+              </button>
+            ))}
+          </nav>
+          <div className="cr-panel" hidden={tab !== 'chat'}>
+            <ChatPanel avatar={avatar} name={HOST} className="cr-chat" placeholder="Request a song, an artist, a mood…" empty={<>Hold the button to talk, or type: "play some 80s synth-pop".</>} />
+          </div>
+          <div className="cr-panel" hidden={tab !== 'next'}>
+            {deck.queue.length ? (
+              <ol className="cr-rows">{deck.queue.map((t, i) => <TrackRow key={`${t.id}-${i}`} track={t} />)}</ol>
+            ) : <p className="cr-empty">Nova lines records up here as the set builds.</p>}
+          </div>
+          <div className="cr-panel" hidden={tab !== 'crate'}>
+            {deck.dug && <p className="cr-dug">Dug for <b>{deck.dug}</b></p>}
             {deck.crate.length ? (
-              <ol className="cr-crate">
-                {deck.crate.map((t) => (
-                  <li key={t.id}>
-                    <button type="button" onClick={() => press(`put on ${label(t)}`, () => spin(t))} aria-label={`Play ${t.title} by ${t.artist}`}>
-                      {t.art ? <img src={t.art} alt="" /> : <span className="cr-blank" />}
-                      <span><b>{t.title}</b><small>{t.artist}{t.year ? ` · ${t.year}` : ''}</small></span>
-                    </button>
-                  </li>
+              <ol className="cr-rows">
+                {deck.crate.map((t, i) => (
+                  <TrackRow key={t.id} track={t} number={i + 1} onPlay={() => press(`put on ${label(t)}`, () => spin(t))} />
                 ))}
               </ol>
             ) : <p className="cr-empty">Records Nova digs up land here. Tap one to put it on yourself.</p>}
           </div>
-        </section>
-
-        <ChatPanel avatar={avatar} name={HOST} className="cr-chat" placeholder="Request a song, an artist, a mood…" empty={<>Hold the button to talk, or type: "play some 80s synth-pop".</>} />
+        </aside>
       </main>
+    </div>
+  );
+}
+
+function TrackRow({ track, number, onPlay }: { track: Track; number?: number; onPlay?: () => void }) {
+  const body = (
+    <>
+      {track.art ? <img src={track.art} alt="" /> : <span className="cr-blank" />}
+      <span><b>{track.title}</b><small>{track.artist}{track.year ? ` · ${track.year}` : ''}</small></span>
+      {number !== undefined && <em>{number}</em>}
+    </>
+  );
+  return <li>{onPlay ? <button type="button" onClick={onPlay} aria-label={`Play ${track.title} by ${track.artist}`}>{body}</button> : <div>{body}</div>}</li>;
+}
+
+const icon = { width: 22, height: 22, viewBox: '0 0 24 24', fill: 'currentColor', 'aria-hidden': true } as const;
+const PauseIcon = () => <svg {...icon}><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>;
+const PlayIcon = () => <svg {...icon}><path d="M7 4.5v15l13-7.5z" /></svg>;
+const SkipIcon = () => <svg {...icon}><path d="M5 5v14l10-7zM17 5h2.5v14H17z" /></svg>;
+
+/** The theme as the page's custom properties; registered in the CSS, so every change fades. */
+function themeStyle(t: Theme): React.CSSProperties {
+  return {
+    '--bg': t.bg, '--surface': t.surface, '--ink': t.ink, '--dim': t.dim, '--accent': t.accent, '--glow': t.glow,
+    '--display': `'${t.font}', 'Archivo Black', sans-serif`,
+  } as React.CSSProperties;
+}
+
+/** The moving light behind everything: the record's colours, and its cover blurred into them. */
+function Backdrop({ theme, cover }: { theme: Theme; cover: string | null }) {
+  return (
+    <div className={`cr-backdrop is-${theme.backdrop}`} aria-hidden="true">
+      {cover && <div className="cr-backdrop-cover" key={cover} style={{ backgroundImage: `url(${cover})` }} />}
+      <span className="cr-blob is-a" /><span className="cr-blob is-b" /><span className="cr-blob is-c" />
+      <div className="cr-grain" />
     </div>
   );
 }
