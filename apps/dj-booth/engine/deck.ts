@@ -9,11 +9,18 @@ export function pick(deck: Deck, number: unknown): Track | null {
 
 export const dig = (deck: Deck, dug: string, crate: Track[]): Deck => ({ ...deck, dug, crate });
 
-export const playNow = (deck: Deck, track: Track): Deck => ({ ...deck, playing: track, paused: false });
+/** The record on goes into what has played (once, by song), and `next` is on. */
+const retire = (deck: Deck): Track[] =>
+  deck.playing && !deck.played.some((t) => songOf(t) === songOf(deck.playing!)) ? [...deck.played, deck.playing] : deck.played;
+
+export const playNow = (deck: Deck, track: Track): Deck => ({ ...deck, played: retire(deck), playing: track, paused: false });
 
 /** A song as people know it: the title without its edit, remaster or mix, and the lead artist. */
 export const songOf = (t: Track) =>
   `${t.title.toLowerCase().replace(/\s*[([].*?[)\]]/g, '').replace(/\s+-\s+.*$/, '').trim()}|${t.artist.toLowerCase().split(',')[0].trim()}`;
+
+/** Whether a song has already played this show (in any release). */
+export const playedTonight = (deck: Deck, track: Track) => deck.played.some((t) => songOf(t) === songOf(track));
 
 /** Whether a track is on now or already in line: the same release, or another release of the same song. */
 export const lined = (deck: Deck, track: Track) =>
@@ -33,7 +40,7 @@ export const nowBecomesNext = (lastNowAt: number, lastListenerAt: number, at: nu
   at - lastNowAt < NOW_GUARD_MS && lastListenerAt < lastNowAt;
 
 /** The next record on, out of the queue; nothing queued leaves the decks empty. */
-export const advance = (deck: Deck): Deck => ({ ...deck, playing: deck.queue[0] ?? null, paused: false, queue: deck.queue.slice(1) });
+export const advance = (deck: Deck): Deck => ({ ...deck, played: retire(deck), playing: deck.queue[0] ?? null, paused: false, queue: deck.queue.slice(1) });
 
 export const setPaused = (deck: Deck, paused: boolean): Deck => (deck.playing ? { ...deck, paused } : deck);
 

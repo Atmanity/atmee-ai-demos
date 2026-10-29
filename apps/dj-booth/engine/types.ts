@@ -20,6 +20,8 @@ export interface Deck {
   playing: Track | null;
   paused: boolean;
   queue: Track[];
+  /** What has played this show, oldest first: never picked again. */
+  played: Track[];
 }
 
-export const emptyDeck: Deck = { crate: [], dug: '', playing: null, paused: false, queue: [] };
+export const emptyDeck: Deck = { crate: [], dug: '', playing: null, paused: false, queue: [], played: [] };

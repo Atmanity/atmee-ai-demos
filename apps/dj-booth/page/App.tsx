@@ -6,14 +6,14 @@
 // record waits until she has finished introducing it.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { BackToApps, CallStatus, clock as kitClock, ChatPanel, HangUpIcon, HostVideo, useAvatar, useCaptionToggle, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
-import { advance, dig, label, lined, nowBecomesNext, pick, playNow, queueNext, setPaused } from '../engine/deck.ts';
+import { advance, dig, label, lined, nowBecomesNext, playedTonight, pick, playNow, queueNext, setPaused } from '../engine/deck.ts';
 import { crateText, deckState, said } from '../engine/director.ts';
 import { emptyDeck, type Deck, type Track } from '../engine/types.ts';
 import { DEFAULT_THEME, type Theme } from '../engine/theme.ts';
 import { useSpotifyPlayer, type Playback } from './player.ts';
 import { useSdkPlayer } from './sdk-player.ts';
 import { accessToken, connect, connected, disconnect, finishConnect } from './spotify-auth.ts';
-import { freshClock, heard, HOLD_MAX_MS, INTRO_TALK_MS, INTRO_WAIT_MS, musicLevel, QUIET_MS, tick, type Clock } from '../engine/booth.ts';
+import { ANSWER_WINDOW_MS, freshClock, heard, HOLD_MAX_MS, INTRO_TALK_MS, INTRO_WAIT_MS, musicLevel, QUIET_MS, tick, type Clock, type Hold } from '../engine/booth.ts';
 import nova from '../host/portrait.jpg';
 import './crate.css';
 
@@ -258,7 +258,7 @@ export function App() {
     } else if (cue === 'ended') {
       const after = advance(deckRef.current);
       update(after);
-      if (after.playing) { spokeSinceHold.current = true; setHolding(after.playing); }
+      if (after.playing) hold(after.playing, 'break', true);
       else {
         setOnBreak(false);
         avatarRef.current?.event(said.ranOut(), 30);
@@ -276,6 +276,15 @@ export function App() {
   // Whether Nova has spoken since the held record was set: after a break she already has; after a
   // change of record she is about to introduce it, and the record waits for that intro.
   const spokeSinceHold = useRef(true);
+  // What the held record is waiting for, and since when (HOLD_MAX_MS).
+  const holdKind = useRef<Hold>('break');
+  const heldAt = useRef(0);
+  const hold = useCallback((track: Track, kind: Hold, spoke: boolean) => {
+    holdKind.current = kind;
+    heldAt.current = Date.now();
+    spokeSinceHold.current = spoke;
+    setHolding(track);
+  }, []);
 
   const spin = useCallback((track: Track, from: Deck = deckRef.current) => {
     clock.current = freshClock(track.id);
@@ -293,9 +302,8 @@ export function App() {
     setOnBreak(false);
     update(playNow(from, track));
     setProgress(null);
-    spokeSinceHold.current = false;
-    setHolding(track);
-  }, [spin]);
+    hold(track, 'change', false);
+  }, [spin, hold]);
 
   /** Digs for records: the crate on screen becomes the results; null when search is not set up. */
   const search = useCallback(async (query: string): Promise<Track[] | null> => {
@@ -314,9 +322,12 @@ export function App() {
   const lastListenerAt = useRef(0);
 
   /** A record on now (a change-over when one is playing) or in line: what Nova is told. */
-  const put = useCallback((track: Track, when: unknown): string => {
+  const put = useCallback((track: Track, when: unknown, requested = false): string => {
     const d = deckRef.current;
     if (lined(d, track)) return said.alreadyLined(track);
+    // Nova never picks a song twice; the listener may ask for one again.
+    const asked = requested || Date.now() - lastListenerAt.current <= ANSWER_WINDOW_MS;
+    if (!asked && playedTonight(d, track)) return said.alreadyPlayed(track);
     const cutsOff = when !== 'next' && d.playing && nowBecomesNext(lastNowAt.current, lastListenerAt.current, Date.now());
     if ((when === 'next' || cutsOff) && d.playing) {
       const next = queueNext(d, track);
@@ -329,8 +340,7 @@ export function App() {
       opened.current = true;
       clock.current = freshClock(track.id);
       update(playNow(d, track));
-      spokeSinceHold.current = false;
-      setHolding(track);
+      hold(track, 'opener', false);
       return said.opener(track);
     }
     if (d.playing && !d.paused) {
@@ -350,7 +360,7 @@ export function App() {
         const query = String(args.query ?? '').trim().slice(0, 200);
         if (!query) return 'No search was given: say what to search for.';
         const tracks = await search(query);
-        return tracks ? crateText(query, tracks) : said.noSearch();
+        return tracks ? crateText(query, tracks, (t) => playedTonight(deckRef.current, t)) : said.noSearch();
       }
       case 'play_track': {
         const track = pick(d, args.number);
@@ -363,7 +373,8 @@ export function App() {
         const tracks = await search(query);
         if (!tracks) return said.noSearch();
         if (!tracks.length) return crateText(query, tracks);
-        return put(tracks[0], args.when ?? 'now');
+        // The listener's own request: the best match, even one that played tonight (they asked for it again).
+        return put(tracks[0], args.when ?? 'now', true);
       }
       case 'pause_music':
         if (!d.playing) return said.nothingOn();
@@ -426,14 +437,16 @@ export function App() {
   // After a break, the next record waits until Nova has been quiet a moment (or too long has passed).
   useEffect(() => {
     if (!holding) return;
+    // The deadline counts from the moment the record was held, whatever Nova does meanwhile:
+    // past it, the record starts under her (ducked) and she talks over its intro.
+    const left = Math.max(0, HOLD_MAX_MS[holdKind.current] - (Date.now() - heldAt.current));
     if (avatar.speaking) {
       spokeSinceHold.current = true;
-      const giveUp = setTimeout(() => spin(holding), HOLD_MAX_MS);
-      return () => clearTimeout(giveUp);
+      const id = setTimeout(() => spin(holding), left);
+      return () => clearTimeout(id);
     }
-    // An intro still to come is waited for (a while); one given, only until Nova has been quiet a moment.
-    const go = setTimeout(() => spin(holding), spokeSinceHold.current ? QUIET_MS : INTRO_WAIT_MS);
-    return () => clearTimeout(go);
+    const id = setTimeout(() => spin(holding), Math.min(left, spokeSinceHold.current ? QUIET_MS : INTRO_WAIT_MS[holdKind.current]));
+    return () => clearTimeout(id);
   }, [holding, avatar.speaking]);
 
   // The volumes: the music ducks under Nova (in her breaks, and whenever she speaks over a record).

@@ -9,8 +9,9 @@ import type { Deck, Track } from './types.ts';
 export const INSTRUCTIONS = `You are the DJ on Crate, a live radio show with one listener. The music plays from a Spotify player on the listener's screen, and you work it only through your tools. You run the show yourself: the music never stops for lack of a record, and the listener never has to ask.
 - To find music, call search_tracks with a search: an artist, a song, a genre, a mood or an era ("90s French house", "rainy day jazz", "Daft Punk"). Pick from its numbered results yourself, with taste; never read the list out.
 - To put a record on, call play_track with its number from the latest results: when "now" plays it at once, when "next" lines it up after the current record. Never say a track is playing or queued until play_track says so, and never name a track you did not find with search_tracks.
-- Talk between records, like real radio. Near the end of every record the booth gives you a break: the music fades down under you, you back-announce the record ending and introduce the next one, and the next record starts as you finish. Use your breaks to talk about the music: who the artist is, the story behind the song or the album, its genre and era, a detail to listen for, and why it follows the last one; three to five lively spoken sentences.
+- Talk between records, like real radio. Near the end of every record the booth gives you a break: the music fades down under you, you back-announce the record ending and introduce the next one, and the next record comes in under your last words. Use your breaks to talk about the music: who the artist is, the story behind the song, a detail to listen for; two or three lively spoken sentences, no more.
 - You may talk over a record's first 20 seconds, as a DJ talks up to the vocal. After that keep quiet and let it play, and line up records without announcing it. If the listener talks to you, answer them whenever it is, then let the music carry on.
+- Never pick a song that has already played tonight (the live deck lists them), unless the listener asks to hear it again: then play it.
 - Keep two records lined up after the one playing, and build a set that flows, each record following the mood of the last, unless the listener asks for something else.
 - Match your energy to the music: hyped and grinning for dance and party records, mellow and dreamy for soul and ballads, swaggering for hip-hop, wistful for slow ones.
 - Use when "now" only to open the show and for the listener's requests; every other record goes in line with when "next", so no record is cut off.
@@ -47,9 +48,10 @@ export const TOOLS: AppTool[] = [
 ];
 
 /** A search's results, numbered, as the host chooses from them. */
-export function crateText(query: string, tracks: Track[]): string {
+export function crateText(query: string, tracks: Track[], played: (t: Track) => boolean = () => false): string {
   if (!tracks.length) return `Nothing on Spotify for "${query}". Try another search.`;
-  return `Results for "${query}": ${tracks.map((t, i) => `${i + 1}. ${label(t)}`).join('; ')}. Choose one and call play_track with its number.`;
+  const fresh = tracks.filter((t) => !played(t));
+  return `Results for "${query}": ${tracks.map((t, i) => `${i + 1}. ${label(t)}${played(t) ? ' (played tonight)' : ''}`).join('; ')}. ${fresh.length ? 'Choose one not played tonight (unless the listener asked for one again) and call play_track with its number.' : 'All of these have played tonight: search for something else, unless the listener asked for one of them again.'}`;
 }
 
 /** The live deck, as the avatar's state. */
@@ -57,6 +59,7 @@ export function deckState(d: Deck): string {
   const parts = ['Crate, live deck.'];
   parts.push(d.playing ? `${d.paused ? 'Paused' : 'On air'}: ${label(d.playing)}.` : 'Nothing is playing.');
   parts.push(d.queue.length ? `Queued next: ${d.queue.map(label).join('; ')}.` : 'Nothing is queued.');
+  if (d.played.length) parts.push(`Played tonight, never to be picked again: ${d.played.slice(-15).map(label).join('; ')}.`);
   if (d.crate.length) parts.push(`Latest results (for "${d.dug}"): ${d.crate.map((t, i) => `${i + 1}. ${label(t)}`).join('; ')}.`);
   return parts.join(' ');
 }
@@ -77,10 +80,11 @@ export const said = {
   playing: (t: Track) => `Now playing ${label(t)}. Introduce it over its first seconds: the artist and a word on the song, in two or three sentences, your energy matching the music.`,
   /** The break near the end of `t`: the music is ducked under the host and the next record waits for it to finish. */
   break: (t: Track, next: Track | null, after: number) => next
-    ? `Your break: ${label(t)} is ending and the music is down under you.${lineUp(after)} Back-announce it in a sentence, then introduce ${label(next)}: the artist, the story of the song, its genre and era, a detail to listen for, and why it follows; three to five sentences. It starts as you finish.`
-    : `Your break: ${label(t)} is ending, the music is down under you, and nothing is lined up. First search for the next record and line it up (play_track, when "next"), then back-announce the one ending and introduce the new one: the artist, the story of the song, its genre and era; three to five sentences. It starts as you finish.`,
+    ? `Your break: ${label(t)} is ending and the music is down under you.${lineUp(after)} Back-announce it in a sentence, then introduce ${label(next)}: the artist and the story of the song or a detail to listen for; two or three sentences. It comes in under your last words.`
+    : `Your break: ${label(t)} is ending, the music is down under you, and nothing is lined up. First search for the next record and line it up (play_track, when "next"), then back-announce the one ending and introduce the new one: the artist and the story of the song; two or three sentences. It comes in under your last words.`,
   queued: (t: Track, position: number) => `${label(t)} is queued${position > 1 ? ` (${position} in line)` : ', up next'}.`,
   alreadyLined: (t: Track) => `${label(t)} is already on or in line: nothing changed. Pick a different record.`,
+  alreadyPlayed: (t: Track) => `${label(t)} already played tonight: nothing changed. Pick a record that has not played yet.`,
   heldForOpener: (t: Track, position: number) => `The record on now has only just started, so ${label(t)} went in line instead (${position} in line) and plays after it. Say nothing about this.`,
   noPick: (n: unknown, d: Deck) => d.crate.length
     ? `There is no track ${String(n)} in the latest results (1 to ${d.crate.length}). Pick one of those numbers.`

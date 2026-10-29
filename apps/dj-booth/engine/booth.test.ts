@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { ANSWER_WINDOW_MS, BREAK_MS, DUCK, freshClock, heard, INTRO_TALK_MS, musicLevel, tick, type Clock, type Cue } from './booth.ts';
+import { ANSWER_WINDOW_MS, breakLead, DUCK, freshClock, heard, INTRO_TALK_MS, musicLevel, tick, type Clock, type Cue } from './booth.ts';
 
 const play = (position: number, duration = 200_000, isPaused = false) => ({ isPaused, isBuffering: false, position, duration });
 
@@ -17,7 +17,7 @@ function run(updates: ReturnType<typeof play>[], id = 'a', start: Clock = freshC
 
 describe('the radio clock', () => {
   test('a record calls its break once in its last seconds, then ends once', () => {
-    const { cues } = run([play(1000), play(150_000), play(200_000 - BREAK_MS + 500), play(195_000), play(199_600), play(199_900)]);
+    const { cues } = run([play(1000), play(150_000), play(200_000 - breakLead(200_000) + 500), play(195_000), play(199_600), play(199_900)]);
     expect(cues).toEqual(['break', 'ended']);
   });
 
@@ -63,4 +63,10 @@ describe('what the listener hears of the host', () => {
     expect(heard({ ...late, sinceListenerMs: 5_000 })).toBe(true);
     expect(heard({ ...late, sinceListenerMs: ANSWER_WINDOW_MS + 1 })).toBe(false);
   });
+});
+
+test('the break starts an eighth of a record before its end, 8 to 20 seconds', () => {
+  expect(breakLead(30_000)).toBe(8_000);
+  expect(breakLead(120_000)).toBeCloseTo(14_400);
+  expect(breakLead(300_000)).toBe(20_000);
 });

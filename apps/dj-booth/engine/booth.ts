@@ -4,16 +4,24 @@
 
 export interface Playback { isPaused: boolean; isBuffering: boolean; position: number; duration: number }
 
-/** How long before a record ends the host's break starts: back-announce, then the next intro. */
-export const BREAK_MS = 10_000;
+/**
+ * How long before a record ends the host's break starts: about an eighth of the record, 8 to 20
+ * seconds, so most of the talk is over the record's ducked outro rather than over silence after it.
+ */
+export const breakLead = (durationMs: number) => Math.min(20_000, Math.max(8_000, durationMs * 0.12));
 /** The music under the host's voice, as a share of the listener's music volume. */
 export const DUCK = 0.3;
 /** How long the host must have been quiet before the next record starts after a break. */
 export const QUIET_MS = 1200;
-/** How long a changed record waits for the host to start its intro before it plays anyway. */
-export const INTRO_WAIT_MS = 10_000;
-/** The longest the next record waits for the host to finish. */
-export const HOLD_MAX_MS = 25_000;
+/** How long a held record waits for the host to start talking before it plays anyway: the show's opening gets longer. */
+export const INTRO_WAIT_MS = { break: 5_000, change: 5_000, opener: 15_000 } as const;
+/**
+ * The longest a held record waits, from the moment it is held, before it starts under the host
+ * (ducked): after a record ends, a change of record, and the show's opening (which waits for the
+ * whole opening, as the listener hears no music yet).
+ */
+export const HOLD_MAX_MS = { break: 4_000, change: 5_000, opener: 25_000 } as const;
+export type Hold = keyof typeof HOLD_MAX_MS;
 
 export interface Clock {
   /** The record the clock follows. */
@@ -39,7 +47,7 @@ export function tick(clock: Clock, id: string, p: Playback): { clock: Clock; cue
     return { clock: c, cue: 'ended' };
   }
   if (!p.isPaused && p.position > 0) c.lastLeft = left;
-  if (!p.isPaused && !c.breakCalled && left <= BREAK_MS) {
+  if (!p.isPaused && !c.breakCalled && left <= breakLead(p.duration)) {
     c.breakCalled = true;
     return { clock: c, cue: 'break' };
   }

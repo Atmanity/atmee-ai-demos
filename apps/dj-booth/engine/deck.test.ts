@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { advance, dig, nowBecomesNext, pick, playNow, queueNext, setPaused } from './deck.ts';
+import { advance, dig, nowBecomesNext, pick, playedTonight, playNow, queueNext, setPaused } from './deck.ts';
 import { crateText, deckState, said, TOOLS, INSTRUCTIONS } from './director.ts';
 import { emptyDeck, type Track } from './types.ts';
 
@@ -53,10 +53,11 @@ describe('what the host is told', () => {
     expect(deckState(emptyDeck)).toContain('Nothing is playing. Nothing is queued.');
   });
 
-  test('a break back-announces the record ending and introduces the next, at length', () => {
+  test('a break back-announces the record ending and introduces the next, briefly', () => {
     const text = said.break(a, b, 2);
     expect(text).toContain('"Alpha" by Artist (1999) is ending');
-    expect(text).toContain('introduce "Bravo" by Artist (1999): the artist, the story of the song');
+    expect(text).toContain('introduce "Bravo" by Artist (1999): the artist and the story of the song');
+    expect(text).toContain('two or three sentences');
     expect(text).not.toContain('line up');
   });
 
@@ -107,4 +108,28 @@ test('another release of the same song counts as already in line', () => {
   const d = queueNext(playNow(emptyDeck, a), nuxx);
   expect(queueNext(d, radio)).toBe(d);
   expect(queueNext(d, other).queue).toHaveLength(2);
+});
+
+describe('what has played tonight', () => {
+  test('a record moves into the played list when the next one goes on, once per song', () => {
+    let d = queueNext(playNow(emptyDeck, a), b);
+    d = advance(d);
+    expect(d.played).toEqual([a]);
+    d = playNow(d, c);
+    expect(d.played).toEqual([a, b]);
+    expect(playedTonight(d, { ...a, id: 'another-release' })).toBe(true);
+    expect(playedTonight(d, c)).toBe(false);
+  });
+
+  test('search results mark what has played, and the live deck lists it', () => {
+    const d = advance(queueNext(playNow(dig(emptyDeck, 'x', [a, b]), a), b));
+    const text = crateText('x', [a, b], (t) => playedTonight(d, t));
+    expect(text).toContain('1. "Alpha" by Artist (1999) (played tonight)');
+    expect(text).not.toContain('2. "Bravo" by Artist (1999) (played tonight)');
+    expect(deckState(d)).toContain('Played tonight, never to be picked again: "Alpha"');
+  });
+});
+
+test('the host is pointed away from played songs, except when the listener asks again', () => {
+  expect(INSTRUCTIONS).toContain('unless the listener asks to hear it again');
 });
