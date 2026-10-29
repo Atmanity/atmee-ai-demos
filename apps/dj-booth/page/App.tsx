@@ -287,19 +287,33 @@ export function App() {
       }
     }
   };
-  const embed = useSpotifyPlayer(onPlayback);
-  const sdk = useSdkPlayer(token, onPlayback, (problem) => {
+  // Which player drives the radio clock: the Premium one while it is in use, else the embed. It
+  // switches the moment Premium fails, before the page re-renders, so no leftover update from the
+  // failed player moves the clock.
+  const sdkLive = useRef(useSdk);
+  sdkLive.current = useSdk;
+  const holdingNow = useRef<Track | null>(null);
+  holdingNow.current = holding;
+  const embed = useSpotifyPlayer((p) => { if (!sdkLive.current) onPlayback(p); });
+  const sdk = useSdkPlayer(token, (p) => { if (sdkLive.current) onPlayback(p); }, (problem) => {
     console.warn('[crate] spotify player: %s', problem);
+    sdkLive.current = false;
+    playerRef.current = embed;
+    void sdk.pause();
     setSdkFailed(true);
     setSpotify((s) => ({ ...s, problem: `${problem}. Playing previews instead.` }));
-    // The record that failed to play goes on the embed now, so the show does not go silent.
-    const on = deckRef.current.playing;
-    if (on && !deckRef.current.paused) {
-      clock.current = freshClock(on.id);
-      void embed.load(on);
+    // The record that failed to play goes on the embed now, so the show does not go silent; one
+    // still waiting for Nova's intro waits on, and the hold starts it on the embed.
+    const d = deckRef.current;
+    if (d.playing && !d.paused && !holdingNow.current) {
+      clock.current = freshClock(d.playing.id);
+      void embed.load(d.playing);
     }
   });
   const player = useSdk ? sdk : embed;
+  // The player a record starts on, read when it starts (a hold set before a switch uses the new one).
+  const playerRef = useRef(player);
+  playerRef.current = player;
 
   // Whether Nova has spoken since the held record was set: after a break she already has; after a
   // change of record she is about to introduce it, and the record waits for that intro.
@@ -320,8 +334,8 @@ export function App() {
     setOnBreak(false);
     update(playNow(from, track));
     setProgress(null);
-    void player.load(track);
-  }, [player]);
+    void playerRef.current.load(track);
+  }, []);
 
   /** A new record in place of the one on: the old fades out, the new waits for Nova to introduce it. */
   const changeOver = useCallback((track: Track, from: Deck = deckRef.current) => {
