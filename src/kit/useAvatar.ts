@@ -48,6 +48,11 @@ export interface Avatar {
   say(text: string): void;
   /** Show a line the user typed that the app handled itself (nothing is sent to the avatar). */
   record(text: string): void;
+  /**
+   * Cut the avatar off now with a turn of the app's own words (not shown as the user's line):
+   * for something on screen that makes what it is saying moot, like a skipped song.
+   */
+  interrupt(text: string): void;
   state(text: string): void;
   note(text: string): void;
   event(text: string, ttlS?: number): void;
@@ -230,6 +235,11 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
       void sessionRef.current?.say(text);
     },
     record(text) { addLine({ who: 'user', text, typed: true }); },
+    interrupt(text) {
+      // Its echo in the transcript is the app's words, not the user's: filtered like a typed turn's.
+      lastTyped.current = { text, at: Date.now() };
+      void sessionRef.current?.interrupt(text);
+    },
     state(text) {
       pending.current.state = text;
       void sessionRef.current?.state(text);

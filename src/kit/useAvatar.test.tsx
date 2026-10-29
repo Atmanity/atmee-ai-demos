@@ -14,7 +14,8 @@ vi.mock('../avatar/room.ts', async (real) => ({
       note: async (t: string) => { if (failNote) throw new Error('room closed'); session.sent.push(`note:${t}`); },
       state: async (t: string) => { session.sent.push(`state:${t}`); },
       event: async (t: string) => { session.sent.push(`event:${t}`); },
-      say: async () => {}, send: async () => {}, setMicMuted: async () => {}, feedMic: async () => {},
+      say: async () => {}, send: async () => {},
+      interrupt: async (t: string) => { session.sent.push(`interrupt:${t}`); }, setMicMuted: async () => {}, feedMic: async () => {},
       acceptsFiles: () => true,
       sendFiles: async (files: File[], o?: { caption?: string }) => {
         session.sent.push(`files:${files.map((f) => f.name).join(',')}:${o?.caption ?? ''}`);
@@ -102,4 +103,12 @@ test('a push-to-talk start joins with the microphone muted, and says the mic is 
   expect(joins[0].opts.mic).toBe(stream);
   expect(joins[0].opts.micMuted).toBe(true);
   expect(result.current.micOn).toBe(false);
+});
+
+test('an interrupt goes to the call at once and is not shown as the user\'s line', async () => {
+  const { result } = renderHook(() => useAvatar('demo'));
+  await act(async () => { await result.current.start(); });
+  act(() => { result.current.interrupt('The listener pressed Skip.'); });
+  expect(joins[0].session.sent).toContain('interrupt:The listener pressed Skip.');
+  expect(result.current.lines).toHaveLength(0);
 });

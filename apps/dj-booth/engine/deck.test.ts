@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { advance, clearHostPicks, dig, pick, playedTonight, playNow, queueNext, setPaused } from './deck.ts';
+import { advance, askOpen, ASK_OPEN_MS, clearHostPicks, dig, pick, playedTonight, playNow, queueNext, setPaused } from './deck.ts';
 import { crateText, deckState, said, TOOLS, INSTRUCTIONS } from './director.ts';
 import { emptyDeck, type Track } from './types.ts';
 
@@ -135,4 +135,11 @@ test('a change of vibe clears the host\'s picks from the line and keeps what the
   expect(after.playing).toBe(a);
   expect(said.newVibe(2)).toContain('2 records you had lined up were cleared');
   expect(said.newVibe(0)).toBe('');
+});
+
+test('a listener\'s ask stays open until the host acts on it, or for 90 seconds', () => {
+  const t0 = 1_000_000;
+  expect(askOpen(t0, 0, t0 + 45_000)).toBe(true);          // a search and a reply later: still theirs
+  expect(askOpen(t0, t0 + 30_000, t0 + 45_000)).toBe(false); // already used for one change
+  expect(askOpen(t0, 0, t0 + ASK_OPEN_MS + 1)).toBe(false);  // long gone
 });

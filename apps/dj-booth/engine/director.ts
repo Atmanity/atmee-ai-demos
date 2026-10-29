@@ -86,7 +86,7 @@ export const said = {
   queued: (t: Track, position: number) => `${label(t)} is queued${position > 1 ? ` (${position} in line)` : ', up next'}.`,
   alreadyLined: (t: Track) => `${label(t)} is already on or in line: nothing changed. Pick a different record.`,
   alreadyPlayed: (t: Track) => `${label(t)} already played tonight: nothing changed. Pick a record that has not played yet.`,
-  heldForOpener: (t: Track, position: number) => `A record is playing and you never cut one off yourself, so ${label(t)} went in line instead (${position} in line) and plays after it. Say nothing about this.`,
+  heldForOpener: (t: Track, position: number) => `A record is playing and you never cut one off on your own, so ${label(t)} went in line instead (${position} in line) and plays after it. If the listener asked you to change the record, call skip_track or play_request instead.`,
   noPick: (n: unknown, d: Deck) => d.crate.length
     ? `There is no track ${String(n)} in the latest results (1 to ${d.crate.length}). Pick one of those numbers.`
     : 'There are no results to pick from yet: call search_tracks first.',
@@ -102,6 +102,8 @@ export const said = {
     : 'Skipped, and nothing is queued, so the decks are empty: search and play the next record now.'),
   ranOut: () => 'The record ended and nothing was queued: the booth is silent. Pick the next record now and play it.',
   pressed: (what: string) => `The listener ${what} on screen.`,
+  /** The listener's own hand on the decks, as a turn that cuts the host off: what it was saying no longer fits. */
+  cutIn: (what: string, t: Track) => `(The listener just ${what} on screen, so ${label(t)} is coming in now. Stop what you were saying, and introduce ${label(t)} in a sentence or two: the artist and a word on the song.)`,
   chose: (what: string, t: Track) => `The listener ${what} on screen, and the record on is fading out. Introduce ${label(t)} in a sentence or two; it starts as you finish.`,
   noSearch: () => 'Music search is not set up on this booth (no Spotify credentials on the server). Tell the listener you cannot reach the record crate right now.',
 };

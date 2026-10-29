@@ -6,14 +6,14 @@
 // record waits until she has finished introducing it.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { BackToApps, CallStatus, clock as kitClock, ChatPanel, HangUpIcon, HostVideo, useAvatar, useCaptionToggle, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
-import { advance, clearHostPicks, dig, label, lined, playedTonight, pick, playNow, queueNext, setPaused } from '../engine/deck.ts';
+import { advance, askOpen, clearHostPicks, dig, label, lined, playedTonight, pick, playNow, queueNext, setPaused } from '../engine/deck.ts';
 import { crateText, deckState, said } from '../engine/director.ts';
 import { emptyDeck, type Deck, type Track } from '../engine/types.ts';
 import { DEFAULT_THEME, type Theme } from '../engine/theme.ts';
 import { useSpotifyPlayer, type Playback } from './player.ts';
 import { useSdkPlayer } from './sdk-player.ts';
 import { accessToken, connect, connected, disconnect, finishConnect } from './spotify-auth.ts';
-import { answering, ANSWER_WINDOW_MS, freshClock, heard, HOLD_MAX_MS, INTRO_TALK_MS, INTRO_WAIT_MS, musicLevel, QUIET_MS, tick, type Clock, type Hold } from '../engine/booth.ts';
+import { answering, freshClock, heard, HOLD_MAX_MS, INTRO_TALK_MS, INTRO_WAIT_MS, musicLevel, QUIET_MS, tick, type Clock, type Hold } from '../engine/booth.ts';
 import nova from '../host/portrait.jpg';
 import './crate.css';
 
@@ -321,13 +321,16 @@ export function App() {
   const askedFor = useRef(new Set<string>());
   // When the listener last asked for anything: a request may cut a record off, Nova alone may not.
   const lastListenerAt = useRef(0);
+  // When the listener's last ask was acted on with a record put on now.
+  const askUsedAt = useRef(0);
 
   /** A record on now (a change-over when one is playing) or in line: what Nova is told. */
   const put = useCallback((track: Track, when: unknown, requested = false): string => {
     const d = deckRef.current;
     if (lined(d, track)) return said.alreadyLined(track);
-    // Nova never picks a song twice; the listener may ask for one again.
-    const asked = requested || Date.now() - lastListenerAt.current <= ANSWER_WINDOW_MS;
+    // Acting on the listener's ask (until used, or 90 s): a record may then cut in, replay or change the vibe.
+    // Nova never picks a song twice herself, and never cuts a record off on her own.
+    const asked = requested || askOpen(lastListenerAt.current, askUsedAt.current, Date.now());
     if (!asked && playedTonight(d, track)) return said.alreadyPlayed(track);
     // Nova never cuts off a playing record on her own: her "now" goes in line unless the listener asked.
     const cutsOff = when !== 'next' && Boolean(d.playing) && opened.current && !asked;
@@ -337,6 +340,8 @@ export function App() {
       update(next);
       return cutsOff ? said.heldForOpener(track, next.queue.length) : said.queued(track, next.queue.length);
     }
+    // A record on "now" for the listener uses their ask.
+    if (asked) askUsedAt.current = Date.now();
     // The listener changing what plays now changes the direction: Nova's own picks in line go, theirs stay.
     let from = d;
     let cleared = 0;
@@ -501,6 +506,13 @@ export function App() {
     }
   }, [avatar.speaking, musicOn, onBreak, (progress?.position ?? 0) < INTRO_TALK_MS]);
   const voiced = avatar.speaking && !muffled;
+
+  /** The listener changed the record by hand: Nova stops mid-sentence (silent at once) and talks about the new one. */
+  function cutIn(what: string, track: Track) {
+    if (!live) return;
+    if (avatar.speaking) setMuffled(true);
+    avatar.interrupt(said.cutIn(what, track));
+  }
   const ducked = voiced || onBreak || Boolean(holding);
   const level = useRef(musicVolume);
   useEffect(() => {
@@ -650,7 +662,7 @@ export function App() {
               lastListenerAt.current = Date.now();
               if (next.playing) {
                 changeOver(next.playing, next);
-                if (live) avatar.event(said.chose(skippedWhat, next.playing), 20);
+                cutIn(skippedWhat, next.playing);
               } else press(skippedWhat, () => { update(next); void player.pause(); });
             }}><SkipIcon /></button>
           </div>
@@ -697,7 +709,7 @@ export function App() {
                   <TrackRow key={t.id} track={t} number={i + 1} onPlay={() => {
                     lastListenerAt.current = Date.now();
                     changeOver(t);
-                    if (live) avatar.event(said.chose(`put on ${label(t)}`, t), 20);
+                    cutIn(`put on ${label(t)}`, t);
                   }} />
                 ))}
               </ol>

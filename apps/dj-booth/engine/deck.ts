@@ -38,3 +38,13 @@ export const label = (t: Track) => `"${t.title}" by ${t.artist}${t.year ? ` (${t
 
 /** A change of vibe: the host's own picks leave the line, what the listener asked for stays. */
 export const clearHostPicks = (deck: Deck, askedFor: (t: Track) => boolean): Deck => ({ ...deck, queue: deck.queue.filter(askedFor) });
+
+/** How long a listener's ask stays open for the host to act on (a search and a reply can take a while). */
+export const ASK_OPEN_MS = 90_000;
+
+/**
+ * Whether the host acting now is acting on the listener's ask: they spoke since the last record
+ * the host put on for them, and not too long ago. One ask, one change: it is used up when the
+ * host puts a record on "now".
+ */
+export const askOpen = (askedAt: number, usedAt: number, at: number) => askedAt > usedAt && at - askedAt <= ASK_OPEN_MS;

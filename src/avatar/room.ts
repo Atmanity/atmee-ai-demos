@@ -66,6 +66,8 @@ export interface AvatarSession {
   room: Room;
   /** A typed user turn, held while the avatar has the floor (floor.ts). */
   say(text: string): Promise<void>;
+  /** A typed user turn sent at once, not held: it cuts the avatar off mid-sentence (barge-in), for an app that means to. */
+  interrupt(text: string): Promise<void>;
   send(message: AppMessage): Promise<void>;
   state(text: string): Promise<void>;
   note(text: string): Promise<void>;
@@ -331,6 +333,7 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
   return {
     session, room,
     say: (text) => floor.say(text),
+    interrupt: (text) => sendText(CHAT, text),
     send,
     state: (text) => send({ type: 'state', text }),
     note: (text) => send({ type: 'note', text }),
