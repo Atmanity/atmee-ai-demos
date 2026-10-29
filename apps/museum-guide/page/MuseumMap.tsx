@@ -91,15 +91,17 @@ function Detail({ exhibit, seen, here, onBack, onOpen, onAsk, onToggleSeen }: {
   );
 }
 
-export function MuseumMap({ seen, current, onClose, onAsk, onToggleSeen }: {
+export function MuseumMap({ seen, current, initial = null, onClose, onAsk, onToggleSeen }: {
   seen: Exhibit[];
   current: Exhibit | null;
+  /** A work to open at, instead of the plan. */
+  initial?: Exhibit | null;
   onClose: () => void;
   /** While the call is live: put a question about this work to Edmund. */
   onAsk?: (e: Exhibit) => void;
   onToggleSeen?: (e: Exhibit, seen: boolean) => void;
 }) {
-  const [open, setOpen] = useState<Exhibit | null>(null);
+  const [open, setOpen] = useState<Exhibit | null>(initial);
   const seenIds = new Set(seen.map((e) => e.id));
   const all = pins();
   const pick = (e: Exhibit) => { setOpen(e); document.querySelector('.mr-map-body')?.scrollTo({ top: 0 }); };

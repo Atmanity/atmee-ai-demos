@@ -39,14 +39,14 @@ export function PushToTalk({ avatar }: { avatar: Avatar }) {
   const open = held || avatar.micOn;
   return (
     <button
-      type="button" className={`mr-ptt ${open ? 'is-open' : ''}`}
+      type="button" className={`mr-dock-btn mr-ptt ${open ? 'is-open' : ''}`}
       aria-pressed={open} aria-label="Hold to talk" title="Hold to talk (or hold the space bar)"
       onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); press(); }}
       onPointerUp={letGo} onPointerCancel={letGo}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <MicIcon />
-      <span className="mr-ptt-label">{open ? 'Listening' : 'Hold to talk'}</span>
+      <span className="mr-dock-ico"><MicIcon /></span>
+      <span className="mr-dock-label">{open ? 'Listening…' : 'Hold to talk'}</span>
     </button>
   );
 }

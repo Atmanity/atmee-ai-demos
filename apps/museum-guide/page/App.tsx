@@ -14,6 +14,7 @@ import { exhibitImage } from './images.ts';
 import { Keyed } from './Keyed.tsx';
 import { Lobby, Wordmark } from './Lobby.tsx';
 import { MuseumMap } from './MuseumMap.tsx';
+import { GuideIcon, KeyboardIcon, MapIcon, ScanIcon } from './icons.tsx';
 import { PushToTalk } from './PushToTalk.tsx';
 import { Sheet } from './Sheet.tsx';
 import { Visit } from './Visit.tsx';
@@ -66,6 +67,20 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   const [small, setSmall] = useState(false);
   const [talk, setTalk] = useState(false);
   const [map, setMap] = useState(false);
+  const [mapAt, setMapAt] = useState<Exhibit | null>(null);
+  // Edmund stands on the sheet's top edge, wherever that is as the sheet grows and shrinks.
+  const tourRef = useRef<HTMLDivElement>(null);
+  const sheetRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const sheet = sheetRef.current;
+    const tour = tourRef.current;
+    if (!sheet || !tour) return;
+    const fit = () => tour.style.setProperty('--sheet', `${sheet.offsetHeight}px`);
+    fit();
+    const watch = new ResizeObserver(fit);
+    watch.observe(sheet);
+    return () => watch.disconnect();
+  }, [screen, talk]);
   const at = useRef({ current, seen, camera: camera.state === 'on' });
   at.current = { current, seen, camera: camera.state === 'on' };
   const lastArrival = useRef<{ id: string; at: number } | null>(null);
@@ -198,50 +213,27 @@ function Tour({ opening }: { opening: Exhibit | null }) {
 
   const live = avatar.phase === 'live';
   const status = callCopy(avatar, HOST);
-  const words = captionTail(avatar.caption);
+  const words = captionTail(avatar.caption, 120);
+  const openMap = (at: Exhibit | null = null) => { setMapAt(at); setMap(true); setTalk(false); };
   return (
-    <div className={`mr-tour ${small ? 'is-small' : ''} ${avatar.speaking ? 'is-speaking' : ''}`}>
+    <div ref={tourRef} className={`mr-tour ${small ? 'is-small' : ''} ${talk ? 'is-talking' : ''} ${avatar.speaking ? 'is-speaking' : ''}`}>
       <video ref={camera.videoRef} className="mr-camera" playsInline muted aria-label="Your camera" />
       <div className="mr-shade" aria-hidden="true" />
 
       <header className="mr-bar">
         <BackToApps avatar={avatar} name={HOST} className="mr-back" />
-        <Wordmark />
+        <span className="mr-bar-title"><Wordmark /></span>
         <span className="mr-bar-end">
           {avatar.secondsLeft !== null && live && <span className="mr-clock">{Math.floor(avatar.secondsLeft / 60)}:{String(avatar.secondsLeft % 60).padStart(2, '0')}</span>}
-          <button type="button" className="mr-chip" onClick={() => { setMap(true); setTalk(false); }} aria-label={`Museum map, ${seen.length} of ${EXHIBITS.length} seen`}>Map <b>{seen.length}/{EXHIBITS.length}</b></button>
-          <button type="button" className="mr-chip" onClick={() => setTalk((t) => !t)} aria-pressed={talk}>{talk ? 'Close' : 'Type'}</button>
-          <button type="button" className="mr-chip is-end" onClick={leave} disabled={!live}>Leave</button>
+          <button type="button" className="mr-end" onClick={leave} disabled={!live}>End</button>
         </span>
       </header>
 
-      {card && (
-        <section className={`mr-card ${card.here ? 'is-here' : 'is-elsewhere'}`} aria-live="polite">
-          <img src={exhibitImage(card.exhibit)} alt="" />
-          <div>
-            <p className="mr-card-where">{card.here ? 'You are at' : card.exhibit.gallery}</p>
-            <h2>{card.exhibit.title}</h2>
-            <p>{card.exhibit.artist} · {card.exhibit.date}</p>
-          </div>
-          <button type="button" className="mr-x" onClick={() => setCard(null)} aria-label="Close the card">×</button>
-        </section>
-      )}
-
-      {live && !card && !looking && <div className="mr-reticle" aria-hidden="true"><span>Point at a work, or its label's code</span></div>}
-      {looking && <div className="mr-looking" role="status"><span className="mr-dot" />Looking…</div>}
-      {notice && <div className="mr-notice" role="status">{notice}</div>}
+      {live && !card && !looking && <div className="mr-reticle" aria-hidden="true" />}
+      {looking && <div className="mr-toast" role="status"><span className="mr-dot" />Looking…</div>}
+      {!looking && notice && <div className="mr-toast" role="status">{notice}</div>}
 
       <Keyed videoRef={avatar.videoRef} audioRef={avatar.audioRef} label={`${HOST} Hale, your guide`} className={small ? 'is-small' : ''} />
-      <button type="button" className="mr-size" onClick={() => setSmall((s) => !s)} aria-label={small ? `Bring ${HOST} back` : `Move ${HOST} aside`}>
-        {small ? '⤢' : '⤡'}
-      </button>
-
-      {live && (words || avatar.heard) && (
-        <div className="mr-words" aria-live="polite">
-          {words && <p className="mr-said">{words}</p>}
-          {avatar.heard && <p className="mr-heard">{avatar.heard}</p>}
-        </div>
-      )}
 
       {status && (
         <div className="mr-status" role="status">
@@ -253,24 +245,51 @@ function Tour({ opening }: { opening: Exhibit | null }) {
       )}
       {live && avatar.audioBlocked && <button type="button" className="mr-hear" onClick={avatar.resumeAudio}>Tap to hear {HOST}</button>}
 
-      {live && (
-        <footer className="mr-controls">
-          <PushToTalk avatar={avatar} />
-          <button type="button" className="mr-shutter" onClick={() => void whatIsThis()} disabled={looking}>
-            <span aria-hidden="true" />What is this?
+      {/* Everything to read and press lives in one sheet under the camera view, never over it. */}
+      <section ref={sheetRef} className="mr-panel" aria-label="Your guide">
+        {talk ? (
+          <div className="mr-panel-chat">
+            <div className="mr-panel-head"><b>Conversation with {HOST}</b><button type="button" className="mr-link" onClick={() => setTalk(false)}>Done</button></div>
+            <ChatPanel avatar={avatar} name={HOST} placeholder={`Ask ${HOST}…`} empty={<span>Type here when the gallery is too loud to talk.</span>} />
+          </div>
+        ) : (
+          <>
+            {card ? (
+              <button type="button" className={`mr-now ${card.here ? 'is-here' : ''}`} onClick={() => openMap(card.exhibit)}>
+                <img src={exhibitImage(card.exhibit)} alt="" />
+                <span><small>{card.here ? 'You are at' : card.exhibit.gallery.split(',')[0]}</small><b>{card.exhibit.title}</b><em>{card.exhibit.artist} · {card.exhibit.date}</em></span>
+                <span className="mr-now-more" aria-hidden="true">›</span>
+              </button>
+            ) : (
+              <p className="mr-now is-empty">Point the camera at a work, or at the code on its label.</p>
+            )}
+            <div className="mr-subs" aria-live="polite">
+              {words ? <p className="mr-subs-said"><b>{HOST}</b>{words}</p>
+                : !avatar.heard && live && <p className="mr-subs-hint">Hold the mic and ask {HOST} anything.</p>}
+              {avatar.heard && <p className="mr-subs-you">{avatar.heard}</p>}
+            </div>
+          </>
+        )}
+        <footer className="mr-dock">
+          <button type="button" className="mr-dock-btn" onClick={() => openMap()} aria-label={`Museum map, ${seen.length} of ${EXHIBITS.length} seen`}>
+            <span className="mr-dock-ico"><MapIcon /><i className="mr-badge">{seen.length}</i></span><span className="mr-dock-label">Map</span>
+          </button>
+          <button type="button" className={`mr-dock-btn ${talk ? 'is-on' : ''}`} onClick={() => setTalk((t) => !t)} aria-pressed={talk} disabled={!live}>
+            <span className="mr-dock-ico"><KeyboardIcon /></span><span className="mr-dock-label">Type</span>
+          </button>
+          {live ? <PushToTalk avatar={avatar} /> : <span className="mr-dock-btn mr-ptt is-idle" aria-hidden="true"><span className="mr-dock-ico" /><span className="mr-dock-label">Hold to talk</span></span>}
+          <button type="button" className={`mr-dock-btn ${looking ? 'is-busy' : ''}`} onClick={() => void whatIsThis()} disabled={!live || looking}>
+            <span className="mr-dock-ico"><ScanIcon /></span><span className="mr-dock-label">What is this?</span>
+          </button>
+          <button type="button" className={`mr-dock-btn ${small ? '' : 'is-on'}`} onClick={() => setSmall((s) => !s)} aria-pressed={!small}>
+            <span className="mr-dock-ico"><GuideIcon /></span><span className="mr-dock-label">{small ? `Show ${HOST}` : HOST}</span>
           </button>
         </footer>
-      )}
+      </section>
 
       {map && (
-        <MuseumMap seen={seen} current={current} onClose={() => setMap(false)}
+        <MuseumMap seen={seen} current={current} initial={mapAt} onClose={() => setMap(false)}
           onAsk={live ? askAbout : undefined} onToggleSeen={markSeen} />
-      )}
-
-      {talk && (
-        <div className="mr-talk">
-          <ChatPanel avatar={avatar} name={HOST} placeholder={`Ask ${HOST}…`} empty={<span>Your conversation with {HOST} shows here. Type if the gallery is too loud to talk.</span>} />
-        </div>
       )}
     </div>
   );
