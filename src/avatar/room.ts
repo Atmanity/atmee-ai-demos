@@ -85,6 +85,11 @@ export interface AvatarSession {
    * silence back. For a session started without a microphone.
    */
   feedMic(track: MediaStreamTrack | null): Promise<void>;
+  /**
+   * Publish this video track as the user's camera now (a copy: the page keeps its own), in
+   * place of any before it; null takes the camera away. For a camera opened after the call.
+   */
+  setCamera(track: MediaStreamTrack | null): Promise<void>;
   /** Whether the host takes files (its runtime reads them): offer a drop only then. */
   acceptsFiles(): boolean;
   /**
@@ -139,7 +144,8 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
   const api = `/api/apps/${app}`;
   let lateMic: MediaStream | undefined;   // a microphone turned on mid-session (typing first)
   const stopMic = () => [mic, lateMic].forEach((m) => m?.getTracks().forEach((t) => t.stop()));
-  const camera = opts.camera?.clone();
+  // The copy of the page's camera published now (from the start, or later with setCamera).
+  let camera = opts.camera?.clone();
   const stopCamera = () => camera?.stop();
   opts.onPhase?.('starting');
   const session = await startSession(api, opts.onPhase).catch((err) => { stopMic(); stopCamera(); throw err; });
@@ -387,6 +393,16 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
       else silence = await publishSilence(room);
       if (previous) await room.localParticipant.unpublishTrack(previous, false);
       if (previousSilence) void previousSilence.ctx.close();
+    },
+    async setCamera(track) {
+      if (ended) return;
+      const previous = camera;
+      camera = track?.clone();
+      if (camera) await room.localParticipant.publishTrack(camera, { source: Track.Source.Camera, simulcast: false });
+      if (previous) {
+        await room.localParticipant.unpublishTrack(previous, false);
+        previous.stop();
+      }
     },
     async end() {
       if (ended) return;

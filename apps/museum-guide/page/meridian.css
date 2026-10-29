@@ -63,9 +63,11 @@ a { color: inherit; }
 /* The camera fills the whole window at any width; the panel keeps a phone's width, centred,
    and Edmund stands at its right edge (--gutter: the space beside the panel). */
 .mr-tour { position: relative; height: 100dvh; overflow: hidden; background: #000; --sheet: 190px; --ed: min(46vw, 250px); --gutter: max(0px, (100% - 560px) / 2); }
-.mr-camera { position: absolute; inset: 0 0 calc(var(--sheet) - 24px); width: 100%; height: calc(100% - var(--sheet) + 24px); object-fit: cover; }
+.mr-camera { position: absolute; inset: 0 0 calc(var(--sheet) - 24px); overflow: hidden; background: #000; }
+/* Centred; the page sets its pixel size so it covers the box (object-fit is the fallback before it knows the stream's size). */
+.mr-camera video { position: absolute; left: 50%; top: 50%; width: 100%; height: 100%; transform: translate(-50%, -50%); object-fit: cover; }
 /* Wider than the panel: the camera runs on behind it, so nothing beside the panel is black. */
-@media (min-width: 561px) { .mr-camera { inset: 0; height: 100%; } }
+@media (min-width: 561px) { .mr-camera { inset: 0; } }
 /* Only enough shade under the top bar to read it. */
 .mr-shade { position: absolute; inset: 0 0 auto; height: 110px; pointer-events: none; background: linear-gradient(rgba(0, 0, 0, .5), transparent); }
 
@@ -75,6 +77,16 @@ a { color: inherit; }
 .mr-bar .mr-wordmark { font-size: 12px; text-shadow: 0 1px 6px rgba(0, 0, 0, .6); }
 .mr-bar-end { display: flex; align-items: center; gap: 8px; }
 .mr-clock { font-variant-numeric: tabular-nums; font-size: 12.5px; color: var(--mr-ivory); padding: 5px 9px; border-radius: 999px; background: rgba(23, 18, 14, .5); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.mr-cam { width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(241, 231, 212, .3); background: rgba(23, 18, 14, .55); color: var(--mr-ivory); display: grid; place-items: center; cursor: pointer; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.mr-cam svg { width: 19px; height: 19px; }
+.mr-cam.is-off { background: var(--mr-ivory); color: var(--mr-ink); border-color: transparent; }
+.mr-cam:disabled { opacity: .45; }
+.mr-cam:focus-visible { outline: 2px solid var(--mr-brass); outline-offset: 2px; }
+/* The camera turned off: said where the picture was, with the way back. */
+/* On the left, clear of the guide standing at the right. */
+.mr-camoff { position: absolute; z-index: 2; left: calc(var(--gutter) + 20px); top: calc((100% - var(--sheet)) / 2 + 20px); transform: translateY(-50%); width: min(52%, 260px); display: grid; justify-items: start; gap: 12px; color: var(--mr-ivory-2); }
+.mr-camoff svg { width: 40px; height: 40px; color: var(--mr-ivory); }
+.mr-camoff p { margin: 0; font-size: 15px; line-height: 1.45; }
 .mr-end { border: 0; border-radius: 999px; padding: 7px 14px; background: var(--mr-red); color: #fff; font-size: 13.5px; font-weight: 700; cursor: pointer; }
 .mr-end:disabled { opacity: .5; }
 .mr-end:focus-visible { outline: 2px solid var(--mr-brass); outline-offset: 2px; }
@@ -118,15 +130,18 @@ a { color: inherit; }
 .mr-now em { font-style: normal; font-size: 12.5px; color: var(--mr-ivory-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mr-now-more { font-size: 22px; color: var(--mr-ivory-2); padding: 0 4px; }
 .mr-now.is-empty { margin: 0; font-size: 14px; color: var(--mr-ivory-2); cursor: default; }
-/* Subtitles: at most four lines, the latest words. */
-/* A fixed height (three lines of his, one of yours), so the panel, and Edmund on it, keep still as he talks. */
-.mr-subs { height: calc(16px * 1.38 * 3 + 4px + 14px * 1.4); display: grid; gap: 4px; align-content: start; overflow: hidden; }
+/* Subtitles: one phrase at a time, its words lit as he says them, the rest waiting dimmed.
+   A fixed height (a name line, three lines of his, one of yours), so the panel and the guide on it keep still. */
+.mr-subs { height: calc(14px + 4px + 17px * 1.36 * 3 + 6px + 14px * 1.4); display: grid; gap: 4px; align-content: start; overflow: hidden; }
 .mr-subs p { margin: 0; }
-.mr-subs-said { font-size: 16px; line-height: 1.38; color: var(--mr-ivory); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
-.mr-subs-said b { margin-right: 6px; font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--mr-brass); vertical-align: 2px; }
+.mr-subs-who { font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--mr-brass); line-height: 14px; }
+.mr-subs-said { font-size: 17px; line-height: 1.36; color: color-mix(in srgb, var(--mr-ivory) 34%, transparent); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; animation: mr-phrase .25s ease-out; }
+.mr-subs-said span { transition: color .18s; }
+.mr-subs-said .is-said { color: var(--mr-ivory); }
 .mr-subs-hint { font-size: 14px; color: var(--mr-ivory-2); }
-.mr-subs-you { font-size: 14px; line-height: 1.4; font-style: italic; color: var(--mr-ivory-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mr-subs-you { margin-top: 2px !important; font-size: 14px; line-height: 1.4; font-style: italic; color: var(--mr-ivory-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mr-subs-you::before { content: "You: "; font-style: normal; font-weight: 600; }
+@keyframes mr-phrase { from { opacity: 0; transform: translateY(4px); } }
 
 .mr-dock { display: grid; grid-template-columns: repeat(5, 1fr); align-items: end; gap: 2px; padding-top: 6px; border-top: 1px solid rgba(241, 231, 212, .1); }
 .mr-dock-btn { display: grid; justify-items: center; gap: 5px; padding: 4px 0; border: 0; background: none; color: var(--mr-ivory); cursor: pointer; -webkit-tap-highlight-color: transparent; }
@@ -158,7 +173,7 @@ a { color: inherit; }
 @keyframes mr-up { from { transform: translateY(30px); opacity: 0; } }
 @keyframes mr-spin { to { transform: rotate(360deg); } }
 @keyframes mr-pulse { 50% { opacity: .3; } }
-@media (prefers-reduced-motion: reduce) { .mr-toast, .mr-map, .mr-ptt.is-open .mr-dock-ico, .mr-pin-here, .mr-dock-btn.is-busy .mr-dock-ico { animation: none; } .mr-spinner, .mr-dot { animation-duration: 3s; } }
+@media (prefers-reduced-motion: reduce) { .mr-toast, .mr-map, .mr-ptt.is-open .mr-dock-ico, .mr-pin-here, .mr-dock-btn.is-busy .mr-dock-ico, .mr-subs-said { animation: none; } .mr-subs-said span { transition: none; } .mr-spinner, .mr-dot { animation-duration: 3s; } }
 
 .mr-chip.is-dark { background: var(--mr-ink); color: var(--mr-ivory); border-color: transparent; }
 .mr-link { border: 0; background: none; padding: 6px 0; color: var(--mr-brass); font-weight: 650; font-size: 14.5px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }

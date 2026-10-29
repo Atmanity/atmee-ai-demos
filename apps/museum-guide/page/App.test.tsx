@@ -14,7 +14,7 @@ import type { Exhibit } from '../engine/catalogue.ts';
 const calls = vi.hoisted(() => ({
   host: null as unknown as Avatar, guest: null as unknown as Avatar,
   handlers: {} as Record<'host' | 'guest', AvatarHandlers>, guestApp: '',
-  label: null as null | ((e: Exhibit) => void), scanning: false,
+  label: null as null | ((e: Exhibit) => void), scanning: false, cameraStarts: 0, cameraState: 'on' as 'on' | 'off',
 }));
 
 vi.mock('../../../src/kit/index.ts', async (importOriginal) => {
@@ -32,7 +32,7 @@ vi.mock('../../../src/kit/index.ts', async (importOriginal) => {
 
 const track = { kind: 'video' } as unknown as MediaStreamTrack;
 vi.mock('./camera.ts', () => ({
-  useCamera: () => ({ state: 'on', videoRef: { current: null }, track, start: async () => track, stop: () => undefined }),
+  useCamera: () => ({ state: calls.cameraState, videoRef: { current: null }, track, start: async () => { calls.cameraStarts++; calls.cameraState = 'on'; return track; }, stop: () => { calls.cameraState = 'off'; } }),
   useLabelScanner: (_video: unknown, active: boolean, onLabel: (e: Exhibit) => void) => { calls.label = onLabel; calls.scanning = active; },
   grabFrame: () => 'jpeg',
 }));
@@ -45,7 +45,7 @@ function fakeAvatar(phase: Avatar['phase']): Avatar {
     phase, detail: '', speaking: false, caption: '', heard: '', lines: [], secondsLeft: null, micOn: false, audioBlocked: false,
     videoRef: { current: null }, audioRef: { current: null },
     start: vi.fn(async () => undefined), end: vi.fn(async () => undefined), say: vi.fn(), record: vi.fn(), interrupt: vi.fn(), state: vi.fn(), note: vi.fn(), event: vi.fn(),
-    mute: vi.fn(), unmute: vi.fn(), setMic: vi.fn(), feedMic: vi.fn(async () => {}), resumeAudio: vi.fn(),
+    mute: vi.fn(), unmute: vi.fn(), setMic: vi.fn(), feedMic: vi.fn(async () => {}), setCamera: vi.fn(async () => {}), resumeAudio: vi.fn(),
     filesAccepted: false, sendFiles: vi.fn(async () => []),
   };
 }
@@ -58,10 +58,14 @@ const events = (a: Avatar) => (a.event as ReturnType<typeof vi.fn>).mock.calls.m
 async function onTour() {
   const view = render(<App />);
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Begin the tour' })); });
-  expect(calls.host.start).toHaveBeenCalledWith({ mic: true, micMuted: true, camera: track });
+  // The call is placed without the camera; it opens once Edmund is on the line, and he is shown it.
+  expect(calls.host.start).toHaveBeenCalledWith({ mic: true, micMuted: true });
+  expect(calls.cameraStarts).toBe(0);
   calls.host.phase = 'live';
   const rerender = () => view.rerender(<App />);
-  act(() => { calls.handlers.host.onLive?.(); rerender(); });
+  await act(async () => { calls.handlers.host.onLive?.(); rerender(); });
+  expect(calls.cameraStarts).toBe(1);
+  expect(calls.host.setCamera).toHaveBeenCalledWith(track);
   return { ...view, update: () => act(() => rerender()) };
 }
 
@@ -81,6 +85,8 @@ beforeEach(() => {
   calls.host = fakeAvatar('idle');
   calls.guest = fakeAvatar('idle');
   calls.label = null;
+  calls.cameraStarts = 0;
+  calls.cameraState = 'off';
 });
 afterEach(() => { cleanup(); });
 
@@ -110,6 +116,24 @@ describe('a work, introduced', () => {
     act(() => calls.label!(pearl()));
     update();
     expect(screen.getByRole('button', { name: 'Meet the girl' })).toBeTruthy();
+  });
+});
+
+describe('the camera button', () => {
+  it('turns the camera off (taken from the call, scanner paused) and back on (shown to Edmund again)', async () => {
+    const { update } = await onTour();
+    fireEvent.click(screen.getByRole('button', { name: 'Turn the camera off' }));
+    update();
+    expect(calls.host.setCamera).toHaveBeenLastCalledWith(null);
+    expect(calls.scanning).toBe(false);
+    expect(screen.getByText(/The camera is off/)).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'What is this?' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(String((calls.host.state as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0])).toContain('camera is off');
+    await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: /Turn the camera on/ })[0]); });
+    update();
+    expect(calls.cameraStarts).toBe(2);
+    expect(calls.host.setCamera).toHaveBeenLastCalledWith(track);
+    expect(calls.scanning).toBe(true);
   });
 });
 

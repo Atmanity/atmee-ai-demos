@@ -62,6 +62,8 @@ export interface Avatar {
   mute(): void;
   unmute(): void;
   setMic(on: boolean): void;
+  /** Show the host this video track as the user's camera, from now on (a camera opened after the call connected); null takes it away. Optional, so stand-ins for a call need not have it. */
+  setCamera?(track: MediaStreamTrack | null): Promise<void>;
   /** Hear this track as the user's microphone (another avatar's voice, say); null for silence. Typing-only calls. */
   feedMic(track: MediaStreamTrack | null): Promise<void>;
   resumeAudio(): void;
@@ -277,6 +279,7 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
       session.setMicMuted(!on).then(() => setMicOn(on), () => setDetail('No microphone: you can type instead.'));
     },
     async feedMic(track) { await sessionRef.current?.feedMic(track); },
+    async setCamera(track) { await sessionRef.current?.setCamera(track); },
     resumeAudio() { void resumeRef.current?.().then(() => setAudioBlocked(false)); },
     async sendFiles(files, options) {
       const session = sessionRef.current;

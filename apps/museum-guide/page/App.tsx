@@ -23,9 +23,10 @@ import { exhibitImage } from './images.ts';
 import { Keyed } from './Keyed.tsx';
 import { Lobby, Wordmark } from './Lobby.tsx';
 import { MuseumMap } from './MuseumMap.tsx';
-import { GuideIcon, KeyboardIcon, MapIcon, ScanIcon } from './icons.tsx';
+import { CameraIcon, CameraOffIcon, GuideIcon, KeyboardIcon, MapIcon, ScanIcon } from './icons.tsx';
 import { PushToTalk } from './PushToTalk.tsx';
 import { Sheet } from './Sheet.tsx';
+import { Subtitles } from './Subtitles.tsx';
 import { Visit } from './Visit.tsx';
 import { WorkInfo } from './WorkInfo.tsx';
 import './meridian.css';
@@ -49,13 +50,6 @@ async function identify(image: string, question?: string): Promise<Identified | 
 }
 
 const params = new URLSearchParams(location.search);
-
-/** The end of a long caption, cut at a word: what he is saying now is what the visitor needs to read. */
-export function captionTail(text: string, max = 180): string {
-  if (text.length <= max) return text;
-  const tail = text.slice(-max);
-  return `…${tail.slice(tail.indexOf(' ') + 1)}`;
-}
 
 export function App() {
   if (params.has('sheet')) return <Sheet />;
@@ -153,7 +147,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
 
   // A label's code in view: the same label held there is not a new arrival. Paused while
   // something covers the camera (the map, a work's entry).
-  useLabelScanner(camera.videoRef, screen === 'tour' && !map && !info, useCallback((exhibit: Exhibit) => {
+  useLabelScanner(camera.videoRef, screen === 'tour' && !map && !info && camera.state === 'on', useCallback((exhibit: Exhibit) => {
     const last = lastArrival.current;
     // Still in view (or back within the window): the visitor is still standing there. Every
     // sighting restarts the window, so a label that never leaves the view never re-arrives
@@ -267,6 +261,11 @@ function Tour({ opening }: { opening: Exhibit | null }) {
       // Back from a guest in a new session: he picks up where the visitor is, and the guest goes.
       if (mode.current === 'to-host') { hostBack(); return; }
       hostRef.current?.event(said.opening(at.current.current), 60);
+      // The camera opens once he is on the line (not while the call is still being placed), and he sees it from then on.
+      void camera.start().then((track) => {
+        if (track) void hostRef.current?.setCamera?.(track);
+        else flash('The camera is off: allow it in your browser\'s settings to point at works. You can still talk with Edmund.');
+      });
     },
     onEnded: () => {
       // Ended while a guest has the visitor (his session ran out): the tour goes on; calling him back starts a new one.
@@ -345,6 +344,27 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     document.documentElement.dataset.speaking = String(active.speaking);
   }, [active.phase, active.speaking, host.phase, guestCall.phase, speaker]);
 
+  // The camera covers its box, cropped at the edges, at any size and turn of the phone. Not
+  // by CSS object-fit alone: on iPhone Safari the live camera was shrunk to fit instead, with
+  // black bars either side.
+  useEffect(() => {
+    const video = camera.videoRef.current;
+    const box = video?.parentElement;
+    if (!video || !box) return;
+    const fit = () => {
+      if (!video.videoWidth || !video.videoHeight) return;
+      const k = Math.max(box.clientWidth / video.videoWidth, box.clientHeight / video.videoHeight);
+      video.style.width = `${Math.ceil(video.videoWidth * k)}px`;
+      video.style.height = `${Math.ceil(video.videoHeight * k)}px`;
+    };
+    const watch = new ResizeObserver(fit);
+    watch.observe(box);
+    video.addEventListener('loadedmetadata', fit);
+    video.addEventListener('resize', fit);
+    fit();
+    return () => { watch.disconnect(); video.removeEventListener('loadedmetadata', fit); video.removeEventListener('resize', fit); };
+  }, [screen]);
+
   // The tour is over: the camera goes off with it (the visit card does not show it).
   useEffect(() => { if (screen === 'visit') camera.stop(); }, [screen]);
 
@@ -352,8 +372,6 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   useEffect(() => { host.state(tourState({ current, seen, camera: camera.state === 'on' })); }, [host, current, seen, camera.state]);
 
   const begin = async () => {
-    const track = await camera.start();
-    if (!track) return;
     setScreen('tour');
     setSeen([]);
     mode.current = 'host';
@@ -363,8 +381,9 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     lastArrival.current = current ? { id: current.id, at: Date.now() } : null;
     if (current) { setSeen([current]); setInfo(current); }
     callGen.current++;
-    // Push to talk: the microphone joins muted and opens while the button is held.
-    await host.start({ mic: true, micMuted: true, camera: track });
+    // Push to talk: the microphone joins muted and opens while the button is held. No camera
+    // yet: it opens when Edmund is on the line (onLive).
+    await host.start({ mic: true, micMuted: true });
   };
 
   /** The "What is this?" button: the page looks, then tells whoever is guiding what it found. */
@@ -374,6 +393,21 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     if (found) { flash(found.title); arrive(found, 'camera'); return; }
     flash('Not one of the Meridian\'s works');
     if (speaker === 'host') host.event(said.whatIsThisPressed(text), 30);
+  };
+
+  const cameraOn = camera.state === 'on';
+  /** The camera button: off stops it and takes it from the calls; on opens it and shows it to whoever is on the line. */
+  const toggleCamera = async () => {
+    if (cameraOn) {
+      camera.stop();
+      void host.setCamera?.(null);
+      void guestCall.setCamera?.(null);
+      return;
+    }
+    const track = await camera.start();
+    if (!track) { flash('The camera is blocked: allow it in your browser\'s settings, then try again.'); return; }
+    if (host.phase === 'live') void host.setCamera?.(track);
+    if (guestCall.phase === 'live') void guestCall.setCamera?.(track);
   };
 
   /** The visitor ticks (or unticks) a work on the map themselves. */
@@ -404,12 +438,11 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   const hostOn = speaker === 'host' && host.phase === 'live' && mode.current === 'host';
   const busy = mode.current === 'to-guest' || mode.current === 'to-host';
   const status = busy ? null : callCopy(active, activeName);
-  const words = captionTail(active.caption, 120);
   const openMap = (where: Exhibit | null = null) => { setMapAt(where); setMap(true); setTalk(false); };
   const infoGuest = guestFor(info);
   return (
     <div ref={tourRef} className={`mr-tour ${small ? 'is-small' : ''} ${talk ? 'is-talking' : ''} ${info ? 'is-reading' : ''} ${active.speaking ? 'is-speaking' : ''}`}>
-      <video ref={camera.videoRef} className="mr-camera" playsInline muted aria-label="Your camera" />
+      <div className="mr-camera"><video ref={camera.videoRef} playsInline muted aria-label="Your camera" /></div>
       <div className="mr-shade" aria-hidden="true" />
 
       <header className="mr-bar">
@@ -417,11 +450,22 @@ function Tour({ opening }: { opening: Exhibit | null }) {
         <span className="mr-bar-title"><Wordmark /></span>
         <span className="mr-bar-end">
           {active.secondsLeft !== null && live && <span className="mr-clock">{Math.floor(active.secondsLeft / 60)}:{String(active.secondsLeft % 60).padStart(2, '0')}</span>}
+          <button type="button" className={`mr-cam ${cameraOn ? '' : 'is-off'}`} onClick={() => void toggleCamera()} disabled={!live || camera.state === 'asking'}
+            aria-pressed={cameraOn} aria-label={cameraOn ? 'Turn the camera off' : 'Turn the camera on'} title={cameraOn ? 'Turn the camera off' : 'Turn the camera on'}>
+            {cameraOn ? <CameraIcon /> : <CameraOffIcon />}
+          </button>
           <button type="button" className="mr-end" onClick={leave} disabled={!live}>End</button>
         </span>
       </header>
 
-      {live && !card && !looking && !info && <div className="mr-reticle" aria-hidden="true" />}
+      {live && cameraOn && !card && !looking && !info && <div className="mr-reticle" aria-hidden="true" />}
+      {live && !cameraOn && camera.state !== 'asking' && !info && (
+        <div className="mr-camoff">
+          <CameraOffIcon />
+          <p>The camera is off. {activeName} can't see what you're looking at.</p>
+          <button type="button" className="mr-primary" onClick={() => void toggleCamera()}>Turn the camera on</button>
+        </div>
+      )}
       {looking && <div className="mr-toast" role="status"><span className="mr-dot" />Looking…</div>}
       {!looking && notice && <div className="mr-toast" role="status">{busy && <span className="mr-dot" />}{notice}</div>}
 
@@ -474,11 +518,8 @@ function Tour({ opening }: { opening: Exhibit | null }) {
             ) : (
               <p className="mr-now is-empty">Point the camera at a work, or at the code on its label.</p>
             )}
-            <div className="mr-subs" aria-live="polite">
-              {words ? <p className="mr-subs-said"><b>{activeName}</b>{words}</p>
-                : !active.heard && live && <p className="mr-subs-hint">Hold the mic and ask {activeName} anything.</p>}
-              {active.heard && <p className="mr-subs-you">{active.heard}</p>}
-            </div>
+            <Subtitles key={speaker} text={active.caption} speaking={active.speaking} name={activeName} heard={active.heard}
+              hint={live ? `Hold the mic and ask ${activeName} anything.` : ''} />
           </>
         )}
         <footer className="mr-dock">
@@ -489,7 +530,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
             <span className="mr-dock-ico"><KeyboardIcon /></span><span className="mr-dock-label">Type</span>
           </button>
           {live ? <PushToTalk avatar={active} /> : <span className="mr-dock-btn mr-ptt is-idle" aria-hidden="true"><span className="mr-dock-ico" /><span className="mr-dock-label">Hold to talk</span></span>}
-          <button type="button" className={`mr-dock-btn ${looking ? 'is-busy' : ''}`} onClick={() => void whatIsThis()} disabled={!live || looking}>
+          <button type="button" className={`mr-dock-btn ${looking ? 'is-busy' : ''}`} onClick={() => void whatIsThis()} disabled={!live || looking || !cameraOn}>
             <span className="mr-dock-ico"><ScanIcon /></span><span className="mr-dock-label">What is this?</span>
           </button>
           {speaker === 'guest' ? (
