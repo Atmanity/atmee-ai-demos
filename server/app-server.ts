@@ -12,8 +12,10 @@ export interface AppServer {
    * How the app uses the avatar. `full-stack` (default): Atmee runs the whole conversation
    * (POST /v1/session). `avatar-only`: the app's own agent speaks and the avatar is its face,
    * rendered into the app's own LiveKit room (POST /v1/avatars/{id}/avatar_sessions).
+   * `speech-to-speech`: Atmee's realtime speech hears and answers over a WebSocket
+   * (POST /v1/speech_sessions), and the face is an avatar-only render of that voice.
    */
-  way?: 'full-stack' | 'avatar-only';
+  way?: 'full-stack' | 'avatar-only' | 'speech-to-speech';
   /**
    * The app also renders its avatar into the site's own LiveKit room on demand (POST
    * /api/apps/<id>/render), as the face of a voice it gets elsewhere (a speech session).

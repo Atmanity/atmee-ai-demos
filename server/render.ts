@@ -32,8 +32,15 @@ export interface StartedRender {
   maxSeconds: number;
 }
 
-export async function startRender(avatarId: string, maxSeconds: number, metadata: Record<string, unknown>) {
-  const room = `atmee-demos-${randomUUID()}`;
+/**
+ * Where the render goes. By default a room of its own; an app with several
+ * faces in one room names the room and gives each avatar its own identity.
+ */
+export interface RenderPlace { room?: string; avatarIdentity?: string }
+
+export async function startRender(avatarId: string, maxSeconds: number, metadata: Record<string, unknown>, place: RenderPlace = {}) {
+  const room = place.room ?? `atmee-demos-${randomUUID()}`;
+  const avatarIdentity = place.avatarIdentity ?? AVATAR_IDENTITY;
   const agentIdentity = `agent-${randomUUID().slice(0, 8)}`;
   // Both outlive the session a little: the page reconnects after a network blip with the same token.
   const ttl = maxSeconds + 600;
@@ -44,7 +51,7 @@ export async function startRender(avatarId: string, maxSeconds: number, metadata
   agent.addGrant({ room, roomJoin: true, canPublish: false, canPublishData: true, canSubscribe: true });
 
   // The avatar: an agent participant that publishes on behalf of ours.
-  const avatar = new AccessToken(KEY, SECRET, { identity: AVATAR_IDENTITY, name: 'Avatar', ttl, attributes: { 'lk.publish_on_behalf': agentIdentity } });
+  const avatar = new AccessToken(KEY, SECRET, { identity: avatarIdentity, name: 'Avatar', ttl, attributes: { 'lk.publish_on_behalf': agentIdentity } });
   avatar.kind = 'agent';
   avatar.addGrant({ room, roomJoin: true, canPublish: true, canPublishData: true, canSubscribe: true });
 
@@ -53,7 +60,7 @@ export async function startRender(avatarId: string, maxSeconds: number, metadata
   });
   if (r.status !== 202 && r.status !== 201) return { ok: false as const, ...r };
   const render: StartedRender = {
-    sessionId: r.json.sessionId, serverUrl: URL!, token: await agent.toJwt(), agentIdentity, avatarIdentity: AVATAR_IDENTITY,
+    sessionId: r.json.sessionId, serverUrl: URL!, token: await agent.toJwt(), agentIdentity, avatarIdentity,
     maxSeconds: r.json.maxDurationSeconds ?? maxSeconds,
   };
   return { ok: true as const, render };

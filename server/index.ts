@@ -47,8 +47,17 @@ if (production) {
   miniapps.use(express.static('dist', { extensions: ['html'] }));
 } else {
   const { createServer: createVite } = await import('vite');
-  // HMR=0: no reloads pushed to open pages (a live session survives edits elsewhere).
-  const vite = await createVite({ server: { middlewareMode: true, hmr: process.env.HMR !== '0' }, appType: 'mpa' });
+  // The live-update socket's port follows the site's (5190 keeps Vite's 24678). In middleware
+  // mode Vite points pages at 24678 unless told otherwise, even with HMR off, so two sites on
+  // one machine shared it: a page followed the other site's socket and reloaded itself
+  // mid-session when that one went away, ending its renders.
+  // HMR=0: no socket at all, so nothing is pushed to open pages (a live session survives edits
+  // elsewhere); the page's one attempt to connect fails, and it never reloads.
+  const hmrOff = process.env.HMR === '0';
+  const vite = await createVite({
+    server: { middlewareMode: true, hmr: { port: PORT + 19_488 }, ws: hmrOff ? false : undefined },
+    appType: 'mpa',
+  });
   miniapps.use(vite.middlewares);
 }
 
