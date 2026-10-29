@@ -1,0 +1,281 @@
+{
+ "ui": {
+  "eyebrow": "Una visita privada con el director",
+  "headline": "Cada obra tiene una historia. Edmund las conoce todas.",
+  "lede": "Levanta tu teléfono en las salas. Apúntalo hacia un cuadro o hacia el código de su etiqueta, y Edmund Hale, el director del Museo Meridian, te explicará lo que estás viendo. Pregúntale lo que quieras, en voz alta.",
+  "opening": "Estás en {title}, {gallery}.",
+  "language": "Idioma",
+  "begin": "Comenzar el recorrido",
+  "starting": "Iniciando…",
+  "uses": "Usa tu cámara y micrófono mientras estás con Edmund. Se recomienda usar auriculares en las salas.",
+  "sheetLink": "¿No estás en el Museo Meridian? Abre las etiquetas de las salas en otra pantalla",
+  "sheetAfter": " y apunta tu teléfono hacia ellas.",
+  "cameraBlocked": "La cámara está bloqueada. Permítela para este sitio en los ajustes del navegador y vuelve a intentarlo.",
+  "cameraMissing": "No se pudo acceder a ninguna cámara en este dispositivo.",
+  "calling": "Llamando a {name}…",
+  "callingDetail": "Esto tardará unos segundos.",
+  "warming": "{name} se está preparando",
+  "warmingDetail": "Todos los guías están ocupados. Esperando a uno…",
+  "connecting": "Conectando con {name}…",
+  "arriving": "{name} se está uniendo…",
+  "arrivingDetail": "Casi listo.",
+  "ended": "Llamada finalizada",
+  "failed": "No se pudo contactar con {name}",
+  "failedDetail": "Por favor, inténtalo de nuevo en un momento.",
+  "tryAgain": "Reintentar",
+  "end": "Finalizar",
+  "tapToHear": "Toca para escuchar a {name}",
+  "cameraOff": "Desactivar la cámara",
+  "cameraOn": "Activar la cámara",
+  "cameraOffNote": "La cámara está desactivada. {name} no puede ver lo que estás mirando.",
+  "cameraBlockedToast": "La cámara está bloqueada: permítela en los ajustes de tu navegador y vuelve a intentarlo.",
+  "cameraOffAtStart": "La cámara está desactivada: actívala en los ajustes de tu navegador para apuntar a las obras. Aún puedes hablar con {name}.",
+  "looking": "Buscando…",
+  "label": "Etiqueta: {title}",
+  "notAWork": "No es una obra del Museo Meridian",
+  "onTheWay": "{name} está en camino…",
+  "hostOnTheWay": "{name} está regresando…",
+  "hostCouldNotComeBack": "{name} no pudo volver en este momento. Inténtalo de nuevo en un instante.",
+  "talkingWith": "Hablando con",
+  "fromWork": "desde {title}",
+  "callBack": "Volver a llamar a {name}",
+  "youAreAt": "Estás en",
+  "pointHint": "Apunta la cámara a una obra o al código en su etiqueta.",
+  "askHint": "Mantén presionado el micrófono y pregúntale a {name} lo que quieras.",
+  "you": "Tú",
+  "conversation": "Conversación con {name}",
+  "done": "Listo",
+  "askPlaceholder": "Pregúntale a {name}…",
+  "chatEmpty": "Escribe aquí cuando haya demasiado ruido en la sala para hablar.",
+  "map": "Mapa",
+  "type": "Escribir",
+  "holdToTalk": "Mantén para hablar",
+  "listening": "Escuchando…",
+  "whatIsThis": "¿Qué es esto?",
+  "showHost": "Mostrar a {name}",
+  "callHost": "Llamar a {name}",
+  "mapLabel": "Mapa del museo, {n} de {total} vistas",
+  "backToCamera": "Volver a la cámara",
+  "allWorks": "‹ Todas las obras",
+  "youAreHere": "Estás aquí · ",
+  "originalHangs": "El original se encuentra en {where}.",
+  "theStory": "La historia",
+  "lookFor": "Qué observar",
+  "nextOnRoute": "Siguiente en el recorrido · {room}",
+  "askAbout": "Pregúntale a Edmund sobre ella",
+  "markSeen": "Marcar como vista",
+  "seen": "Vista",
+  "museumMap": "Mapa del museo",
+  "seenCount": "{n} de {total} obras vistas",
+  "close": "Cerrar",
+  "entrance": "Entrada",
+  "gallery": "Sala {n}",
+  "hereSuffix": " · estás aquí",
+  "notSeenYet": "Aún no vista",
+  "floorPlan": "Plano del Museo Meridian",
+  "thanks": "Gracias por tu visita",
+  "visitOne": "Tu visita: una obra",
+  "visitMany": "Tu visita: {n} obras",
+  "comeBack": "Vuelve pronto",
+  "noneSeen": "Esta vez no te detuviste en ninguna obra. Edmund te esperará aquí.",
+  "newTour": "Iniciar un nuevo recorrido",
+  "seeMap": "Ver el mapa del museo",
+  "theOriginal": "El original: {where}"
+ },
+ "works": {
+  "mona-lisa": {
+   "title": "Mona Lisa",
+   "artist": "Leonardo da Vinci",
+   "date": "hacia 1503 a 1519",
+   "medium": "óleo sobre tabla de álamo, 77 por 53 centímetros",
+   "gallery": "Sala 1, la sala del Renacimiento",
+   "original": "el Museo del Louvre, París",
+   "story": [
+    "La retratada se identifica comúnmente con Lisa Gherardini, esposa de un comerciante de seda florentino, Francesco del Giocondo.",
+    "Leonardo continuó trabajando en ella durante años y nunca se la entregó a la familia.",
+    "Suavizó cada borde con sfumato, sutiles veladuras que funden la luz con la sombra, por lo que la sonrisa parece aparecer y desaparecer.",
+    "En 1911 fue robada del Louvre por Vincenzo Peruggia, un empleado de mantenimiento que trabajaba allí, y fue recuperada en Florencia en 1913."
+   ],
+   "lookFor": [
+    "las comisuras de la boca, donde habita la sonrisa",
+    "el paisaje detrás de ella, con un camino serpenteante y un puente",
+    "las manos, descansando una sobre la otra"
+   ]
+  },
+  "birth-of-venus": {
+   "title": "El nacimiento de Venus",
+   "artist": "Sandro Botticelli",
+   "date": "hacia 1484 a 1486",
+   "medium": "témpera sobre lienzo, unos 1,7 por 2,8 metros",
+   "gallery": "Sala 1, la sala del Renacimiento",
+   "original": "la Galería Uffizi, Florencia",
+   "story": [
+    "Venus, la diosa del amor, llega a la orilla sobre una concha de vieira, nacida ya adulta del mar.",
+    "A la izquierda, Céfiro, el viento del oeste, sopla para llevarla a tierra, acompañado por una ninfa.",
+    "A la derecha, una de las Horas, diosas de las estaciones, se apresura a cubrirla con un manto repleto de flores.",
+    "Está pintada al temple, con pigmentos aglutinados con huevo, lo que le otorga esa luz pálida y yesosa."
+   ],
+   "lookFor": [
+    "las rosas flotando en el aire alrededor de los dioses del viento",
+    "la concha de vieira bajo sus pies",
+    "su largo cabello, que recoge para cubrirse"
+   ]
+  },
+  "pearl-earring": {
+   "title": "La joven de la perla",
+   "artist": "Johannes Vermeer",
+   "date": "hacia 1665",
+   "medium": "óleo sobre lienzo, 44,5 por 39 centímetros",
+   "gallery": "Sala 2, la sala del Siglo de Oro neerlandés",
+   "original": "el Mauritshuis, La Haya",
+   "story": [
+    "No es el retrato de una persona conocida: es un tronie, un estudio holandés de un rostro, un personaje o una expresión.",
+    "Nadie sabe quién era la joven.",
+    "El azul de su turbante es azul ultramar, elaborado con lapislázuli molido y más costoso que el oro.",
+    "El pendiente son solo unas pocas pinceladas de luz sin ningún gancho pintado, y algunos expertos creen que es demasiado grande para ser una perla auténtica.",
+    "Una investigación en 2018 reveló que tras ella colgaba originalmente una cortina verde, que con el tiempo se desvaneció en el fondo oscuro."
+   ],
+   "lookFor": [
+    "el único reflejo de luz en el pendiente",
+    "el diminuto punto blanco de luz en la comisura de los labios",
+    "el azul ultramar del turbante contra la tela amarilla que cae de él"
+   ]
+  },
+  "night-watch": {
+   "title": "La ronda de noche",
+   "artist": "Rembrandt van Rijn",
+   "date": "1642",
+   "medium": "óleo sobre lienzo, unos 3,8 por 4,5 metros",
+   "gallery": "Sala 2, la sala del Siglo de Oro neerlandés",
+   "original": "el Rijksmuseum, Ámsterdam",
+   "story": [
+    "Es un retrato colectivo de una compañía de la milicia civil, pintado para la sede de los mosqueteros de Ámsterdam.",
+    "Rembrandt los muestra en movimiento, poniéndose en marcha, en lugar de posar en filas ordenadas como en la mayoría de los retratos de grupo de la época.",
+    "No es para nada una escena nocturna: el barniz oscurecido le dio apariencia de noche, y el apodo surgió más tarde.",
+    "En 1715 fue recortada por los cuatro costados para encajar en una pared del ayuntamiento de Ámsterdam, por lo que se perdieron varias figuras."
+   ],
+   "lookFor": [
+    "el capitán de negro con una banda roja, en el centro",
+    "la sombra de su mano sobre la casaca amarilla del teniente",
+    "la niña vestida de dorado a la izquierda, con un pollo colgado del cinturón"
+   ]
+  },
+  "wanderer": {
+   "title": "El caminante sobre el mar de nubes",
+   "artist": "Caspar David Friedrich",
+   "date": "hacia 1818",
+   "medium": "óleo sobre lienzo, 94,8 por 74,8 centímetros",
+   "gallery": "Sala 3, la sala del Romanticismo y Arte Moderno",
+   "original": "la Hamburger Kunsthalle, Hamburgo",
+   "story": [
+    "Es una de las grandes obras del Romanticismo alemán.",
+    "Friedrich solía pintar figuras de espaldas, de modo que nos situamos donde él está y contemplamos junto a él.",
+    "Las rocas y cumbres provienen de bocetos de montañas reales, las montañas de arenisca del Elba en Sajonia, combinadas en un paisaje que no existe en ningún lugar."
+   ],
+   "lookFor": [
+    "la espalda de la figura, justo en el centro",
+    "su bastón de senderismo",
+    "las capas de niebla entre las cumbres"
+   ]
+  },
+  "starry-night": {
+   "title": "La noche estrellada",
+   "artist": "Vincent van Gogh",
+   "date": "junio de 1889",
+   "medium": "óleo sobre lienzo, 73,7 por 92,1 centímetros",
+   "gallery": "Sala 3, la sala del Romanticismo y Arte Moderno",
+   "original": "el Museo de Arte Moderno, Nueva York",
+   "story": [
+    "Van Gogh la pintó mientras estaba ingresado en el sanatorio de Saint-Paul-de-Mausole, en Saint-Rémy-de-Provence.",
+    "Es la vista desde su ventana orientada al este, justo antes del amanecer.",
+    "Le escribió a su hermano Theo contándole que había visto el campo desde su ventana antes del alba, sin nada más que el lucero del alba, que se veía muy grande.",
+    "El pueblo no formaba parte de la vista desde su ventana: lo añadió de su imaginación."
+   ],
+   "lookFor": [
+    "la gran espiral en el centro del cielo",
+    "el ciprés oscuro a la izquierda, elevándose como una llama",
+    "la torre de la iglesia en el pueblo"
+   ]
+  },
+  "the-kiss": {
+   "title": "El beso",
+   "artist": "Gustav Klimt",
+   "date": "1907 a 1908",
+   "medium": "óleo y pan de oro sobre lienzo, 180 por 180 centímetros",
+   "gallery": "Sala 3, la sala del Romanticismo y Arte Moderno",
+   "original": "el Belvedere, Viena",
+   "story": [
+    "Pertenece al denominado período dorado de Klimt, cuando incorporaba auténtico pan de oro a sus pinturas.",
+    "El Estado austríaco la compró en 1908, cuando se expuso por primera vez en Viena.",
+    "Los dos amantes están envueltos en un único manto dorado, pero sus estampados se diferencian con claridad."
+   ],
+   "lookFor": [
+    "la túnica del hombre con rectángulos negros y blancos",
+    "el vestido de la mujer con círculos y flores",
+    "el borde del prado de flores bajo sus pies, donde cae al vacío"
+   ]
+  },
+  "great-wave": {
+   "title": "La gran ola de Kanagawa",
+   "artist": "Katsushika Hokusai",
+   "date": "hacia 1830 a 1832",
+   "medium": "xilografía en color, tinta y color sobre papel, unos 26 por 38 centímetros",
+   "gallery": "Sala 4, la sala de grabados japoneses",
+   "original": "muchos museos, ya que se imprimieron miles de ejemplares; uno de ellos está en el Museo Metropolitano de Arte, Nueva York",
+   "story": [
+    "Es el grabado más famoso de la serie de Hokusai Treinta y seis vistas del monte Fuji.",
+    "Hokusai tenía unos setenta años cuando la creó.",
+    "El azul intenso es azul de Prusia, un pigmento que acababa de empezar a llegar a Japón.",
+    "Al ser una xilografía, se estamparon miles de copias con las mismas planchas talladas, y en su momento se vendía a bajo precio."
+   ],
+   "lookFor": [
+    "el monte Fuji, diminuto, en el hueco de la ola",
+    "la espuma en la cresta, curvada como garras",
+    "los remeros agazapados en las tres barcas"
+   ]
+  }
+ },
+ "rooms": {
+  "1": [
+   "Renacimiento"
+  ],
+  "2": [
+   "Siglo de Oro",
+   "neerlandés"
+  ],
+  "3": [
+   "Romántico y",
+   "Moderno"
+  ],
+  "4": [
+   "Grabados",
+   "japoneses"
+  ]
+ },
+ "pins": {
+  "mona-lisa": "Mona Lisa",
+  "birth-of-venus": "Venus",
+  "pearl-earring": "La perla",
+  "night-watch": "La ronda",
+  "wanderer": "Caminante",
+  "starry-night": "Estrellada",
+  "the-kiss": "El beso",
+  "great-wave": "Gran ola"
+ },
+ "guests": {
+  "girl": {
+   "name": "La joven",
+   "meet": "Conoce a la joven"
+  },
+  "wanderer": {
+   "name": "El caminante",
+   "meet": "Conoce al caminante"
+  }
+ },
+ "names": {
+  "museum": "el Museo Meridian",
+  "hostFull": "Edmund Hale",
+  "host": "Edmund",
+  "title": "director"
+ }
+}

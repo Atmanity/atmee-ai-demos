@@ -10,6 +10,7 @@ import type { AppTool } from '../../../server/app-server.ts';
 import { exhibitById, recordText, type Exhibit } from './catalogue.ts';
 import { localize } from './catalogue.i18n.ts';
 import type { Lang } from './lang.ts';
+import { TRANSLATIONS } from './translations.ts';
 
 export interface Guest {
   id: string;
@@ -22,22 +23,26 @@ export interface Guest {
   /** Who they are, for Edmund's introduction and the info page. */
   who: string;
   avatarId: string;
-  /** On screen, by language: who is talking, and the button that brings them. */
-  labels: Record<Lang, { name: string; meet: string }>;
 }
+
+const EN_LABELS: Record<string, { name: string; meet: string }> = {
+  girl: { name: 'The girl', meet: 'Meet the girl' },
+  wanderer: { name: 'The wanderer', meet: 'Meet the wanderer' },
+};
+
+/** On screen, in a language: who is talking, and the button that brings them. */
+export const guestLabel = (g: Guest, lang: Lang) => (lang === 'en' ? EN_LABELS[g.id] : TRANSLATIONS[lang].guests[g.id]);
 
 export const GUESTS: Guest[] = [
   {
     id: 'girl', exhibit: 'pearl-earring', name: 'the girl', meet: 'Meet the girl',
     who: 'the girl from the painting herself, an anonymous model nobody has ever named',
     avatarId: 'cb84bed4-c6df-4cae-8bf8-42e5cbcdb71b',
-    labels: { en: { name: 'The girl', meet: 'Meet the girl' }, 'zh-TW': { name: '畫中少女', meet: '和畫中少女說話' }, ja: { name: '絵の少女', meet: '絵の少女と話す' } },
   },
   {
     id: 'wanderer', exhibit: 'wanderer', name: 'the wanderer', meet: 'Meet the wanderer',
     who: 'the wanderer himself, who has stood with his back to every visitor for two centuries and has turned around',
     avatarId: '2e7275e6-b307-490b-b02e-8d2613293648',
-    labels: { en: { name: 'The wanderer', meet: 'Meet the wanderer' }, 'zh-TW': { name: '畫中旅人', meet: '和畫中旅人說話' }, ja: { name: '絵の旅人', meet: '絵の旅人と話す' } },
   },
 ];
 

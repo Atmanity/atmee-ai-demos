@@ -26,6 +26,8 @@ button { font: inherit; }
 /* The display face has no Chinese or Japanese: those pages take a serif of their own (the page's lang picks the glyph forms). */
 :root:lang(zh-TW) { --mr-serif: 'Cormorant Garamond', 'Noto Serif TC', 'Songti TC', serif; }
 :root:lang(ja) { --mr-serif: 'Cormorant Garamond', 'Noto Serif JP', 'Hiragino Mincho ProN', serif; }
+:root:lang(zh-CN) { --mr-serif: 'Cormorant Garamond', 'Noto Serif SC', 'Songti SC', serif; }
+:root:lang(ko) { --mr-serif: 'Cormorant Garamond', 'Noto Serif KR', 'AppleMyungjo', serif; }
 /* Cormorant's old-style figures read as letters in a CJK heading ("1" as "I"). */
 h1, h2, b { font-variant-numeric: lining-nums; }
 a { color: inherit; }
@@ -42,18 +44,37 @@ a { color: inherit; }
 .mr-lobby { min-height: 100dvh; background: radial-gradient(120% 70% at 50% 0%, #3a2c20 0%, var(--mr-ink) 62%); padding: max(14px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
 .mr-lobby-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 960px; margin: 0 auto; }
 .mr-lobby-main { max-width: 960px; margin: 0 auto; display: grid; gap: 8px; align-items: center; }
-.mr-portrait { position: relative; display: grid; place-items: end center; height: min(46vh, 380px); overflow: hidden; }
+/* Small enough on a phone that the headline and the way in are on the first screen. */
+.mr-portrait { position: relative; display: grid; place-items: end center; height: min(34dvh, 320px); overflow: hidden; }
 /* A gallery wall behind him, lit from above. */
 .mr-portrait::before { content: ""; position: absolute; inset: 12% 8% 0; border-radius: 50% 50% 0 0 / 30% 30% 0 0; background: radial-gradient(60% 70% at 50% 18%, rgba(240, 205, 150, .32), rgba(120, 80, 45, .12) 60%, transparent 75%); }
 .mr-portrait img { position: relative; height: 100%; width: auto; max-width: 100%; object-fit: contain; object-position: bottom; -webkit-mask-image: linear-gradient(to bottom, #000 82%, transparent); mask-image: linear-gradient(to bottom, #000 82%, transparent); }
 .mr-lobby-copy { display: grid; gap: 14px; justify-items: start; }
-.mr-lobby h1, .mr-visit h1 { margin: 0; font: 600 clamp(34px, 9vw, 54px)/1.02 var(--mr-serif); letter-spacing: -.01em; text-wrap: balance; }
+.mr-lobby h1, .mr-visit h1 { margin: 0; font: 600 clamp(30px, 8.2vw, 54px)/1.08 var(--mr-serif); letter-spacing: -.01em; text-wrap: balance; }
 .mr-lede { margin: 0; font-size: 16.5px; line-height: 1.55; color: #e3d6bf; max-width: 46ch; }
-.mr-langs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.mr-langs-label { font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--mr-ivory-2); margin-right: 4px; }
-.mr-langs button { border: 1px solid rgba(241, 231, 212, .3); border-radius: 999px; padding: 8px 14px; background: transparent; color: var(--mr-ivory); font-size: 15px; font-weight: 600; cursor: pointer; }
-.mr-langs button.is-on { background: var(--mr-ivory); color: var(--mr-ink); border-color: transparent; }
-.mr-langs button:focus-visible { outline: 2px solid var(--mr-brass); outline-offset: 2px; }
+/* The language: one button in the top bar, a sheet of every language. */
+.mr-lobby-end { display: flex; align-items: center; gap: 12px; }
+.mr-lang { display: inline-flex; align-items: center; gap: 7px; border: 1px solid rgba(241, 231, 212, .3); border-radius: 999px; padding: 7px 12px; background: rgba(23, 18, 14, .5); color: var(--mr-ivory); font-size: 14px; font-weight: 600; cursor: pointer; }
+.mr-lang-caret { font-size: 10px; color: var(--mr-ivory-2); }
+.mr-lang:focus-visible { outline: 2px solid var(--mr-brass); outline-offset: 2px; }
+.mr-lang-backdrop { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-end; justify-content: center; background: rgba(8, 6, 4, .55); animation: mr-fade .18s ease-out; }
+.mr-lang-sheet { width: min(100%, 460px); max-height: 82dvh; display: flex; flex-direction: column; border-radius: 22px 22px 0 0; background: #f4efe6; color: var(--mr-ink); color-scheme: light; padding: 14px max(16px, env(safe-area-inset-left, 0px)) calc(14px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-right, 0px)); box-shadow: 0 -10px 40px rgba(0, 0, 0, .4); animation: mr-up .22s ease-out; }
+.mr-lang-head { display: flex; justify-content: space-between; align-items: center; padding: 2px 4px 10px; }
+.mr-lang-head b { font: 600 24px var(--mr-serif); }
+.mr-lang-head .mr-link { padding: 0; text-decoration: none; }
+.mr-lang-sheet ul { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: grid; gap: 2px; }
+.mr-lang-sheet li button { width: 100%; display: flex; align-items: baseline; gap: 10px; padding: 13px 12px; border: 0; border-radius: 12px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.mr-lang-sheet li button:hover { background: #ebe3d5; }
+.mr-lang-sheet li button.is-on { background: #e7dcc8; }
+.mr-lang-sheet li button:focus-visible { outline: 2px solid var(--mr-brass); outline-offset: -2px; }
+.mr-lang-name { font-size: 18px; font-weight: 600; }
+.mr-lang-en { font-size: 13px; color: #6a5d50; }
+.mr-lang-tick { margin-left: auto; color: #8a6a2e; font-weight: 700; }
+@keyframes mr-fade { from { opacity: 0; } }
+/* Spaced capitals are for Latin: Chinese, Japanese and Korean labels keep their own spacing. */
+:root:lang(zh-TW) .mr-eyebrow, :root:lang(zh-CN) .mr-eyebrow, :root:lang(ja) .mr-eyebrow, :root:lang(ko) .mr-eyebrow,
+:root:lang(zh-TW) .mr-card-where, :root:lang(zh-CN) .mr-card-where, :root:lang(ja) .mr-card-where, :root:lang(ko) .mr-card-where,
+:root:lang(zh-TW) .mr-subs-who, :root:lang(zh-CN) .mr-subs-who, :root:lang(ja) .mr-subs-who, :root:lang(ko) .mr-subs-who { letter-spacing: .04em; }
 .mr-opening { margin: 0; padding: 10px 14px; border: 1px solid rgba(201, 162, 90, .45); border-radius: 12px; background: rgba(201, 162, 90, .1); font-size: 15px; }
 .mr-trouble { margin: 0; color: #f0a596; font-size: 14px; }
 @media (min-width: 820px) {

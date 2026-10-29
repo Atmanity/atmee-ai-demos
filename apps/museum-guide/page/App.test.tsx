@@ -123,7 +123,9 @@ describe('a work, introduced', () => {
 describe('the tour\'s language', () => {
   it('is picked at the front door: the calls are in it, Edmund keeps to it, and the screen and the works are in it', async () => {
     const view = render(<App />);
-    fireEvent.click(screen.getByRole('radio', { name: '繁體中文' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Language: English' }));
+    fireEvent.click(screen.getByRole('radio', { name: /繁體中文/ }));
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.getByRole('button', { name: '開始導覽' })).toBeTruthy();
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: '開始導覽' })); });
     expect(calls.host.start).toHaveBeenCalledWith({ mic: true, micMuted: true, language: 'zh-TW' });

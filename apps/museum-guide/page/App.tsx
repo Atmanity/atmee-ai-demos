@@ -18,7 +18,7 @@ import { EXHIBITS, exhibitById, findExhibit, type Exhibit } from '../engine/cata
 import { localize } from '../engine/catalogue.i18n.ts';
 import { languageRule, type Lang } from '../engine/lang.ts';
 import { arrived, isToolName, said, tourState, type Found } from '../engine/director.ts';
-import { guestFor, guestSaid, guestState, type Guest } from '../engine/guests.ts';
+import { guestFor, guestLabel, guestSaid, guestState, type Guest } from '../engine/guests.ts';
 import { asksForHost, asksWhat } from '../engine/judge.ts';
 import { grabFrame, useCamera, useLabelScanner } from './camera.ts';
 import { HOST_NAME, LangContext, saveLang, savedLang, translator, type T } from './i18n.ts';
@@ -207,7 +207,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     mode.current = 'to-guest';
     setGuest(g);
     setInfo(null);
-    flash(translator(langRef.current)('onTheWay', { name: g.labels[langRef.current].name }));
+    flash(translator(langRef.current)('onTheWay', { name: guestLabel(g, langRef.current).name }));
     if (how === 'button') hostRef.current?.event(said.handOverPressed(g), 20);
     setHandovers((n) => n + 1);
     return true;
@@ -365,7 +365,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   }, [host.phase]);
 
   const active = speaker === 'guest' ? guestCall : host;
-  const activeName = speaker === 'guest' && guest ? guest.labels[lang].name : HOST;
+  const activeName = speaker === 'guest' && guest ? guestLabel(guest, lang).name : HOST;
   // <html> data-call and data-speaking follow whoever is on screen (each call's hook also sets them).
   useEffect(() => {
     document.documentElement.dataset.call = active.phase;
@@ -510,7 +510,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
             back={`‹ ${t('backToCamera')}`} onBack={() => setInfo(null)} onOpen={setInfo}
             onAsk={hostOn ? askAbout : undefined} onToggleSeen={markSeen}>
             {infoGuest && hostOn && (
-              <button type="button" className="mr-primary mr-meet" onClick={() => handOver(infoGuest, 'button')}>{infoGuest.labels[lang].meet}</button>
+              <button type="button" className="mr-primary mr-meet" onClick={() => handOver(infoGuest, 'button')}>{guestLabel(infoGuest, lang).meet}</button>
             )}
           </WorkInfo>
           <button type="button" className="mr-info-close" onClick={() => setInfo(null)}>{t('backToCamera')}</button>
@@ -518,7 +518,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
       )}
 
       <Keyed videoRef={host.videoRef} audioRef={host.audioRef} label={HOST} className={`${small ? 'is-small' : ''} ${speaker === 'host' ? '' : 'is-away'}`} />
-      <Keyed videoRef={guestCall.videoRef} audioRef={guestCall.audioRef} label={guest ? guest.labels[lang].name : ''} className={`${small ? 'is-small' : ''} ${speaker === 'guest' ? '' : 'is-away'}`} />
+      <Keyed videoRef={guestCall.videoRef} audioRef={guestCall.audioRef} label={guest ? guestLabel(guest, lang).name : ''} className={`${small ? 'is-small' : ''} ${speaker === 'guest' ? '' : 'is-away'}`} />
 
       {status && (
         <div className="mr-status" role="status">
@@ -541,7 +541,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
           <>
             {speaker === 'guest' && guest ? (
               <div className="mr-now is-guest">
-                <span><small>{t('talkingWith')}</small><b>{guest.labels[lang].name}</b><em>{t('fromWork', { title: L(exhibitById(guest.exhibit)!).title })}</em></span>
+                <span><small>{t('talkingWith')}</small><b>{guestLabel(guest, lang).name}</b><em>{t('fromWork', { title: L(exhibitById(guest.exhibit)!).title })}</em></span>
                 <button type="button" className="mr-callback" onClick={() => callHostBack('button')} disabled={busy}>{t('callBack', { name: HOST })}</button>
               </div>
             ) : card ? (

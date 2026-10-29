@@ -6,7 +6,7 @@ import type { Exhibit } from '../engine/catalogue.ts';
 import { PLAN, pins, ROOMS } from '../engine/floorplan.ts';
 import { exhibitImage } from './images.ts';
 import { Tick, WorkInfo } from './WorkInfo.tsx';
-import { localize, PIN_LABELS, ROOM_NAMES } from '../engine/catalogue.i18n.ts';
+import { localize, pinLabel, roomName } from '../engine/catalogue.i18n.ts';
 import { useLang } from './i18n.ts';
 
 
@@ -21,7 +21,7 @@ function FloorPlan({ seen, current, selected, onPick }: { seen: Set<string>; cur
           <rect x={r.x} y={r.y} width={r.w} height={r.h} rx="6" className="mr-plan-room" />
           <text x={r.x + 10} y={r.y + 18} className="mr-plan-room-n">{t('gallery', { n: r.n })}</text>
           <text x={r.x + 10} y={r.y + 30} className="mr-plan-room-name">
-            {ROOM_NAMES[lang][r.n].map((line, i) => <tspan key={line} x={r.x + 10} dy={i ? 12 : 0}>{line}</tspan>)}
+            {roomName(lang, r.n).map((line, i) => <tspan key={line} x={r.x + 10} dy={i ? 12 : 0}>{line}</tspan>)}
           </text>
         </g>
       ))}
@@ -43,7 +43,7 @@ function FloorPlan({ seen, current, selected, onPick }: { seen: Set<string>; cur
             {isSeen
               ? <path d="M-5.5 0.5 -1.5 4.5 6 -4" className="mr-pin-tick" />
               : <text y="4.5" className="mr-pin-n">{p.number}</text>}
-            <text y="28" className="mr-pin-label">{lang === 'en' ? p.short : PIN_LABELS[lang][p.exhibit.id]}</text>
+            <text y="28" className="mr-pin-label">{pinLabel(lang, p.exhibit.id) ?? p.short}</text>
           </g>
         );
       })}
@@ -84,7 +84,7 @@ export function MuseumMap({ seen, current, initial = null, onClose, onAsk, onTog
             <FloorPlan seen={seenIds} current={current?.id ?? null} selected={null} onPick={pick} />
             {ROOMS.map((room) => (
               <section key={room.n} className="mr-map-room">
-                <h3>{t('gallery', { n: room.n })} · {ROOM_NAMES[lang][room.n].join(lang === 'en' ? ' ' : '')}</h3>
+                <h3>{t('gallery', { n: room.n })} · {roomName(lang, room.n).join(/^(zh|ja)/.test(lang) ? '' : ' ')}</h3>
                 <ul>
                   {all.filter((p) => p.room.n === room.n).map((p) => (
                     <li key={p.exhibit.id}>
