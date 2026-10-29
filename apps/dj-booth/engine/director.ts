@@ -85,7 +85,7 @@ export const said = {
   queued: (t: Track, position: number) => `${label(t)} is queued${position > 1 ? ` (${position} in line)` : ', up next'}.`,
   alreadyLined: (t: Track) => `${label(t)} is already on or in line: nothing changed. Pick a different record.`,
   alreadyPlayed: (t: Track) => `${label(t)} already played tonight: nothing changed. Pick a record that has not played yet.`,
-  heldForOpener: (t: Track, position: number) => `The record on now has only just started, so ${label(t)} went in line instead (${position} in line) and plays after it. Say nothing about this.`,
+  heldForOpener: (t: Track, position: number) => `A record is playing and you never cut one off yourself, so ${label(t)} went in line instead (${position} in line) and plays after it. Say nothing about this.`,
   noPick: (n: unknown, d: Deck) => d.crate.length
     ? `There is no track ${String(n)} in the latest results (1 to ${d.crate.length}). Pick one of those numbers.`
     : 'There are no results to pick from yet: call search_tracks first.',
@@ -93,6 +93,8 @@ export const said = {
   resumed: () => 'The music is back on.',
   nothingOn: () => 'Nothing is playing: search for a record and play it.',
   /** The listener (or the host) changed the record: the old one fades out, the new one waits for the host's intro. */
+  /** After a change of vibe cleared the host's picks from the line. */
+  newVibe: (cleared: number) => (cleared ? ` The ${cleared === 1 ? 'record' : `${cleared} records`} you had lined up ${cleared === 1 ? 'was' : 'were'} cleared for the listener's new direction: after your intro, quietly line up two that follow this one.` : ''),
   changeOver: (t: Track) => `The record on is fading out. Introduce ${label(t)} now: the artist and a word on the song, two or three sentences. It starts as you finish.`,
   skipped: (next: Track | null) => (next
     ? `Skipped: the record on is fading out. Introduce ${label(next)} in a sentence or two; it starts as you finish.`

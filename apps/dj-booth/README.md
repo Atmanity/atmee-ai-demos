@@ -36,8 +36,9 @@ track. The music is Spotify's own embed on the page; Nova works it through app t
   into the crate), `play_track(number, when)`, `play_request(query, when)` (a listener's
   request in one step: search and play the best match), `pause_music`, `resume_music`,
   `skip_track`. Nova picks by number, never by Spotify id. The page refuses a record already
-  on or in line, and a second "now" within 20 s of the last goes in line unless the listener
-  asked for something since (`nowBecomesNext`): the opener is never cut off.
+  on or in line (any release of the song) or played tonight (unless the listener asks for it
+  again), and Nova never cuts a playing record off herself: her "now" goes in line unless the
+  listener asked. A listener's "now" clears her own picks from the line (a change of vibe).
 - **The look follows the record.** For each record the server asks Gemini, with the cover
   attached, for a palette, a display face, a backdrop (aurora, bokeh, pulse, grain) and a
   mood; `engine/theme.ts` validates it (dark page, WCAG contrast for text and accent, known

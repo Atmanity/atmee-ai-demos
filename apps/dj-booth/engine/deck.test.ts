@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { advance, dig, nowBecomesNext, pick, playedTonight, playNow, queueNext, setPaused } from './deck.ts';
+import { advance, clearHostPicks, dig, pick, playedTonight, playNow, queueNext, setPaused } from './deck.ts';
 import { crateText, deckState, said, TOOLS, INSTRUCTIONS } from './director.ts';
 import { emptyDeck, type Track } from './types.ts';
 
@@ -93,12 +93,6 @@ describe('the line keeps order and no repeats', () => {
     expect(queueNext(queueNext(d, c), b).queue).toEqual([b, c]);
   });
 
-  test('the host alone cannot cut off a record it put on moments ago; a listener request can', () => {
-    const t0 = 1_000_000;
-    expect(nowBecomesNext(t0, 0, t0 + 5_000)).toBe(true);
-    expect(nowBecomesNext(t0, t0 + 2_000, t0 + 5_000)).toBe(false);
-    expect(nowBecomesNext(t0, 0, t0 + 25_000)).toBe(false);
-  });
 });
 
 test('another release of the same song counts as already in line', () => {
@@ -132,4 +126,13 @@ describe('what has played tonight', () => {
 
 test('the host is pointed away from played songs, except when the listener asks again', () => {
   expect(INSTRUCTIONS).toContain('unless the listener asks to hear it again');
+});
+
+test('a change of vibe clears the host\'s picks from the line and keeps what the listener asked for', () => {
+  const d = queueNext(queueNext(queueNext(playNow(emptyDeck, a), b), c), { ...a, id: 'd', title: 'Delta' });
+  const after = clearHostPicks(d, (t) => t.id === 'c');
+  expect(after.queue.map((t) => t.id)).toEqual(['c']);
+  expect(after.playing).toBe(a);
+  expect(said.newVibe(2)).toContain('2 records you had lined up were cleared');
+  expect(said.newVibe(0)).toBe('');
 });

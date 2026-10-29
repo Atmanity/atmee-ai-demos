@@ -29,19 +29,12 @@ export const lined = (deck: Deck, track: Track) =>
 /** Lines a track up after the others; one on now or already in line is not lined up twice (the same deck comes back). */
 export const queueNext = (deck: Deck, track: Track): Deck => (lined(deck, track) ? deck : { ...deck, queue: [...deck.queue, track] });
 
-/** How soon after a record was put on "now" another "now" would cut it off. */
-export const NOW_GUARD_MS = 20_000;
-
-/**
- * Whether a "now" from the host should go in line instead: a record put on moments ago is
- * cut off only when the listener has asked for something since (a request plays at once).
- */
-export const nowBecomesNext = (lastNowAt: number, lastListenerAt: number, at: number) =>
-  at - lastNowAt < NOW_GUARD_MS && lastListenerAt < lastNowAt;
-
 /** The next record on, out of the queue; nothing queued leaves the decks empty. */
 export const advance = (deck: Deck): Deck => ({ ...deck, played: retire(deck), playing: deck.queue[0] ?? null, paused: false, queue: deck.queue.slice(1) });
 
 export const setPaused = (deck: Deck, paused: boolean): Deck => (deck.playing ? { ...deck, paused } : deck);
 
 export const label = (t: Track) => `"${t.title}" by ${t.artist}${t.year ? ` (${t.year})` : ''}`;
+
+/** A change of vibe: the host's own picks leave the line, what the listener asked for stays. */
+export const clearHostPicks = (deck: Deck, askedFor: (t: Track) => boolean): Deck => ({ ...deck, queue: deck.queue.filter(askedFor) });

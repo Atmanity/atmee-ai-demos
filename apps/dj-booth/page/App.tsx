@@ -6,7 +6,7 @@
 // record waits until she has finished introducing it.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { BackToApps, CallStatus, clock as kitClock, ChatPanel, HangUpIcon, HostVideo, useAvatar, useCaptionToggle, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
-import { advance, dig, label, lined, nowBecomesNext, playedTonight, pick, playNow, queueNext, setPaused } from '../engine/deck.ts';
+import { advance, clearHostPicks, dig, label, lined, playedTonight, pick, playNow, queueNext, setPaused } from '../engine/deck.ts';
 import { crateText, deckState, said } from '../engine/director.ts';
 import { emptyDeck, type Deck, type Track } from '../engine/types.ts';
 import { DEFAULT_THEME, type Theme } from '../engine/theme.ts';
@@ -315,10 +315,11 @@ export function App() {
     return tracks;
   }, []);
 
-  // When a record was last put on "now", and when the listener last asked for anything: a request may cut a record off, Nova alone may not.
-  const lastNowAt = useRef(0);
   // Whether the show has had its first record: that one waits for Nova's opening.
   const opened = useRef(false);
+  // The records the listener asked for (by id): a change of vibe keeps them in line.
+  const askedFor = useRef(new Set<string>());
+  // When the listener last asked for anything: a request may cut a record off, Nova alone may not.
   const lastListenerAt = useRef(0);
 
   /** A record on now (a change-over when one is playing) or in line: what Nova is told. */
@@ -328,13 +329,21 @@ export function App() {
     // Nova never picks a song twice; the listener may ask for one again.
     const asked = requested || Date.now() - lastListenerAt.current <= ANSWER_WINDOW_MS;
     if (!asked && playedTonight(d, track)) return said.alreadyPlayed(track);
-    const cutsOff = when !== 'next' && d.playing && nowBecomesNext(lastNowAt.current, lastListenerAt.current, Date.now());
+    // Nova never cuts off a playing record on her own: her "now" goes in line unless the listener asked.
+    const cutsOff = when !== 'next' && Boolean(d.playing) && opened.current && !asked;
     if ((when === 'next' || cutsOff) && d.playing) {
+      if (asked) askedFor.current.add(track.id);
       const next = queueNext(d, track);
       update(next);
       return cutsOff ? said.heldForOpener(track, next.queue.length) : said.queued(track, next.queue.length);
     }
-    lastNowAt.current = Date.now();
+    // The listener changing what plays now changes the direction: Nova's own picks in line go, theirs stay.
+    let from = d;
+    let cleared = 0;
+    if (asked && opened.current) {
+      from = clearHostPicks(d, (t) => askedFor.current.has(t.id));
+      cleared = d.queue.length - from.queue.length;
+    }
     if (!opened.current) {
       // The show's first record waits for Nova's opening: the style of the set, then the record.
       opened.current = true;
@@ -343,12 +352,12 @@ export function App() {
       hold(track, 'opener', false);
       return said.opener(track);
     }
-    if (d.playing && !d.paused) {
-      changeOver(track);
-      return said.changeOver(track);
+    if (from.playing && !from.paused) {
+      changeOver(track, from);
+      return said.changeOver(track) + said.newVibe(cleared);
     }
-    spin(track);
-    return said.playing(track);
+    spin(track, from);
+    return said.playing(track) + said.newVibe(cleared);
   }, [changeOver, spin]);
 
   // Nova's tool calls: the deck changes, the player follows, the result is what Nova says next.
