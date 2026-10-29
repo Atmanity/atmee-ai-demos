@@ -52,7 +52,6 @@
   "holdToTalk": "Nhấn giữ để nói",
   "listening": "Đang nghe…",
   "whatIsThis": "Đây là tác phẩm gì?",
-  "showHost": "Hiển thị {name}",
   "callHost": "Gọi cho {name}",
   "mapLabel": "Bản đồ bảo tàng, đã xem {n}/{total}",
   "backToCamera": "Quay lại camera",
@@ -81,7 +80,9 @@
   "newTour": "Bắt đầu chuyến tham quan mới",
   "seeMap": "Xem bản đồ bảo tàng",
   "theOriginal": "Bản gốc: {where}",
-  "info": "Thông tin"
+  "info": "Thông tin",
+  "larger": "Phóng to {name}",
+  "smaller": "Thu nhỏ {name}"
  },
  "works": {
   "mona-lisa": {

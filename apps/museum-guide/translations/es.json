@@ -52,7 +52,6 @@
   "holdToTalk": "Mantén para hablar",
   "listening": "Escuchando…",
   "whatIsThis": "¿Qué es esto?",
-  "showHost": "Mostrar a {name}",
   "callHost": "Llamar a {name}",
   "mapLabel": "Mapa del museo, {n} de {total} vistas",
   "backToCamera": "Volver a la cámara",
@@ -81,7 +80,9 @@
   "newTour": "Iniciar un nuevo recorrido",
   "seeMap": "Ver el mapa del museo",
   "theOriginal": "El original: {where}",
-  "info": "Info"
+  "info": "Info",
+  "larger": "Ver a {name} más grande",
+  "smaller": "Ver a {name} más pequeño"
  },
  "works": {
   "mona-lisa": {

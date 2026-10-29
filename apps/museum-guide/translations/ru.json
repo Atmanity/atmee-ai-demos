@@ -52,7 +52,6 @@
   "holdToTalk": "Удерживайте, чтобы говорить",
   "listening": "Слушаю…",
   "whatIsThis": "Что это?",
-  "showHost": "Показать: {name}",
   "callHost": "Позвонить: {name}",
   "mapLabel": "План музея, осмотрено {n} из {total}",
   "backToCamera": "Назад к камере",
@@ -81,7 +80,9 @@
   "newTour": "Начать новую экскурсию",
   "seeMap": "Посмотреть план музея",
   "theOriginal": "Оригинал: {where}",
-  "info": "Об этом"
+  "info": "Об этом",
+  "larger": "Показать {name} крупнее",
+  "smaller": "Показать {name} меньше"
  },
  "works": {
   "mona-lisa": {

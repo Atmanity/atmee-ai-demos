@@ -52,7 +52,6 @@
   "holdToTalk": "누른 상태로 말하기",
   "listening": "듣는 중…",
   "whatIsThis": "이 작품은 무엇인가요?",
-  "showHost": "{name} 보기",
   "callHost": "{name}에게 연결",
   "mapLabel": "미술관 지도, 전체 {total}개 중 {n}개 감상",
   "backToCamera": "카메라로 돌아가기",
@@ -81,7 +80,9 @@
   "newTour": "새 투어 시작하기",
   "seeMap": "미술관 지도 보기",
   "theOriginal": "원작 소장처: {where}",
-  "info": "작품 정보"
+  "info": "작품 정보",
+  "larger": "{name} 크게 보기",
+  "smaller": "{name} 작게 보기"
  },
  "works": {
   "mona-lisa": {

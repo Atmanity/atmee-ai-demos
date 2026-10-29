@@ -52,7 +52,6 @@
   "holdToTalk": "按住說話",
   "listening": "聆聽中…",
   "whatIsThis": "這是什麼？",
-  "showHost": "顯示{name}",
   "callHost": "請{name}回來",
   "mapLabel": "館內地圖，已看 {n}/{total} 件",
   "backToCamera": "回到相機",
@@ -81,7 +80,9 @@
   "newTour": "開始新的導覽",
   "seeMap": "查看館內地圖",
   "theOriginal": "原作：{where}",
-  "info": "介紹"
+  "info": "介紹",
+  "larger": "放大{name}",
+  "smaller": "縮小{name}"
  },
  "works": {
   "mona-lisa": {

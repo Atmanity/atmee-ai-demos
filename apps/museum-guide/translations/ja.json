@@ -52,7 +52,6 @@
   "holdToTalk": "押して話す",
   "listening": "聞いています…",
   "whatIsThis": "これは何？",
-  "showHost": "{name}を表示",
   "callHost": "{name}を呼ぶ",
   "mapLabel": "館内マップ、{total}点中{n}点を鑑賞済み",
   "backToCamera": "カメラに戻る",
@@ -81,7 +80,9 @@
   "newTour": "新しいツアーを始める",
   "seeMap": "館内マップを見る",
   "theOriginal": "原画：{where}",
-  "info": "解説"
+  "info": "解説",
+  "larger": "{name}を大きく表示",
+  "smaller": "{name}を小さく表示"
  },
  "works": {
   "mona-lisa": {

@@ -52,7 +52,7 @@ const en = {
   conversation: 'Conversation with {name}', done: 'Done', askPlaceholder: 'Ask {name}…',
   chatEmpty: 'Type here when the gallery is too loud to talk.',
   map: 'Map', type: 'Type', holdToTalk: 'Hold to talk', listening: 'Listening…', whatIsThis: 'What is this?',
-  showHost: 'Show {name}', callHost: 'Call {name}', info: 'Info',
+  callHost: 'Call {name}', info: 'Info', larger: 'Show {name} larger', smaller: 'Show {name} smaller',
   mapLabel: 'Museum map, {n} of {total} seen',
   // A work's entry
   backToCamera: 'Back to camera', allWorks: '‹ All works', youAreHere: 'You are here · ',

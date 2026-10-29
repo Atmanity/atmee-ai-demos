@@ -29,7 +29,7 @@ import { grabFrame, useCamera, useLabelScanner } from './camera.ts';
 import { HOST_NAME, LangContext, saveLang, savedLang, translator, type T } from './i18n.ts';
 import { Lobby, Wordmark } from './Lobby.tsx';
 import { MuseumMap } from './MuseumMap.tsx';
-import { CameraIcon, CameraOffIcon, GuideIcon, InfoIcon, KeyboardIcon, MapIcon, ScanIcon } from './icons.tsx';
+import { CameraIcon, CameraOffIcon, GrowIcon, GuideIcon, InfoIcon, ShrinkIcon, KeyboardIcon, MapIcon, ScanIcon } from './icons.tsx';
 import hostPortrait from '../host/portrait.jpg';
 import { guestImage } from './images.ts';
 import { PushToTalk } from './PushToTalk.tsx';
@@ -68,7 +68,7 @@ export function App() {
 /** Who is guiding the visitor: Edmund, a guest, or one on the way in while the other is still there. */
 type Mode = 'host' | 'to-guest' | 'guest' | 'to-host';
 
-/** The call's state over the camera while it connects, and after it ends or fails, in the visitor's language. */
+/** The call's state in the panel (never over the camera) while it connects, and after it ends or fails, in the visitor's language. */
 function statusCopy(call: Avatar, name: string, t: T): { title: string; detail: string; busy: boolean } | null {
   switch (call.phase) {
     case 'starting': return { title: t('calling', { name }), detail: t('callingDetail'), busy: true };
@@ -116,6 +116,8 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   const greetedUnheard = useRef(false);
   const warmTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const mode = useRef<Mode>('host');
+  // The guide's tile, enlarged by a tap.
+  const [big, setBig] = useState(false);
   // The same, for the screen: who is on the way shows while a hand-over is under way.
   const [modeView, setModeView] = useState<Mode>('host');
   const setMode = (next: Mode) => { mode.current = next; setModeView(next); };
@@ -608,14 +610,6 @@ function Tour({ opening }: { opening: Exhibit | null }) {
       )}
 
 
-      {status && (
-        <div className="mr-status" role="status">
-          {status.busy && <span className="mr-spinner" aria-hidden="true" />}
-          <strong>{status.title}</strong>
-          {status.detail && <span>{status.detail}</span>}
-          {!status.busy && <button type="button" className="mr-primary" onClick={() => void begin()}>{t('tryAgain')}</button>}
-        </div>
-      )}
       {live && active.audioBlocked && <button type="button" className="mr-hear" onClick={active.resumeAudio}>{t('tapToHear', { name: activeName })}</button>}
 
       {/* Everything to read and press lives in one panel under the camera view, never over it. */}
@@ -626,24 +620,33 @@ function Tour({ opening }: { opening: Exhibit | null }) {
             <ChatPanel avatar={active} name={activeName} placeholder={t('askPlaceholder', { name: activeName })} empty={<span>{t('chatEmpty')}</span>} />
           </div>
         ) : (
-          <div className="mr-guide">
-            {/* The guides: a video tile of their own, never over the camera. Both calls play in it; the one on stage shows. */}
-            <div className={`mr-tile ${active.speaking ? 'is-speaking' : ''}`} role="img" aria-label={activeName}>
+          <div className={`mr-guide ${big ? 'is-big' : ''}`}>
+            {/* The guides: a video tile of their own, never over the camera. Both calls play in it; the one on stage shows. Tapped, it grows (the panel with it). */}
+            <div className={`mr-tile ${active.speaking ? 'is-speaking' : ''}`} role="button" tabIndex={0} aria-pressed={big}
+              aria-label={big ? t('smaller', { name: activeName }) : t('larger', { name: activeName })}
+              onClick={() => setBig((b) => !b)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setBig((b) => !b); } }}>
               <img className="mr-tile-poster" src={hostPortrait} alt="" />
               <video ref={host.videoRef} className={speaker === 'host' ? 'is-on' : ''} playsInline muted />
               <audio ref={host.audioRef} autoPlay />
               <video ref={guestCall.videoRef} className={speaker === 'guest' ? 'is-on' : ''} playsInline muted />
               <audio ref={guestCall.audioRef} autoPlay />
-              {coming && (
+              {(coming || status?.busy) && (
                 <div className="mr-tile-coming" aria-hidden="true">
-                  <img src={coming.image} alt="" />
+                  <img src={coming ? coming.image : hostPortrait} alt="" />
                   <span className="mr-tile-ring" />
                 </div>
               )}
               <span className="mr-tile-name">{coming ? coming.name : activeName}</span>
+              <span className="mr-tile-grow" aria-hidden="true">{big ? <ShrinkIcon /> : <GrowIcon />}</span>
             </div>
             <div className="mr-guide-text">
-              {coming ? (
+              {status ? (
+                <div className="mr-callstate" role="status">
+                  <p className="mr-nowline is-coming">{status.busy && <span className="mr-dot" />} <b>{status.title}</b></p>
+                  {status.detail && <p className="mr-callstate-detail">{status.detail}</p>}
+                  {!status.busy && <button type="button" className="mr-primary" onClick={() => void begin()}>{t('tryAgain')}</button>}
+                </div>
+              ) : coming ? (
                 <p className="mr-nowline is-coming" role="status"><span className="mr-dot" /> {coming.line}</p>
               ) : speaker === 'guest' && guest ? (
                 <p className="mr-nowline is-guest"><small>{t('talkingWith')}</small> <b>{guestLabel(guest, lang).name}</b> <span>{t('fromWork', { title: L(exhibitById(guest.exhibit)!).title })}</span></p>
@@ -654,8 +657,8 @@ function Tour({ opening }: { opening: Exhibit | null }) {
               ) : (
                 <p className="mr-nowline is-empty">{t('pointHint')}</p>
               )}
-              <Subtitles key={speaker} text={active.caption} speaking={active.speaking} name={activeName} heard={active.heard}
-                hint={live ? t('askHint', { name: activeName }) : ''} />
+              {!status && <Subtitles key={speaker} text={active.caption} speaking={active.speaking} name={activeName} heard={active.heard}
+                hint={live ? t('askHint', { name: activeName }) : ''} />}
             </div>
           </div>
         )}

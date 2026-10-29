@@ -10,3 +10,5 @@ export const GuideIcon = () => <Icon><circle cx="12" cy="8" r="3.6" /><path d="M
 export const CameraIcon = () => <Icon><path d="M3.5 8.5A1.5 1.5 0 0 1 5 7h2.2l1.4-2h6.8l1.4 2H19a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z" /><circle cx="12" cy="12.8" r="3.4" /></Icon>;
 export const CameraOffIcon = () => <Icon><path d="M7.2 7H5a1.5 1.5 0 0 0-1.5 1.5v9A1.5 1.5 0 0 0 5 19h12.5M20.5 16.5v-8A1.5 1.5 0 0 0 19 7h-2.2l-1.4-2H8.6L8 5.9" /><path d="M3 3l18 18" /></Icon>;
 export const InfoIcon = () => <Icon><circle cx="12" cy="12" r="9" /><path d="M12 11v5.5M12 7.6v.01" /></Icon>;
+export const GrowIcon = () => <Icon><path d="M14 4h6v6M10 20H4v-6M20 4l-6 6M4 20l6-6" /></Icon>;
+export const ShrinkIcon = () => <Icon><path d="M20 10h-6V4M4 14h6v6M14 10l6-6M10 14l-6 6" /></Icon>;

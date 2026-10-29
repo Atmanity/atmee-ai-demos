@@ -52,7 +52,6 @@
   "holdToTalk": "按住说话",
   "listening": "正在倾听…",
   "whatIsThis": "这是什么？",
-  "showHost": "显示{name}",
   "callHost": "呼叫{name}",
   "mapLabel": "展馆地图，已看 {n} / {total}",
   "backToCamera": "返回相机",
@@ -81,7 +80,9 @@
   "newTour": "开启新导览",
   "seeMap": "查看展馆地图",
   "theOriginal": "原作藏地：{where}",
-  "info": "介绍"
+  "info": "介绍",
+  "larger": "放大{name}",
+  "smaller": "缩小{name}"
  },
  "works": {
   "mona-lisa": {
