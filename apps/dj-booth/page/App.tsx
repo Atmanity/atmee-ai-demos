@@ -456,6 +456,20 @@ export function App() {
               <input type="range" min={0} max={1} step={0.05} value={novaVolume} onChange={(e) => setNovaVolume(Number(e.target.value))} aria-label={`${HOST}'s volume`} />
             </label>
           </div>
+          {deck.queue.length > 0 && (
+            <section className="cr-upnext" aria-label="Up next">
+              <h2>Up next</h2>
+              <ol>
+                {deck.queue.slice(0, 3).map((t, i) => (
+                  <li key={`${t.id}-${i}`}>
+                    {t.art ? <img src={t.art} alt="" /> : <span className="cr-blank" />}
+                    <span><b>{t.title}</b><small>{t.artist}</small></span>
+                  </li>
+                ))}
+              </ol>
+              {deck.queue.length > 3 && <button type="button" className="cr-link" onClick={() => setTab('next')}>+{deck.queue.length - 3} more</button>}
+            </section>
+          )}
           <div ref={player.host} className="cr-embed" />
         </section>
 

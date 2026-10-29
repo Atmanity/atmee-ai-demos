@@ -132,6 +132,17 @@ button { font: inherit; color: inherit; }
    so its own buttons and sign-up banner never sit in the booth. The deck above is its face. */
 .cr-embed { position: fixed; left: 0; bottom: 0; width: 300px; height: 80px; opacity: 0; pointer-events: none; overflow: hidden; }
 
+/* Up next, under the controls: the records in line, always in view */
+.cr-upnext { width: min(100%, 560px); }
+.cr-upnext h2 { margin: 4px 0 8px; font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+.cr-upnext ol { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.cr-upnext li { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px; border-radius: 14px; background: color-mix(in srgb, var(--surface) 70%, transparent); backdrop-filter: blur(10px); animation: cr-fade-in .5s ease; }
+.cr-upnext img, .cr-upnext .cr-blank { width: 40px; height: 40px; border-radius: 8px; flex: none; object-fit: cover; }
+.cr-upnext li > span { min-width: 0; }
+.cr-upnext b, .cr-upnext small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.cr-upnext small { color: var(--dim); font-size: 12px; }
+.cr-upnext .cr-link { margin-top: 6px; font-size: 13px; }
+
 /* The side panel */
 .cr-side { display: flex; flex-direction: column; min-height: 0; max-height: calc(100dvh - 100px); border-radius: 22px; background: color-mix(in srgb, var(--surface) 72%, transparent); backdrop-filter: blur(18px); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 8%, transparent); overflow: hidden; }
 .cr-tabs { display: flex; gap: 4px; padding: 8px; }
@@ -164,6 +175,9 @@ button { font: inherit; color: inherit; }
   .cr-top { padding: 12px 16px; gap: 10px; }
   .cr-mood { max-width: 34vw; }
   .cr-stage { width: min(100%, 420px); }
+}
+@media (max-width: 600px) {
+  .cr-upnext ol { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 480px) {
   .cr-mood, .cr-onair, .cr-logo span { display: none; }
