@@ -16,8 +16,14 @@ export function Keyed({ videoRef, audioRef, label, className = '' }: {
 
   useEffect(() => {
     const c = canvas.current;
-    const keyer = c ? createKeyer(c) : null;
-    if (!keyer) { setKeyed(false); return; }
+    let keyer: ReturnType<typeof createKeyer> = null;
+    try {
+      keyer = c ? createKeyer(c) : null;
+    } catch (err) {
+      console.warn('[keyer] no WebGL keying (%s): showing the video as it is', (err as Error).message);
+    }
+    // Without keying, the video itself is what the visitor sees.
+    if (!keyer) { setKeyed(false); setShowing(true); return; }
     let stop = false;
     let shown = false;
     let handle = 0;

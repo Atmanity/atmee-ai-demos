@@ -128,9 +128,12 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
   useEffect(() => { document.documentElement.dataset.speaking = String(speaking); }, [speaking]);
 
   const starting = useRef(false);   // set before the first await: a second click while the mic prompt is up starts nothing
+  // end() while a call is still being placed: the call is ended as soon as it connects, so it never bills unseen.
+  const endWanted = useRef(false);
   const start = useCallback(async ({ mic = false, micMuted = false, camera = null }: { mic?: boolean; micMuted?: boolean; camera?: MediaStreamTrack | null } = {}) => {
     if (sessionRef.current || starting.current) return;
     starting.current = true;
+    endWanted.current = false;
     betweenCalls.current = false;
     setErrorCode(undefined); setDetail(''); setLines([]); setCaption(''); setHeard(''); setFilesAccepted(false);
     sentNotes.current.clear();
@@ -189,6 +192,11 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
         },
       });
       sessionRef.current = session;
+      if (endWanted.current) {
+        endWanted.current = false;
+        await session.end();
+        return;
+      }
       // Deliver what the app said while the avatar was on its way.
       const { state, notes, events } = pending.current;
       for (const text of notes) {
@@ -219,7 +227,10 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
     }
   }, [app, addLine]);
 
-  const end = useCallback(async () => { await sessionRef.current?.end(); }, []);
+  const end = useCallback(async () => {
+    if (!sessionRef.current && starting.current) endWanted.current = true;
+    await sessionRef.current?.end();
+  }, []);
 
   useEffect(() => () => { void sessionRef.current?.end(); }, []);
   useEffect(() => {

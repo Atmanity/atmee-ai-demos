@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { exhibitById } from './catalogue.ts';
-import { arrived, said, TOOLS, tourState } from './director.ts';
+import { arrived, INSTRUCTIONS, said, TOOLS, tourState } from './director.ts';
+import { GUEST_INSTRUCTIONS, GUEST_TOOLS, guestById } from './guests.ts';
 
 const wave = exhibitById('great-wave')!;
 const kiss = exhibitById('the-kiss')!;
@@ -12,6 +13,20 @@ describe('what Edmund is told', () => {
       expect(schema).not.toMatch(/enum|pattern|additionalProperties|minLength/);
       expect(tool['x-atmee']?.mode).toBe('await');
     }
+  });
+
+  it('keeps both sets of instructions within the limit, naming every tool and the rule that only tools change the screen', () => {
+    for (const [instructions, tools] of [[INSTRUCTIONS, TOOLS], [GUEST_INSTRUCTIONS, GUEST_TOOLS]] as const) {
+      expect(instructions.length).toBeLessThanOrEqual(4000);
+      for (const tool of tools) expect(instructions).toContain(tool.name);
+      expect(instructions).toMatch(/screen changes only when you call a tool/);
+    }
+  });
+
+  it('welcomes the visitor back, telling the new work when they moved on while the guest talked', () => {
+    const girl = guestById('girl')!;
+    expect(said.welcomeBack(girl, exhibitById('pearl-earring'))).toMatch(/ask what they would like to see next/);
+    expect(said.welcomeBack(girl, wave)).toMatch(/moved on to "The Great Wave off Kanagawa"\. Welcome them back in one sentence, then tell them about it/);
   });
 
   it('puts the current work\'s record, what was seen and the floor plan in the state', () => {

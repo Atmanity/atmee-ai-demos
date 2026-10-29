@@ -16,7 +16,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { BackToApps, callCopy, ChatPanel, useAvatar, useToolNet, type ToolCall } from '../../../src/kit/index.ts';
 import { EXHIBITS, exhibitById, findExhibit, type Exhibit } from '../engine/catalogue.ts';
 import { arrived, isToolName, said, tourState, type Found } from '../engine/director.ts';
-import { guestFor, guestState, type Guest } from '../engine/guests.ts';
+import { guestFor, guestSaid, guestState, type Guest } from '../engine/guests.ts';
+import { asksForHost, asksWhat } from '../engine/judge.ts';
 import { grabFrame, useCamera, useLabelScanner } from './camera.ts';
 import { exhibitImage } from './images.ts';
 import { Keyed } from './Keyed.tsx';
@@ -46,12 +47,6 @@ async function identify(image: string, question?: string): Promise<Identified | 
     return 'failed';
   }
 }
-
-/** "What's this?", "who painted that", "what am I looking at": the visitor asking about what is in front of them. */
-/** Asking a guest for Edmund: "can I talk to Edmund again", "bring back the chairman". */
-const ASKS_HOST = /\b(edmund|chairman|the guide|go back|bring (him|the guide) back)\b/i;
-
-const ASKS_WHAT = /\b(what('s| is) (this|that|it)\b|what am i looking at|who (painted|made|did) (this|that|it)\b|tell me about (this|that|it)\b)/i;
 
 const params = new URLSearchParams(location.search);
 
@@ -115,6 +110,10 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   const guestRef = useRef<ReturnType<typeof useAvatar> | null>(null);
   const guestNow = useRef<Guest | null>(null);
   guestNow.current = guest;
+  // The guest Edmund is coming back from (kept from the call-back on: the guest's state may clear first),
+  // and the wait for the guest's goodbye.
+  const leavingGuest = useRef<Guest | null>(null);
+  const backTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   /** Edmund off stage while a guest talks: he hears silence and is not heard. */
   const hostAside = useCallback((aside: boolean) => {
@@ -140,15 +139,16 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     setSeen(nextSeen);
     setCard({ exhibit, here: true });
     if (!again) setInfo(exhibit);
-    // With a guest on, another work is Edmund's to tell: the guest says so and calls him back.
-    if (mode.current === 'guest' && guestNow.current && guestNow.current.exhibit !== exhibit.id) {
-      guestRef.current?.event(`The visitor has moved on to "${exhibit.title}". Say in one sentence that Edmund will tell them about it, and call call_host_back.`, 30);
+    const host = hostRef.current;
+    host?.state(tourState(at.current));
+    if (mode.current !== 'host') {
+      // With a guest on, another work is Edmund's to tell: the guest says so and calls him back, and
+      // his welcome back tells it. Mid hand-over he is about to step aside or back: no story now.
+      const g = guestNow.current;
+      if (mode.current === 'guest' && g && g.exhibit !== exhibit.id) guestRef.current?.event(guestSaid.movedOn(exhibit.title), 30);
       return;
     }
-    const host = hostRef.current;
-    if (!host) return;
-    host.state(tourState(at.current));
-    if (how !== 'tool') host.event(arrived(exhibit, how, again), 30);
+    if (how !== 'tool') host?.event(arrived(exhibit, how, again), 30);
   }, []);
 
   // A label's code in view: the same label held there is not a new arrival. Paused while
@@ -197,6 +197,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   const callHostBack = useCallback((how: 'button' | 'guest' | 'dropped') => {
     if (mode.current !== 'guest') return;
     mode.current = 'to-host';
+    leavingGuest.current = guestNow.current;
     const host = hostRef.current;
     if (host?.phase !== 'live') {
       // His session ended meanwhile: a new one (he greets from scratch, then is told he is back).
@@ -205,24 +206,28 @@ function Tour({ opening }: { opening: Exhibit | null }) {
       return;
     }
     // Still there: once the guest has said goodbye (a few seconds at most), he steps back in.
-    if (how === 'button') guestRef.current?.event('The visitor asked for Edmund. Say one short, warm goodbye; he is coming back.', 20);
+    if (how === 'button') guestRef.current?.event(guestSaid.visitorAsked, 20);
     const started = Date.now();
-    const id = setInterval(() => {
+    clearInterval(backTimer.current);
+    backTimer.current = setInterval(() => {
       const guestTalking = how !== 'dropped' && (Date.now() - started < 1500 || guestRef.current?.speaking);
       if (guestTalking && Date.now() - started < 9000) return;
-      clearInterval(id);
+      clearInterval(backTimer.current);
       hostBack();
     }, 300);
   }, [camera.track, flash]);
 
   /** Edmund on stage again, told whom the visitor met; the guest's call ends. */
   const hostBack = () => {
-    const g = guestNow.current;
+    if (ending.current) return;
+    const g = leavingGuest.current;
+    leavingGuest.current = null;
     mode.current = 'host';
     hostAside(false);
     setSpeaker('host');
     if (g) hostRef.current?.event(said.welcomeBack(g, at.current.current), 60);
     void guestRef.current?.end();
+    setGuest(null);
   };
 
   const onToolCall = useCallback(async ({ name, arguments: args }: ToolCall) => {
@@ -237,18 +242,20 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     if (name === 'introduce_guest') {
       const g = guestFor(at.current.current);
       if (!g) return said.noGuest(at.current.current);
-      return handOver(g, 'tool') ? said.handingOver(g) : 'Not now: a guest is already joining or leaving.';
+      return handOver(g, 'tool') ? said.handingOver(g) : said.guestBusy;
     }
     const title = String(args?.title ?? args?.name ?? args?.work ?? '').trim();
     const exhibit = findExhibit(title);
     if (!exhibit) return said.notFound(title);
     setCard({ exhibit, here: exhibit.id === at.current.current?.id });
+    // He is introducing it: its entry opens, as for a work the visitor arrives at.
+    setInfo(exhibit);
     return said.shown(exhibit);
   }, [arrive, flash, handOver, lookNow]);
 
   // If Edmund answers "what is this?" without looking, the page looks and tells him.
   const net = useToolNet({
-    match: (text) => (ASKS_WHAT.test(text) ? { id: `net-${Date.now()}`, name: 'identify_exhibit', arguments: { question: text } } : null),
+    match: (text) => (asksWhat(text) ? { id: `net-${Date.now()}`, name: 'identify_exhibit', arguments: { question: text } } : null),
     run: async (call) => String(await onToolCall(call)),
     avatar: () => hostRef.current!,
   });
@@ -272,19 +279,25 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   });
   hostRef.current = host;
 
+  /** A guest's one tool: Edmund back once their goodbye is said. */
+  const onGuestToolCall = useCallback(async ({ name }: ToolCall) => {
+    if (name !== 'call_host_back') throw new Error(`there is no tool called ${name}`);
+    callHostBack('guest');
+    return guestSaid.calledBack;
+  }, [callHostBack]);
   // Asking a guest for Edmund: if the guest does not call him back within a few seconds, the page does.
-  const guestHeard = (text: string) => {
-    if (!ASKS_HOST.test(text)) return;
-    setTimeout(() => { if (mode.current === 'guest') callHostBack('guest'); }, 7000);
-  };
-  const guestCall = useAvatar(`museum-guide/guest/${guest?.id ?? 'none'}`, {
-    onToolCall: ({ name }) => {
-      if (name !== 'call_host_back') throw new Error(`there is no tool called ${name}`);
-      // After the guest's goodbye has begun.
-      setTimeout(() => callHostBack('guest'), 1500);
-      return 'Edmund is coming back. Say one short goodbye.';
+  const guestNet = useToolNet({
+    match: (text) => (asksForHost(text) ? { id: `net-${Date.now()}`, name: 'call_host_back', arguments: {} } : null),
+    run: async () => {
+      if (mode.current !== 'guest') return null;
+      callHostBack('guest');
+      return guestSaid.netCalledBack;
     },
-    onUserSaid: guestHeard,
+    avatar: () => guestRef.current!,
+  });
+  const guestCall = useAvatar(`museum-guide/guest/${guest?.id ?? 'none'}`, {
+    onToolCall: guestNet.watch(onGuestToolCall),
+    onUserSaid: (text) => guestNet.heard(text),
     onLive: () => {
       const g = guestNow.current;
       if (!g) return;
@@ -296,8 +309,8 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     },
     onEnded: () => {
       if (ending.current) { callGen.current++; setScreen((s) => (s === 'tour' ? 'visit' : s)); return; }
+      // Dropped while talking: Edmund comes back (and is told whom the visitor met).
       if (mode.current === 'guest') callHostBack('dropped');
-      if (mode.current === 'to-host' || mode.current === 'host') setGuest(null);
     },
   });
   guestRef.current = guestCall;
@@ -313,6 +326,8 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     mode.current = 'host';
     const g = guestNow.current;
     setGuest(null);
+    // And Edmund's own call ended meanwhile: there is no one left to guide; the visit is over.
+    if (host.phase !== 'live') { callGen.current++; setScreen((s) => (s === 'tour' ? 'visit' : s)); return; }
     if (g) host.event(said.guestCouldNotCome(g), 30);
   }, [guestCall.phase]);
   // Edmund could not come back: the guest stays.
@@ -329,6 +344,9 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     document.documentElement.dataset.call = active.phase;
     document.documentElement.dataset.speaking = String(active.speaking);
   }, [active.phase, active.speaking, host.phase, guestCall.phase, speaker]);
+
+  // The tour is over: the camera goes off with it (the visit card does not show it).
+  useEffect(() => { if (screen === 'visit') camera.stop(); }, [screen]);
 
   // Edmund's picture of the tour, kept current (the same text twice is sent once).
   useEffect(() => { host.state(tourState({ current, seen, camera: camera.state === 'on' })); }, [host, current, seen, camera.state]);
@@ -355,7 +373,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     const { text, found } = await lookNow();
     if (found) { flash(found.title); arrive(found, 'camera'); return; }
     flash('Not one of the Meridian\'s works');
-    if (speaker === 'host') host.event(`The visitor pressed "What is this?". ${text}`, 30);
+    if (speaker === 'host') host.event(said.whatIsThisPressed(text), 30);
   };
 
   /** The visitor ticks (or unticks) a work on the map themselves. */
@@ -365,12 +383,13 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   /** "Ask Edmund about it": a typed turn, as if the visitor had asked. */
   const askAbout = (exhibit: Exhibit) => {
     setMap(false);
-    setInfo(null);
+    setInfo(exhibit);
     host.say(`Tell me about "${exhibit.title}".`);
   };
 
   const leave = () => {
     ending.current = true;
+    clearInterval(backTimer.current);
     void host.end();
     void guestCall.end();
   };

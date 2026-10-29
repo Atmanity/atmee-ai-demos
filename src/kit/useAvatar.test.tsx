@@ -122,3 +122,14 @@ test('a start with a camera hands its track to the join, and one without hands n
   await act(async () => { await result.current.start(); });
   expect(joins[1].opts.camera).toBeNull();
 });
+
+test('ending while the call is still being placed ends it as soon as it connects', async () => {
+  const { result } = renderHook(() => useAvatar('demo'));
+  let starting!: Promise<void>;
+  act(() => { starting = result.current.start(); });
+  await act(async () => { await result.current.end(); });
+  await act(async () => { await starting; });
+  expect(joins).toHaveLength(1);
+  expect(joins[0].session.ended).toBe(true);
+  expect(result.current.phase).toBe('ended');
+});

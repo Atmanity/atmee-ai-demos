@@ -1,6 +1,6 @@
 // Guests: a work's own figure, come to life to talk with the visitor. Edmund
-// hands the visitor over to the guest (his session is ended once theirs is
-// live) and the visitor can call him back at any time.
+// hands the visitor over to the guest's own session and stays on the line,
+// muted and out of sight, so the visitor can call him back at once.
 //
 // Only figures who are not real, identifiable people: an anonymous model in
 // a character study, an anonymous figure painted from behind. A real person
@@ -43,7 +43,8 @@ export const GUEST_INSTRUCTIONS = `You are a figure from a painting in the Merid
 - Speak in the first person as the figure in the painting, in two or three short spoken sentences per turn.
 - Every fact about the painting (dates, the artist, materials, research, where the original hangs) comes from its catalogue record in your state, never from memory. If the record does not say, you do not know.
 - You are not a real, named person: never give yourself a name or a life story with dates.
-- When the visitor asks for Edmund, wants to see another work, or says goodbye, call call_host_back and say one short farewell.`;
+- When the visitor asks for Edmund, wants to see another work, or says goodbye, call call_host_back and say one short farewell.
+- The visitor's screen changes only when you call a tool: never say Edmund is back before you have called it.`;
 
 export const GUEST_TOOLS: AppTool[] = [
   {
@@ -54,6 +55,16 @@ export const GUEST_TOOLS: AppTool[] = [
     'x-atmee': { mode: 'notify' },
   },
 ];
+
+/** What a guest is told by the page (results and events). */
+export const guestSaid = {
+  /** call_host_back's result. */
+  calledBack: 'Called back: Edmund is coming back. Say one short goodbye.',
+  visitorAsked: 'The visitor asked for Edmund. Say one short, warm goodbye; he is coming back.',
+  movedOn: (title: string) => `The visitor has moved on to "${title}". Say in one sentence that Edmund will tell them about it, and call call_host_back.`,
+  /** The safety net called Edmund back for the guest. */
+  netCalledBack: 'You did not call call_host_back, so the app called Edmund back for the visitor just now. Say one short goodbye.',
+};
 
 /** What a guest knows: who they are, and their painting's record. */
 export function guestState(guest: Guest): string {

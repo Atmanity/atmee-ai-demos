@@ -12,16 +12,22 @@ export function PushToTalk({ avatar }: { avatar: Avatar }) {
   const release = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const avatarRef = useRef(avatar);
   avatarRef.current = avatar;
+  // The call whose microphone the press opened: the one closed on release, even if another
+  // call has come on screen meanwhile (a guest arriving while the button is held).
+  const opened = useRef<Avatar | null>(null);
 
   const press = () => {
     clearTimeout(release.current);
     setHeld(true);
+    if (opened.current && opened.current !== avatarRef.current) opened.current.setMic(false);
+    opened.current = avatarRef.current;
     if (!avatarRef.current.micOn) avatarRef.current.setMic(true);
   };
   const letGo = () => {
     setHeld(false);
     clearTimeout(release.current);
-    release.current = setTimeout(() => avatarRef.current.setMic(false), TAIL_MS);
+    const call = opened.current;
+    release.current = setTimeout(() => { call?.setMic(false); if (opened.current === call) opened.current = null; }, TAIL_MS);
   };
 
   // The space bar, held, when no text box has the keys.
@@ -34,7 +40,7 @@ export function PushToTalk({ avatar }: { avatar: Avatar }) {
     return () => { removeEventListener('keydown', down); removeEventListener('keyup', up); };
   }, []);
   // Leaving the screen with the button held must not leave the microphone open.
-  useEffect(() => () => { clearTimeout(release.current); avatarRef.current.setMic(false); }, []);
+  useEffect(() => () => { clearTimeout(release.current); (opened.current ?? avatarRef.current).setMic(false); }, []);
 
   const open = held || avatar.micOn;
   return (
