@@ -80,7 +80,8 @@
   "noneSeen": "今回はどの作品にも立ち寄りませんでした。エドマンドはいつでもここにいます。",
   "newTour": "新しいツアーを始める",
   "seeMap": "館内マップを見る",
-  "theOriginal": "原画：{where}"
+  "theOriginal": "原画：{where}",
+  "info": "解説"
  },
  "works": {
   "mona-lisa": {
@@ -267,6 +268,10 @@
   "wanderer": {
    "name": "絵の旅人",
    "meet": "絵の旅人と話す"
+  },
+  "mona": {
+   "name": "絵のモナ・リザ",
+   "meet": "モナ・リザと話す"
   }
  },
  "names": {

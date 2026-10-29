@@ -2,10 +2,11 @@
 // hands the visitor over to the guest's own session and stays on the line,
 // muted and out of sight, so the visitor can call him back at once.
 //
-// Only figures who are not real, identifiable people: an anonymous model in
-// a character study, an anonymous figure painted from behind. A real person
-// (an artist, a named sitter) would need a likeness the portrait tools are
-// not for.
+// The figures are the paintings' own: an anonymous model in a character study,
+// an anonymous figure painted from behind, and the woman in the Mona Lisa, who
+// speaks as the painted figure and knows only what the record says of who she
+// is thought to be (a sitter dead for five centuries, from a public-domain
+// painting). The artists are not guests.
 import type { AppTool } from '../../../server/app-server.ts';
 import { exhibitById, recordText, type Exhibit } from './catalogue.ts';
 import { localize } from './catalogue.i18n.ts';
@@ -28,12 +29,18 @@ export interface Guest {
 const EN_LABELS: Record<string, { name: string; meet: string }> = {
   girl: { name: 'The girl', meet: 'Meet the girl' },
   wanderer: { name: 'The wanderer', meet: 'Meet the wanderer' },
+  mona: { name: 'Mona Lisa', meet: 'Meet Mona Lisa' },
 };
 
 /** On screen, in a language: who is talking, and the button that brings them. */
 export const guestLabel = (g: Guest, lang: Lang) => (lang === 'en' ? EN_LABELS[g.id] : TRANSLATIONS[lang].guests[g.id]);
 
 export const GUESTS: Guest[] = [
+  {
+    id: 'mona', exhibit: 'mona-lisa', name: 'Mona Lisa', meet: 'Meet Mona Lisa',
+    who: 'the woman in the painting herself, who has watched five hundred years of visitors lean in to read her smile',
+    avatarId: '63b1eb03-8759-4539-abf9-153a3a97c10d',
+  },
   {
     id: 'girl', exhibit: 'pearl-earring', name: 'the girl', meet: 'Meet the girl',
     who: 'the girl from the painting herself, an anonymous model nobody has ever named',
@@ -75,6 +82,8 @@ export const guestSaid = {
   movedOn: (title: string) => `The visitor has moved on to "${title}". Say in one sentence that Edmund will tell them about it, and call call_host_back.`,
   /** The safety net called Edmund back for the guest. */
   netCalledBack: 'You did not call call_host_back, so the app called Edmund back for the visitor just now. Say one short goodbye.',
+  /** On stage after waiting unheard: the greeting they gave on joining went unheard. */
+  visitorArrived: 'The visitor has just come to meet you; they did not hear anything you said before this. Greet them now in one or two short sentences, as yourself.',
 };
 
 /** What a guest knows: who they are, and their painting's record (in the visitor's language). */

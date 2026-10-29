@@ -80,7 +80,8 @@
   "noneSeen": "您这次没有在任何展品前驻足。埃德蒙随时在此等候您的到来。",
   "newTour": "开启新导览",
   "seeMap": "查看展馆地图",
-  "theOriginal": "原作藏地：{where}"
+  "theOriginal": "原作藏地：{where}",
+  "info": "介绍"
  },
  "works": {
   "mona-lisa": {
@@ -268,6 +269,10 @@
   "wanderer": {
    "name": "旅人",
    "meet": "结识旅人"
+  },
+  "mona": {
+   "name": "画中的蒙娜丽莎",
+   "meet": "和蒙娜丽莎聊聊"
   }
  },
  "names": {

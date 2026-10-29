@@ -7,7 +7,7 @@ import { localize } from '../engine/catalogue.i18n.ts';
 import { LANGS, type Lang } from '../engine/lang.ts';
 import { useLang, type StringKey } from './i18n.ts';
 import type { CameraState } from './camera.ts';
-import cutout from '../host/cutout.webp';
+import portrait from '../host/portrait.jpg';
 
 export function Wordmark() {
   return (
@@ -87,9 +87,10 @@ export function Lobby({ opening, camera, onLang, onBegin }: { opening: Exhibit |
     <div className="mr-lobby">
       <header className="mr-lobby-top"><BackToApps /><span className="mr-lobby-end"><Wordmark /><LanguageButton value={lang} onChange={onLang} /></span></header>
       <main className="mr-lobby-main">
-        <div className="mr-portrait" aria-hidden="true">
-          <img src={cutout} alt="" width={320} height={320} />
-        </div>
+        {/* Edmund as a portrait on the wall: a gilt frame round his own photograph. */}
+        <figure className="mr-portrait" aria-hidden="true">
+          <img src={portrait} alt="" width={320} height={320} />
+        </figure>
         <div className="mr-lobby-copy">
           <p className="mr-eyebrow">{t('eyebrow')}</p>
           <h1>{t('headline')}</h1>

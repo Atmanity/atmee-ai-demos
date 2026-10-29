@@ -11,7 +11,12 @@
 // any time. His session stays open meanwhile, muted (he hears nothing) and out
 // of sight: live, a session started again to bring him back took 18 s and
 // opened with his greeting from scratch; kept open, he is back at once and
-// remembers the conversation.
+// remembers the conversation. A guest's session is started as soon as the
+// visitor reaches their work (hidden, muted), so meeting them waits only for
+// Edmund's goodbye, not the ~20 s a session takes to join.
+//
+// The guides are not laid over the camera: they are a video tile in the panel
+// below it, with their own backgrounds.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BackToApps, ChatPanel, useAvatar, useToolNet, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
 import { EXHIBITS, exhibitById, findExhibit, type Exhibit } from '../engine/catalogue.ts';
@@ -22,11 +27,11 @@ import { guestFor, guestLabel, guestSaid, guestState, type Guest } from '../engi
 import { asksForHost, asksWhat } from '../engine/judge.ts';
 import { grabFrame, useCamera, useLabelScanner } from './camera.ts';
 import { HOST_NAME, LangContext, saveLang, savedLang, translator, type T } from './i18n.ts';
-import { exhibitImage } from './images.ts';
-import { Keyed } from './Keyed.tsx';
 import { Lobby, Wordmark } from './Lobby.tsx';
 import { MuseumMap } from './MuseumMap.tsx';
-import { CameraIcon, CameraOffIcon, GuideIcon, KeyboardIcon, MapIcon, ScanIcon } from './icons.tsx';
+import { CameraIcon, CameraOffIcon, GuideIcon, InfoIcon, KeyboardIcon, MapIcon, ScanIcon } from './icons.tsx';
+import hostPortrait from '../host/portrait.jpg';
+import { guestImage } from './images.ts';
 import { PushToTalk } from './PushToTalk.tsx';
 import { Sheet } from './Sheet.tsx';
 import { Subtitles } from './Subtitles.tsx';
@@ -38,6 +43,8 @@ const API = '/api/apps/museum-guide';
 
 /** The same work again within this long is the visitor still standing at it, not arriving. */
 const STILL_HERE_MS = 90_000;
+/** How long a guest warmed up for a work waits to be met before their call is let go. */
+const WARM_GUEST_MS = 4 * 60_000;
 
 type Identified = { kind: 'found'; id: string; seen: string } | { kind: 'not_in_catalogue' | 'unclear'; seen: string };
 
@@ -96,15 +103,22 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   const [seen, setSeen] = useState<Exhibit[]>([]);
   const [looking, setLooking] = useState(false);
   const [notice, setNotice] = useState('');
-  const [small, setSmall] = useState(false);
   const [talk, setTalk] = useState(false);
   const [map, setMap] = useState(false);
   const [mapAt, setMapAt] = useState<Exhibit | null>(null);
   // The guest in play (joining, talking, or leaving), and which call is on screen.
   const [guest, setGuest] = useState<Guest | null>(null);
   const [speaker, setSpeaker] = useState<'host' | 'guest'>('host');
-  const [handovers, setHandovers] = useState(0);
+  // Each start of a guest's call (warming one up, or one asked for at once): the call is on the guest's path, so it starts on the next render.
+  const [guestStarts, setGuestStarts] = useState(0);
+  // The guest's call is live (warm, hidden, or on stage), and whether its greeting went unheard while warm.
+  const guestReady = useRef(false);
+  const greetedUnheard = useRef(false);
+  const warmTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const mode = useRef<Mode>('host');
+  // The same, for the screen: who is on the way shows while a hand-over is under way.
+  const [modeView, setModeView] = useState<Mode>('host');
+  const setMode = (next: Mode) => { mode.current = next; setModeView(next); };
   const ending = useRef(false);
   // The panel's top edge, where the guide stands, as it grows and shrinks.
   const tourRef = useRef<HTMLDivElement>(null);
@@ -143,6 +157,14 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     if (host.phase === 'live') (aside ? host.mute : host.unmute)();
   }, []);
 
+  /** A warm guest waits unheard: hears silence and is not heard, until the visitor meets them. */
+  const guestAside = useCallback((aside: boolean) => {
+    const guest = guestRef.current;
+    if (!guest) return;
+    if (guest.audioRef.current) guest.audioRef.current.muted = aside;
+    if (guest.phase === 'live') (aside ? guest.mute : guest.unmute)();
+  }, []);
+
   const flash = useCallback((text: string) => {
     setNotice(text);
     setTimeout(() => setNotice((n) => (n === text ? '' : n)), 3500);
@@ -169,6 +191,10 @@ function Tour({ opening }: { opening: Exhibit | null }) {
       return;
     }
     if (how !== 'tool') host?.event(arrived(L(exhibit), how, again), 30);
+    // The work's guest is warmed up while Edmund tells its story; another work's goes.
+    const g = guestFor(exhibit);
+    if (g) warmGuest(g);
+    else coolGuest();
   }, []);
 
   // A label's code in view: the same label held there is not a new arrival. Paused while
@@ -204,24 +230,71 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   /** Edmund hands the visitor over to a work's guest. The guest's call starts on the next render (its path names the guest). */
   const handOver = useCallback((g: Guest, how: 'tool' | 'button') => {
     if (mode.current !== 'host') return false;
-    mode.current = 'to-guest';
-    setGuest(g);
+    setMode('to-guest');
+    clearTimeout(warmTimer.current);
     setInfo(null);
-    flash(translator(langRef.current)('onTheWay', { name: guestLabel(g, langRef.current).name }));
     if (how === 'button') hostRef.current?.event(said.handOverPressed(g), 20);
-    setHandovers((n) => n + 1);
+    if (guestNow.current?.id === g.id && guestReady.current) {
+      // Warm and waiting: on stage once Edmund has said his goodbye (a few seconds at most).
+      const started = Date.now();
+      const id = setInterval(() => {
+        const saying = Date.now() - started < 1500 || hostRef.current?.speaking;
+        if (saying && Date.now() - started < 6000 && mode.current === 'to-guest') return;
+        clearInterval(id);
+        if (mode.current === 'to-guest') guestOnStage();
+      }, 250);
+      return true;
+    }
+    // Still joining: on stage the moment the call is live. Not started (or another's): start it now.
+    if (guestNow.current?.id !== g.id) {
+      if (guestNow.current) void guestRef.current?.end();
+      guestReady.current = false;
+      greetedUnheard.current = false;
+      setGuest(g);
+      setGuestStarts((n) => n + 1);
+    }
     return true;
   }, [flash]);
+
+  /** The guest takes the stage; Edmund steps aside, still on the line. */
+  const guestOnStage = () => {
+    setMode('guest');
+    guestAside(false);
+    hostAside(true);
+    setSpeaker('guest');
+    if (greetedUnheard.current) guestRef.current?.event(guestSaid.visitorArrived, 30);
+  };
+
+  /** A work's guest, started hidden while Edmund tells its story. */
+  const warmGuest = (g: Guest) => {
+    if (mode.current !== 'host' || guestNow.current?.id === g.id) return;
+    if (guestNow.current) void guestRef.current?.end();
+    guestReady.current = false;
+    greetedUnheard.current = false;
+    setGuest(g);
+    setGuestStarts((n) => n + 1);
+    clearTimeout(warmTimer.current);
+    // Not met in a few minutes: let it go (it bills while it waits).
+    warmTimer.current = setTimeout(() => coolGuest(), WARM_GUEST_MS);
+  };
+
+  /** The visitor moved on without meeting the warm guest: their call ends. */
+  const coolGuest = () => {
+    clearTimeout(warmTimer.current);
+    if (mode.current !== 'host' || !guestNow.current) return;
+    void guestRef.current?.end();
+    guestReady.current = false;
+    setGuest(null);
+  };
 
   /** The guest leaves and Edmund comes back; the guest's call ends once his is live. */
   const callHostBack = useCallback((how: 'button' | 'guest' | 'dropped') => {
     if (mode.current !== 'guest') return;
-    mode.current = 'to-host';
+    setMode('to-host');
     leavingGuest.current = guestNow.current;
     const host = hostRef.current;
     if (host?.phase !== 'live') {
       // His session ended meanwhile: a new one (he greets from scratch, then is told he is back).
-      flash(translator(langRef.current)('hostOnTheWay', { name: HOST_NAME[langRef.current] }));
       void host?.start({ mic: true, micMuted: true, camera: camera.track, language: langRef.current });
       return;
     }
@@ -242,11 +315,12 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     if (ending.current) return;
     const g = leavingGuest.current;
     leavingGuest.current = null;
-    mode.current = 'host';
+    setMode('host');
     hostAside(false);
     setSpeaker('host');
     if (g) hostRef.current?.event(said.welcomeBack(g, at.current.current && L(at.current.current)), 60);
     void guestRef.current?.end();
+    guestReady.current = false;
     setGuest(null);
   };
 
@@ -287,6 +361,9 @@ function Tour({ opening }: { opening: Exhibit | null }) {
       // Back from a guest in a new session: he picks up where the visitor is, and the guest goes.
       if (mode.current === 'to-host') { hostBack(); return; }
       hostRef.current?.event(said.opening(at.current.current && L(at.current.current)), 60);
+      // Opened at a work with a guest: warm them up now.
+      const opened = guestFor(at.current.current);
+      if (opened) warmGuest(opened);
       // The camera opens once he is on the line (not while the call is still being placed), and he sees it from then on.
       void camera.start().then((track) => {
         if (track) void hostRef.current?.setCamera?.(track);
@@ -296,7 +373,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     onEnded: () => {
       // Ended while a guest has the visitor (his session ran out): the tour goes on; calling him back starts a new one.
       if (!ending.current && (mode.current === 'to-guest' || mode.current === 'guest')) return;
-      if (!ending.current && mode.current === 'to-host') { mode.current = 'guest'; return; }
+      if (!ending.current && mode.current === 'to-host') { setMode('guest'); return; }
       callGen.current++;
       setLooking(false);
       setScreen((s) => (s === 'tour' ? 'visit' : s));
@@ -326,31 +403,33 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     onLive: () => {
       const g = guestNow.current;
       if (!g) return;
-      mode.current = 'guest';
+      guestReady.current = true;
       guestRef.current?.state(guestState(g, langRef.current));
-      // The guest takes the stage (and greets); Edmund steps aside, still on the line.
-      hostAside(true);
-      setSpeaker('guest');
+      if (mode.current === 'to-guest') { guestOnStage(); return; }
+      // Warmed up ahead of the visitor: waits unheard (its greeting goes unheard: asked again on stage).
+      greetedUnheard.current = true;
+      guestAside(true);
     },
     onEnded: () => {
       if (ending.current) { callGen.current++; setScreen((s) => (s === 'tour' ? 'visit' : s)); return; }
+      guestReady.current = false;
       // Dropped while talking: Edmund comes back (and is told whom the visitor met).
       if (mode.current === 'guest') callHostBack('dropped');
     },
   });
   guestRef.current = guestCall;
 
-  // A handover asked for: the guest's call, on the guest's path (this render has it).
+  // A guest's call asked for (warming up, or met at once), on the guest's path (this render has it).
   useEffect(() => {
-    if (!handovers || mode.current !== 'to-guest') return;
+    if (!guestStarts) return;
     const rule = languageRule(langRef.current);
     if (rule) guestCall.note(rule);
     void guestCall.start({ mic: true, micMuted: true, camera: camera.track, language: langRef.current });
-  }, [handovers]);
+  }, [guestStarts]);
   // The guest could not come: Edmund carries on.
   useEffect(() => {
     if (guestCall.phase !== 'failed' || mode.current !== 'to-guest') return;
-    mode.current = 'host';
+    setMode('host');
     const g = guestNow.current;
     setGuest(null);
     // And Edmund's own call ended meanwhile: there is no one left to guide; the visit is over.
@@ -360,7 +439,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   // Edmund could not come back: the guest stays.
   useEffect(() => {
     if (host.phase !== 'failed' || mode.current !== 'to-host') return;
-    mode.current = 'guest';
+    setMode('guest');
     flash(t('hostCouldNotComeBack', { name: HOST }));
   }, [host.phase]);
 
@@ -402,12 +481,13 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   const begin = async () => {
     setScreen('tour');
     setSeen([]);
-    mode.current = 'host';
+    setMode('host');
     ending.current = false;
     setSpeaker('host');
     setGuest(null);
     lastArrival.current = current ? { id: current.id, at: Date.now() } : null;
     if (current) { setSeen([current]); setInfo(current); }
+    guestReady.current = false;
     callGen.current++;
     // In the visitor's language: the call is set to it, and Edmund keeps to it.
     const rule = languageRule(lang);
@@ -455,6 +535,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   const leave = () => {
     ending.current = true;
     clearInterval(backTimer.current);
+    clearTimeout(warmTimer.current);
     void host.end();
     void guestCall.end();
   };
@@ -470,13 +551,17 @@ function Tour({ opening }: { opening: Exhibit | null }) {
 
   const live = active.phase === 'live';
   const hostOn = speaker === 'host' && host.phase === 'live' && mode.current === 'host';
-  const busy = mode.current === 'to-guest' || mode.current === 'to-host';
+  const busy = modeView === 'to-guest' || modeView === 'to-host';
+  // Who is on the way during a hand-over, for the tile and the line above the subtitles.
+  const coming = modeView === 'to-guest' && guest
+    ? { name: guestLabel(guest, lang).name, image: guestImage(guest.id), line: t('onTheWay', { name: guestLabel(guest, lang).name }) }
+    : modeView === 'to-host' ? { name: HOST, image: hostPortrait, line: t('hostOnTheWay', { name: HOST }) } : null;
   const status = busy ? null : statusCopy(active, activeName, t);
   const openMap = (where: Exhibit | null = null) => { setMapAt(where); setMap(true); setTalk(false); };
   const infoGuest = guestFor(info);
   return (
     <LangContext.Provider value={context}>
-    <div ref={tourRef} className={`mr-tour ${small ? 'is-small' : ''} ${talk ? 'is-talking' : ''} ${info ? 'is-reading' : ''} ${active.speaking ? 'is-speaking' : ''}`}>
+    <div ref={tourRef} className={`mr-tour ${talk ? 'is-talking' : ''} ${info ? 'is-reading' : ''} ${active.speaking ? 'is-speaking' : ''}`}>
       <div className="mr-camera"><video ref={camera.videoRef} playsInline muted aria-label="Your camera" /></div>
       <div className="mr-shade" aria-hidden="true" />
 
@@ -517,8 +602,6 @@ function Tour({ opening }: { opening: Exhibit | null }) {
         </section>
       )}
 
-      <Keyed videoRef={host.videoRef} audioRef={host.audioRef} label={HOST} className={`${small ? 'is-small' : ''} ${speaker === 'host' ? '' : 'is-away'}`} />
-      <Keyed videoRef={guestCall.videoRef} audioRef={guestCall.audioRef} label={guest ? guestLabel(guest, lang).name : ''} className={`${small ? 'is-small' : ''} ${speaker === 'guest' ? '' : 'is-away'}`} />
 
       {status && (
         <div className="mr-status" role="status">
@@ -531,31 +614,45 @@ function Tour({ opening }: { opening: Exhibit | null }) {
       {live && active.audioBlocked && <button type="button" className="mr-hear" onClick={active.resumeAudio}>{t('tapToHear', { name: activeName })}</button>}
 
       {/* Everything to read and press lives in one panel under the camera view, never over it. */}
-      <section ref={sheetRef} className="mr-panel" aria-label="Your guide">
+      <section ref={sheetRef} className={`mr-panel ${coming ? 'is-handing' : ''}`} aria-label="Your guide">
         {talk ? (
           <div className="mr-panel-chat">
             <div className="mr-panel-head"><b>{t('conversation', { name: activeName })}</b><button type="button" className="mr-link" onClick={() => setTalk(false)}>{t('done')}</button></div>
             <ChatPanel avatar={active} name={activeName} placeholder={t('askPlaceholder', { name: activeName })} empty={<span>{t('chatEmpty')}</span>} />
           </div>
         ) : (
-          <>
-            {speaker === 'guest' && guest ? (
-              <div className="mr-now is-guest">
-                <span><small>{t('talkingWith')}</small><b>{guestLabel(guest, lang).name}</b><em>{t('fromWork', { title: L(exhibitById(guest.exhibit)!).title })}</em></span>
-                <button type="button" className="mr-callback" onClick={() => callHostBack('button')} disabled={busy}>{t('callBack', { name: HOST })}</button>
-              </div>
-            ) : card ? (
-              <button type="button" className={`mr-now ${card.here ? 'is-here' : ''}`} onClick={() => setInfo(card.exhibit)}>
-                <img src={exhibitImage(card.exhibit)} alt="" />
-                <span><small>{card.here ? t('youAreAt') : L(card.exhibit).gallery.split(/[,，]/)[0]}</small><b>{L(card.exhibit).title}</b><em>{L(card.exhibit).artist} · {L(card.exhibit).date}</em></span>
-                <span className="mr-now-more" aria-hidden="true">›</span>
-              </button>
-            ) : (
-              <p className="mr-now is-empty">{t('pointHint')}</p>
-            )}
-            <Subtitles key={speaker} text={active.caption} speaking={active.speaking} name={activeName} heard={active.heard}
-              hint={live ? t('askHint', { name: activeName }) : ''} />
-          </>
+          <div className="mr-guide">
+            {/* The guides: a video tile of their own, never over the camera. Both calls play in it; the one on stage shows. */}
+            <div className={`mr-tile ${active.speaking ? 'is-speaking' : ''}`} role="img" aria-label={activeName}>
+              <img className="mr-tile-poster" src={hostPortrait} alt="" />
+              <video ref={host.videoRef} className={speaker === 'host' ? 'is-on' : ''} playsInline muted />
+              <audio ref={host.audioRef} autoPlay />
+              <video ref={guestCall.videoRef} className={speaker === 'guest' ? 'is-on' : ''} playsInline muted />
+              <audio ref={guestCall.audioRef} autoPlay />
+              {coming && (
+                <div className="mr-tile-coming" aria-hidden="true">
+                  <img src={coming.image} alt="" />
+                  <span className="mr-tile-ring" />
+                </div>
+              )}
+              <span className="mr-tile-name">{coming ? coming.name : activeName}</span>
+            </div>
+            <div className="mr-guide-text">
+              {coming ? (
+                <p className="mr-nowline is-coming" role="status"><span className="mr-dot" /> {coming.line}</p>
+              ) : speaker === 'guest' && guest ? (
+                <p className="mr-nowline is-guest"><small>{t('talkingWith')}</small> <b>{guestLabel(guest, lang).name}</b> <span>{t('fromWork', { title: L(exhibitById(guest.exhibit)!).title })}</span></p>
+              ) : card ? (
+                <button type="button" className="mr-nowline" onClick={() => setInfo(card.exhibit)}>
+                  <small>{card.here ? t('youAreAt') : L(card.exhibit).gallery.split(/[,，]/)[0]}</small> <b>{L(card.exhibit).title}</b> <span aria-hidden="true">›</span>
+                </button>
+              ) : (
+                <p className="mr-nowline is-empty">{t('pointHint')}</p>
+              )}
+              <Subtitles key={speaker} text={active.caption} speaking={active.speaking} name={activeName} heard={active.heard}
+                hint={live ? t('askHint', { name: activeName }) : ''} />
+            </div>
+          </div>
         )}
         <footer className="mr-dock">
           <button type="button" className="mr-dock-btn" onClick={() => openMap()} aria-label={t('mapLabel', { n: seen.length, total: EXHIBITS.length })}>
@@ -573,8 +670,8 @@ function Tour({ opening }: { opening: Exhibit | null }) {
               <span className="mr-dock-ico"><GuideIcon /></span><span className="mr-dock-label">{t('callHost', { name: HOST })}</span>
             </button>
           ) : (
-            <button type="button" className={`mr-dock-btn ${small ? '' : 'is-on'}`} onClick={() => setSmall((s) => !s)} aria-pressed={!small}>
-              <span className="mr-dock-ico"><GuideIcon /></span><span className="mr-dock-label">{small ? t('showHost', { name: HOST }) : HOST}</span>
+            <button type="button" className={`mr-dock-btn ${info ? 'is-on' : ''}`} onClick={() => setInfo(info ? null : card?.exhibit ?? null)} disabled={!card && !info} aria-pressed={Boolean(info)}>
+              <span className="mr-dock-ico"><InfoIcon /></span><span className="mr-dock-label">{t('info')}</span>
             </button>
           )}
         </footer>

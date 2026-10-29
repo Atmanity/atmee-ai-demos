@@ -51,7 +51,6 @@ function fakeAvatar(phase: Avatar['phase']): Avatar {
 }
 
 const pearl = () => exhibitById('pearl-earring')!;
-const mona = () => exhibitById('mona-lisa')!;
 const events = (a: Avatar) => (a.event as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]));
 
 /** Through the front door, with Edmund live and greeted. */
@@ -110,13 +109,53 @@ describe('a work, introduced', () => {
 
   it('offers the guest on the entry of a work that has one, and not on one that does not', async () => {
     const { update } = await onTour();
-    act(() => calls.label!(mona()));
+    act(() => calls.label!(exhibitById('night-watch')!));
     update();
     expect(screen.queryByRole('button', { name: /^Meet / })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Back to camera' }));
     act(() => calls.label!(pearl()));
     update();
     expect(screen.getByRole('button', { name: 'Meet the girl' })).toBeTruthy();
+  });
+});
+
+describe('a guest warmed up ahead', () => {
+  it('starts at the work, waits unheard, and comes on stage at Meet once Edmund has said goodbye', async () => {
+    const { update } = await onTour();
+    act(() => calls.label!(pearl()));
+    update();
+    // Started as soon as the visitor reached the work, before anyone asked.
+    expect(calls.guestApp).toBe('museum-guide/guest/girl');
+    expect(calls.guest.start).toHaveBeenCalledTimes(1);
+    guestArrives(update);
+    expect(calls.guest.mute).toHaveBeenCalled();
+    expect(screen.queryByText('Talking with')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Meet the girl' }));
+    await waitFor(() => expect(screen.getByText('Talking with')).toBeTruthy(), { timeout: 4000 });
+    expect(calls.host.mute).toHaveBeenCalled();
+    expect(calls.guest.unmute).toHaveBeenCalled();
+    expect(events(calls.guest).some((e) => e.startsWith('The visitor has just come to meet you'))).toBe(true);
+    expect(calls.guest.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('is let go when the visitor moves on to a work without a guest', async () => {
+    const { update } = await onTour();
+    act(() => calls.label!(pearl()));
+    update();
+    expect(calls.guest.start).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Back to camera' }));
+    act(() => calls.label!(exhibitById('night-watch')!));
+    update();
+    expect(calls.guest.end).toHaveBeenCalled();
+  });
+
+  it('shows who is on the way while a guest is still joining', async () => {
+    const { update } = await onTour();
+    act(() => calls.label!(pearl()));
+    update();
+    fireEvent.click(screen.getByRole('button', { name: 'Meet the girl' }));
+    update();
+    expect(screen.getAllByText(/The girl is on the way/).length).toBeGreaterThan(0);
   });
 });
 
@@ -190,7 +229,7 @@ describe('a guest from the painting', () => {
     expect(calls.host.end).not.toHaveBeenCalled();
     expect((calls.guest.state as ReturnType<typeof vi.fn>).mock.calls[0][0]).toContain('You are the girl from "Girl with a Pearl Earring"');
     expect(screen.getByText('Talking with')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Call Edmund back' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Call Edmund' })).toBeTruthy();
   });
 
   it('hands back to Edmund at once when called: he is told whom the visitor met, and the guest\'s call ends', async () => {
@@ -202,7 +241,7 @@ describe('a guest from the painting', () => {
     expect(events(calls.host).some((e) => e.startsWith('The visitor pressed "Meet the girl"'))).toBe(true);
     guestArrives(update);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Call Edmund back' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Call Edmund' }));
     expect(events(calls.guest).some((e) => e.startsWith('The visitor asked for Edmund'))).toBe(true);
     await waitFor(() => expect(calls.host.unmute).toHaveBeenCalled(), { timeout: 4000 });
     update();
@@ -224,7 +263,7 @@ describe('a guest from the painting', () => {
     act(() => { calls.handlers.host.onEnded?.(); });
     update();
     expect(screen.getByText('Talking with')).toBeTruthy();   // not the visit card
-    fireEvent.click(screen.getByRole('button', { name: 'Call Edmund back' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Call Edmund' }));
     expect(calls.host.start).toHaveBeenCalledTimes(2);
   });
 

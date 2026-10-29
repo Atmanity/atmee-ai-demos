@@ -80,7 +80,8 @@
   "noneSeen": "이번에는 감상한 작품이 없습니다. 언제든 에드먼드가 여기서 기다리고 있겠습니다.",
   "newTour": "새 투어 시작하기",
   "seeMap": "미술관 지도 보기",
-  "theOriginal": "원작 소장처: {where}"
+  "theOriginal": "원작 소장처: {where}",
+  "info": "작품 정보"
  },
  "works": {
   "mona-lisa": {
@@ -268,6 +269,10 @@
   "wanderer": {
    "name": "방랑자",
    "meet": "방랑자 만나기"
+  },
+  "mona": {
+   "name": "모나리자",
+   "meet": "모나리자와 이야기하기"
   }
  },
  "names": {

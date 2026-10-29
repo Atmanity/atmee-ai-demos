@@ -80,7 +80,8 @@
   "noneSeen": "這次你沒有停在任何一件作品前。艾德蒙會在這裡等你。",
   "newTour": "開始新的導覽",
   "seeMap": "查看館內地圖",
-  "theOriginal": "原作：{where}"
+  "theOriginal": "原作：{where}",
+  "info": "介紹"
  },
  "works": {
   "mona-lisa": {
@@ -267,6 +268,10 @@
   "wanderer": {
    "name": "畫中旅人",
    "meet": "和畫中旅人說話"
+  },
+  "mona": {
+   "name": "畫中的蒙娜麗莎",
+   "meet": "和蒙娜麗莎說話"
   }
  },
  "names": {

@@ -80,7 +80,8 @@
   "noneSeen": "Lần này bạn chưa dừng lại ở tác phẩm nào. Edmund vẫn luôn ở đây.",
   "newTour": "Bắt đầu chuyến tham quan mới",
   "seeMap": "Xem bản đồ bảo tàng",
-  "theOriginal": "Bản gốc: {where}"
+  "theOriginal": "Bản gốc: {where}",
+  "info": "Thông tin"
  },
  "works": {
   "mona-lisa": {
@@ -270,6 +271,10 @@
   "wanderer": {
    "name": "Người lữ hành",
    "meet": "Gặp gỡ người lữ hành"
+  },
+  "mona": {
+   "name": "Mona Lisa",
+   "meet": "Trò chuyện với Mona Lisa"
   }
  },
  "names": {

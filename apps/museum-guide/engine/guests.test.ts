@@ -9,7 +9,8 @@ describe('guests', () => {
     expect(new Set(GUESTS.map((g) => g.exhibit)).size).toBe(GUESTS.length);
     expect(guestById('girl')?.exhibit).toBe('pearl-earring');
     expect(guestFor(exhibitById('pearl-earring'))?.id).toBe('girl');
-    expect(guestFor(exhibitById('mona-lisa'))).toBeNull();
+    expect(guestFor(exhibitById('night-watch'))).toBeNull();
+    expect(guestFor(exhibitById('mona-lisa'))?.id).toBe('mona');
     expect(guestFor(null)).toBeNull();
   });
 
@@ -25,10 +26,10 @@ describe('guests', () => {
     const at = tourState({ current: exhibitById('pearl-earring'), seen: [], camera: true });
     expect(at).toContain('This work has a guest: the girl from the painting herself');
     expect(at.length).toBeLessThan(3858);
-    expect(tourState({ current: exhibitById('mona-lisa'), seen: [], camera: true })).not.toContain('This work has a guest');
+    expect(tourState({ current: exhibitById('night-watch'), seen: [], camera: true })).not.toContain('This work has a guest');
     expect(TOOLS.map((t) => t.name)).toContain('introduce_guest');
     expect(said.handingOver(guestById('girl')!)).toMatch(/^Handing over: the girl/);
-    expect(said.noGuest(exhibitById('mona-lisa'))).toMatch(/^No guest: "Mona Lisa" has no guest/);
+    expect(said.noGuest(exhibitById('night-watch'))).toMatch(/^No guest: "The Night Watch" has no guest/);
     expect(said.welcomeBack(guestById('girl')!, exhibitById('pearl-earring'))).toContain('talked with the girl at "Girl with a Pearl Earring"');
   });
 });

@@ -9,3 +9,4 @@ export const ScanIcon = () => <Icon><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4
 export const GuideIcon = () => <Icon><circle cx="12" cy="8" r="3.6" /><path d="M5 20c.8-3.6 3.6-5.6 7-5.6s6.2 2 7 5.6" /></Icon>;
 export const CameraIcon = () => <Icon><path d="M3.5 8.5A1.5 1.5 0 0 1 5 7h2.2l1.4-2h6.8l1.4 2H19a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z" /><circle cx="12" cy="12.8" r="3.4" /></Icon>;
 export const CameraOffIcon = () => <Icon><path d="M7.2 7H5a1.5 1.5 0 0 0-1.5 1.5v9A1.5 1.5 0 0 0 5 19h12.5M20.5 16.5v-8A1.5 1.5 0 0 0 19 7h-2.2l-1.4-2H8.6L8 5.9" /><path d="M3 3l18 18" /></Icon>;
+export const InfoIcon = () => <Icon><circle cx="12" cy="12" r="9" /><path d="M12 11v5.5M12 7.6v.01" /></Icon>;

@@ -80,7 +80,8 @@
   "noneSeen": "Sie haben dieses Mal bei keinem Werk verweilt. Edmund wird hier sein.",
   "newTour": "Neue Tour beginnen",
   "seeMap": "Museumsplan ansehen",
-  "theOriginal": "Das Original: {where}"
+  "theOriginal": "Das Original: {where}",
+  "info": "Info"
  },
  "works": {
   "mona-lisa": {
@@ -270,6 +271,10 @@
   "wanderer": {
    "name": "Der Wanderer",
    "meet": "Lernen Sie den Wanderer kennen"
+  },
+  "mona": {
+   "name": "Mona Lisa",
+   "meet": "Mona Lisa kennenlernen"
   }
  },
  "names": {
