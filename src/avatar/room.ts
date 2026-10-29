@@ -38,6 +38,14 @@ export interface JoinOptions {
   mic?: MediaStream | null;             // null: typing only (a silent track is published)
   /** Publish the microphone muted (push to talk): nothing is heard until setMicMuted(false). */
   micMuted?: boolean;
+  /**
+   * A video track to publish as the user's camera: the host sees its latest frame
+   * when it answers. A copy is published, so ending the call leaves the page's own
+   * track (a preview, a scanner) running.
+   */
+  camera?: MediaStreamTrack | null;
+  /** The language the session speaks and listens in (a BCP-47 tag: `en`, `zh-TW`, `ja`); absent, the avatar's own. */
+  language?: string;
   onPhase?: (phase: Phase, detail?: Record<string, unknown>) => void;
   /** The avatar's words; `done` once the utterance is complete. */
   onAvatarSpeech?: (text: string, done: boolean) => void;
@@ -79,6 +87,11 @@ export interface AvatarSession {
    * silence back. For a session started without a microphone.
    */
   feedMic(track: MediaStreamTrack | null): Promise<void>;
+  /**
+   * Publish this video track as the user's camera now (a copy: the page keeps its own), in
+   * place of any before it; null takes the camera away. For a camera opened after the call.
+   */
+  setCamera(track: MediaStreamTrack | null): Promise<void>;
   /** Whether the host takes files (its runtime reads them): offer a drop only then. */
   acceptsFiles(): boolean;
   /**
@@ -133,8 +146,11 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
   const api = `/api/apps/${app}`;
   let lateMic: MediaStream | undefined;   // a microphone turned on mid-session (typing first)
   const stopMic = () => [mic, lateMic].forEach((m) => m?.getTracks().forEach((t) => t.stop()));
+  // The copy of the page's camera published now (from the start, or later with setCamera).
+  let camera = opts.camera?.clone();
+  const stopCamera = () => camera?.stop();
   opts.onPhase?.('starting');
-  const session = await startSession(api, opts.onPhase).catch((err) => { stopMic(); throw err; });
+  const session = await startSession(api, opts.onPhase, opts.language).catch((err) => { stopMic(); stopCamera(); throw err; });
   // From here the avatar is waiting in the room: a closed tab must end the session.
   const endUrl = `${api}/session/${session.sessionId}/end`;
   let ended = false;
@@ -175,6 +191,7 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
     floor.close();
     drops.refuse('unreadable');
     stopMic();
+    stopCamera();
     void silence?.ctx.close();
   };
   const finish = (reason: unknown) => {
@@ -298,6 +315,7 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
     } else {
       silence = await publishSilence(room);
     }
+    if (camera) await room.localParticipant.publishTrack(camera, { source: Track.Source.Camera, simulcast: false });
     opts.onPhase?.('arriving');
     const timeout = new Promise<'timeout'>((resolve) => { arrivalTimer = setTimeout(resolve, ARRIVAL_TIMEOUT_MS, 'timeout'); });
     if ((await Promise.race([arrival, timeout])) === 'timeout') throw new AvatarError('arrival_timeout', 'The avatar did not appear in time');
@@ -378,6 +396,16 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
       if (previous) await room.localParticipant.unpublishTrack(previous, false);
       if (previousSilence) void previousSilence.ctx.close();
     },
+    async setCamera(track) {
+      if (ended) return;
+      const previous = camera;
+      camera = track?.clone();
+      if (camera) await room.localParticipant.publishTrack(camera, { source: Track.Source.Camera, simulcast: false });
+      if (previous) {
+        await room.localParticipant.unpublishTrack(previous, false);
+        previous.stop();
+      }
+    },
     async end() {
       if (ended) return;
       finish('ended');
@@ -391,10 +419,13 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
 // A 503 no_capacity means no rendering capacity yet: wait Retry-After (at least
 // 5 s; 30 s when it is missing) and start again, for up to WARMING_LIMIT_MS.
 // Any other failure, a bodyless 503 (embeds turned off) included, is final.
-async function startSession(api: string, onPhase?: JoinOptions['onPhase']): Promise<SessionInfo> {
+async function startSession(api: string, onPhase?: JoinOptions['onPhase'], language?: string): Promise<SessionInfo> {
   const since = Date.now();
+  const init: RequestInit = language
+    ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ language }) }
+    : { method: 'POST' };
   for (;;) {
-    const res = await fetch(`${api}/session`, { method: 'POST' }).catch(() => null);
+    const res = await fetch(`${api}/session`, init).catch(() => null);
     if (!res) throw new AvatarError('backend_unreachable', 'Could not reach the app server');
     const body = await res.json().catch(() => ({}));
     if (res.ok) return body;

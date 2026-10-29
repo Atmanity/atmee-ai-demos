@@ -41,8 +41,12 @@ export interface Avatar {
   filesAccepted: boolean;
   videoRef: React.RefObject<HTMLVideoElement | null>;
   audioRef: React.RefObject<HTMLAudioElement | null>;
-  /** `micMuted`: the microphone joins muted (push to talk), for setMic(true) to open. */
-  start(opts?: { mic?: boolean; micMuted?: boolean }): Promise<void>;
+  /**
+   * `micMuted`: the microphone joins muted (push to talk), for setMic(true) to open.
+   * `camera`: a video track the host sees as the user's camera (the page keeps its own).
+   * `language`: the language the call is in (a BCP-47 tag); absent, the host's own.
+   */
+  start(opts?: { mic?: boolean; micMuted?: boolean; camera?: MediaStreamTrack | null; language?: string }): Promise<void>;
   end(): Promise<void>;
   /** A typed user turn: it shows in the transcript and the avatar answers it. */
   say(text: string): void;
@@ -59,6 +63,8 @@ export interface Avatar {
   mute(): void;
   unmute(): void;
   setMic(on: boolean): void;
+  /** Show the host this video track as the user's camera, from now on (a camera opened after the call connected); null takes it away. Optional, so stand-ins for a call need not have it. */
+  setCamera?(track: MediaStreamTrack | null): Promise<void>;
   /** Hear this track as the user's microphone (another avatar's voice, say); null for silence. Typing-only calls. */
   feedMic(track: MediaStreamTrack | null): Promise<void>;
   resumeAudio(): void;
@@ -125,9 +131,16 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
   useEffect(() => { document.documentElement.dataset.speaking = String(speaking); }, [speaking]);
 
   const starting = useRef(false);   // set before the first await: a second click while the mic prompt is up starts nothing
-  const start = useCallback(async ({ mic = false, micMuted = false }: { mic?: boolean; micMuted?: boolean } = {}) => {
+  // end() while a call is still being placed: the call is ended as soon as it connects, so it never bills unseen.
+  const endWanted = useRef(false);
+  // Settles once the start under way has finished (and, when end() was asked for meanwhile, hung up): end() waits for it.
+  const startDone = useRef<Promise<void>>(Promise.resolve());
+  const start = useCallback(async ({ mic = false, micMuted = false, camera = null, language }: { mic?: boolean; micMuted?: boolean; camera?: MediaStreamTrack | null; language?: string } = {}) => {
     if (sessionRef.current || starting.current) return;
     starting.current = true;
+    let settle!: () => void;
+    startDone.current = new Promise<void>((resolve) => { settle = resolve; });
+    endWanted.current = false;
     betweenCalls.current = false;
     setErrorCode(undefined); setDetail(''); setLines([]); setCaption(''); setHeard(''); setFilesAccepted(false);
     sentNotes.current.clear();
@@ -143,7 +156,7 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
     let session: AvatarSession | null = null;
     try {
       session = await joinAvatar({
-        app, mic: stream, micMuted, video: () => videoRef.current, audio: () => audioRef.current,
+        app, mic: stream, micMuted, camera, language, video: () => videoRef.current, audio: () => audioRef.current,
         onPhase: (p, d) => {
           setPhase(p);
           if (p === 'warming') setDetail(`Getting ready (${d?.waited ?? 0} s)…`);
@@ -186,6 +199,11 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
         },
       });
       sessionRef.current = session;
+      if (endWanted.current) {
+        endWanted.current = false;
+        await session.end();
+        return;
+      }
       // Deliver what the app said while the avatar was on its way.
       const { state, notes, events } = pending.current;
       for (const text of notes) {
@@ -213,10 +231,19 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
       }
     } finally {
       starting.current = false;
+      settle();
     }
   }, [app, addLine]);
 
-  const end = useCallback(async () => { await sessionRef.current?.end(); }, []);
+  const end = useCallback(async () => {
+    // Still being placed: resolves once it has connected and been hung up, so a start() after it is not a no-op.
+    if (!sessionRef.current && starting.current) {
+      endWanted.current = true;
+      await startDone.current;
+      return;
+    }
+    await sessionRef.current?.end();
+  }, []);
 
   useEffect(() => () => { void sessionRef.current?.end(); }, []);
   useEffect(() => {
@@ -263,6 +290,7 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
       session.setMicMuted(!on).then(() => setMicOn(on), () => setDetail('No microphone: you can type instead.'));
     },
     async feedMic(track) { await sessionRef.current?.feedMic(track); },
+    async setCamera(track) { await sessionRef.current?.setCamera(track); },
     resumeAudio() { void resumeRef.current?.().then(() => setAudioBlocked(false)); },
     async sendFiles(files, options) {
       const session = sessionRef.current;

@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import sharp from 'sharp';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import type { AppServer } from './app-server.ts';
-import { avatarApi, endSession, setConductor, startSession } from './atmee.ts';
+import { avatarApi, endSession, sessionLanguage, setConductor, startSession } from './atmee.ts';
 import { endRender, renderConfigured, startRender } from './render.ts';
 import { avatarEnvName, avatarFor, hostNameOf } from './hosts.js';
 
@@ -88,7 +88,7 @@ api.post('/apps/:app/session', async (req, res) => {
   }
 
   const maxSeconds = Number(process.env.MAX_SECONDS) || app.maxSeconds || 600;
-  const r = await startSession(avatarId, maxSeconds, { app: 'atmee-usecase-demos', usecase: app.id }, app.appTools);
+  const r = await startSession(avatarId, maxSeconds, { app: 'atmee-usecase-demos', usecase: app.id }, app.appTools, sessionLanguage(req.body?.language));
   if (!r.ok) {
     // The code is for the page; the message (which limit, which key) is for you.
     console.warn('[%s] POST /v1/session -> %d %s %s', app.id, r.status, r.json?.error ?? '', r.json?.message ?? '');
