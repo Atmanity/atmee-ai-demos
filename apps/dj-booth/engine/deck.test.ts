@@ -63,3 +63,16 @@ describe('what the host is told', () => {
     expect(INSTRUCTIONS.length).toBeLessThanOrEqual(4000);
   });
 });
+
+describe('the host keeps the show going', () => {
+  test('a record that starts with a short line asks for more, a full line does not', () => {
+    expect(said.onAir(a, 0)).toContain('queue two more');
+    expect(said.playing(a, 1)).toContain('queue one more');
+    expect(said.playing(a, 2)).not.toContain('queue');
+    expect(said.onAir(a, 2)).toContain('Introduce the song and its artist');
+  });
+
+  test('the show opens on the host\'s own pick, unasked', () => {
+    expect(said.start()).toContain('pick an opening record yourself');
+  });
+});

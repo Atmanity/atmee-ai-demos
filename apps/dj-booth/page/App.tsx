@@ -3,7 +3,7 @@
 // drives the Spotify embed, keeps Nova's picture of the deck current and
 // tells it when a record is about to run out, so it can talk over the outro.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BackToApps, CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, useCaptionToggle, type ToolCall } from '../../../src/kit/index.ts';
+import { BackToApps, CallStatus, ChatPanel, HangUpIcon, HostVideo, useAvatar, useCaptionToggle, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
 import { advance, dig, label, pick, playNow, queueNext, setPaused } from '../engine/deck.ts';
 import { crateText, deckState, said } from '../engine/director.ts';
 import { emptyDeck, type Deck, type Track } from '../engine/types.ts';
@@ -47,6 +47,49 @@ function Lobby({ onStart }: { onStart: (mic: boolean) => void }) {
   );
 }
 
+// How long the microphone stays open after the button is let go, so the last word is not cut off.
+const TAIL_MS = 400;
+
+/** Hold to talk (the button, or the space bar outside the text box): the only way the mic opens. */
+function PushToTalk({ avatar }: { avatar: Avatar }) {
+  const [held, setHeld] = useState(false);
+  const holding = useRef(false);
+  const closing = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const mic = useRef(avatar);
+  mic.current = avatar;
+  const down = useCallback(() => {
+    clearTimeout(closing.current);
+    holding.current = true;
+    setHeld(true);
+    mic.current.setMic(true);
+  }, []);
+  const up = useCallback(() => {
+    if (!holding.current) return;
+    holding.current = false;
+    setHeld(false);
+    closing.current = setTimeout(() => mic.current.setMic(false), TAIL_MS);
+  }, []);
+  useEffect(() => {
+    const typing = (e: KeyboardEvent) => e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+    const keydown = (e: KeyboardEvent) => { if (e.code === 'Space' && !typing(e)) { e.preventDefault(); if (!e.repeat) down(); } };
+    const keyup = (e: KeyboardEvent) => { if (e.code === 'Space' && !typing(e)) up(); };
+    addEventListener('keydown', keydown);
+    addEventListener('keyup', keyup);
+    return () => { removeEventListener('keydown', keydown); removeEventListener('keyup', keyup); clearTimeout(closing.current); };
+  }, [down, up]);
+  return (
+    <button
+      type="button" className={`cr-ptt ${held ? 'is-held' : ''}`} aria-pressed={held}
+      onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); down(); }}
+      onPointerUp={up} onPointerCancel={up} onContextMenu={(e) => e.preventDefault()}
+    >
+      <span className="cr-ptt-dot" aria-hidden="true" />
+      {held ? 'Listening… let go to send' : 'Hold to talk to Nova'}
+      <small>or hold the space bar</small>
+    </button>
+  );
+}
+
 export function App() {
   const [deck, setDeck] = useState<Deck>(emptyDeck);
   const deckRef = useRef(deck);
@@ -63,17 +106,20 @@ export function App() {
     const on = deckRef.current.playing;
     if (!on || p.duration <= 0) return;
     const left = p.duration - p.position;
-    if (!p.isPaused && left <= CUE_MS && cued.current !== on.id) {
+    // Only an empty line needs a word before the end: a queued record is introduced as it starts.
+    if (!p.isPaused && left <= CUE_MS && cued.current !== on.id && !deckRef.current.queue.length) {
       cued.current = on.id;
-      avatarRef.current?.event(said.ending(on, deckRef.current.queue[0] ?? null), 15);
+      avatarRef.current?.event(said.ending(on, null), 15);
     }
     // The end: the embed stops at (or snaps back from) the last second.
     if (left <= 600 && ended.current !== on.id) {
       ended.current = on.id;
       const next = advance(deckRef.current);
       update(next);
-      if (next.playing) spin(next.playing, next);
-      else avatarRef.current?.event(said.ranOut(), 30);
+      if (next.playing) {
+        spin(next.playing, next);
+        avatarRef.current?.event(said.onAir(next.playing, next.queue.length), 20);
+      } else avatarRef.current?.event(said.ranOut(), 30);
     }
   });
 
@@ -111,7 +157,7 @@ export function App() {
           return said.queued(track, next.queue.length);
         }
         spin(track);
-        return said.playing(track);
+        return said.playing(track, d.queue.length);
       }
       case 'pause_music':
         if (!d.playing) return said.nothingOn();
@@ -127,18 +173,21 @@ export function App() {
         const next = advance(d);
         if (next.playing) spin(next.playing, next);
         else { update(next); void player.pause(); }
-        return said.skipped(next.playing);
+        return said.skipped(next.playing, next.queue.length);
       }
     }
     throw new Error(`unknown tool ${name}`);
   }, [search, spin]);
 
   const cc = useCaptionToggle('dj-booth', false);
+  const [pushToTalk, setPushToTalk] = useState(false);
   const avatar = useAvatar('dj-booth', { onToolCall });
   avatarRef.current = avatar;
   const live = avatar.phase === 'live';
 
   useEffect(() => { if (avatar.phase === 'starting') avatar.event(said.start(), 60); }, [avatar.phase]);
+  // Push to talk: the microphone opens only while the button is held, so the music never reaches Nova as speech.
+  useEffect(() => { if (live) avatar.setMic(false); }, [live]);
   // Nova's picture of the deck follows the deck.
   useEffect(() => { avatar.state(deckState(deck)); }, [deck]);
   // The music stops with the show.
@@ -150,7 +199,7 @@ export function App() {
     if (live) avatar.event(said.pressed(what), 20);
   }
 
-  if (avatar.phase === 'idle') return <Lobby onStart={(mic) => void avatar.start({ mic })} />;
+  if (avatar.phase === 'idle') return <Lobby onStart={(mic) => { setPushToTalk(mic); void avatar.start({ mic }); }} />;
 
   const pct = progress && progress.duration > 0 ? Math.min(100, (progress.position / progress.duration) * 100) : 0;
 
@@ -159,7 +208,7 @@ export function App() {
       <header className="cr-top">
         <BackToApps avatar={avatar} name={HOST} /><Logo />
         {live && <span className="cr-onair">On air</span>}
-        <CallControls avatar={avatar} className="cr-controls" />
+        {live && <button type="button" className="call-round is-end cr-controls" onClick={() => void avatar.end()} title="End the show"><HangUpIcon /></button>}
       </header>
 
       <main className="cr-main">
@@ -168,6 +217,7 @@ export function App() {
             <CallStatus avatar={avatar} name={HOST} again="Call Nova back" />
           </HostVideo>
           <p className="cr-nameplate"><b>{HOST}</b> on the decks</p>
+          {live && pushToTalk && <PushToTalk avatar={avatar} />}
         </aside>
 
         <section className="cr-decks" aria-label="The decks">

@@ -6,12 +6,14 @@ import { label } from './deck.ts';
 import type { Deck, Track } from './types.ts';
 
 /** The host's rules: the session's tool instructions (at most 4,000 characters). */
-export const INSTRUCTIONS = `You are the DJ on Crate, a live radio booth with one listener. The music plays from a Spotify player on the listener's screen, and you work it only through your tools.
+export const INSTRUCTIONS = `You are the DJ on Crate, a live radio show with one listener. The music plays from a Spotify player on the listener's screen, and you work it only through your tools. You run the show yourself: the music never stops for lack of a record, and the listener never has to ask.
 - To find music, call search_tracks with a search: an artist, a song, a genre, a mood or an era ("90s French house", "rainy day jazz", "Daft Punk"). Pick from its numbered results yourself; you are the DJ, so choose with taste instead of reading the list out.
 - To put a record on, call play_track with its number from the latest results: when "now" plays it at once, when "next" lines it up after the current record. Never say a track is playing or queued until play_track says so, and never name a track you did not find with search_tracks.
-- Requests: search for what the listener asks, play it, and say a word about it. A vague request ("something chill") is yours to choose.
+- Keep the playlist going: always have two records lined up after the one playing. Build a set that flows, each record following the mood of the last, unless the listener asks for something else. When the booth says the line is short, search and queue more at once.
+- Introduce every record as it starts: the song, the singer or band, and one fact about them or the record, in one or two sentences. Match your energy to the music: hyped and grinning for dance and party records, mellow and dreamy for soul and ballads, swaggering for hip-hop, wistful for slow ones.
+- Requests: search for what the listener asks, play it now, and say a word about it. A vague request ("something chill") is yours to choose.
 - "Stop", "pause", "quiet": pause_music. "Carry on", "play": resume_music. "Skip", "next song", "I don't like this": skip_track.
-- The booth tells you when a record is about to end. Then back-announce it and tease what is next in one line; if nothing is lined up, search and queue the next record first.
+- While a record plays, let it play: when you have nothing to add, say nothing or a few words at most.
 - The live deck in your context says what is playing, what is queued and the latest results: answer "what is this song?" from it, no tool needed.
 - Talk like a radio DJ: warm, quick, a little cheeky, one or two short spoken sentences, never a list.`;
 
@@ -50,10 +52,19 @@ export function deckState(d: Deck): string {
   return parts.join(' ');
 }
 
+/** How many records the host keeps lined up after the one playing. */
+export const LINE_UP = 2;
+
+/** A reminder to line up more, when the queue is short of LINE_UP. */
+const lineUp = (queued: number) => (queued < LINE_UP
+  ? ` Only ${queued || 'nothing'} ${queued === 1 ? 'record is' : 'is'} lined up: then search and queue ${LINE_UP - queued === 1 ? 'one more' : 'two more'} that flow from this one (play_track, when "next").`
+  : '');
+
 /** What the booth tells the host, in words it speaks from. */
 export const said = {
-  start: () => 'You have just greeted the listener; do not greet again. The decks are empty: ask what they are in the mood for, or offer to open with a pick of your own.',
-  playing: (t: Track) => `Now playing ${label(t)}. Introduce it in one line.`,
+  start: () => 'You have just greeted the listener; do not greet again. Open the show now: unless they have asked for something, pick an opening record yourself, search for it, play it, and line up two more.',
+  playing: (t: Track, queued: number) => `Now playing ${label(t)}. Introduce the song and its artist with one fact, matching your energy to the music.${lineUp(queued)}`,
+  onAir: (t: Track, queued: number) => `Your queued record ${label(t)} has just started. Introduce the song and its artist with one fact, matching your energy to the music.${lineUp(queued)}`,
   queued: (t: Track, position: number) => `${label(t)} is queued${position > 1 ? ` (${position} in line)` : ', up next'}.`,
   noPick: (n: unknown, d: Deck) => d.crate.length
     ? `There is no track ${String(n)} in the latest results (1 to ${d.crate.length}). Pick one of those numbers.`
@@ -61,7 +72,9 @@ export const said = {
   paused: () => 'The music is paused.',
   resumed: () => 'The music is back on.',
   nothingOn: () => 'Nothing is playing: search for a record and play it.',
-  skipped: (next: Track | null) => (next ? `Skipped. Now playing ${label(next)}. Introduce it in one line.` : 'Skipped, and nothing is queued, so the decks are empty: search and play the next record.'),
+  skipped: (next: Track | null, queued: number) => (next
+    ? `Skipped. Now playing ${label(next)}. Introduce the song and its artist in one line.${lineUp(queued)}`
+    : 'Skipped, and nothing is queued, so the decks are empty: search and play the next record now.'),
   ending: (t: Track, next: Track | null) => next
     ? `${label(t)} ends in a few seconds and ${label(next)} is up next. Back-announce the one ending and tease the next, in one line.`
     : `${label(t)} ends in a few seconds and nothing is queued. Search for the next record and queue it with play_track (when "next"), then tease it in one line.`,

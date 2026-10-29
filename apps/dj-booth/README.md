@@ -34,10 +34,15 @@ track. The music is Spotify's own embed on the page; Nova works it through app t
 
   Nova picks by **number** from the latest results, never by Spotify id: a spoken model
   copies a 22-character id badly, and a number it read a moment ago well.
-- **The cues.** The embed's `playback_update` drives two `event`s: about 8 s before a record
-  ends ("back-announce it, tease the next; nothing queued: queue one now"), and, when a
-  record ends with nothing queued, "the booth is silent: play the next". A queued record
-  starts by itself when the one before ends.
+- **Nova runs the show.** She opens with her own pick, keeps two records lined up and
+  introduces each one as it starts (the song, the artist, one fact). The page drives this
+  with `event`s from the embed's `playback_update`: a queued record that starts ("introduce
+  it; the line is short, queue more"), a record about 8 s from its end with nothing queued
+  ("queue the next now"), and a record that ended with nothing queued ("the booth is silent").
+  Every tool result for a record that starts also says when the line is short.
+- **Push to talk.** The listener talks by holding a button (or the space bar); the mic is
+  muted the rest of the time, so the music playing in the room never reaches Nova as speech.
+  Typed requests go through the chat box.
 - **The listener's hands.** Tapping a crate record, Pause or Skip acts at once and tells
   Nova as an `event` (she cannot see the screen).
 
@@ -53,6 +58,17 @@ generated portrait and a designed voice).
 
 ## Limitations
 
+- **Nova's face can only be steered, not set.** Her listening face is mapped from the
+  session's emotion, which Causeur's judge estimates from the conversation; nothing in the
+  room protocol or `POST /v1/session` sets it. The instructions ask her to match each
+  record's energy as she introduces it (hyped for dance, mellow for soul), which moves the
+  estimate and so the face. Causeur's `avatar2` module would do this properly (it writes the
+  avatar's body language as text prompts from the conversation, refreshed every ~10 s), but
+  it is enabled only on the Live API, not on `POST /v1/session`. *Platform gap:* a way for the
+  app to set the avatar's mood or listening expression (a room message, or `avatar2` on full-stack
+  sessions).
+- **Check-ins.** Causeur speaks up after about 10 s of silence and that cannot be turned off
+  per session; over a playing record that means extra DJ chatter. The instructions keep it short.
 - **Previews.** The embed plays whole tracks only for a listener signed in to Spotify in the
   same browser; otherwise 30-second previews. Spotify developers also report that
   `play()` from code can start a preview even for a signed-in Premium listener. For the demo
