@@ -53,8 +53,9 @@ label codes: `meridian:<id>` works as well as the link).
 ## Keys and setup
 
 - The host is Edmund Hale (`avatar.json`, avatar `fc4ee25c`), on the demo
-  account. His voice sample was sped up 1.2× (long pauses trimmed): v2 voices
-  are Fish clones that copy the sample's pace, and there is no speed setting.
+  account. Every guide's voice was designed in ElevenLabs (`design_voice`) and
+  is spoken by a Fish clone of that sample: v2 voices copy the sample's pace and
+  have no speed setting, so Edmund's was designed at a brisk pace.
 - `GEMINI_API_KEY` for `/identify`. Without it the "What is this?" button and
   `identify_exhibit` say recognition is not answering, and labels still work.
 - The camera and microphone need a secure page: `https://`, or `localhost` on
