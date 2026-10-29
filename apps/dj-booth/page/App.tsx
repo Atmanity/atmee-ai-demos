@@ -279,6 +279,17 @@ export function App() {
   const cc = useCaptionToggle('dj-booth', false);
   // The side panel stays closed until the listener opens the playlist or the chat.
   const [tab, setTab] = useState<'chat' | 'next' | 'crate' | null>(null);
+  // The volumes live behind a gear: open on a click, closed by a click elsewhere or Escape.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const away = (e: PointerEvent) => { if (!settingsRef.current?.contains(e.target as Node)) setSettingsOpen(false); };
+    const escape = (e: KeyboardEvent) => { if (e.key === 'Escape') setSettingsOpen(false); };
+    addEventListener('pointerdown', away);
+    addEventListener('keydown', escape);
+    return () => { removeEventListener('pointerdown', away); removeEventListener('keydown', escape); };
+  }, [settingsOpen]);
 
   // The look follows the record: each one's theme is asked for when it is lined up, so it is ready as it plays.
   const [theme, setTheme] = useState<Theme>(DEFAULT_THEME);
@@ -408,6 +419,25 @@ export function App() {
           Playlist{deck.queue.length ? ` · ${deck.queue.length}` : ''}
         </button>
         <button type="button" className={`cr-pill ${tab === 'chat' ? 'is-on' : ''}`} onClick={() => setTab(tab === 'chat' ? null : 'chat')}>Chat</button>
+        <div className="cr-settings" ref={settingsRef}>
+          <button type="button" className={`cr-pill cr-gear ${settingsOpen ? 'is-on' : ''}`} aria-expanded={settingsOpen} aria-label="Settings" title="Settings"
+            onClick={() => setSettingsOpen((o) => !o)}><GearIcon /></button>
+          {settingsOpen && (
+            <div className="cr-mixer" role="dialog" aria-label="Volume">
+                  {/* Spotify's embed is another site's frame: no page can set its volume, so the slider is there only with Premium. */}
+                  {player.canVolume && (
+                    <label>
+                      <span>Music</span>
+                      <input type="range" min={0} max={1} step={0.05} value={musicVolume} onChange={(e) => setMusicVolume(Number(e.target.value))} aria-label="Music volume" />
+                    </label>
+                  )}
+                  <label>
+                    <span>{HOST}</span>
+                    <input type="range" min={0} max={1} step={0.05} value={novaVolume} onChange={(e) => setNovaVolume(Number(e.target.value))} aria-label={`${HOST}'s volume`} />
+                  </label>
+            </div>
+          )}
+        </div>
         {live && <span className="cr-onair">On air</span>}
         {live && <button type="button" className="cr-end" onClick={() => void avatar.end()} title="End the show"><HangUpIcon /></button>}
       </header>
@@ -458,19 +488,6 @@ export function App() {
             }}><SkipIcon /></button>
           </div>
 
-          <div className="cr-mixer">
-            {/* Spotify's embed is another site's frame: no page can set its volume, so the slider is there only with Premium. */}
-            {player.canVolume && (
-              <label>
-                <span>Music</span>
-                <input type="range" min={0} max={1} step={0.05} value={musicVolume} onChange={(e) => setMusicVolume(Number(e.target.value))} aria-label="Music volume" />
-              </label>
-            )}
-            <label>
-              <span>{HOST}</span>
-              <input type="range" min={0} max={1} step={0.05} value={novaVolume} onChange={(e) => setNovaVolume(Number(e.target.value))} aria-label={`${HOST}'s volume`} />
-            </label>
-          </div>
           {deck.queue.length > 0 && (
             <section className="cr-upnext" aria-label="Up next">
               <h2>Up next</h2>
@@ -538,6 +555,7 @@ function TrackRow({ track, number, onPlay }: { track: Track; number?: number; on
 
 const icon = { width: 22, height: 22, viewBox: '0 0 24 24', fill: 'currentColor', 'aria-hidden': true } as const;
 const SpotifyIcon = () => <svg {...icon} width={18} height={18}><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm4.6 14.4a.6.6 0 0 1-.9.2c-2.4-1.5-5.4-1.8-8.9-1a.6.6 0 1 1-.3-1.2c3.9-.9 7.2-.5 9.9 1.1.3.2.4.6.2.9zm1.2-2.7a.8.8 0 0 1-1.1.3c-2.7-1.7-6.9-2.2-10.1-1.2a.8.8 0 1 1-.5-1.5c3.7-1.1 8.3-.6 11.4 1.3.4.2.5.7.3 1.1zm.1-2.8C14.7 9 9.4 8.8 6.3 9.7a.9.9 0 1 1-.5-1.8c3.5-1.1 9.4-.9 13.1 1.3a.9.9 0 1 1-1 1.7z" /></svg>;
+const GearIcon = () => <svg {...icon} width={18} height={18}><path d="M19.4 13a7.5 7.5 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.4L6.6 11a7.5 7.5 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.4zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)" /></svg>;
 const PauseIcon = () => <svg {...icon}><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>;
 const PlayIcon = () => <svg {...icon}><path d="M7 4.5v15l13-7.5z" /></svg>;
 const SkipIcon = () => <svg {...icon}><path d="M5 5v14l10-7zM17 5h2.5v14H17z" /></svg>;
