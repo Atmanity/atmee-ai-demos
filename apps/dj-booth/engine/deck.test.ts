@@ -72,9 +72,9 @@ describe('what the host is told', () => {
 });
 
 describe('the host keeps the show going', () => {
-  test('a break with a short line quietly tops it up before talking', () => {
-    expect(said.break(a, b, 0)).toContain('without saying so, search and line up two more records');
-    expect(said.break(a, b, 1)).toContain('line up one more record');
+  test('a break with a short line quietly fills it back up to ten, in one call', () => {
+    expect(said.break(a, b, 0)).toContain('fill the line back up to 10 with one line_up call (10 records');
+    expect(said.break(a, b, 6)).not.toContain('line_up');
   });
 
   test('the show opens on the host\'s own pick, unasked', () => {
@@ -82,7 +82,7 @@ describe('the host keeps the show going', () => {
     expect(said.opener(a)).toContain('first describe the style of music you will play tonight');
     expect(said.opener(a)).toContain('saying its title "Alpha" and its artist Artist');
     expect(said.opener(a)).toContain('It starts as you finish');
-    expect(said.start()).toContain('never "now": the opener plays to its end');
+    expect(said.start()).toContain('nine more in one line_up call, never with "now": the opener plays to its end');
   });
 });
 
@@ -142,4 +142,10 @@ test('a listener\'s ask stays open until the host acts on it, or for 90 seconds'
   expect(askOpen(t0, 0, t0 + 45_000)).toBe(true);          // a search and a reply later: still theirs
   expect(askOpen(t0, t0 + 30_000, t0 + 45_000)).toBe(false); // already used for one change
   expect(askOpen(t0, 0, t0 + ASK_OPEN_MS + 1)).toBe(false);  // long gone
+});
+
+test('early in a record with a short line, the host is asked to fill it to ten quietly, in one call', () => {
+  expect(said.topUp(a, 3)).toContain('one line_up call with 7 searches');
+  expect(said.topUp(a, 3)).toContain('Say nothing at all');
+  expect(said.linedUp([b], ['nope'], 4)).toBe('Lined up: "Bravo" by Artist (1999). Not found, or already on, in line or played tonight: nope. 4 in line now.');
 });

@@ -12,7 +12,7 @@ export const INSTRUCTIONS = `You are the DJ on Crate, a live radio show with one
 - Talk between records, like real radio. Near the end of every record the booth gives you a break: the music fades down under you, you back-announce the record ending and introduce the next one, and the next record comes in under your last words. Use your breaks to talk about the music: who the artist is, the story behind the song, a detail to listen for; two or three lively spoken sentences, no more.
 - You may talk over a record's first 20 seconds, as a DJ talks up to the vocal. After that keep quiet and let it play, and line up records without announcing it. If the listener talks to you, answer them whenever it is, then let the music carry on.
 - Never pick a song that has already played tonight (the live deck lists them), unless the listener asks to hear it again: then play it.
-- Keep two records lined up after the one playing, and build a set that flows, each record following the mood of the last, unless the listener asks for something else.
+- Keep ten records lined up after the one playing (line_up adds several in one call), and build a set that flows, each record following the mood of the last, unless the listener asks for something else.
 - Match your energy to the music: hyped and grinning for dance and party records, mellow and dreamy for soul and ballads, swaggering for hip-hop, wistful for slow ones.
 - Use when "now" only to open the show and for the listener's requests; every other record goes in line with when "next", so no record is cut off.
 - Requests: when the listener asks for a song, an artist or a style, call play_request with their words at once, before you say anything about it; it finds the record and plays it. A vague request ("something chill") is play_request too, with your own search words.
@@ -43,6 +43,11 @@ export const TOOLS: AppTool[] = [
       when: { type: 'string', enum: ['now', 'next'], description: '"now" (default) plays it at once; "next" if they asked for it after the current record.' },
     }, required: ['query'] },
     'x-atmee': awaits },
+  { type: 'function', name: 'line_up', description: 'Lines up several records at once after the current one, in one call: each search finds its best match, skipping any already on, in line or played tonight. Use it to keep the line full.',
+    parameters: { type: 'object', properties: {
+      records: { type: 'array', maxItems: 10, items: { type: 'string', maxLength: 200 }, description: 'Up to 10 searches, one per record, in the order to play them: an artist and a title, or a sharp mood.' },
+    }, required: ['records'] },
+    'x-atmee': awaits },
   { type: 'function', name: 'pause_music', description: 'Pauses the music.', parameters: noArgs, 'x-atmee': awaits },
   { type: 'function', name: 'resume_music', description: 'Resumes the paused music.', parameters: noArgs, 'x-atmee': awaits },
   { type: 'function', name: 'skip_track', description: 'Skips the current record and plays the next one in the queue.', parameters: noArgs, 'x-atmee': awaits },
@@ -66,16 +71,18 @@ export function deckState(d: Deck): string {
 }
 
 /** How many records the host keeps lined up after the one playing. */
-export const LINE_UP = 2;
+export const LINE_UP = 10;
+/** Below this many in line, the host is asked to fill the line back up to LINE_UP. */
+export const LINE_LOW = 5;
 
 /** What to line up first, when fewer than LINE_UP records wait after `next`. */
-const lineUp = (after: number) => (after < LINE_UP
-  ? ` First, without saying so, search and line up ${LINE_UP - after === 1 ? 'one more record' : 'two more records'} after it (play_track, when "next").`
+const lineUp = (after: number) => (after < LINE_LOW
+  ? ` First, without saying so, fill the line back up to ${LINE_UP} with one line_up call (${LINE_UP - after} records that follow this one).`
   : '');
 
 /** What the booth tells the host, in words it speaks from. */
 export const said = {
-  start: () => 'You have just greeted the listener; do not greet again. Open the show now: unless they have asked for something, decide the style of tonight\'s set, pick one opening record for it yourself, search for it and call play_track with when "now". It waits for your opening words. Then line up two more with play_track when "next", never "now": the opener plays to its end.',
+  start: () => 'You have just greeted the listener; do not greet again. Open the show now: unless they have asked for something, decide the style of tonight\'s set, pick one opening record for it yourself and put it on with play_request (when "now"). It waits for your opening words. Then fill the line with nine more in one line_up call, never with "now": the opener plays to its end.',
   /** The show's first record, held for the opening: the set's style, then the record. */
   opener: (t: Track) => `${label(t)} opens the show and waits for you: no music is playing yet. In one turn, first describe the style of music you will play tonight, the mood and the sound of the set, in a sentence or two; then introduce the opening record by name, saying its title "${t.title}" and its artist ${t.artist}, with a word on the song. It starts as you finish.`,
   playing: (t: Track) => `Now playing ${label(t)}. Introduce it over its first seconds: the artist and a word on the song, in two or three sentences, your energy matching the music.`,
@@ -94,8 +101,12 @@ export const said = {
   resumed: () => 'The music is back on.',
   nothingOn: () => 'Nothing is playing: search for a record and play it.',
   /** The listener (or the host) changed the record: the old one fades out, the new one waits for the host's intro. */
+  /** Early in a record with the line short: fill it now, quietly, so a break never finds it empty. */
+  topUp: (t: Track, queued: number) => `Not a break: ${label(t)} is playing and only ${queued || 'nothing'} ${queued === 1 ? 'record is' : 'is'} lined up. Quietly fill the line back up to ${LINE_UP}: one line_up call with ${LINE_UP - queued} searches for records that follow this one. Say nothing at all: the music is playing.`,
+  linedUp: (added: Track[], missed: string[], inLine: number) =>
+    `${added.length ? `Lined up: ${added.map(label).join('; ')}.` : 'Nothing new was lined up.'}${missed.length ? ` Not found, or already on, in line or played tonight: ${missed.join('; ')}.` : ''} ${inLine} in line now.`,
   /** After a change of vibe cleared the host's picks from the line. */
-  newVibe: (cleared: number) => (cleared ? ` The ${cleared === 1 ? 'record' : `${cleared} records`} you had lined up ${cleared === 1 ? 'was' : 'were'} cleared for the listener's new direction: after your intro, quietly line up two that follow this one.` : ''),
+  newVibe: (cleared: number) => (cleared ? ` The ${cleared === 1 ? 'record' : `${cleared} records`} you had lined up ${cleared === 1 ? 'was' : 'were'} cleared for the listener's new direction: after your intro, quietly fill the line back up to ten with one line_up call, records that follow this one.` : ''),
   changeOver: (t: Track) => `The record on is fading out. Introduce ${label(t)} now: the artist and a word on the song, two or three sentences. It starts as you finish.`,
   skipped: (next: Track | null) => (next
     ? `Skipped: the record on is fading out. Introduce ${label(next)} in a sentence or two; it starts as you finish.`

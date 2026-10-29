@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { BackToApps, CallStatus, clock as kitClock, ChatPanel, HangUpIcon, HostVideo, useAvatar, useCaptionToggle, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
 import { advance, askOpen, clearHostPicks, dig, label, lined, playedTonight, pick, playNow, queueNext, setPaused } from '../engine/deck.ts';
-import { crateText, deckState, said } from '../engine/director.ts';
+import { crateText, deckState, LINE_LOW, said } from '../engine/director.ts';
 import { emptyDeck, type Deck, type Track } from '../engine/types.ts';
 import { DEFAULT_THEME, type Theme } from '../engine/theme.ts';
 import { useSpotifyPlayer, type Playback } from './player.ts';
@@ -22,6 +22,8 @@ const API = '/api/apps/dj-booth';
 // The face on demand: kept up this long after the listener spoke, and ended after this long unneeded.
 const FACE_LISTENER_MS = 30_000;
 const FACE_IDLE_MS = 45_000;
+// How far into a record a short line is filled, past the time she may talk over it.
+const TOP_UP_AT_MS = 25_000;
 // The music's fades: a change of record fades the old one out over this, a duck dips over the same.
 const FADE_MS = 1200;
 const FADE_STEPS = 12;
@@ -250,6 +252,8 @@ export function App() {
 
   // The radio clock: each record's break near its end, its end, and the next record held until Nova finishes.
   const clock = useRef<Clock>(freshClock());
+  // The record whose line was last topped up, so each is asked once.
+  const toppedUp = useRef<string | null>(null);
   const [onBreak, setOnBreak] = useState(false);
   const [holding, setHolding] = useState<Track | null>(null);
   const onPlayback = (p: Playback) => {
@@ -258,6 +262,12 @@ export function App() {
     if (!on || holding) return;
     const { clock: next, cue } = tick(clock.current, on.id, p);
     clock.current = next;
+    // The line is filled early in each record, so her break never finds it empty.
+    const d = deckRef.current;
+    if (!p.isPaused && p.position >= TOP_UP_AT_MS && d.queue.length < LINE_LOW && toppedUp.current !== on.id) {
+      toppedUp.current = on.id;
+      avatarRef.current?.event(said.topUp(on, d.queue.length), 20);
+    }
     if (cue === 'break') {
       setOnBreak(true);
       const d = deckRef.current;
@@ -396,6 +406,23 @@ export function App() {
         if (!tracks.length) return crateText(query, tracks);
         // The listener's own request: the best match, even one that played tonight (they asked for it again).
         return put(tracks[0], args.when ?? 'now', true);
+      }
+      case 'line_up': {
+        const wanted = (Array.isArray(args.records) ? args.records : []).map((r) => String(r ?? '').trim().slice(0, 200)).filter(Boolean).slice(0, 10);
+        if (!wanted.length) return 'No records were given: pass up to ten searches.';
+        const found = await Promise.all(wanted.map((q) => fetch(`${API}/search`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: q }) })
+          .then((r) => (r.ok ? r.json() : { tracks: [] })).then((j: { tracks?: Track[] }) => j.tracks ?? []).catch(() => [] as Track[])));
+        let deckNow = deckRef.current;
+        const added: Track[] = [];
+        const missed: string[] = [];
+        found.forEach((tracks, i) => {
+          const pickOne = tracks.find((t) => !lined(deckNow, t) && !playedTonight(deckNow, t));
+          if (!pickOne) return void missed.push(wanted[i]);
+          deckNow = queueNext(deckNow, pickOne);
+          added.push(pickOne);
+        });
+        update(deckNow);
+        return said.linedUp(added, missed, deckNow.queue.length);
       }
       case 'pause_music':
         if (!d.playing) return said.nothingOn();

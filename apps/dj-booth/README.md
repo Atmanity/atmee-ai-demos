@@ -49,7 +49,9 @@ track. The music is Spotify's own embed on the page; Nova works it through app t
   answer within 40 s of the listener) plays silent: no voice, no overlay, no dip (`heard`).
 - **The tools** (all `await`, answered by the page): `search_tracks(query)` (numbered results
   into the crate), `play_track(number, when)`, `play_request(query, when)` (a listener's
-  request in one step: search and play the best match), `pause_music`, `resume_music`,
+  request in one step: search and play the best match), `line_up(records)` (up to ten searches in one
+  call, each best match queued: the line is kept at ten, refilled early in a record when below
+  five), `pause_music`, `resume_music`,
   `skip_track`. Nova picks by number, never by Spotify id. The page refuses a record already
   on or in line (any release of the song) or played tonight (unless the listener asks for it
   again), and Nova never cuts a playing record off herself: her "now" goes in line unless the
