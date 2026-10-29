@@ -48,9 +48,11 @@ const FACE_LAG_MS = 4_500;
 const INVITE_LEAD_MS = FACE_LAG_MS + 1_500;
 const TRAILER_FADE_MS = 900;
 const CAPTION_LINGER_MS = 3_000;
-// `?prompts=off`: the faces get no free-form prompt, as in the regular chat room (to compare).
-const PROMPTS_ON = typeof location === 'undefined' || new URLSearchParams(location.search).get('prompts') !== 'off';   // waiting for a guest still on their way: Jada keeps the viewers company this often
-const SEGMENT_MS = 4 * 60_000;   // a guest's time on air before an auto-booked guest may take over   // the dissolve into the trailer and back out to the studio
+// `?prompts=off`: no face gets a free-form prompt, as in the regular chat room; `?prompts=host`: only Jada's.
+const PROMPTS = typeof location === 'undefined' ? 'all' : (new URLSearchParams(location.search).get('prompts') ?? 'all');
+const PROMPTS_ON = PROMPTS !== 'off';
+const GUEST_PROMPTS = PROMPTS === 'all';
+const SEGMENT_MS = 4 * 60_000;   // a guest's time on air before an auto-booked guest may take over
 
 const STAGE_TEXT: Record<Stage, string> = {
   greeting: 'Jada is opening the show',
@@ -264,7 +266,7 @@ export function App() {
     }
     [f0.g0, f0.g1].forEach((f, i) => {
       const g = slotsRef.current[i];
-      if (f.phase !== 'live' || !g) return;
+      if (!GUEST_PROMPTS || f.phase !== 'live' || !g) return;
       void f.setPrompt(first ? pick(guestPrompts(g)) : { listening: pick(guestPrompts(g)).listening })
         .then((a) => { if (first) console.info('[gilded-reel] %s prompt: renders_prompts=%s', g.name, a?.renders_prompts); });
     });
