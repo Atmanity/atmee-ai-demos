@@ -453,7 +453,9 @@ function Tour({ opening }: { opening: Exhibit | null }) {
 
   // The camera covers its box, cropped at the edges, at any size and turn of the phone. Not
   // by CSS object-fit alone: on iPhone Safari the live camera was shrunk to fit instead, with
-  // black bars either side.
+  // black bars either side. Checked once a second as well as on the video's events: on an
+  // iPhone the camera's size came after those events (opened late, or turned off and on),
+  // and it showed shrunk with the bars again.
   useEffect(() => {
     const video = camera.videoRef.current;
     const box = video?.parentElement;
@@ -461,15 +463,18 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     const fit = () => {
       if (!video.videoWidth || !video.videoHeight) return;
       const k = Math.max(box.clientWidth / video.videoWidth, box.clientHeight / video.videoHeight);
-      video.style.width = `${Math.ceil(video.videoWidth * k)}px`;
-      video.style.height = `${Math.ceil(video.videoHeight * k)}px`;
+      const width = `${Math.ceil(video.videoWidth * k)}px`;
+      const height = `${Math.ceil(video.videoHeight * k)}px`;
+      if (video.style.width !== width) video.style.width = width;
+      if (video.style.height !== height) video.style.height = height;
     };
+    const events = ['loadedmetadata', 'resize', 'playing'] as const;
     const watch = new ResizeObserver(fit);
     watch.observe(box);
-    video.addEventListener('loadedmetadata', fit);
-    video.addEventListener('resize', fit);
+    events.forEach((e) => video.addEventListener(e, fit));
+    const tick = setInterval(fit, 1000);
     fit();
-    return () => { watch.disconnect(); video.removeEventListener('loadedmetadata', fit); video.removeEventListener('resize', fit); };
+    return () => { watch.disconnect(); clearInterval(tick); events.forEach((e) => video.removeEventListener(e, fit)); };
   }, [screen]);
 
   // The tour is over: the camera goes off with it (the visit card does not show it).
