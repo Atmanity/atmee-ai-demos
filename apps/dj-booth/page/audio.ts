@@ -59,6 +59,9 @@ export class Resampler24to16 {
 /** The jitter buffer's cushion: how much is held before playing, and before resuming after running dry. */
 export const START_MS = 200;
 export const RESUME_MS = 120;
+/** Each time it runs dry the cushion grows by this much, up to MAX_CUSHION_MS (the network is jittery). */
+export const GROW_MS = 100;
+export const MAX_CUSHION_MS = 600;
 /** Past this much held, silent pieces are skipped to come back to the cushion (the two clocks drift). */
 export const DRIFT_MS = 500;
 
@@ -71,7 +74,8 @@ class Voice extends AudioWorkletProcessor {
     this.buf = new Float32Array(sampleRate * 20); this.read = 0; this.write = 0; this.held = 0;
     this.playing = false; this.gain = 1; this.target = 1; this.step = 1 / (sampleRate * 0.03);
     this.start = Math.round(sampleRate * ${START_MS} / 1000); this.resume = Math.round(sampleRate * ${RESUME_MS} / 1000);
-    this.last = 0; this.tick = 0;
+    this.last = 0; this.tick = 0; this.dropouts = 0;
+    this.grow = Math.round(sampleRate * ${GROW_MS} / 1000); this.max = Math.round(sampleRate * ${MAX_CUSHION_MS} / 1000);
     this.port.onmessage = (e) => {
       const d = e.data;
       if (d.pcm) { const p = d.pcm; for (let i = 0; i < p.length && this.held < this.buf.length; i++) { this.buf[this.write] = p[i]; this.write = (this.write + 1) % this.buf.length; this.held++; } }
@@ -89,12 +93,14 @@ class Voice extends AudioWorkletProcessor {
       if (this.playing && this.held > 0) {
         s = this.buf[this.read]; this.read = (this.read + 1) % this.buf.length; this.held--; this.last = s;
       } else {
-        // Ran dry: fade the last sample out rather than drop to zero, then wait for a cushion again.
+        // Ran dry: fade the last sample out rather than drop to zero, then wait for a bigger cushion,
+        // as WebRTC's jitter buffer grows on a jittery network.
+        if (this.playing) { this.dropouts++; this.resume = Math.min(this.max, this.resume + this.grow); }
         this.playing = false; this.last *= 0.995; s = this.last;
       }
       out[i] = s * this.gain;
     }
-    if (++this.tick % 30 === 0) this.port.postMessage({ heldMs: (this.held / sampleRate) * 1000 });
+    if (++this.tick % 30 === 0) this.port.postMessage({ heldMs: (this.held / sampleRate) * 1000, dropouts: this.dropouts, cushionMs: (this.resume / sampleRate) * 1000 });
     return true;
   }
 }
@@ -117,7 +123,13 @@ export async function createVoicePlayer(context: AudioContext): Promise<VoicePla
   node.connect(context.destination);
   let heldMs = 0;
   let gain = 1;
-  node.port.onmessage = (e: MessageEvent<{ heldMs: number }>) => { heldMs = e.data.heldMs; };
+  let stats = { dropouts: 0, cushionMs: RESUME_MS };
+  node.port.onmessage = (e: MessageEvent<{ heldMs: number; dropouts: number; cushionMs: number }>) => {
+    heldMs = e.data.heldMs;
+    stats = { dropouts: e.data.dropouts, cushionMs: Math.round(e.data.cushionMs) };
+  };
+  // What the listener's network does to her voice, for anyone comparing it with the full-stack call.
+  const report = setInterval(() => console.info('[speech] voice: %d dropouts, cushion %d ms, held %d ms', stats.dropouts, stats.cushionMs, Math.round(heldMs)), 10_000);
   return {
     push(pcm, silent) {
       if (silent && heldMs > DRIFT_MS) return;
@@ -131,6 +143,6 @@ export async function createVoicePlayer(context: AudioContext): Promise<VoicePla
       node.port.postMessage({ gain: g });
     },
     flush() { node.port.postMessage({ flush: true }); },
-    async close() { node.disconnect(); },
+    async close() { clearInterval(report); node.disconnect(); },
   };
 }
