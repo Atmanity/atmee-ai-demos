@@ -59,7 +59,7 @@ async function onTour() {
   const view = render(<App />);
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Begin the tour' })); });
   // The call is placed without the camera; it opens once Edmund is on the line, and he is shown it.
-  expect(calls.host.start).toHaveBeenCalledWith({ mic: true, micMuted: true });
+  expect(calls.host.start).toHaveBeenCalledWith({ mic: true, micMuted: true, language: 'en' });
   expect(calls.cameraStarts).toBe(0);
   calls.host.phase = 'live';
   const rerender = () => view.rerender(<App />);
@@ -82,6 +82,7 @@ beforeAll(() => {
   globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;
 });
 beforeEach(() => {
+  try { localStorage.clear(); } catch { /* no storage */ }
   calls.host = fakeAvatar('idle');
   calls.guest = fakeAvatar('idle');
   calls.label = null;
@@ -96,14 +97,14 @@ describe('a work, introduced', () => {
     expect(calls.scanning).toBe(true);
     act(() => calls.label!(pearl()));
     update();
-    expect(screen.getByRole('region', { name: 'About Girl with a Pearl Earring' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Girl with a Pearl Earring' })).toBeTruthy();
     expect(events(calls.host).some((e) => e.includes('just scanned the label of "Girl with a Pearl Earring"'))).toBe(true);
     expect(calls.scanning).toBe(false);
     // The same label again (still in view) is not a new arrival.
     act(() => calls.label!(pearl()));
     expect(events(calls.host).filter((e) => e.includes('scanned the label')).length).toBe(1);
     fireEvent.click(screen.getByRole('button', { name: 'Back to camera' }));
-    expect(screen.queryByRole('region', { name: /^About / })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Girl with a Pearl Earring' })).toBeNull();
     expect(calls.scanning).toBe(true);
   });
 
@@ -116,6 +117,28 @@ describe('a work, introduced', () => {
     act(() => calls.label!(pearl()));
     update();
     expect(screen.getByRole('button', { name: 'Meet the girl' })).toBeTruthy();
+  });
+});
+
+describe('the tour\'s language', () => {
+  it('is picked at the front door: the calls are in it, Edmund keeps to it, and the screen and the works are in it', async () => {
+    const view = render(<App />);
+    fireEvent.click(screen.getByRole('radio', { name: '繁體中文' }));
+    expect(screen.getByRole('button', { name: '開始導覽' })).toBeTruthy();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '開始導覽' })); });
+    expect(calls.host.start).toHaveBeenCalledWith({ mic: true, micMuted: true, language: 'zh-TW' });
+    expect(String((calls.host.note as ReturnType<typeof vi.fn>).mock.calls[0][0])).toMatch(/Traditional Chinese.*Speak only in it/);
+    calls.host.phase = 'live';
+    await act(async () => { calls.handlers.host.onLive?.(); view.rerender(<App />); });
+    act(() => calls.label!(pearl()));
+    act(() => view.rerender(<App />));
+    expect(screen.getByRole('region', { name: '戴珍珠耳環的少女' })).toBeTruthy();
+    expect(screen.getByText('回到相機')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '和畫中少女說話' })).toBeTruthy();
+    // Edmund is told the work in the visitor's language.
+    expect(String((calls.host.state as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0])).toContain('They are at: "戴珍珠耳環的少女"');
+    // And it is kept for the next visit.
+    expect(localStorage.getItem('meridian-language')).toBe('zh-TW');
   });
 });
 
@@ -155,7 +178,7 @@ describe('a guest from the painting', () => {
     expect(String(result)).toMatch(/^Handing over: the girl/);
     update();
     expect(calls.guestApp).toBe('museum-guide/guest/girl');
-    expect(calls.guest.start).toHaveBeenCalledWith({ mic: true, micMuted: true, camera: track });
+    expect(calls.guest.start).toHaveBeenCalledWith({ mic: true, micMuted: true, camera: track, language: 'en' });
     // A second introduction while the first is under way does nothing.
     await act(async () => { result = await calls.handlers.host.onToolCall?.({ id: '2', name: 'introduce_guest', arguments: {} }); });
     expect(String(result)).toMatch(/^Not now/);

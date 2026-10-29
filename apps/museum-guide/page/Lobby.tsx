@@ -2,6 +2,9 @@
 // Beginning asks for the camera (the tour is the camera view) and then the microphone.
 import { BackToApps } from '../../../src/kit/index.ts';
 import type { Exhibit } from '../engine/catalogue.ts';
+import { localize } from '../engine/catalogue.i18n.ts';
+import { LANGS, type Lang } from '../engine/lang.ts';
+import { useLang, type StringKey } from './i18n.ts';
 import type { CameraState } from './camera.ts';
 import cutout from '../host/cutout.webp';
 
@@ -18,12 +21,25 @@ export function Wordmark() {
   );
 }
 
-const CAMERA_TROUBLE: Partial<Record<CameraState, string>> = {
-  blocked: 'The camera is blocked. Allow it for this site in your browser\'s settings, then begin again.',
-  missing: 'No camera could be opened on this device.',
-};
+const CAMERA_TROUBLE: Partial<Record<CameraState, StringKey>> = { blocked: 'cameraBlocked', missing: 'cameraMissing' };
 
-export function Lobby({ opening, camera, onBegin }: { opening: Exhibit | null; camera: CameraState; onBegin: () => void }) {
+/** The tour's language, picked before it starts (each name written in its own language). */
+function LanguagePicker({ value, onChange }: { value: Lang; onChange: (lang: Lang) => void }) {
+  const { t } = useLang();
+  return (
+    <div className="mr-langs" role="radiogroup" aria-label={t('language')}>
+      <span className="mr-langs-label">{t('language')}</span>
+      {LANGS.map((l) => (
+        <button key={l.id} type="button" role="radio" aria-checked={value === l.id} lang={l.id}
+          className={value === l.id ? 'is-on' : ''} onClick={() => onChange(l.id)}>{l.name}</button>
+      ))}
+    </div>
+  );
+}
+
+export function Lobby({ opening, camera, onLang, onBegin }: { opening: Exhibit | null; camera: CameraState; onLang: (lang: Lang) => void; onBegin: () => void }) {
+  const { lang, t } = useLang();
+  const at = opening && localize(opening, lang);
   return (
     <div className="mr-lobby">
       <header className="mr-lobby-top"><BackToApps /><Wordmark /></header>
@@ -32,19 +48,17 @@ export function Lobby({ opening, camera, onBegin }: { opening: Exhibit | null; c
           <img src={cutout} alt="" width={320} height={320} />
         </div>
         <div className="mr-lobby-copy">
-          <p className="mr-eyebrow">A private tour with the chairman</p>
-          <h1>Every work has a story. Edmund knows them all.</h1>
-          <p className="mr-lede">
-            Hold up your phone in the galleries. Point it at a painting, or at the code on its label, and Edmund Hale,
-            the Meridian's chairman, tells you what you're looking at. Ask him anything, out loud.
-          </p>
-          {opening && <p className="mr-opening">You're at <b>{opening.title}</b>, {opening.gallery}.</p>}
+          <p className="mr-eyebrow">{t('eyebrow')}</p>
+          <h1>{t('headline')}</h1>
+          <p className="mr-lede">{t('lede')}</p>
+          {at && <p className="mr-opening">{t('opening', { title: at.title, gallery: at.gallery })}</p>}
+          <LanguagePicker value={lang} onChange={onLang} />
           <button type="button" className="mr-primary is-big" onClick={onBegin} disabled={camera === 'asking'}>
-            {camera === 'asking' ? 'Opening the camera…' : 'Begin the tour'}
+            {camera === 'asking' ? t('starting') : t('begin')}
           </button>
-          {CAMERA_TROUBLE[camera] && <p className="mr-trouble" role="alert">{CAMERA_TROUBLE[camera]}</p>}
-          <p className="mr-small">Uses your camera and microphone while you're with Edmund. Earbuds are best in the galleries.</p>
-          <p className="mr-small"><a href="?sheet">Not at the Meridian? Open the gallery labels on another screen</a> and point your phone at them.</p>
+          {CAMERA_TROUBLE[camera] && <p className="mr-trouble" role="alert">{t(CAMERA_TROUBLE[camera]!)}</p>}
+          <p className="mr-small">{t('uses')}</p>
+          <p className="mr-small"><a href="?sheet">{t('sheetLink')}</a>{t('sheetAfter')}</p>
         </div>
       </main>
     </div>

@@ -17,8 +17,13 @@ export async function avatarApi<T = any>(method: string, path: string, body?: un
 
 export interface StartedSession { sessionId: string; serverUrl: string; userToken: string; maxSeconds: number | null }
 
-export async function startSession(avatarId: string, maxSeconds: number, metadata: Record<string, unknown>, appTools?: unknown) {
-  const r = await avatarApi('POST', '/v1/session', { avatarId, maxDurationSeconds: maxSeconds, metadata, ...(appTools ? { appTools } : {}) });
+/** A language tag the page may ask a session for: BCP-47 shaped (`en`, `zh-TW`, `ja`), or nothing. */
+export function sessionLanguage(value: unknown): string | undefined {
+  return typeof value === 'string' && /^[a-z]{2,3}(-[A-Za-z0-9]{2,8}){0,2}$/.test(value) ? value : undefined;
+}
+
+export async function startSession(avatarId: string, maxSeconds: number, metadata: Record<string, unknown>, appTools?: unknown, language?: string) {
+  const r = await avatarApi('POST', '/v1/session', { avatarId, maxDurationSeconds: maxSeconds, metadata, ...(appTools ? { appTools } : {}), ...(language ? { language } : {}) });
   if (r.status !== 201) return { ok: false as const, ...r };
   const { sessionId, serverUrl, userToken, actualDurationSeconds } = r.json;
   return { ok: true as const, session: { sessionId, serverUrl, userToken, maxSeconds: actualDurationSeconds ?? null } as StartedSession };

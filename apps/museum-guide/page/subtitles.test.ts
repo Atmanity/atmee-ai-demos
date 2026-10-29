@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nowSaying, phrases } from './subtitles.ts';
+import { nowSaying, phrases, unitsPerSecond } from './subtitles.ts';
 
 const text = 'Ah, I see you are looking at Leonardo da Vinci\'s Mona Lisa, painted between about 1503 and 1519. Look at the corners of her mouth! That is where the smile lives.';
 
@@ -35,6 +35,23 @@ describe('subtitles', () => {
     const later = nowSaying(text, 4)!;
     expect(later.phrase.first).toBe(first.phrase.first);
     expect(later.said).toBe(first.said);
+  });
+
+  it('cuts Chinese and Japanese, written without spaces, by characters at their own sentence marks', () => {
+    const zh = '這是梵谷的《星夜》，畫於1889年6月。他從朝東的窗戶望出去，看見日出前的景色！';
+    const parts = phrases(zh);
+    expect(parts.map((p) => p.words.join(''))).toEqual(['這是梵谷的《星夜》，畫於1889年6月。', '他從朝東的窗戶望出去，看見日出前的景色！']);
+    expect(parts[0].spaced).toBe(false);
+    expect(nowSaying(zh, 3)).toMatchObject({ phrase: { first: 0 }, said: 3 });
+    const ja = 'ゴッホは療養院に滞在していたときにこの絵を描きました。東向きの窓から見た、夜明け前の眺めです。';
+    expect(phrases(ja).map((p) => p.words.join(''))).toEqual(['ゴッホは療養院に滞在していたときにこの絵を描きました。', '東向きの窓から見た、夜明け前の眺めです。']);
+    expect(unitsPerSecond(zh)).toBeGreaterThan(unitsPerSecond('in English'));
+  });
+
+  it('cuts a long Chinese sentence at its commas, so it fits three lines', () => {
+    const long = '他以暈塗法柔化每一道輪廓，用薄薄的釉層讓光線融入陰影，所以她的微笑若隱若現，好像會隨著你看的角度出現又消失，這也是幾百年來大家一直爭論的原因。';
+    for (const p of phrases(long)) expect(p.words.join('').length).toBeLessThanOrEqual(56);
+    expect(phrases(long).map((p) => p.words.join('')).join('')).toBe(long);
   });
 
   it('has nothing to show for no words', () => {

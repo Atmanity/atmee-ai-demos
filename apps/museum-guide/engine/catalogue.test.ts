@@ -42,3 +42,26 @@ describe('the catalogue', () => {
     expect(text).toContain('Suggested next: "The Kiss"');
   });
 });
+
+describe('the catalogue in other languages', () => {
+  it('has every work in Traditional Chinese and Japanese, with every field filled', async () => {
+    const { allIds, localize, translatedIds } = await import('./catalogue.i18n.ts');
+    for (const lang of ['zh-TW', 'ja'] as const) {
+      expect(translatedIds(lang)).toEqual(allIds());
+      for (const e of EXHIBITS) {
+        const t = localize(e, lang);
+        for (const field of ['title', 'artist', 'date', 'medium', 'gallery', 'original'] as const) expect(t[field], `${lang} ${e.id} ${field}`).not.toBe(e[field]);
+        expect(t.story.length, `${lang} ${e.id} story`).toBe(e.story.length);
+        expect(t.lookFor.length, `${lang} ${e.id} lookFor`).toBe(e.lookFor.length);
+        expect(t.next).toBe(e.next);
+      }
+    }
+  });
+
+  it('tells a guide to keep to the visitor\'s language, and says nothing for English', async () => {
+    const { languageRule } = await import('./lang.ts');
+    expect(languageRule('en')).toBeNull();
+    expect(languageRule('zh-TW')).toMatch(/Traditional Chinese.*Speak only in it/);
+    expect(languageRule('ja')).toMatch(/Japanese.*Speak only in it/);
+  });
+});

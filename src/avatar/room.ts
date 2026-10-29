@@ -44,6 +44,8 @@ export interface JoinOptions {
    * track (a preview, a scanner) running.
    */
   camera?: MediaStreamTrack | null;
+  /** The language the session speaks and listens in (a BCP-47 tag: `en`, `zh-TW`, `ja`); absent, the avatar's own. */
+  language?: string;
   onPhase?: (phase: Phase, detail?: Record<string, unknown>) => void;
   /** The avatar's words; `done` once the utterance is complete. */
   onAvatarSpeech?: (text: string, done: boolean) => void;
@@ -148,7 +150,7 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
   let camera = opts.camera?.clone();
   const stopCamera = () => camera?.stop();
   opts.onPhase?.('starting');
-  const session = await startSession(api, opts.onPhase).catch((err) => { stopMic(); stopCamera(); throw err; });
+  const session = await startSession(api, opts.onPhase, opts.language).catch((err) => { stopMic(); stopCamera(); throw err; });
   // From here the avatar is waiting in the room: a closed tab must end the session.
   const endUrl = `${api}/session/${session.sessionId}/end`;
   let ended = false;
@@ -417,10 +419,13 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
 // A 503 no_capacity means no rendering capacity yet: wait Retry-After (at least
 // 5 s; 30 s when it is missing) and start again, for up to WARMING_LIMIT_MS.
 // Any other failure, a bodyless 503 (embeds turned off) included, is final.
-async function startSession(api: string, onPhase?: JoinOptions['onPhase']): Promise<SessionInfo> {
+async function startSession(api: string, onPhase?: JoinOptions['onPhase'], language?: string): Promise<SessionInfo> {
   const since = Date.now();
+  const init: RequestInit = language
+    ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ language }) }
+    : { method: 'POST' };
   for (;;) {
-    const res = await fetch(`${api}/session`, { method: 'POST' }).catch(() => null);
+    const res = await fetch(`${api}/session`, init).catch(() => null);
     if (!res) throw new AvatarError('backend_unreachable', 'Could not reach the app server');
     const body = await res.json().catch(() => ({}));
     if (res.ok) return body;

@@ -8,6 +8,8 @@
 // not for.
 import type { AppTool } from '../../../server/app-server.ts';
 import { exhibitById, recordText, type Exhibit } from './catalogue.ts';
+import { localize } from './catalogue.i18n.ts';
+import type { Lang } from './lang.ts';
 
 export interface Guest {
   id: string;
@@ -20,6 +22,8 @@ export interface Guest {
   /** Who they are, for Edmund's introduction and the info page. */
   who: string;
   avatarId: string;
+  /** On screen, by language: who is talking, and the button that brings them. */
+  labels: Record<Lang, { name: string; meet: string }>;
 }
 
 export const GUESTS: Guest[] = [
@@ -27,11 +31,13 @@ export const GUESTS: Guest[] = [
     id: 'girl', exhibit: 'pearl-earring', name: 'the girl', meet: 'Meet the girl',
     who: 'the girl from the painting herself, an anonymous model nobody has ever named',
     avatarId: 'cb84bed4-c6df-4cae-8bf8-42e5cbcdb71b',
+    labels: { en: { name: 'The girl', meet: 'Meet the girl' }, 'zh-TW': { name: '畫中少女', meet: '和畫中少女說話' }, ja: { name: '絵の少女', meet: '絵の少女と話す' } },
   },
   {
     id: 'wanderer', exhibit: 'wanderer', name: 'the wanderer', meet: 'Meet the wanderer',
     who: 'the wanderer himself, who has stood with his back to every visitor for two centuries and has turned around',
     avatarId: '2e7275e6-b307-490b-b02e-8d2613293648',
+    labels: { en: { name: 'The wanderer', meet: 'Meet the wanderer' }, 'zh-TW': { name: '畫中旅人', meet: '和畫中旅人說話' }, ja: { name: '絵の旅人', meet: '絵の旅人と話す' } },
   },
 ];
 
@@ -66,9 +72,9 @@ export const guestSaid = {
   netCalledBack: 'You did not call call_host_back, so the app called Edmund back for the visitor just now. Say one short goodbye.',
 };
 
-/** What a guest knows: who they are, and their painting's record. */
-export function guestState(guest: Guest): string {
-  const e = exhibitById(guest.exhibit)!;
+/** What a guest knows: who they are, and their painting's record (in the visitor's language). */
+export function guestState(guest: Guest, lang: Lang = 'en'): string {
+  const e = localize(exhibitById(guest.exhibit)!, lang);
   return [
     `You are ${guest.name} from "${e.title}" by ${e.artist}. The visitor is standing at your painting.`,
     `Its catalogue record:\n${recordText(e)}`,

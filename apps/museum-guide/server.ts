@@ -4,7 +4,7 @@
 // catalogue's works a camera frame shows. The model only picks an id; the
 // catalogue (engine/catalogue.ts) is what Edmund is told about it.
 import type { AppServer } from '../../server/app-server.ts';
-import { endSession, startSession } from '../../server/atmee.ts';
+import { endSession, sessionLanguage, startSession } from '../../server/atmee.ts';
 import { llmAvailable, structured } from '../../server/llm.ts';
 import { INSTRUCTIONS, TOOLS } from './engine/director.ts';
 import { GUEST_INSTRUCTIONS, GUEST_TOOLS, guestById } from './engine/guests.ts';
@@ -38,7 +38,7 @@ const app: AppServer = {
       if (guestSessions.size >= MAX_GUESTS) return void res.status(429).json({ error: 'no_capacity', retryAfter: 30 });
       const seconds = Number(process.env.MAX_SECONDS) || GUEST_SECONDS;
       const r = await startSession(guest.avatarId, seconds,
-        { app: 'atmee-usecase-demos', usecase: `${ID}/guest/${guest.id}` }, { instructions: GUEST_INSTRUCTIONS, tools: GUEST_TOOLS });
+        { app: 'atmee-usecase-demos', usecase: `${ID}/guest/${guest.id}` }, { instructions: GUEST_INSTRUCTIONS, tools: GUEST_TOOLS }, sessionLanguage(req.body?.language));
       if (!r.ok) {
         console.warn('[%s] guest %s POST /v1/session -> %d %s', ID, guest.id, r.status, r.json?.error ?? '');
         return void res.status(r.status).json({ error: r.json?.error || `http_${r.status}`, retryAfter: r.retryAfter });

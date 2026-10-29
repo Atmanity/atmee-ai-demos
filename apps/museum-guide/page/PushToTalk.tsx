@@ -4,10 +4,12 @@
 // moment after it is let go so the last word is not cut off.
 import { useEffect, useRef, useState } from 'react';
 import { MicIcon, type Avatar } from '../../../src/kit/index.ts';
+import { useLang } from './i18n.ts';
 
 const TAIL_MS = 400;
 
 export function PushToTalk({ avatar }: { avatar: Avatar }) {
+  const { t } = useLang();
   const [held, setHeld] = useState(false);
   const release = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const avatarRef = useRef(avatar);
@@ -46,13 +48,13 @@ export function PushToTalk({ avatar }: { avatar: Avatar }) {
   return (
     <button
       type="button" className={`mr-dock-btn mr-ptt ${open ? 'is-open' : ''}`}
-      aria-pressed={open} aria-label="Hold to talk" title="Hold to talk (or hold the space bar)"
+      aria-pressed={open} aria-label={t('holdToTalk')} title={t('holdToTalk')}
       onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); press(); }}
       onPointerUp={letGo} onPointerCancel={letGo}
       onContextMenu={(e) => e.preventDefault()}
     >
       <span className="mr-dock-ico"><MicIcon /></span>
-      <span className="mr-dock-label">{open ? 'Listening…' : 'Hold to talk'}</span>
+      <span className="mr-dock-label">{open ? t('listening') : t('holdToTalk')}</span>
     </button>
   );
 }

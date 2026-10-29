@@ -44,8 +44,9 @@ export interface Avatar {
   /**
    * `micMuted`: the microphone joins muted (push to talk), for setMic(true) to open.
    * `camera`: a video track the host sees as the user's camera (the page keeps its own).
+   * `language`: the language the call is in (a BCP-47 tag); absent, the host's own.
    */
-  start(opts?: { mic?: boolean; micMuted?: boolean; camera?: MediaStreamTrack | null }): Promise<void>;
+  start(opts?: { mic?: boolean; micMuted?: boolean; camera?: MediaStreamTrack | null; language?: string }): Promise<void>;
   end(): Promise<void>;
   /** A typed user turn: it shows in the transcript and the avatar answers it. */
   say(text: string): void;
@@ -132,7 +133,7 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
   const starting = useRef(false);   // set before the first await: a second click while the mic prompt is up starts nothing
   // end() while a call is still being placed: the call is ended as soon as it connects, so it never bills unseen.
   const endWanted = useRef(false);
-  const start = useCallback(async ({ mic = false, micMuted = false, camera = null }: { mic?: boolean; micMuted?: boolean; camera?: MediaStreamTrack | null } = {}) => {
+  const start = useCallback(async ({ mic = false, micMuted = false, camera = null, language }: { mic?: boolean; micMuted?: boolean; camera?: MediaStreamTrack | null; language?: string } = {}) => {
     if (sessionRef.current || starting.current) return;
     starting.current = true;
     endWanted.current = false;
@@ -151,7 +152,7 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
     let session: AvatarSession | null = null;
     try {
       session = await joinAvatar({
-        app, mic: stream, micMuted, camera, video: () => videoRef.current, audio: () => audioRef.current,
+        app, mic: stream, micMuted, camera, language, video: () => videoRef.current, audio: () => audioRef.current,
         onPhase: (p, d) => {
           setPhase(p);
           if (p === 'warming') setDetail(`Getting ready (${d?.waited ?? 0} s)…`);

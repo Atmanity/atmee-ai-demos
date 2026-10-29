@@ -3,6 +3,8 @@
 // from a pin; the tour opens it as Edmund starts on a work, over the camera.
 import type { ReactNode } from 'react';
 import { exhibitById, type Exhibit } from '../engine/catalogue.ts';
+import { localize } from '../engine/catalogue.i18n.ts';
+import { useLang } from './i18n.ts';
 import { exhibitImage } from './images.ts';
 
 export const Tick = ({ size = 12 }: { size?: number }) => (
@@ -23,32 +25,35 @@ export function WorkInfo({ exhibit, seen, here, back, onBack, onOpen, onAsk, onT
   /** More actions beside Ask and Seen (a guest to meet). */
   children?: ReactNode;
 }) {
-  const next = exhibitById(exhibit.next);
+  const { lang, t } = useLang();
+  const e = localize(exhibit, lang);
+  const nextWork = exhibitById(exhibit.next);
+  const next = nextWork && localize(nextWork, lang);
   return (
-    <article className="mr-detail" aria-label={exhibit.title}>
+    <article className="mr-detail" aria-label={e.title} lang={lang}>
       <button type="button" className="mr-link mr-detail-back" onClick={onBack}>{back}</button>
-      <img className="mr-detail-img" src={exhibitImage(exhibit)} alt={`${exhibit.title}, ${exhibit.artist}`} />
-      <p className="mr-card-where">{here ? 'You are here · ' : ''}{exhibit.gallery}</p>
-      <h2>{exhibit.title}</h2>
-      <p className="mr-detail-by">{exhibit.artist} · {exhibit.date}</p>
-      <p className="mr-detail-medium">{exhibit.medium}. The original hangs in {exhibit.original}.</p>
+      <img className="mr-detail-img" src={exhibitImage(exhibit)} alt={`${e.title}, ${e.artist}`} />
+      <p className="mr-card-where">{here ? t('youAreHere') : ''}{e.gallery}</p>
+      <h2>{e.title}</h2>
+      <p className="mr-detail-by">{e.artist} · {e.date}</p>
+      <p className="mr-detail-medium">{e.medium}{lang === 'en' ? '.' : '。'} {t('originalHangs', { where: e.original })}</p>
       <div className="mr-detail-actions">
         {children}
-        {onAsk && <button type="button" className="mr-primary" onClick={() => onAsk(exhibit)}>Ask Edmund about it</button>}
+        {onAsk && <button type="button" className="mr-primary" onClick={() => onAsk(exhibit)}>{t('askAbout')}</button>}
         {onToggleSeen && (
           <button type="button" className={`mr-seen-toggle ${seen ? 'is-on' : ''}`} aria-pressed={seen} onClick={() => onToggleSeen(exhibit, !seen)}>
-            {seen ? <><Tick /> Seen</> : 'Mark as seen'}
+            {seen ? <><Tick /> {t('seen')}</> : t('markSeen')}
           </button>
         )}
       </div>
-      <h3>The story</h3>
-      {exhibit.story.map((line) => <p key={line}>{line}</p>)}
-      <h3>Look for</h3>
-      <ul>{exhibit.lookFor.map((line) => <li key={line}>{line[0].toUpperCase() + line.slice(1)}</li>)}</ul>
+      <h3>{t('theStory')}</h3>
+      {e.story.map((line) => <p key={line}>{line}</p>)}
+      <h3>{t('lookFor')}</h3>
+      <ul>{e.lookFor.map((line) => <li key={line}>{line[0].toUpperCase() + line.slice(1)}</li>)}</ul>
       {next && (
-        <button type="button" className="mr-next" onClick={() => onOpen(next)}>
+        <button type="button" className="mr-next" onClick={() => onOpen(nextWork!)}>
           <img src={exhibitImage(next)} alt="" />
-          <span><small>Next on the route · {next.gallery.split(',')[0]}</small><b>{next.title}</b></span>
+          <span><small>{t('nextOnRoute', { room: next.gallery.split(/[,，\s]/)[0] })}</small><b>{next.title}</b></span>
           <span aria-hidden="true">›</span>
         </button>
       )}

@@ -23,6 +23,11 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; background: #0d0a08; color: var(--mr-ivory); font-family: var(--mr-sans); -webkit-font-smoothing: antialiased; }
 button { font: inherit; }
+/* The display face has no Chinese or Japanese: those pages take a serif of their own (the page's lang picks the glyph forms). */
+:root:lang(zh-TW) { --mr-serif: 'Cormorant Garamond', 'Noto Serif TC', 'Songti TC', serif; }
+:root:lang(ja) { --mr-serif: 'Cormorant Garamond', 'Noto Serif JP', 'Hiragino Mincho ProN', serif; }
+/* Cormorant's old-style figures read as letters in a CJK heading ("1" as "I"). */
+h1, h2, b { font-variant-numeric: lining-nums; }
 a { color: inherit; }
 
 .mr-wordmark { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; font: 600 15px var(--mr-sans); letter-spacing: .16em; text-transform: uppercase; }
@@ -44,6 +49,11 @@ a { color: inherit; }
 .mr-lobby-copy { display: grid; gap: 14px; justify-items: start; }
 .mr-lobby h1, .mr-visit h1 { margin: 0; font: 600 clamp(34px, 9vw, 54px)/1.02 var(--mr-serif); letter-spacing: -.01em; text-wrap: balance; }
 .mr-lede { margin: 0; font-size: 16.5px; line-height: 1.55; color: #e3d6bf; max-width: 46ch; }
+.mr-langs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.mr-langs-label { font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--mr-ivory-2); margin-right: 4px; }
+.mr-langs button { border: 1px solid rgba(241, 231, 212, .3); border-radius: 999px; padding: 8px 14px; background: transparent; color: var(--mr-ivory); font-size: 15px; font-weight: 600; cursor: pointer; }
+.mr-langs button.is-on { background: var(--mr-ivory); color: var(--mr-ink); border-color: transparent; }
+.mr-langs button:focus-visible { outline: 2px solid var(--mr-brass); outline-offset: 2px; }
 .mr-opening { margin: 0; padding: 10px 14px; border: 1px solid rgba(201, 162, 90, .45); border-radius: 12px; background: rgba(201, 162, 90, .1); font-size: 15px; }
 .mr-trouble { margin: 0; color: #f0a596; font-size: 14px; }
 @media (min-width: 820px) {
@@ -140,7 +150,7 @@ a { color: inherit; }
 .mr-subs-said .is-said { color: var(--mr-ivory); }
 .mr-subs-hint { font-size: 14px; color: var(--mr-ivory-2); }
 .mr-subs-you { margin-top: 2px !important; font-size: 14px; line-height: 1.4; font-style: italic; color: var(--mr-ivory-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mr-subs-you::before { content: "You: "; font-style: normal; font-weight: 600; }
+.mr-subs-you b { font-style: normal; font-weight: 600; }
 @keyframes mr-phrase { from { opacity: 0; transform: translateY(4px); } }
 
 .mr-dock { display: grid; grid-template-columns: repeat(5, 1fr); align-items: end; gap: 2px; padding-top: 6px; border-top: 1px solid rgba(241, 231, 212, .1); }
