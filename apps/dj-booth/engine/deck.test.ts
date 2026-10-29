@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { advance, dig, nowBecomesNext, pick, playNow, queueNext, setPaused } from './deck.ts';
+import { advance, dig, listenerWants, nowBecomesNext, pick, playNow, queueNext, setPaused } from './deck.ts';
 import { crateText, deckState, said, TOOLS, INSTRUCTIONS } from './director.ts';
 import { emptyDeck, type Track } from './types.ts';
 
@@ -95,4 +95,29 @@ describe('the line keeps order and no repeats', () => {
     expect(nowBecomesNext(t0, t0 + 2_000, t0 + 5_000)).toBe(false);
     expect(nowBecomesNext(t0, 0, t0 + 25_000)).toBe(false);
   });
+});
+
+describe('what the listener plainly asks the decks for', () => {
+  test('skips, in the ways people say it', () => {
+    for (const s of ['I mean, skip this song.', 'Next song please', 'can you change the song', 'I don\'t like this', 'play another track']) expect(listenerWants(s), s).toBe('skip_track');
+  });
+
+  test('pause and resume', () => {
+    expect(listenerWants('pause it for a sec')).toBe('pause_music');
+    expect(listenerWants('ok carry on')).toBe('resume_music');
+    expect(listenerWants('unpause')).toBe('resume_music');
+  });
+
+  test('anything else is the host\'s to read', () => {
+    for (const s of ['play some disco', 'who sings this?', 'I like this one', 'next week I\'m in Tokyo']) expect(listenerWants(s), s).toBeNull();
+  });
+});
+
+test('another release of the same song counts as already in line', () => {
+  const nuxx = { ...a, id: 'x1', title: 'Born Slippy (Nuxx)', artist: 'Underworld' };
+  const radio = { ...a, id: 'x2', title: 'Born Slippy (Nuxx) - Radio Edit', artist: 'Underworld, Someone' };
+  const other = { ...a, id: 'x3', title: 'Born Slippy', artist: 'Another Band' };
+  const d = queueNext(playNow(emptyDeck, a), nuxx);
+  expect(queueNext(d, radio)).toBe(d);
+  expect(queueNext(d, other).queue).toHaveLength(2);
 });

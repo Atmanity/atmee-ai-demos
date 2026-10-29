@@ -5,8 +5,8 @@
 // near the end of every record: the music ducks under her, and the next
 // record waits until she has finished introducing it.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BackToApps, CallStatus, clock as kitClock, ChatPanel, HangUpIcon, HostVideo, useAvatar, useCaptionToggle, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
-import { advance, dig, label, lined, nowBecomesNext, pick, playNow, queueNext, setPaused } from '../engine/deck.ts';
+import { BackToApps, CallStatus, clock as kitClock, useToolNet, ChatPanel, HangUpIcon, HostVideo, useAvatar, useCaptionToggle, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
+import { advance, dig, label, lined, listenerWants, nowBecomesNext, pick, playNow, queueNext, setPaused } from '../engine/deck.ts';
 import { crateText, deckState, said } from '../engine/director.ts';
 import { emptyDeck, type Deck, type Track } from '../engine/types.ts';
 import { DEFAULT_THEME, type Theme } from '../engine/theme.ts';
@@ -18,6 +18,8 @@ import nova from '../host/portrait.jpg';
 import './crate.css';
 
 const API = '/api/apps/dj-booth';
+// How long the page waits for Nova's own call before it skips (or pauses) for the listener itself.
+const NET_WAIT_MS = 4500;
 // The music's fades: a change of record fades the old one out over this, a duck dips over the same.
 const FADE_MS = 1200;
 const FADE_STEPS = 12;
@@ -233,9 +235,9 @@ export function App() {
   }, [changeOver, spin]);
 
   // Nova's tool calls: the deck changes, the player follows, the result is what Nova says next.
-  const onToolCall = useCallback(async ({ name, arguments: args }: ToolCall) => {
+  const onToolCall = useCallback(async ({ id, name, arguments: args }: ToolCall) => {
     const d = deckRef.current;
-    console.info('[crate] tool %s %o', name, args);
+    console.info('[crate] tool %s %o%s', name, args, id.startsWith('net-') ? ' (the page, for the listener)' : '');
     switch (name) {
       case 'search_tracks': {
         const query = String(args.query ?? '').trim().slice(0, 200);
@@ -310,7 +312,18 @@ export function App() {
   }, [deck.playing?.id]);
   useEffect(() => { if (deck.queue[0]) void themeOf(deck.queue[0]); }, [deck.queue[0]?.id]);
   const [pushToTalk, setPushToTalk] = useState(false);
-  const avatar = useAvatar('dj-booth', { onToolCall, onUserSaid: () => { lastListenerAt.current = Date.now(); } });
+  // The listener's plain asks (skip, pause, carry on) happen even when Nova answers without the tool:
+  // the page does them itself a few seconds on and tells her.
+  const net = useToolNet({
+    match: (text) => { const name = listenerWants(text); return name ? { id: `net-${Date.now()}`, name, arguments: {} } : null; },
+    run: async (call) => String(await onToolCall(call)),
+    avatar: () => avatarRef.current!,
+    waitMs: NET_WAIT_MS,
+  });
+  const avatar = useAvatar('dj-booth', {
+    onToolCall: net.watch(onToolCall),
+    onUserSaid: (text) => { lastListenerAt.current = Date.now(); net.heard(text); },
+  });
   avatarRef.current = avatar;
   const live = avatar.phase === 'live';
 

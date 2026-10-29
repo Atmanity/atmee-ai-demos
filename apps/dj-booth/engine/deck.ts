@@ -11,8 +11,13 @@ export const dig = (deck: Deck, dug: string, crate: Track[]): Deck => ({ ...deck
 
 export const playNow = (deck: Deck, track: Track): Deck => ({ ...deck, playing: track, paused: false });
 
-/** Whether a track is on now or already in line. */
-export const lined = (deck: Deck, track: Track) => deck.playing?.id === track.id || deck.queue.some((t) => t.id === track.id);
+/** A song as people know it: the title without its edit, remaster or mix, and the lead artist. */
+export const songOf = (t: Track) =>
+  `${t.title.toLowerCase().replace(/\s*[([].*?[)\]]/g, '').replace(/\s+-\s+.*$/, '').trim()}|${t.artist.toLowerCase().split(',')[0].trim()}`;
+
+/** Whether a track is on now or already in line: the same release, or another release of the same song. */
+export const lined = (deck: Deck, track: Track) =>
+  [deck.playing, ...deck.queue].some((t) => t && (t.id === track.id || songOf(t) === songOf(track)));
 
 /** Lines a track up after the others; one on now or already in line is not lined up twice (the same deck comes back). */
 export const queueNext = (deck: Deck, track: Track): Deck => (lined(deck, track) ? deck : { ...deck, queue: [...deck.queue, track] });
@@ -33,3 +38,15 @@ export const advance = (deck: Deck): Deck => ({ ...deck, playing: deck.queue[0] 
 export const setPaused = (deck: Deck, paused: boolean): Deck => (deck.playing ? { ...deck, paused } : deck);
 
 export const label = (t: Track) => `"${t.title}" by ${t.artist}${t.year ? ` (${t.year})` : ''}`;
+
+/**
+ * What the listener's own words clearly ask the decks to do, for the page to do itself when
+ * the host does not call the tool (useToolNet). Only plain asks; anything vaguer is the host's.
+ */
+export function listenerWants(text: string): 'skip_track' | 'pause_music' | 'resume_music' | null {
+  const t = text.toLowerCase();
+  if (/\b(skip|next (song|track|record|one)|change (the |this )?(song|track|record|music)|another (song|track|record)|(don'?t|do not) like (this|it)|not this (song|one))\b/.test(t)) return 'skip_track';
+  if (/\b(resume|unpause|carry on|keep playing|play (it|the music) again)\b/.test(t)) return 'resume_music';
+  if (/\b(pause|stop the music|music off)\b/.test(t)) return 'pause_music';
+  return null;
+}
