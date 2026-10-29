@@ -77,7 +77,10 @@ api.post('/apps/:app/session', async (req, res) => {
   if (conductorOf.get(avatarId) !== app.id) {
     const graph = app.conductor ?? null;
     const r = await setConductor(avatarId, graph?.graph ?? null, graph?.speakAfterS);
-    if (r.status >= 300 && !(graph === null && r.status === 404)) {
+    // Clearing an agenda the avatar may not have is best-effort: a key bound to one avatar can be
+    // refused it (403) and the app, which runs none, still starts. Setting one must succeed.
+    if (graph === null && r.status === 403) console.warn('[%s] could not clear the avatar\'s agenda (403): starting anyway', app.id);
+    else if (r.status >= 300 && !(graph === null && r.status === 404)) {
       console.warn('[%s] conductor -> %d %s', app.id, r.status, JSON.stringify(r.json).slice(0, 300));
       return void res.status(502).json({ error: 'conductor_failed' });
     }
