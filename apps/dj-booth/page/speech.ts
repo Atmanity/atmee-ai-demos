@@ -309,20 +309,21 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
     }
     micGate.current = Boolean(stream) && !micMuted;
     setMicOn(micGate.current);
-    // The face first, so her greeting comes through it; one that is not up in time is let go, and
-    // the show is voice only.
+    // The face first, so her greeting comes through it. One not up in time does not hold the show:
+    // she goes on by voice, and the face takes over her words from the moment it is up.
     faceOffRef.current = false;
     setFaceOff(false);
-    const late = await Promise.race([
-      faceRef.current.start().then(() => false),
-      new Promise<boolean>((r) => setTimeout(r, FACE_START_TIMEOUT_MS, true)),
-    ]);
-    for (let i = 0; i < 10 && faceRef.current.phase !== 'live' && !late; i++) await new Promise((r) => setTimeout(r, 50));
-    if (late || faceRef.current.phase !== 'live') {
+    const facing = faceRef.current.start();
+    const late = await Promise.race([facing.then(() => false), new Promise<boolean>((r) => setTimeout(r, FACE_START_TIMEOUT_MS, true))]);
+    if (late) {
       faceOffRef.current = true;
       setFaceOff(true);
-      void faceRef.current.end();
-      console.info('[speech] the face did not come up in time: voice only');
+      console.info('[speech] the face is not up yet: voice only until it is');
+      void facing.then(() => {
+        faceOffRef.current = false;
+        setFaceOff(false);
+        console.info('[speech] the face is up: her words go to it from now on');
+      });
     }
     try {
       const res = await fetch(`/api/apps/${app}/speech`, { method: 'POST' });
