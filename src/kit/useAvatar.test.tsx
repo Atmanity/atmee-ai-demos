@@ -112,3 +112,13 @@ test('an interrupt goes to the call at once and is not shown as the user\'s line
   expect(joins[0].session.sent).toContain('interrupt:The listener pressed Skip.');
   expect(result.current.lines).toHaveLength(0);
 });
+
+test('a start with a camera hands its track to the join, and one without hands none', async () => {
+  const camera = { kind: 'video' } as unknown as MediaStreamTrack;
+  const { result } = renderHook(() => useAvatar('demo'));
+  await act(async () => { await result.current.start({ camera }); });
+  expect(joins[0].opts.camera).toBe(camera);
+  await act(async () => { await result.current.end(); });
+  await act(async () => { await result.current.start(); });
+  expect(joins[1].opts.camera).toBeNull();
+});

@@ -38,6 +38,12 @@ export interface JoinOptions {
   mic?: MediaStream | null;             // null: typing only (a silent track is published)
   /** Publish the microphone muted (push to talk): nothing is heard until setMicMuted(false). */
   micMuted?: boolean;
+  /**
+   * A video track to publish as the user's camera: the host sees its latest frame
+   * when it answers. A copy is published, so ending the call leaves the page's own
+   * track (a preview, a scanner) running.
+   */
+  camera?: MediaStreamTrack | null;
   onPhase?: (phase: Phase, detail?: Record<string, unknown>) => void;
   /** The avatar's words; `done` once the utterance is complete. */
   onAvatarSpeech?: (text: string, done: boolean) => void;
@@ -133,8 +139,10 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
   const api = `/api/apps/${app}`;
   let lateMic: MediaStream | undefined;   // a microphone turned on mid-session (typing first)
   const stopMic = () => [mic, lateMic].forEach((m) => m?.getTracks().forEach((t) => t.stop()));
+  const camera = opts.camera?.clone();
+  const stopCamera = () => camera?.stop();
   opts.onPhase?.('starting');
-  const session = await startSession(api, opts.onPhase).catch((err) => { stopMic(); throw err; });
+  const session = await startSession(api, opts.onPhase).catch((err) => { stopMic(); stopCamera(); throw err; });
   // From here the avatar is waiting in the room: a closed tab must end the session.
   const endUrl = `${api}/session/${session.sessionId}/end`;
   let ended = false;
@@ -175,6 +183,7 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
     floor.close();
     drops.refuse('unreadable');
     stopMic();
+    stopCamera();
     void silence?.ctx.close();
   };
   const finish = (reason: unknown) => {
@@ -298,6 +307,7 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
     } else {
       silence = await publishSilence(room);
     }
+    if (camera) await room.localParticipant.publishTrack(camera, { source: Track.Source.Camera, simulcast: false });
     opts.onPhase?.('arriving');
     const timeout = new Promise<'timeout'>((resolve) => { arrivalTimer = setTimeout(resolve, ARRIVAL_TIMEOUT_MS, 'timeout'); });
     if ((await Promise.race([arrival, timeout])) === 'timeout') throw new AvatarError('arrival_timeout', 'The avatar did not appear in time');
