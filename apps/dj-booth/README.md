@@ -8,11 +8,13 @@ track. The music is Spotify's own embed on the page; Nova works it through app t
 
 ```
  page (React)                               server (apps/dj-booth/server.ts)
- ┌───────────────────────────────┐          ┌───────────────────────────────┐
- │ Spotify embed (iFrame API)    │  /search │ Spotify Web API search        │
- │ the deck: on air, queue, crate│ ───────▶ │ (client credentials: the app  │
- │ answers Nova's tool calls     │          │  signs in, never the listener)│
- └──────┬────────────────▲───────┘          └───────────────────────────────┘
+ ┌───────────────────────────────┐ /search  ┌───────────────────────────────┐
+ │ player: Spotify Premium via   │ ───────▶ │ Spotify Web API search        │
+ │  the Web Playback SDK, else   │ /theme   │ (client credentials)          │
+ │  the embed's previews         │ ───────▶ │ Gemini: the record's look     │
+ │ the deck, the radio clock,    │          │ from its title and cover      │
+ │ the stage, the mixer          │          └───────────────────────────────┘
+ └──────┬────────────────▲───────┘
   state │ event    tool  │ atmee.tool
         ▼                │
  ┌───────────────────────┴───────┐
@@ -20,38 +22,41 @@ track. The music is Spotify's own embed on the page; Nova works it through app t
  └───────────────────────────────┘
 ```
 
-- **The deck** (`engine/deck.ts`) is the page's: the latest search ("the crate"), the
-  record on, paused or not, and the queue. Every change is sent as Nova's `state`
-  (`deckState`), so "what is this song?" needs no tool.
-- **The tools** (`engine/director.ts`), all `await`, answered by the page:
-
-  | tool | what the page does | Nova hears |
-  |---|---|---|
-  | `search_tracks(query)` | POST `/api/apps/dj-booth/search`, shows the results as the crate | up to 8 numbered tracks |
-  | `play_track(number, when)` | plays crate track *number* now, or queues it (`when: "next"`) | now playing / queued |
-  | `pause_music`, `resume_music` | the embed's pause / resume | paused / back on |
-  | `skip_track` | the next queued record, or silence | what is on now |
-
-  Nova picks by **number** from the latest results, never by Spotify id: a spoken model
-  copies a 22-character id badly, and a number it read a moment ago well.
-- **Nova runs the show.** She opens with her own pick, keeps two records lined up and
-  introduces each one as it starts (the song, the artist, one fact). The page drives this
-  with `event`s from the embed's `playback_update`: a queued record that starts ("introduce
-  it; the line is short, queue more"), a record about 8 s from its end with nothing queued
-  ("queue the next now"), and a record that ended with nothing queued ("the booth is silent").
-  Every tool result for a record that starts also says when the line is short.
-- **Push to talk.** The listener talks by holding a button (or the space bar); the mic is
-  muted the rest of the time, so the music playing in the room never reaches Nova as speech.
-  Typed requests go through the chat box.
-- **The listener's hands.** Tapping a crate record, Pause or Skip acts at once and tells
-  Nova as an `event` (she cannot see the screen).
+- **Radio, not a chatbot.** Nova talks between records. About 10 s before a record ends,
+  the booth calls her break (`event`): the music ducks under her, she back-announces the
+  record and tells the story of the next (artist, song, era, a detail to listen for), and the
+  next record waits until she has finished (`engine/booth.ts`). She keeps two records lined
+  up and opens the show with her own pick.
+- **Change-overs.** A request, a skip or a tap in the crate fades the record on out, Nova
+  introduces the new one, and it fades in when she finishes.
+- **Quiet over the music.** Causeur checks in after ~10 s of silence and a session cannot
+  turn that off; over a playing record, anything Nova says unasked (not in a break, not an
+  answer within 40 s of the listener) plays silent: no voice, no overlay, no dip (`heard`).
+- **The tools** (all `await`, answered by the page): `search_tracks(query)` (numbered results
+  into the crate), `play_track(number, when)`, `play_request(query, when)` (a listener's
+  request in one step: search and play the best match), `pause_music`, `resume_music`,
+  `skip_track`. Nova picks by number, never by Spotify id. The page refuses a record already
+  on or in line, and a second "now" within 20 s of the last goes in line unless the listener
+  asked for something since (`nowBecomesNext`): the opener is never cut off.
+- **The look follows the record.** For each record the server asks Gemini, with the cover
+  attached, for a palette, a display face, a backdrop (aurora, bokeh, pulse, grain) and a
+  mood; `engine/theme.ts` validates it (dark page, WCAG contrast for text and accent, known
+  fonts). Registered CSS properties fade every colour as the record changes.
+- **The stage** shows the cover while music plays. When Nova talks over a record she appears
+  as a small round overlay on it; her face fills the stage only when no music plays.
+- **Push to talk.** The mic joins muted (`start({ micMuted })`) and opens only while the
+  button or the space bar is held, so the music never reaches Nova as speech.
+- **The mixer.** Nova's volume always; the music's only with Premium (Spotify's embed is
+  another site's frame, whose volume no page can set).
 
 ## Run it
 
-Set `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` in `.env` (any app from
-developer.spotify.com/dashboard; search needs no user scopes), then `npm run dev` and open
-http://localhost:5190/apps/dj-booth/. Without them the server says so at start and Nova
-tells the listener the crate is out of reach.
+Set `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` in `.env`, then `npm run dev` (Node 22.9+)
+and open http://127.0.0.1:5190/apps/dj-booth/. For whole tracks and a music volume, connect
+Spotify Premium on the start page; the Spotify app needs that page's address as a Redirect URI
+(`http://127.0.0.1:<port>/apps/dj-booth/`, and the deployed site's) and, while it is in
+development mode, the listener's Spotify account under User Management. Without Premium the
+booth plays 30-second previews through the embed.
 
 The host is `apps/dj-booth/avatar.json` (staging avatar `4ce5be14…`, made 2026-10-29 from a
 generated portrait and a designed voice).
@@ -85,6 +90,17 @@ generated portrait and a designed voice).
 - Spotify's iFrame `play()` right after `loadUri` is sometimes dropped; the page tries once
   more if a record has not started after 2.5 s.
 
-## Live run
+## Live runs (staging, 2026-10-29)
 
-Not yet run live: waiting on the Spotify keys (see Run it).
+Driven in headless Chrome with a fake microphone playing a spoken request, previews only
+(headless Chrome has no Widevine, so the Premium player is untested).
+
+- Nova opens by herself, keeps two records lined up and introduces each in her break:
+  "Thomas Bangalter of Daft Punk and Alan Braxe built it around a Chaka Khan guitar sample…
+  Listen for that filtered guitar".
+- The next record waits for her to finish (an ended record held 38 s until her intro ended).
+- Push to talk: "Hey Nova, can you play some disco next?" was heard and answered.
+- Unprompted check-ins over a record play silent (three in one run, logged by the page).
+- The look changed with each record ("smoky lounge elegance" in Playfair Display,
+  "interstellar disco euphoria" in Righteous, …); no sideways scroll at phone width.
+- Not yet seen live: `play_request` and the change-over fade (the demo key hit its spend cap).

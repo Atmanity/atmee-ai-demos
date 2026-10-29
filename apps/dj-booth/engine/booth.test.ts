@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { BREAK_MS, DUCK, freshClock, musicLevel, tick, type Clock, type Cue } from './booth.ts';
+import { ANSWER_WINDOW_MS, BREAK_MS, DUCK, freshClock, heard, musicLevel, tick, type Clock, type Cue } from './booth.ts';
 
 const play = (position: number, duration = 200_000, isPaused = false) => ({ isPaused, isBuffering: false, position, duration });
 
@@ -44,4 +44,16 @@ test('the music ducks under the host to a share of the listener\'s level, never 
   expect(musicLevel(0.8, false)).toBe(0.8);
   expect(musicLevel(0.8, true)).toBeCloseTo(0.8 * DUCK);
   expect(musicLevel(2, false)).toBe(1);
+});
+
+describe('what the listener hears of the host', () => {
+  test('between records and in a break, everything', () => {
+    expect(heard({ musicOn: false, onBreak: false, sinceListenerMs: Infinity })).toBe(true);
+    expect(heard({ musicOn: true, onBreak: true, sinceListenerMs: Infinity })).toBe(true);
+  });
+
+  test('over a record, an answer to the listener but not an unprompted check-in', () => {
+    expect(heard({ musicOn: true, onBreak: false, sinceListenerMs: 5_000 })).toBe(true);
+    expect(heard({ musicOn: true, onBreak: false, sinceListenerMs: ANSWER_WINDOW_MS + 1 })).toBe(false);
+  });
 });

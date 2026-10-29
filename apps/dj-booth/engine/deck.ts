@@ -11,9 +11,21 @@ export const dig = (deck: Deck, dug: string, crate: Track[]): Deck => ({ ...deck
 
 export const playNow = (deck: Deck, track: Track): Deck => ({ ...deck, playing: track, paused: false });
 
-/** Lines a track up after the others; the same track twice in a row is kept once. */
-export const queueNext = (deck: Deck, track: Track): Deck =>
-  deck.queue.at(-1)?.id === track.id ? deck : { ...deck, queue: [...deck.queue, track] };
+/** Whether a track is on now or already in line. */
+export const lined = (deck: Deck, track: Track) => deck.playing?.id === track.id || deck.queue.some((t) => t.id === track.id);
+
+/** Lines a track up after the others; one on now or already in line is not lined up twice (the same deck comes back). */
+export const queueNext = (deck: Deck, track: Track): Deck => (lined(deck, track) ? deck : { ...deck, queue: [...deck.queue, track] });
+
+/** How soon after a record was put on "now" another "now" would cut it off. */
+export const NOW_GUARD_MS = 20_000;
+
+/**
+ * Whether a "now" from the host should go in line instead: a record put on moments ago is
+ * cut off only when the listener has asked for something since (a request plays at once).
+ */
+export const nowBecomesNext = (lastNowAt: number, lastListenerAt: number, at: number) =>
+  at - lastNowAt < NOW_GUARD_MS && lastListenerAt < lastNowAt;
 
 /** The next record on, out of the queue; nothing queued leaves the decks empty. */
 export const advance = (deck: Deck): Deck => ({ ...deck, playing: deck.queue[0] ?? null, paused: false, queue: deck.queue.slice(1) });

@@ -14,7 +14,7 @@ export const INSTRUCTIONS = `You are the DJ on Crate, a live radio show with one
 - Keep two records lined up after the one playing, and build a set that flows, each record following the mood of the last, unless the listener asks for something else.
 - Match your energy to the music: hyped and grinning for dance and party records, mellow and dreamy for soul and ballads, swaggering for hip-hop, wistful for slow ones.
 - Use when "now" only to open the show and for the listener's requests; every other record goes in line with when "next", so no record is cut off.
-- Requests: search for what the listener asks, play it now, and introduce it. A vague request ("something chill") is yours to choose.
+- Requests: when the listener asks for a song, an artist or a style, call play_request with their words at once, before you say anything about it; it finds the record and plays it. A vague request ("something chill") is play_request too, with your own search words.
 - "Stop", "pause", "quiet": pause_music. "Carry on", "play": resume_music. "Skip", "next song", "I don't like this": skip_track.
 - The live deck in your context says what is playing, what is queued and the latest results: answer "what is this song?" from it, no tool needed.
 - Sound like a radio DJ: warm, quick, a little cheeky, never a list.`;
@@ -33,6 +33,12 @@ export const TOOLS: AppTool[] = [
       number: { type: 'integer', description: 'The track\'s number in the latest search results.' },
       when: { type: 'string', enum: ['now', 'next'], description: '"now" plays it at once; "next" queues it after the current record.' },
     }, required: ['number'] },
+    'x-atmee': awaits },
+  { type: 'function', name: 'play_request', description: 'Plays what the listener asked for, in one step: searches Spotify and puts the best match on now (the record on fades out first), or lines it up next.',
+    parameters: { type: 'object', properties: {
+      query: { type: 'string', maxLength: 200, description: 'What the listener asked for, as a Spotify search: a song, an artist, a genre or a mood.' },
+      when: { type: 'string', enum: ['now', 'next'], description: '"now" (default) plays it at once; "next" if they asked for it after the current record.' },
+    }, required: ['query'] },
     'x-atmee': awaits },
   { type: 'function', name: 'pause_music', description: 'Pauses the music.', parameters: noArgs, 'x-atmee': awaits },
   { type: 'function', name: 'resume_music', description: 'Resumes the paused music.', parameters: noArgs, 'x-atmee': awaits },
@@ -71,16 +77,21 @@ export const said = {
     ? `Your break: ${label(t)} is ending and the music is down under you.${lineUp(after)} Back-announce it in a sentence, then introduce ${label(next)}: the artist, the story of the song, its genre and era, a detail to listen for, and why it follows; three to five sentences. It starts as you finish.`
     : `Your break: ${label(t)} is ending, the music is down under you, and nothing is lined up. First search for the next record and line it up (play_track, when "next"), then back-announce the one ending and introduce the new one: the artist, the story of the song, its genre and era; three to five sentences. It starts as you finish.`,
   queued: (t: Track, position: number) => `${label(t)} is queued${position > 1 ? ` (${position} in line)` : ', up next'}.`,
+  alreadyLined: (t: Track) => `${label(t)} is already on or in line: nothing changed. Pick a different record.`,
+  heldForOpener: (t: Track, position: number) => `The record on now has only just started, so ${label(t)} went in line instead (${position} in line) and plays after it. Say nothing about this.`,
   noPick: (n: unknown, d: Deck) => d.crate.length
     ? `There is no track ${String(n)} in the latest results (1 to ${d.crate.length}). Pick one of those numbers.`
     : 'There are no results to pick from yet: call search_tracks first.',
   paused: () => 'The music is paused.',
   resumed: () => 'The music is back on.',
   nothingOn: () => 'Nothing is playing: search for a record and play it.',
+  /** The listener (or the host) changed the record: the old one fades out, the new one waits for the host's intro. */
+  changeOver: (t: Track) => `The record on is fading out. Introduce ${label(t)} now: the artist and a word on the song, two or three sentences. It starts as you finish.`,
   skipped: (next: Track | null) => (next
-    ? `Skipped. Now playing ${label(next)}. Introduce it in a sentence or two.`
+    ? `Skipped: the record on is fading out. Introduce ${label(next)} in a sentence or two; it starts as you finish.`
     : 'Skipped, and nothing is queued, so the decks are empty: search and play the next record now.'),
   ranOut: () => 'The record ended and nothing was queued: the booth is silent. Pick the next record now and play it.',
   pressed: (what: string) => `The listener ${what} on screen.`,
+  chose: (what: string, t: Track) => `The listener ${what} on screen, and the record on is fading out. Introduce ${label(t)} in a sentence or two; it starts as you finish.`,
   noSearch: () => 'Music search is not set up on this booth (no Spotify credentials on the server). Tell the listener you cannot reach the record crate right now.',
 };

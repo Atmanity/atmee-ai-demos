@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { advance, dig, pick, playNow, queueNext, setPaused } from './deck.ts';
+import { advance, dig, nowBecomesNext, pick, playNow, queueNext, setPaused } from './deck.ts';
 import { crateText, deckState, said, TOOLS, INSTRUCTIONS } from './director.ts';
 import { emptyDeck, type Track } from './types.ts';
 
@@ -79,5 +79,20 @@ describe('the host keeps the show going', () => {
   test('the show opens on the host\'s own pick, unasked', () => {
     expect(said.start()).toContain('pick one opening record yourself');
     expect(said.start()).toContain('never "now": the opener plays to its end');
+  });
+});
+
+describe('the line keeps order and no repeats', () => {
+  test('a record on now, or already in line, is not lined up again', () => {
+    const d = queueNext(playNow(emptyDeck, a), b);
+    expect(queueNext(d, a)).toBe(d);
+    expect(queueNext(queueNext(d, c), b).queue).toEqual([b, c]);
+  });
+
+  test('the host alone cannot cut off a record it put on moments ago; a listener request can', () => {
+    const t0 = 1_000_000;
+    expect(nowBecomesNext(t0, 0, t0 + 5_000)).toBe(true);
+    expect(nowBecomesNext(t0, t0 + 2_000, t0 + 5_000)).toBe(false);
+    expect(nowBecomesNext(t0, 0, t0 + 25_000)).toBe(false);
   });
 });

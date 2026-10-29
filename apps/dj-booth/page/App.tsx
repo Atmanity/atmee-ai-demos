@@ -5,19 +5,24 @@
 // near the end of every record: the music ducks under her, and the next
 // record waits until she has finished introducing it.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BackToApps, CallStatus, ChatPanel, HangUpIcon, HostVideo, useAvatar, useCaptionToggle, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
-import { advance, dig, label, pick, playNow, queueNext, setPaused } from '../engine/deck.ts';
+import { BackToApps, CallStatus, clock as kitClock, ChatPanel, HangUpIcon, HostVideo, useAvatar, useCaptionToggle, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
+import { advance, dig, label, lined, nowBecomesNext, pick, playNow, queueNext, setPaused } from '../engine/deck.ts';
 import { crateText, deckState, said } from '../engine/director.ts';
 import { emptyDeck, type Deck, type Track } from '../engine/types.ts';
 import { DEFAULT_THEME, type Theme } from '../engine/theme.ts';
 import { useSpotifyPlayer, type Playback } from './player.ts';
 import { useSdkPlayer } from './sdk-player.ts';
 import { accessToken, connect, connected, disconnect, finishConnect } from './spotify-auth.ts';
-import { freshClock, HOLD_MAX_MS, musicLevel, QUIET_MS, tick, type Clock } from '../engine/booth.ts';
+import { freshClock, heard, HOLD_MAX_MS, INTRO_WAIT_MS, musicLevel, QUIET_MS, tick, type Clock } from '../engine/booth.ts';
 import nova from '../host/portrait.jpg';
 import './crate.css';
 
 const API = '/api/apps/dj-booth';
+// The music's fades: a change of record fades the old one out over this, a duck dips over the same.
+const FADE_MS = 1200;
+const FADE_STEPS = 12;
+/** Milliseconds as m:ss. */
+const mmss = (ms: number) => kitClock(Math.floor(ms / 1000));
 // A break's cue goes stale fast: one Nova hears late would introduce a record that already played.
 const BREAK_TTL_S = 15;
 // Nova's face stays up this long after she stops, so the stage does not flicker between sentences.
@@ -147,7 +152,7 @@ export function App() {
     } else if (cue === 'ended') {
       const after = advance(deckRef.current);
       update(after);
-      if (after.playing) setHolding(after.playing);
+      if (after.playing) { spokeSinceHold.current = true; setHolding(after.playing); }
       else {
         setOnBreak(false);
         avatarRef.current?.event(said.ranOut(), 30);
@@ -162,6 +167,10 @@ export function App() {
   });
   const player = useSdk ? sdk : embed;
 
+  // Whether Nova has spoken since the held record was set: after a break she already has; after a
+  // change of record she is about to introduce it, and the record waits for that intro.
+  const spokeSinceHold = useRef(true);
+
   const spin = useCallback((track: Track, from: Deck = deckRef.current) => {
     clock.current = freshClock(track.id);
     setHolding(null);
@@ -171,14 +180,49 @@ export function App() {
     void player.load(track);
   }, [player]);
 
-  const search = useCallback(async (query: string): Promise<string> => {
+  /** A new record in place of the one on: the old fades out, the new waits for Nova to introduce it. */
+  const changeOver = useCallback((track: Track, from: Deck = deckRef.current) => {
+    if (!from.playing || from.paused) return spin(track, from);
+    clock.current = freshClock(track.id);
+    setOnBreak(false);
+    update(playNow(from, track));
+    setProgress(null);
+    spokeSinceHold.current = false;
+    setHolding(track);
+  }, [spin]);
+
+  /** Digs for records: the crate on screen becomes the results; null when search is not set up. */
+  const search = useCallback(async (query: string): Promise<Track[] | null> => {
     const res = await fetch(`${API}/search`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query }) });
-    if (res.status === 503) return said.noSearch();
+    if (res.status === 503) return null;
     if (!res.ok) throw new Error(`search: ${res.status}`);
     const { tracks } = await res.json() as { tracks: Track[] };
     update(dig(deckRef.current, query, tracks));
-    return crateText(query, tracks);
+    return tracks;
   }, []);
+
+  // When a record was last put on "now", and when the listener last asked for anything: a request may cut a record off, Nova alone may not.
+  const lastNowAt = useRef(0);
+  const lastListenerAt = useRef(0);
+
+  /** A record on now (a change-over when one is playing) or in line: what Nova is told. */
+  const put = useCallback((track: Track, when: unknown): string => {
+    const d = deckRef.current;
+    if (lined(d, track)) return said.alreadyLined(track);
+    const cutsOff = when !== 'next' && d.playing && nowBecomesNext(lastNowAt.current, lastListenerAt.current, Date.now());
+    if ((when === 'next' || cutsOff) && d.playing) {
+      const next = queueNext(d, track);
+      update(next);
+      return cutsOff ? said.heldForOpener(track, next.queue.length) : said.queued(track, next.queue.length);
+    }
+    lastNowAt.current = Date.now();
+    if (d.playing && !d.paused) {
+      changeOver(track);
+      return said.changeOver(track);
+    }
+    spin(track);
+    return said.playing(track);
+  }, [changeOver, spin]);
 
   // Nova's tool calls: the deck changes, the player follows, the result is what Nova says next.
   const onToolCall = useCallback(async ({ name, arguments: args }: ToolCall) => {
@@ -187,18 +231,22 @@ export function App() {
     switch (name) {
       case 'search_tracks': {
         const query = String(args.query ?? '').trim().slice(0, 200);
-        return query ? search(query) : 'No search was given: say what to search for.';
+        if (!query) return 'No search was given: say what to search for.';
+        const tracks = await search(query);
+        return tracks ? crateText(query, tracks) : said.noSearch();
       }
       case 'play_track': {
         const track = pick(d, args.number);
-        if (!track) return said.noPick(args.number, d);
-        if (args.when === 'next' && d.playing) {
-          const next = queueNext(d, track);
-          update(next);
-          return said.queued(track, next.queue.length);
-        }
-        spin(track);
-        return said.playing(track);
+        return track ? put(track, args.when) : said.noPick(args.number, d);
+      }
+      case 'play_request': {
+        // One step for a listener's request: the best match, played (or lined up) at once.
+        const query = String(args.query ?? '').trim().slice(0, 200);
+        if (!query) return 'No request was given: ask what they would like.';
+        const tracks = await search(query);
+        if (!tracks) return said.noSearch();
+        if (!tracks.length) return crateText(query, tracks);
+        return put(tracks[0], args.when ?? 'now');
       }
       case 'pause_music':
         if (!d.playing) return said.nothingOn();
@@ -212,16 +260,17 @@ export function App() {
         return said.resumed();
       case 'skip_track': {
         const next = advance(d);
-        if (next.playing) spin(next.playing, next);
+        if (next.playing) changeOver(next.playing, next);
         else { update(next); void player.pause(); }
         return said.skipped(next.playing);
       }
     }
     throw new Error(`unknown tool ${name}`);
-  }, [search, spin, player]);
+  }, [search, put, changeOver, player]);
 
   const cc = useCaptionToggle('dj-booth', false);
-  const [tab, setTab] = useState<'chat' | 'next' | 'crate'>('chat');
+  // The side panel stays closed until the listener opens the playlist or the chat.
+  const [tab, setTab] = useState<'chat' | 'next' | 'crate' | null>(null);
 
   // The look follows the record: each one's theme is asked for when it is lined up, so it is ready as it plays.
   const [theme, setTheme] = useState<Theme>(DEFAULT_THEME);
@@ -242,7 +291,7 @@ export function App() {
   }, [deck.playing?.id]);
   useEffect(() => { if (deck.queue[0]) void themeOf(deck.queue[0]); }, [deck.queue[0]?.id]);
   const [pushToTalk, setPushToTalk] = useState(false);
-  const avatar = useAvatar('dj-booth', { onToolCall });
+  const avatar = useAvatar('dj-booth', { onToolCall, onUserSaid: () => { lastListenerAt.current = Date.now(); } });
   avatarRef.current = avatar;
   const live = avatar.phase === 'live';
 
@@ -250,32 +299,54 @@ export function App() {
   useEffect(() => {
     if (!holding) return;
     if (avatar.speaking) {
+      spokeSinceHold.current = true;
       const giveUp = setTimeout(() => spin(holding), HOLD_MAX_MS);
       return () => clearTimeout(giveUp);
     }
-    const go = setTimeout(() => spin(holding), QUIET_MS);
+    // An intro still to come is waited for (a while); one given, only until Nova has been quiet a moment.
+    const go = setTimeout(() => spin(holding), spokeSinceHold.current ? QUIET_MS : INTRO_WAIT_MS);
     return () => clearTimeout(go);
   }, [holding, avatar.speaking]);
 
   // The volumes: the music ducks under Nova (in her breaks, and whenever she speaks over a record).
   const [musicVolume, setMusicVolume] = useState(0.8);
   const [novaVolume, setNovaVolume] = useState(1);
-  const ducked = avatar.speaking || onBreak || Boolean(holding);
+  // Unprompted words over a playing record (Causeur's check-ins, which a session cannot turn off)
+  // play silent: no voice, no overlay, no dip in the music. Between utterances the page keeps its
+  // guess for the next one, so a check-in's first syllable never slips out; an utterance keeps the
+  // verdict it started with.
+  const musicOn = live && Boolean(deck.playing) && !deck.paused && !holding;
+  const [muffled, setMuffled] = useState(false);
+  const wasSpeaking = useRef(false);
+  useEffect(() => {
+    const starting = avatar.speaking && !wasSpeaking.current;
+    wasSpeaking.current = avatar.speaking;
+    if (avatar.speaking && !starting) return;
+    const verdict = !heard({ musicOn, onBreak, sinceListenerMs: Date.now() - lastListenerAt.current });
+    setMuffled(verdict);
+    if (starting && verdict) console.info('[crate] an unprompted line over the record plays silent');
+  }, [avatar.speaking, musicOn, onBreak]);
+  const voiced = avatar.speaking && !muffled;
+  const ducked = voiced || onBreak || Boolean(holding);
   const level = useRef(musicVolume);
   useEffect(() => {
     // A short fade, not a jump.
-    const target = musicLevel(musicVolume, ducked);
+    const target = holding ? 0 : musicLevel(musicVolume, ducked);
     const from = level.current;
     let step = 0;
     const id = setInterval(() => {
       step += 1;
-      level.current = from + (target - from) * (step / 6);
+      level.current = from + (target - from) * (step / FADE_STEPS);
       player.setVolume(level.current);
-      if (step >= 6) clearInterval(id);
-    }, 60);
+      if (step >= FADE_STEPS) {
+        clearInterval(id);
+        // Faded out for a held record: stop the old one (the embed, with no volume, stops here at once).
+        if (holding) void player.pause();
+      }
+    }, FADE_MS / FADE_STEPS);
     return () => clearInterval(id);
-  }, [musicVolume, ducked, player]);
-  useEffect(() => { if (avatar.audioRef.current) avatar.audioRef.current.volume = novaVolume; }, [novaVolume, avatar.phase]);
+  }, [musicVolume, ducked, player, Boolean(holding)]);
+  useEffect(() => { if (avatar.audioRef.current) avatar.audioRef.current.volume = muffled ? 0 : novaVolume; }, [novaVolume, muffled, avatar.phase]);
 
   useEffect(() => { if (avatar.phase === 'starting') avatar.event(said.start(), 60); }, [avatar.phase]);
   // Nova's picture of the deck follows the deck.
@@ -285,18 +356,20 @@ export function App() {
 
   // The listener's own hands on the decks: Nova cannot see the screen, so it is told.
   function press(what: string, act: () => void) {
+    lastListenerAt.current = Date.now();
     act();
     if (live) avatar.event(said.pressed(what), 20);
   }
 
   // The stage shows Nova only when she is on the mic; the rest of the time, the record.
-  const wantFace = !live || avatar.speaking || onBreak || Boolean(holding) || !deck.playing || deck.paused;
-  const [showFace, setShowFace] = useState(true);
+  // Full when no music plays (between records, paused, quiet decks); over music, a small round overlay on the cover.
+  const [talking, setTalking] = useState(false);
   useEffect(() => {
-    if (wantFace) return void setShowFace(true);
-    const id = setTimeout(() => setShowFace(false), FACE_LINGER_MS);
+    if (voiced) return void setTalking(true);
+    const id = setTimeout(() => setTalking(false), FACE_LINGER_MS);
     return () => clearTimeout(id);
-  }, [wantFace]);
+  }, [voiced]);
+  const stage: 'face' | 'overlay' | 'record' = !musicOn ? 'face' : talking ? 'overlay' : 'record';
 
   if (avatar.phase === 'idle') {
     return <Lobby spotify={spotify} onStart={(mic) => {
@@ -316,30 +389,40 @@ export function App() {
       <header className="cr-top">
         <BackToApps avatar={avatar} name={HOST} /><Logo />
         <span className="cr-mood" title="This look was made by AI for the record playing">✦ {theme.mood}</span>
+        <button type="button" className={`cr-pill is-first ${tab === 'next' || tab === 'crate' ? 'is-on' : ''}`} onClick={() => setTab(tab === 'next' || tab === 'crate' ? null : 'next')}>
+          Playlist{deck.queue.length ? ` · ${deck.queue.length}` : ''}
+        </button>
+        <button type="button" className={`cr-pill ${tab === 'chat' ? 'is-on' : ''}`} onClick={() => setTab(tab === 'chat' ? null : 'chat')}>Chat</button>
         {live && <span className="cr-onair">On air</span>}
         {live && <button type="button" className="cr-end" onClick={() => void avatar.end()} title="End the show"><HangUpIcon /></button>}
       </header>
 
-      <main className="cr-main">
+      <main className={`cr-main ${tab === null ? 'is-solo' : ''}`}>
         <section className="cr-center" aria-label="The booth">
-          <div className={`cr-stage ${showFace ? 'is-face' : 'is-record'}`}>
+          <div className={`cr-stage is-${stage}`}>
             {/* Mounted all along: the call's video plays into it, shown or not. */}
-            <HostVideo avatar={avatar} captions={cc.on} onToggleCaptions={cc.toggle} name={HOST} poster={nova} className="cr-host-video">
+            <HostVideo avatar={avatar} captions={cc.on && !muffled} onToggleCaptions={cc.toggle} name={HOST} poster={nova} className="cr-host-video">
               <CallStatus avatar={avatar} name={HOST} again="Call Nova back" />
             </HostVideo>
             {deck.playing?.cover && (
-              <div className="cr-record" aria-hidden={showFace}>
-                <div className={`cr-vinyl ${deck.paused || holding ? 'is-still' : ''}`}><img src={deck.playing.cover} alt={`${deck.playing.title} cover`} /></div>
+              <div className="cr-record" aria-hidden={stage === 'face'}>
+                <img key={deck.playing.cover} src={deck.playing.cover} alt={`${deck.playing.title} cover`} />
               </div>
             )}
-            <span className="cr-stage-tag">{showFace ? `${HOST} on the mic` : `${HOST} on the decks`}</span>
+            <span className="cr-stage-tag">{stage === 'record' ? `${HOST} on the decks` : `${HOST} on the mic`}</span>
           </div>
 
           <div className="cr-meta">
             <p className="cr-kicker">{kicker}</p>
             <h1 className="cr-title">{deck.playing ? deck.playing.title : 'Ask Nova for a record'}</h1>
             {deck.playing && <p className="cr-artist">{deck.playing.artist}{deck.playing.year ? ` · ${deck.playing.year}` : ''}</p>}
-            <div className="cr-bar" aria-hidden="true"><span style={{ width: `${holding ? 0 : pct}%` }} /></div>
+            <div className="cr-time">
+              <span>{progress && !holding ? mmss(progress.position) : '0:00'}</span>
+              <div className="cr-bar" role="progressbar" aria-label="Time in the record" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(holding ? 0 : pct)}>
+                <span style={{ width: `${holding ? 0 : pct}%` }} />
+              </div>
+              <span>{progress && progress.duration > 0 ? mmss(progress.duration) : deck.playing?.durationMs ? mmss(deck.playing.durationMs) : '–:––'}</span>
+            </div>
           </div>
 
           <div className="cr-dock">
@@ -351,18 +434,23 @@ export function App() {
             {live && pushToTalk ? <PushToTalk avatar={avatar} /> : <p className="cr-typing">Type your requests in the chat</p>}
             <button type="button" className="cr-icon" disabled={!deck.playing} title="Skip" onClick={() => {
               const next = advance(deckRef.current);
-              press(`skipped ${deckRef.current.playing ? label(deckRef.current.playing) : 'the record'}${next.playing ? `; ${label(next.playing)} is on now` : ''}`, () => {
-                if (next.playing) spin(next.playing, next); else { update(next); void player.pause(); }
-              });
+              const skippedWhat = `skipped ${deckRef.current.playing ? label(deckRef.current.playing) : 'the record'}`;
+              lastListenerAt.current = Date.now();
+              if (next.playing) {
+                changeOver(next.playing, next);
+                if (live) avatar.event(said.chose(skippedWhat, next.playing), 20);
+              } else press(skippedWhat, () => { update(next); void player.pause(); });
             }}><SkipIcon /></button>
           </div>
 
           <div className="cr-mixer">
-            <label title={player.canVolume ? undefined : 'Connect Spotify Premium on the start page for a music volume'}>
-              <span>Music</span>
-              <input type="range" min={0} max={1} step={0.05} value={musicVolume} disabled={!player.canVolume}
-                onChange={(e) => setMusicVolume(Number(e.target.value))} aria-label="Music volume" />
-            </label>
+            {/* Spotify's embed is another site's frame: no page can set its volume, so the slider is there only with Premium. */}
+            {player.canVolume && (
+              <label>
+                <span>Music</span>
+                <input type="range" min={0} max={1} step={0.05} value={musicVolume} onChange={(e) => setMusicVolume(Number(e.target.value))} aria-label="Music volume" />
+              </label>
+            )}
             <label>
               <span>{HOST}</span>
               <input type="range" min={0} max={1} step={0.05} value={novaVolume} onChange={(e) => setNovaVolume(Number(e.target.value))} aria-label={`${HOST}'s volume`} />
@@ -371,7 +459,8 @@ export function App() {
           <div ref={player.host} className="cr-embed" />
         </section>
 
-        <aside className="cr-side">
+        <aside className="cr-side" hidden={tab === null}>
+          <button type="button" className="cr-close" onClick={() => setTab(null)} aria-label="Close">×</button>
           <nav className="cr-tabs" role="tablist">
             {(['chat', 'next', 'crate'] as const).map((t) => (
               <button key={t} type="button" role="tab" aria-selected={tab === t} className={tab === t ? 'is-on' : ''} onClick={() => setTab(t)}>
@@ -392,7 +481,11 @@ export function App() {
             {deck.crate.length ? (
               <ol className="cr-rows">
                 {deck.crate.map((t, i) => (
-                  <TrackRow key={t.id} track={t} number={i + 1} onPlay={() => press(`put on ${label(t)}`, () => spin(t))} />
+                  <TrackRow key={t.id} track={t} number={i + 1} onPlay={() => {
+                    lastListenerAt.current = Date.now();
+                    changeOver(t);
+                    if (live) avatar.event(said.chose(`put on ${label(t)}`, t), 20);
+                  }} />
                 ))}
               </ol>
             ) : <p className="cr-empty">Records Nova digs up land here. Tap one to put it on yourself.</p>}

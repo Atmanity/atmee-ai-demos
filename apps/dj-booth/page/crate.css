@@ -53,6 +53,8 @@ button { font: inherit; color: inherit; }
 .cr-logo { display: flex; align-items: center; gap: 8px; color: var(--accent); text-decoration: none; font-family: var(--display); font-size: 22px; }
 .cr-mood { margin-left: auto; padding: 5px 12px; border-radius: 999px; background: color-mix(in srgb, var(--surface) 70%, transparent); color: var(--dim); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw; backdrop-filter: blur(10px); }
 .cr-lobby .cr-mood { display: none; }
+.cr-pill { white-space: nowrap; flex: none; padding: 6px 14px; border-radius: 999px; border: 0; background: color-mix(in srgb, var(--surface) 70%, transparent); color: var(--ink); font-size: 13px; font-weight: 700; cursor: pointer; backdrop-filter: blur(10px); transition: background .2s ease; }
+.cr-pill.is-on { background: var(--accent); color: var(--bg); }
 .cr-onair { padding: 4px 10px; border-radius: 6px; background: var(--glow); color: var(--bg); font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
 .cr-end { display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 50%; background: #e5484d; color: #fff; cursor: pointer; }
 .cr-end svg { width: 20px; height: 20px; }
@@ -73,26 +75,43 @@ button { font: inherit; color: inherit; }
 
 /* The booth: the stage and its controls in the middle, the side panel beside */
 .cr-main { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 28px; padding: 4px 28px 28px; min-height: 0; }
+.cr-main.is-solo { grid-template-columns: minmax(0, 1fr); }
+.cr-side[hidden] { display: none; }
+.cr-side { position: relative; }
+.cr-close { position: absolute; top: 10px; right: 10px; z-index: 1; width: 30px; height: 30px; border: 0; border-radius: 50%; background: none; color: var(--dim); font-size: 22px; line-height: 1; cursor: pointer; }
+.cr-tabs { padding-right: 44px !important; }
 .cr-center { display: flex; flex-direction: column; align-items: center; gap: 18px; min-width: 0; }
 
 .cr-stage { position: relative; width: min(100%, 56vh, 520px); aspect-ratio: 1; border-radius: 28px; overflow: hidden; background: var(--surface); box-shadow: 0 30px 80px rgba(0, 0, 0, .45), 0 0 0 1px color-mix(in srgb, var(--ink) 8%, transparent); }
-.cr-stage .cr-host-video { position: absolute; inset: 0; aspect-ratio: auto; border-radius: 0; transition: opacity .7s ease; }
+.cr-stage .cr-host-video {
+  position: absolute; z-index: 2; right: 0; bottom: 0; width: 100%; height: 100%; aspect-ratio: auto; border-radius: 0;
+  transition: width .6s cubic-bezier(.2, .8, .2, 1), height .6s cubic-bezier(.2, .8, .2, 1), right .6s cubic-bezier(.2, .8, .2, 1),
+    bottom .6s cubic-bezier(.2, .8, .2, 1), border-radius .6s ease, opacity .5s ease, box-shadow .3s ease;
+}
 .cr-stage .cr-host-video video { object-fit: cover; }
-.cr-record { position: absolute; inset: 0; display: grid; place-items: center; background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--accent) 22%, var(--surface)), var(--surface) 70%); transition: opacity .7s ease; }
-.cr-stage.is-face .cr-record { opacity: 0; pointer-events: none; }
-.cr-stage.is-record .cr-host-video { opacity: 0; }
-.cr-vinyl { width: 78%; aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; background: repeating-radial-gradient(circle, #0c0c0c 0 2px, #191919 2px 4px); box-shadow: 0 24px 60px rgba(0, 0, 0, .55); animation: cr-spin 7s linear infinite; }
-.cr-vinyl img { width: 64%; aspect-ratio: 1; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 5px #0a0a0a; }
-.cr-vinyl.is-still { animation-play-state: paused; }
-@keyframes cr-spin { to { transform: rotate(360deg); } }
+/* The kit's speaking ring never matched the stage's corners: the stage shows who is on air itself. */
+.cr-stage .cr-host-video::after { display: none; }
+.cr-record { position: absolute; inset: 0; z-index: 1; }
+.cr-record img { width: 100%; height: 100%; object-fit: cover; display: block; animation: cr-fade-in .8s ease; }
+/* Over a playing record: Nova as a small round overlay in the corner, the cover stays. */
+.cr-stage.is-overlay .cr-host-video {
+  width: 34%; height: 34%; right: 16px; bottom: 16px; border-radius: 50%;
+  box-shadow: 0 0 0 3px var(--accent), 0 14px 40px rgba(0, 0, 0, .5);
+}
+.cr-stage.is-overlay .cr-host-video .call-caption, .cr-stage.is-overlay .cr-host-video button { display: none; }
+.cr-stage.is-record .cr-host-video { width: 34%; height: 34%; right: 16px; bottom: 16px; border-radius: 50%; opacity: 0; pointer-events: none; }
+.cr-stage.is-face .cr-record { opacity: 0; transition: opacity .5s ease; }
 .cr-stage-tag { position: absolute; left: 14px; bottom: 14px; padding: 5px 11px; border-radius: 999px; background: rgba(0, 0, 0, .45); color: #fff; font-size: 12px; font-weight: 600; backdrop-filter: blur(8px); }
 
 .cr-meta { width: min(100%, 560px); text-align: center; }
 .cr-kicker { margin: 0; color: var(--accent); font-size: 12px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
 .cr-title { margin: 6px 0 2px; font-family: var(--display); font-weight: 400; font-size: clamp(26px, 3.4vw, 40px); line-height: 1.08; overflow-wrap: anywhere; }
 .cr-artist { margin: 0; color: var(--dim); font-size: 16px; }
-.cr-bar { height: 4px; margin-top: 16px; border-radius: 2px; background: color-mix(in srgb, var(--ink) 14%, transparent); overflow: hidden; }
-.cr-bar span { display: block; height: 100%; background: var(--accent); transition: width .5s linear; }
+.cr-time { display: flex; align-items: center; gap: 12px; margin-top: 16px; color: var(--dim); font-size: 13px; font-variant-numeric: tabular-nums; }
+.cr-time > span { min-width: 38px; }
+.cr-time > span:last-child { text-align: right; }
+.cr-bar { flex: 1; height: 6px; margin: 0; border-radius: 2px; background: color-mix(in srgb, var(--ink) 14%, transparent); overflow: hidden; }
+.cr-bar span { display: block; height: 100%; border-radius: 3px; background: var(--accent); transition: width .5s linear; }
 
 .cr-dock { display: flex; align-items: center; justify-content: center; gap: 18px; width: min(100%, 560px); }
 .cr-icon { display: grid; place-items: center; flex: none; width: 52px; height: 52px; border-radius: 50%; border: 0; background: color-mix(in srgb, var(--surface) 80%, transparent); color: var(--ink); cursor: pointer; transition: background .2s ease, transform .15s ease; }
@@ -135,7 +154,8 @@ button { font: inherit; color: inherit; }
 .cr-rows em { font-style: normal; font-size: 12px; font-weight: 800; color: var(--accent); }
 
 @media (prefers-reduced-motion: reduce) {
-  .cr-blob, .cr-vinyl { animation: none !important; }
+  .cr-blob { animation: none !important; }
+  .cr-stage .cr-host-video { transition: opacity .3s ease; }
 }
 @media (max-width: 900px) {
   .cr-main { grid-template-columns: minmax(0, 1fr); padding: 4px 16px 24px; gap: 20px; }
@@ -146,6 +166,8 @@ button { font: inherit; color: inherit; }
   .cr-stage { width: min(100%, 420px); }
 }
 @media (max-width: 480px) {
-  .cr-mood { display: none; }
+  .cr-mood, .cr-onair, .cr-logo span { display: none; }
+  .cr-pill { padding: 6px 11px; }
+  .cr-pill.is-first { margin-left: auto; }
   .cr-mixer { flex-direction: column; gap: 10px; }
 }

@@ -10,6 +10,8 @@ export const BREAK_MS = 10_000;
 export const DUCK = 0.3;
 /** How long the host must have been quiet before the next record starts after a break. */
 export const QUIET_MS = 1200;
+/** How long a changed record waits for the host to start its intro before it plays anyway. */
+export const INTRO_WAIT_MS = 10_000;
 /** The longest the next record waits for the host to finish. */
 export const HOLD_MAX_MS = 25_000;
 
@@ -46,3 +48,16 @@ export function tick(clock: Clock, id: string, p: Playback): { clock: Clock; cue
 
 /** The music's volume: the listener's level, ducked while the host talks or holds a break. */
 export const musicLevel = (volume: number, ducked: boolean) => Math.max(0, Math.min(1, volume * (ducked ? DUCK : 1)));
+
+/** How long after the listener spoke, typed or pressed something the host may answer over a record. */
+export const ANSWER_WINDOW_MS = 40_000;
+
+/**
+ * Whether the listener hears what the host starts saying now. Between records and in its
+ * break, always; over a playing record, only as an answer to the listener. Anything else
+ * (Causeur's check-ins after a silence, which a session cannot turn off) would cut into the
+ * music unasked, so the page plays it silent.
+ */
+export function heard({ musicOn, onBreak, sinceListenerMs }: { musicOn: boolean; onBreak: boolean; sinceListenerMs: number }): boolean {
+  return !musicOn || onBreak || sinceListenerMs <= ANSWER_WINDOW_MS;
+}
