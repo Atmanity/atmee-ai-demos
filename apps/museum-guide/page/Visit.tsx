@@ -1,9 +1,13 @@
-// After the tour: the works the visitor saw, to remember them by.
+// After the tour: the works the visitor saw, to remember them by, and the map
+// with them ticked (each work's full entry a tap away).
+import { useState } from 'react';
 import type { Exhibit } from '../engine/catalogue.ts';
 import { exhibitImage } from './images.ts';
 import { Wordmark } from './Lobby.tsx';
+import { MuseumMap } from './MuseumMap.tsx';
 
 export function Visit({ seen, onAgain }: { seen: Exhibit[]; onAgain: () => void }) {
+  const [map, setMap] = useState(false);
   return (
     <div className="mr-lobby mr-visit">
       <header className="mr-lobby-top"><Wordmark /></header>
@@ -23,7 +27,9 @@ export function Visit({ seen, onAgain }: { seen: Exhibit[]; onAgain: () => void 
           <p className="mr-lede">You didn't stop at any work this time. Edmund will be here.</p>
         )}
         <button type="button" className="mr-primary is-big" onClick={onAgain}>Begin a new tour</button>
+        <button type="button" className="mr-link" onClick={() => setMap(true)}>See the museum map</button>
       </main>
+      {map && <MuseumMap seen={seen} current={null} onClose={() => setMap(false)} />}
     </div>
   );
 }

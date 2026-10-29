@@ -6,13 +6,15 @@
 // says about it comes from the museum. He also sees the camera as he answers,
 // which is for pointing at details.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BackToApps, callCopy, ChatPanel, MicIcon, MicOffIcon, useAvatar, useToolNet, type ToolCall } from '../../../src/kit/index.ts';
-import { exhibitById, findExhibit, type Exhibit } from '../engine/catalogue.ts';
+import { BackToApps, callCopy, ChatPanel, useAvatar, useToolNet, type ToolCall } from '../../../src/kit/index.ts';
+import { EXHIBITS, exhibitById, findExhibit, type Exhibit } from '../engine/catalogue.ts';
 import { arrived, isToolName, said, tourState, type Found } from '../engine/director.ts';
 import { grabFrame, useCamera, useLabelScanner } from './camera.ts';
 import { exhibitImage } from './images.ts';
 import { Keyed } from './Keyed.tsx';
 import { Lobby, Wordmark } from './Lobby.tsx';
+import { MuseumMap } from './MuseumMap.tsx';
+import { PushToTalk } from './PushToTalk.tsx';
 import { Sheet } from './Sheet.tsx';
 import { Visit } from './Visit.tsx';
 import './meridian.css';
@@ -63,6 +65,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   const [notice, setNotice] = useState('');
   const [small, setSmall] = useState(false);
   const [talk, setTalk] = useState(false);
+  const [map, setMap] = useState(false);
   const at = useRef({ current, seen, camera: camera.state === 'on' });
   at.current = { current, seen, camera: camera.state === 'on' };
   const lastArrival = useRef<{ id: string; at: number } | null>(null);
@@ -92,9 +95,12 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   }, []);
 
   // A label's code in view: the same label held there is not a new arrival.
-  useLabelScanner(camera.videoRef, screen === 'tour', useCallback((exhibit: Exhibit) => {
+  useLabelScanner(camera.videoRef, screen === 'tour' && !map, useCallback((exhibit: Exhibit) => {
     const last = lastArrival.current;
-    if (last?.id === exhibit.id && Date.now() - last.at < STILL_HERE_MS) return;
+    // Still in view (or back within the window): the visitor is still standing there. Every
+    // sighting restarts the window, so a label that never leaves the view never re-arrives
+    // (live, the label still in view after the map closed made him tell its story again).
+    if (last?.id === exhibit.id && Date.now() - last.at < STILL_HERE_MS) { last.at = Date.now(); return; }
     flash(`Label: ${exhibit.title}`);
     arrive(exhibit, 'label');
   }, [arrive, flash]));
@@ -159,7 +165,8 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     lastArrival.current = current ? { id: current.id, at: Date.now() } : null;
     if (current) setSeen([current]);
     callGen.current++;
-    await avatar.start({ mic: true, camera: track });
+    // Push to talk: the microphone joins muted and opens while the button is held.
+    await avatar.start({ mic: true, micMuted: true, camera: track });
   };
 
   /** The "What is this?" button: the page looks, then tells Edmund what it found. */
@@ -169,6 +176,16 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     if (found) { flash(found.title); arrive(found, 'camera'); return; }
     flash('Not one of the Meridian\'s works');
     avatar.event(`The visitor pressed "What is this?". ${text}`, 30);
+  };
+
+  /** The visitor ticks (or unticks) a work on the map themselves. */
+  const markSeen = (exhibit: Exhibit, on: boolean) => {
+    setSeen((list) => (on ? (list.some((e) => e.id === exhibit.id) ? list : [...list, exhibit]) : list.filter((e) => e.id !== exhibit.id)));
+  };
+  /** "Ask Edmund about it" on the map: a typed turn, as if the visitor had asked. */
+  const askAbout = (exhibit: Exhibit) => {
+    setMap(false);
+    avatar.say(`Tell me about "${exhibit.title}".`);
   };
 
   const leave = () => { void avatar.end(); };
@@ -192,6 +209,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
         <Wordmark />
         <span className="mr-bar-end">
           {avatar.secondsLeft !== null && live && <span className="mr-clock">{Math.floor(avatar.secondsLeft / 60)}:{String(avatar.secondsLeft % 60).padStart(2, '0')}</span>}
+          <button type="button" className="mr-chip" onClick={() => { setMap(true); setTalk(false); }} aria-label={`Museum map, ${seen.length} of ${EXHIBITS.length} seen`}>Map <b>{seen.length}/{EXHIBITS.length}</b></button>
           <button type="button" className="mr-chip" onClick={() => setTalk((t) => !t)} aria-pressed={talk}>{talk ? 'Close' : 'Type'}</button>
           <button type="button" className="mr-chip is-end" onClick={leave} disabled={!live}>Leave</button>
         </span>
@@ -237,14 +255,16 @@ function Tour({ opening }: { opening: Exhibit | null }) {
 
       {live && (
         <footer className="mr-controls">
-          <button type="button" className={`mr-round ${avatar.micOn ? '' : 'is-off'}`} onClick={() => avatar.setMic(!avatar.micOn)}
-            aria-pressed={!avatar.micOn} title={avatar.micOn ? 'Mute your microphone' : 'Unmute your microphone'}>
-            {avatar.micOn ? <MicIcon /> : <MicOffIcon />}
-          </button>
+          <PushToTalk avatar={avatar} />
           <button type="button" className="mr-shutter" onClick={() => void whatIsThis()} disabled={looking}>
             <span aria-hidden="true" />What is this?
           </button>
         </footer>
+      )}
+
+      {map && (
+        <MuseumMap seen={seen} current={current} onClose={() => setMap(false)}
+          onAsk={live ? askAbout : undefined} onToggleSeen={markSeen} />
       )}
 
       {talk && (
