@@ -16,6 +16,7 @@ import type { Avatar, AvatarHandlers, Line } from '../../../src/kit/index.ts';
 import { fromBase64, tapMicrophone, toBase64 } from '../../../src/kit/index.ts';
 import { useAvatarOnly } from '../../../src/kit/useAvatarOnly.ts';
 import type { SpeechWriter } from '../../../src/avatar/render.ts';
+import { createVoicePlayer, Resampler24to16, type VoicePlayer } from './audio.ts';
 
 const RATE = 24_000;
 /** Mic audio goes out in pieces this long. */
@@ -32,18 +33,6 @@ const RETRY_MS = 1500;
 const QUIET_FOR_CUE_MS = 800;
 
 interface Cue { text: string; until: number; typed: boolean; id?: string }
-
-/** 24 kHz PCM as 16 kHz, for the face (linear interpolation; speech has little above 8 kHz). */
-function to16k(pcm: Int16Array): Int16Array {
-  const out = new Int16Array(Math.floor((pcm.length * 2) / 3));
-  for (let i = 0; i < out.length; i++) {
-    const x = i * 1.5;
-    const a = Math.floor(x);
-    const b = Math.min(a + 1, pcm.length - 1);
-    out[i] = Math.round(pcm[a] + (pcm[b] - pcm[a]) * (x - a));
-  }
-  return out;
-}
 
 const rms = (pcm: Int16Array) => {
   let sum = 0;
@@ -137,23 +126,18 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
 
   // ---- Her voice: played here, or streamed into the face while it is up ----
   const playCtx = useRef<AudioContext | null>(null);
-  const playAt = useRef(0);
+  // Her voice in the page: a continuous player with a jitter buffer (audio.ts).
+  const player = useRef<VoicePlayer | null>(null);
+  // The face's audio, resampled to 16 kHz without aliasing; one per utterance it takes.
+  const resampler = useRef<Resampler24to16 | null>(null);
   const writer = useRef<SpeechWriter | null>(null);
   const writerOpening = useRef(false);
-  const play = useCallback((pcm: Int16Array) => {
-    const ctx = playCtx.current;
-    if (!ctx) return;
-    const buffer = ctx.createBuffer(1, pcm.length, RATE);
-    const data = buffer.getChannelData(0);
-    // The page's own volume for Nova (the stage's audio element, which the mixer and the check-in mute set).
-    const gain = faceRef.current.audioRef.current?.volume ?? 1;
-    for (let i = 0; i < pcm.length; i++) data[i] = (pcm[i] / 0x8000) * gain;
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(ctx.destination);
-    playAt.current = Math.max(playAt.current, ctx.currentTime + 0.06);
-    source.start(playAt.current);
-    playAt.current += buffer.duration;
+  const play = useCallback((pcm: Int16Array, silent: boolean) => {
+    const p = player.current;
+    if (!p) return;
+    // The page's own volume for Nova (the stage's audio element, which the mixer and the check-in mute set), ramped in the player.
+    p.setGain(faceRef.current.audioRef.current?.volume ?? 1);
+    p.push(pcm, silent);
   }, []);
   const onAudio = useCallback((pcm: Int16Array) => {
     const now = Date.now();
@@ -166,6 +150,7 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
         writerOpening.current = true;
         setVoiceVia('face');
         console.info('[speech] her words go to the face');
+        resampler.current = new Resampler24to16();
         void faceRef.current.open().then((w) => { writer.current = w; writerOpening.current = false; }, (err) => {
           writerOpening.current = false;
           console.warn('[speech] the face would not take her words: %s', (err as Error).message);
@@ -189,8 +174,9 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
       if (text) { addLine({ who: 'avatar', text }); handlersRef.current.onAvatarSaid?.(text); }
     }
     if (writer.current || writerOpening.current) {
-      if (writer.current) void writer.current.write(to16k(pcm));
-    } else play(pcm);
+      const pcm16 = resampler.current?.push(pcm);
+      if (writer.current && pcm16?.length) void writer.current.write(pcm16);
+    } else play(pcm, !loud && !voiced.current);
   }, [addLine, play]);
 
   // ---- Tool calls: run each, then hand back every result and let her go on ----
@@ -289,6 +275,7 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
     void stopMic.current?.(); stopMic.current = null;
     if (silenceTimer.current) clearInterval(silenceTimer.current);
     silenceTimer.current = null;
+    void player.current?.close(); player.current = null;
     void playCtx.current?.close(); playCtx.current = null;
     void faceRef.current.end();
   }, []);
@@ -299,9 +286,12 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
     captionRef.current = '';
     setPhase('starting');
     // In the click: the browser lets these make sound.
-    playCtx.current = new AudioContext({ sampleRate: RATE });
+    playCtx.current = new AudioContext({ sampleRate: RATE, latencyHint: 'playback' });
     void playCtx.current.resume();
-    playAt.current = 0;
+    player.current = await createVoicePlayer(playCtx.current).catch((err) => {
+      console.warn('[speech] the voice player could not start: %s', (err as Error).message);
+      return null;
+    });
     let stream: MediaStream | null = null;
     if (mic) {
       try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
