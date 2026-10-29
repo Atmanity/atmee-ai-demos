@@ -72,15 +72,15 @@ generated portrait and a designed voice).
   it is enabled only on the Live API, not on `POST /v1/session`. *Platform gap:* a way for the
   app to set the avatar's mood or listening expression (a room message, or `avatar2` on full-stack
   sessions).
-- **Check-ins.** Causeur speaks up after about 10 s of silence and that cannot be turned off
-  per session; over a playing record that means extra DJ chatter. The instructions keep it short.
-- **Previews.** The embed plays whole tracks only for a listener signed in to Spotify in the
-  same browser; otherwise 30-second previews. Spotify developers also report that
-  `play()` from code can start a preview even for a signed-in Premium listener. For the demo
-  the short previews are a feature: a DJ break every 30 seconds.
-- **No ducking.** The embed has no volume control, so Nova talks over the music at full level
-  (or pauses it). The Web Playback SDK has volume, but needs Premium and a Spotify login per
-  listener.
+- **Check-ins are hidden, not stopped.** Causeur speaks up after ~10 s of silence (twice per
+  silence); the page plays those lines silent over a record, but Nova still says them, so her
+  chat shows them and a session minute is the same. *Platform gap:* Causeur already takes a
+  per-session `checkin_after_s` (0 turns check-ins off) from its client; `POST /v1/session`
+  does not pass one through.
+- **Without Premium: previews, no volume, no fades.** The embed plays 30-second previews
+  (a break every record) and has no volume, so the music is not ducked under Nova and a
+  change-over stops the record instead of fading it. The Premium player has all three; it
+  is built but not yet tried live (headless Chrome cannot play DRM audio).
 - **Nova never hears the music.** It mixes in the listener's browser; she knows a record only
   from the deck the page sends.
 - **Not shippable as-is.** Spotify's Developer Policy forbids syncing recordings with visual
