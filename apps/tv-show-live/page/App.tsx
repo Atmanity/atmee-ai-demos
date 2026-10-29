@@ -48,11 +48,14 @@ const FACE_LAG_MS = 4_500;
 const INVITE_LEAD_MS = FACE_LAG_MS + 1_500;
 const TRAILER_FADE_MS = 900;
 const CAPTION_LINGER_MS = 3_000;
-// `?prompts=off`: no face gets a free-form prompt, as in the regular chat room; `?prompts=host`: only Jada's;
-// `?prompts=hands`: Jada's hands only (hostHandsPrompts).
-const PROMPTS = typeof location === 'undefined' ? 'all' : (new URLSearchParams(location.search).get('prompts') ?? 'all');
+// The faces' free-form prompts. By default Jada's face gets one sentence, her look and her hands
+// calm on the desk (hostHandsPrompts), and the guests' none: fuller prompts made the guests drift and
+// wash out, and with none her hands warped. `?prompts=all`: the full prompts (hostPrompts,
+// guestPrompts); `?prompts=host`: Jada's full prompt only; `?prompts=off`: none, as in the chat room.
+const PROMPTS = typeof location === 'undefined' ? 'hands' : (new URLSearchParams(location.search).get('prompts') ?? 'hands');
 const PROMPTS_ON = PROMPTS !== 'off';
 const GUEST_PROMPTS = PROMPTS === 'all';
+const WELCOME_SHOT_MS = 8_000;   // the two-shot held as a guest is put through, before the director cuts
 const SEGMENT_MS = 4 * 60_000;   // a guest's time on air before an auto-booked guest may take over
 
 const STAGE_TEXT: Record<Stage, string> = {
@@ -196,13 +199,10 @@ export function App() {
     const id = setTimeout(() => setTrailerCovers(true), TRAILER_FADE_MS);
     return () => clearTimeout(id);
   }, [trailerUp]);
-  // While the trailer plays the studio is off air: what Jada says then is neither heard nor logged.
-  // During the trailer Jada watches it in a corner window, silent: what she says then is
-  // neither heard nor logged, and her faces get silence (see hush), so they never mouth it.
-  const trailerOn = useRef(false);
-  trailerOn.current = trailer;
   // Her voice is kept off her faces from the roll until her line after the trailer is cued:
-  // with her face FACE_LAG_MS behind, that is the trailer's time on screen.
+  // with her face FACE_LAG_MS behind, that is the trailer's time on screen. What she says while
+  // hushed is neither shown nor logged; her line after it is, from its first word, though it
+  // starts while the trailer is still fading out.
   const hush = useRef(false);
   const [shot, setShot] = useState<Shot>('host-front');
   const [shotMode, setShotMode] = useState<ShotMode>('auto');
@@ -320,7 +320,7 @@ export function App() {
           director.current?.speaking(role, false);
           const said = words.current[role].trim();
           words.current[role] = '';
-          if (said && aired && !trailerOn.current) {
+          if (said && aired && !hush.current) {
             advancer.current?.line({ who: role, text: said });
             booker.current?.line({ who: role, text: said });
           }
@@ -328,7 +328,7 @@ export function App() {
           const name = role === 'guest' ? segment.current?.name : undefined;
           setTimeout(() => {
             setSpeaking((l) => ({ ...l, [role]: undefined }));
-            if (said && aired && !trailerOn.current) addLog(role, said, name);
+            if (said && aired && !hush.current) addLog(role, said, name);
           }, FACE_LAG_MS);
         },
       });
@@ -347,6 +347,8 @@ export function App() {
           }
         },
         flush() { voice.flush(); for (const { feeder } of feeders) feeder.end(); },
+        // A face that has gone: its stream ends, so the next face in that seat gets one of its own.
+        release(seat: string) { for (const f of feeders) if (f.seat === seat) f.feeder.end(); },
       };
     };
     return { host: make('host', ['host']), guest: make('guest', ['g0', 'g1']) };
@@ -365,7 +367,7 @@ export function App() {
         },
         onWords(delta) {
           words.current[role] += delta;
-          if (!trailerOn.current && floor.onAir(role)) {
+          if (!hush.current && floor.onAir(role)) {
             const name = role === 'guest' ? segment.current?.name : undefined;
             setTimeout(() => setSpeaking((l) => ({ ...l, [role]: { name, text: (l[role]?.text ?? '') + delta } })), FACE_LAG_MS);
           }
@@ -399,7 +401,11 @@ export function App() {
       if (role === 'host') booth.current?.hostLive();
       // The guest is on: the two-shot, Jada and the TV, until the booth or the director cuts.
       else {
-        setPatched(true); chooseShot('two'); booth.current?.guestLive(); advancer.current?.topic(firstTopic.current, true);
+        // The two-shot for the welcome, then the director follows whoever speaks (show/director.ts).
+        setPatched(true); chooseShot('two');
+        const show = showRef.current;
+        setTimeout(() => { if (showRef.current === show) chooseShot('auto'); }, WELCOME_SHOT_MS);
+        booth.current?.guestLive(); advancer.current?.topic(firstTopic.current, true);
         booker.current?.guestOn();
         setSegmentDone(false);
         clearTimeout(segmentTimer.current);
@@ -655,10 +661,14 @@ export function App() {
         await lines.current.guest?.end();
         lines.current.guest = undefined;
         await faces.current[old === 0 ? 'g0' : 'g1'].end();
+        voices.guest.release(old === 0 ? 'g0' : 'g1');
       }),
       // Jada has introduced them: the new guest is put through, and says hello first.
       bringOn: () => later(async () => {
         const to = slotsRef.current[next]!;
+        // On air now: no longer someone being brought on (left, they read as a guest still on
+        // the way, and blocked the next invite and the suggestion to wrap).
+        delete purpose.current[to.id];
         const old = onTvRef.current;
         onTvRef.current = next;
         setOnTv(next);
