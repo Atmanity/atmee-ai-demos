@@ -368,6 +368,29 @@ describe('a handover to the next guest', () => {
     expect(h.bringOn).toHaveBeenCalledOnce();
   });
 
+  it('brings nobody on once the show is wrapped mid-handover', () => {
+    const s = onAir();
+    const h = steps();
+    s.booth.handover(h);
+    s.turn('host');
+    s.turn('guest');                                  // the guest is gone; her introduction pending
+    s.booth.wrap();
+    vi.advanceTimersByTime(BRIDGE_WAIT_MS);
+    s.turn('host');
+    expect(h.bringOn).not.toHaveBeenCalled();
+  });
+
+  it('brings nobody on once the show is closed mid-handover', () => {
+    const s = onAir();
+    const h = steps();
+    s.booth.handover(h);
+    s.turn('host');
+    s.turn('guest');
+    s.booth.close();
+    vi.advanceTimersByTime(BRIDGE_WAIT_MS);
+    expect(h.bringOn).not.toHaveBeenCalled();
+  });
+
   it('is dropped by the wrap before it has begun', () => {
     const s = onAir();
     const h = steps();

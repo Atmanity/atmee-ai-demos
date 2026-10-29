@@ -366,7 +366,8 @@ export function createBooth(opts: BoothOptions): Booth {
       if (wrapping || stage === 'closing' || stage === 'over') return;
       wrapping = true;
       if (stage !== 'on-air') return setStage('over');
-      if (handing?.at === 'farewell') handing = null;   // not yet begun: the wrap takes its place
+      // The wrap takes a handover's place at any step: nobody new is brought on once the show is wrapping.
+      if (handing) { handing = null; clearTimeout(handTimer); clearTimeout(bridgeTimer); }
       direct(read(opts.wrap));
       waiting = read(opts.wrap);
       watchIdle();
@@ -379,6 +380,8 @@ export function createBooth(opts: BoothOptions): Booth {
       clearTimeout(speakUpTimer);
       clearTimeout(holdTimer);
       clearTimeout(handTimer);
+      clearTimeout(bridgeTimer);
+      handing = null;
       clearTimeout(turnTimers.host);
       clearTimeout(turnTimers.guest);
     },
