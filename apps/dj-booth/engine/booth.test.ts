@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { ANSWER_WINDOW_MS, BREAK_MS, DUCK, freshClock, heard, musicLevel, tick, type Clock, type Cue } from './booth.ts';
+import { ANSWER_WINDOW_MS, BREAK_MS, DUCK, freshClock, heard, INTRO_TALK_MS, musicLevel, tick, type Clock, type Cue } from './booth.ts';
 
 const play = (position: number, duration = 200_000, isPaused = false) => ({ isPaused, isBuffering: false, position, duration });
 
@@ -47,13 +47,20 @@ test('the music ducks under the host to a share of the listener\'s level, never 
 });
 
 describe('what the listener hears of the host', () => {
+  const late = { musicOn: true, onBreak: false, positionMs: 60_000 };
+
   test('between records and in a break, everything', () => {
-    expect(heard({ musicOn: false, onBreak: false, sinceListenerMs: Infinity })).toBe(true);
-    expect(heard({ musicOn: true, onBreak: true, sinceListenerMs: Infinity })).toBe(true);
+    expect(heard({ ...late, musicOn: false, sinceListenerMs: Infinity })).toBe(true);
+    expect(heard({ ...late, onBreak: true, sinceListenerMs: Infinity })).toBe(true);
   });
 
-  test('over a record, an answer to the listener but not an unprompted check-in', () => {
-    expect(heard({ musicOn: true, onBreak: false, sinceListenerMs: 5_000 })).toBe(true);
-    expect(heard({ musicOn: true, onBreak: false, sinceListenerMs: ANSWER_WINDOW_MS + 1 })).toBe(false);
+  test('over the first 20 seconds of a record, everything: the host talks up to the vocal', () => {
+    expect(heard({ ...late, positionMs: INTRO_TALK_MS - 1, sinceListenerMs: Infinity })).toBe(true);
+    expect(heard({ ...late, positionMs: INTRO_TALK_MS, sinceListenerMs: Infinity })).toBe(false);
+  });
+
+  test('later in a record, an answer to the listener but not an unprompted check-in', () => {
+    expect(heard({ ...late, sinceListenerMs: 5_000 })).toBe(true);
+    expect(heard({ ...late, sinceListenerMs: ANSWER_WINDOW_MS + 1 })).toBe(false);
   });
 });

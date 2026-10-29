@@ -13,7 +13,7 @@ import { DEFAULT_THEME, type Theme } from '../engine/theme.ts';
 import { useSpotifyPlayer, type Playback } from './player.ts';
 import { useSdkPlayer } from './sdk-player.ts';
 import { accessToken, connect, connected, disconnect, finishConnect } from './spotify-auth.ts';
-import { freshClock, heard, HOLD_MAX_MS, INTRO_WAIT_MS, musicLevel, QUIET_MS, tick, type Clock } from '../engine/booth.ts';
+import { freshClock, heard, HOLD_MAX_MS, INTRO_TALK_MS, INTRO_WAIT_MS, musicLevel, QUIET_MS, tick, type Clock } from '../engine/booth.ts';
 import nova from '../host/portrait.jpg';
 import './crate.css';
 
@@ -330,10 +330,10 @@ export function App() {
     const starting = avatar.speaking && !wasSpeaking.current;
     wasSpeaking.current = avatar.speaking;
     if (avatar.speaking && !starting) return;
-    const verdict = !heard({ musicOn, onBreak, sinceListenerMs: Date.now() - lastListenerAt.current });
+    const verdict = !heard({ musicOn, onBreak, sinceListenerMs: Date.now() - lastListenerAt.current, positionMs: progress?.position ?? 0 });
     setMuffled(verdict);
     if (starting && verdict) console.info('[crate] an unprompted line over the record plays silent');
-  }, [avatar.speaking, musicOn, onBreak]);
+  }, [avatar.speaking, musicOn, onBreak, (progress?.position ?? 0) < INTRO_TALK_MS]);
   const voiced = avatar.speaking && !muffled;
   const ducked = voiced || onBreak || Boolean(holding);
   const level = useRef(musicVolume);
