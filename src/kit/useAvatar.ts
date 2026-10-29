@@ -41,12 +41,18 @@ export interface Avatar {
   filesAccepted: boolean;
   videoRef: React.RefObject<HTMLVideoElement | null>;
   audioRef: React.RefObject<HTMLAudioElement | null>;
-  start(opts?: { mic?: boolean }): Promise<void>;
+  /** `micMuted`: the microphone joins muted (push to talk), for setMic(true) to open. */
+  start(opts?: { mic?: boolean; micMuted?: boolean }): Promise<void>;
   end(): Promise<void>;
   /** A typed user turn: it shows in the transcript and the avatar answers it. */
   say(text: string): void;
   /** Show a line the user typed that the app handled itself (nothing is sent to the avatar). */
   record(text: string): void;
+  /**
+   * Cut the avatar off now with a turn of the app's own words (not shown as the user's line):
+   * for something on screen that makes what it is saying moot, like a skipped song.
+   */
+  interrupt(text: string): void;
   state(text: string): void;
   note(text: string): void;
   event(text: string, ttlS?: number): void;
@@ -119,7 +125,7 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
   useEffect(() => { document.documentElement.dataset.speaking = String(speaking); }, [speaking]);
 
   const starting = useRef(false);   // set before the first await: a second click while the mic prompt is up starts nothing
-  const start = useCallback(async ({ mic = false }: { mic?: boolean } = {}) => {
+  const start = useCallback(async ({ mic = false, micMuted = false }: { mic?: boolean; micMuted?: boolean } = {}) => {
     if (sessionRef.current || starting.current) return;
     starting.current = true;
     betweenCalls.current = false;
@@ -133,11 +139,11 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
         setDetail('No microphone: you can type instead.');
       }
     }
-    setMicOn(Boolean(stream));
+    setMicOn(Boolean(stream) && !micMuted);
     let session: AvatarSession | null = null;
     try {
       session = await joinAvatar({
-        app, mic: stream, video: () => videoRef.current, audio: () => audioRef.current,
+        app, mic: stream, micMuted, video: () => videoRef.current, audio: () => audioRef.current,
         onPhase: (p, d) => {
           setPhase(p);
           if (p === 'warming') setDetail(`Getting ready (${d?.waited ?? 0} s)…`);
@@ -229,6 +235,11 @@ export function useAvatar(app: string, handlers: AvatarHandlers = {}): Avatar {
       void sessionRef.current?.say(text);
     },
     record(text) { addLine({ who: 'user', text, typed: true }); },
+    interrupt(text) {
+      // Its echo in the transcript is the app's words, not the user's: filtered like a typed turn's.
+      lastTyped.current = { text, at: Date.now() };
+      void sessionRef.current?.interrupt(text);
+    },
     state(text) {
       pending.current.state = text;
       void sessionRef.current?.state(text);

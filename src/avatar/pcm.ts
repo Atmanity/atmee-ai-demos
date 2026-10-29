@@ -42,9 +42,9 @@ const WORKLET = `registerProcessor('pcm-tap', class extends AudioWorkletProcesso
   process(inputs) { const ch = inputs[0] && inputs[0][0]; if (ch) this.port.postMessage(ch.slice(0)); return true; }
 });`;
 
-/** Calls onPcm with the microphone's audio as 16 kHz PCM until the returned stop() is called. */
-export async function tapMicrophone(stream: MediaStream, onPcm: (pcm: Int16Array) => void): Promise<() => Promise<void>> {
-  const context = new AudioContext({ sampleRate: SAMPLE_RATE });
+/** Calls onPcm with the microphone's audio as PCM at `rate` (16 kHz by default) until the returned stop() is called. */
+export async function tapMicrophone(stream: MediaStream, onPcm: (pcm: Int16Array) => void, rate = SAMPLE_RATE): Promise<() => Promise<void>> {
+  const context = new AudioContext({ sampleRate: rate });
   const url = URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' }));
   try { await context.audioWorklet.addModule(url); } finally { URL.revokeObjectURL(url); }
   const source = context.createMediaStreamSource(stream);

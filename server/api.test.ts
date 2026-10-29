@@ -6,6 +6,8 @@ import { afterAll, beforeAll, expect, test, vi } from 'vitest';
 // The Avatar API, faked: every call is recorded; the page-side calls go to the real server.
 const BASE = 'https://avatar-api.test';
 const calls: string[] = [];
+// Clearing an agenda refused, as a key without the right to the avatar's conductor gets.
+let denyConductor = false;
 const realFetch = globalThis.fetch;
 let server: Server;
 let port: number;
@@ -19,6 +21,8 @@ beforeAll(async () => {
     if (!u.startsWith(BASE)) return realFetch(url, init);
     const path = u.slice(BASE.length);
     calls.push(`${init?.method ?? 'GET'} ${path}`);
+    if (denyConductor && path.endsWith('/conductor')) return Response.json({ error: 'insufficient_scope' }, { status: 403 });
+    if (path === '/v1/speech_sessions') return Response.json({ sessionId: `sp-${calls.length}`, url: 'wss://speech.test', token: 't', actualDurationSeconds: 900 }, { status: 201 });
     if (path === '/v1/session') return Response.json({ sessionId: `s-${calls.length}`, serverUrl: 'wss://lk.test', userToken: 't', actualDurationSeconds: 600 }, { status: 201 });
     if (path.endsWith('/end')) return Response.json({ status: 'completed' });
     return new Response(null, { status: 204 });
@@ -57,4 +61,23 @@ test('the app list carries what the home page counts: each host\'s tools and whe
     expect(typeof a.agenda).toBe('boolean');
   }
   expect(list.find((a) => a.id === 'sky-guide')?.tools).toBeGreaterThan(0);
+});
+
+test('an app with no agenda starts its session even when clearing the avatar\'s agenda is refused', async () => {
+  denyConductor = true;
+  try {
+    expect(await start('dj-booth')).toMatch(/^s-/);
+    expect(calls.some((c) => c.startsWith('DELETE') && c.endsWith('/conductor'))).toBe(true);
+  } finally {
+    denyConductor = false;
+  }
+});
+
+test('on shutdown an app\'s own live sessions (Crate\'s speech sessions) are ended too, and awaited', async () => {
+  const res = await fetch(`http://127.0.0.1:${port}/api/apps/dj-booth/speech`, { method: 'POST' });
+  const { sessionId } = await res.json();
+  expect(sessionId).toMatch(/^sp-/);
+  calls.length = 0;
+  await endLiveSessions();
+  expect(calls).toContain(`POST /v1/speech_sessions/${sessionId}/end`);
 });
