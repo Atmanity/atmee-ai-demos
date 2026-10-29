@@ -57,8 +57,7 @@ function Lobby({ onStart, spotify }: { onStart: (mic: boolean) => void; spotify:
         <h1>Your own radio show, hosted live.</h1>
         <p>Nova digs through Spotify, builds the set and talks you in and out of every record, between the songs, like real radio.</p>
         <div className="cr-cta">
-          <button type="button" className="cr-primary" onClick={() => onStart(true)}>Go on air with your voice</button>
-          <button type="button" className="cr-secondary" onClick={() => onStart(false)}>Request by typing</button>
+          <button type="button" className="cr-primary" onClick={() => onStart(true)}>Go on air</button>
         </div>
         {spotify.clientId && (
           <div className="cr-spotify">
