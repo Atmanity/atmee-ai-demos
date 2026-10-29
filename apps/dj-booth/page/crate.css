@@ -55,6 +55,7 @@ button { font: inherit; color: inherit; }
 .cr-lobby .cr-mood { display: none; }
 .cr-pill { white-space: nowrap; flex: none; padding: 6px 14px; border-radius: 999px; border: 0; background: color-mix(in srgb, var(--surface) 70%, transparent); color: var(--ink); font-size: 13px; font-weight: 700; cursor: pointer; backdrop-filter: blur(10px); transition: background .2s ease; }
 .cr-pill.is-on { background: var(--accent); color: var(--bg); }
+.cr-pill-spotify { display: inline-flex; align-items: center; gap: 6px; background: #1ed760; color: #04170a; }
 .cr-onair { padding: 4px 10px; border-radius: 6px; background: var(--glow); color: var(--bg); font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
 .cr-end { display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 50%; background: #e5484d; color: #fff; cursor: pointer; }
 .cr-end svg { width: 20px; height: 20px; }
@@ -186,6 +187,7 @@ button { font: inherit; color: inherit; }
 }
 @media (max-width: 480px) {
   .cr-mood, .cr-onair, .cr-logo span { display: none; }
+  .cr-pill-spotify { font-size: 0; gap: 0; padding: 6px 8px; }
   .cr-pill { padding: 6px 11px; }
   .cr-pill.is-first { margin-left: auto; }
   .cr-mixer { flex-direction: column; gap: 10px; }

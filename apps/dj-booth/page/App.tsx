@@ -397,6 +397,13 @@ export function App() {
       <header className="cr-top">
         <BackToApps avatar={avatar} name={HOST} /><Logo />
         <span className="cr-mood" title="This look was made by AI for the record playing">✦ {theme.mood}</span>
+        {spotify.clientId && !useSdk && (
+          // The Premium player (a music volume, the dip under Nova) is a sign-in away; it leaves the page, so the show ends first.
+          <button type="button" className="cr-pill cr-pill-spotify" title="Connect Spotify Premium for a music volume (ends this show)"
+            onClick={() => { if (confirm('Connecting Spotify Premium ends this show; start a new one after. Connect now?')) { void avatar.end().finally(() => void connect(spotify.clientId!)); } }}>
+            <SpotifyIcon /> Connect Premium
+          </button>
+        )}
         <button type="button" className={`cr-pill is-first ${tab === 'next' || tab === 'crate' ? 'is-on' : ''}`} onClick={() => setTab(tab === 'next' || tab === 'crate' ? null : 'next')}>
           Playlist{deck.queue.length ? ` · ${deck.queue.length}` : ''}
         </button>
