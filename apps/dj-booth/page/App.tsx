@@ -58,13 +58,21 @@ function Lobby({ onStart, spotify }: { onStart: (mic: boolean) => void; spotify:
           <button type="button" className="cr-primary" onClick={() => onStart(true)}>Go on air with your voice</button>
           <button type="button" className="cr-secondary" onClick={() => onStart(false)}>Request by typing</button>
         </div>
-        {spotify.clientId && (spotify.connected ? (
-          <p className="cr-small">Playing through your Spotify Premium: whole tracks, with a volume. <button type="button" className="cr-link" onClick={() => { disconnect(); location.reload(); }}>Disconnect</button></p>
-        ) : (
-          <p className="cr-small">
-            <button type="button" className="cr-link" onClick={() => void connect(spotify.clientId!)}>Connect Spotify Premium</button> for whole tracks and a music volume; without it the booth plays 30-second previews.
-          </p>
-        ))}
+        {spotify.clientId && (
+          <div className="cr-spotify">
+            {spotify.connected ? (
+              <>
+                <span className="cr-spotify-on"><SpotifyIcon /> Spotify Premium connected: whole tracks, music volume</span>
+                <button type="button" className="cr-link" onClick={() => { disconnect(); location.reload(); }}>Disconnect</button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="cr-spotify-connect" onClick={() => void connect(spotify.clientId!)}><SpotifyIcon /> Connect Spotify Premium</button>
+                <p className="cr-small">For whole tracks and a music volume. Without it the booth plays 30-second previews.</p>
+              </>
+            )}
+          </div>
+        )}
         {spotify.problem && <p className="cr-small cr-problem">{spotify.problem}</p>}
       </main>
     </div>
@@ -522,6 +530,7 @@ function TrackRow({ track, number, onPlay }: { track: Track; number?: number; on
 }
 
 const icon = { width: 22, height: 22, viewBox: '0 0 24 24', fill: 'currentColor', 'aria-hidden': true } as const;
+const SpotifyIcon = () => <svg {...icon} width={18} height={18}><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm4.6 14.4a.6.6 0 0 1-.9.2c-2.4-1.5-5.4-1.8-8.9-1a.6.6 0 1 1-.3-1.2c3.9-.9 7.2-.5 9.9 1.1.3.2.4.6.2.9zm1.2-2.7a.8.8 0 0 1-1.1.3c-2.7-1.7-6.9-2.2-10.1-1.2a.8.8 0 1 1-.5-1.5c3.7-1.1 8.3-.6 11.4 1.3.4.2.5.7.3 1.1zm.1-2.8C14.7 9 9.4 8.8 6.3 9.7a.9.9 0 1 1-.5-1.8c3.5-1.1 9.4-.9 13.1 1.3a.9.9 0 1 1-1 1.7z" /></svg>;
 const PauseIcon = () => <svg {...icon}><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>;
 const PlayIcon = () => <svg {...icon}><path d="M7 4.5v15l13-7.5z" /></svg>;
 const SkipIcon = () => <svg {...icon}><path d="M5 5v14l10-7zM17 5h2.5v14H17z" /></svg>;

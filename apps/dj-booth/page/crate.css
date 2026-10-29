@@ -70,6 +70,11 @@ button { font: inherit; color: inherit; }
 .cr-primary { background: var(--accent); color: var(--bg); border: 0; }
 .cr-secondary { background: color-mix(in srgb, var(--surface) 60%, transparent); border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); }
 .cr-small { font-size: 14px !important; }
+.cr-spotify { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-top: 22px; }
+.cr-spotify-connect { display: inline-flex; align-items: center; gap: 8px; padding: 11px 20px; border: 0; border-radius: 999px; background: #1ed760; color: #04170a; font-weight: 800; cursor: pointer; transition: transform .15s ease; }
+.cr-spotify-connect:hover { transform: translateY(-1px); }
+.cr-spotify-on { display: inline-flex; align-items: center; gap: 8px; color: #1ed760; font-weight: 700; font-size: 14px; }
+.cr-spotify .cr-small { margin: 6px 0 0; }
 .cr-link { padding: 0; border: 0; background: none; color: var(--accent); font-weight: 700; text-decoration: underline; cursor: pointer; }
 .cr-problem { color: var(--glow) !important; }
 
