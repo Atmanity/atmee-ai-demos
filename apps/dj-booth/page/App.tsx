@@ -478,9 +478,9 @@ export function App() {
   }, [deck.playing?.id]);
   useEffect(() => { if (deck.queue[0]) void themeOf(deck.queue[0]); }, [deck.queue[0]?.id]);
   const [pushToTalk, setPushToTalk] = useState(false);
-  // Two engines with one shape: Nova over the speech API with her face rendered on demand (the
-  // default), or the full-stack session (?engine=session), whose face is always rendered.
-  const engine = useMemo(() => (new URLSearchParams(location.search).get('engine') === 'session' ? 'session' : 'speech'), []);
+  // Two engines with one shape: the full-stack session (the default), whose face is always rendered,
+  // or Nova over the speech API with her face rendered on demand (?engine=speech).
+  const engine = useMemo(() => (new URLSearchParams(location.search).get('engine') === 'speech' ? 'speech' : 'session'), []);
   const avatarHandlers = { onToolCall, onUserSaid: () => { lastListenerAt.current = Date.now(); } };
   const fullStack = useAvatar('dj-booth', avatarHandlers);
   const speechCall = useSpeechCall('dj-booth', avatarHandlers);

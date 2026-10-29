@@ -6,7 +6,8 @@ track. The music is Spotify's own embed on the page; Nova works it through app t
 
 ## Two engines
 
-- **Speech (default):** Nova over the speech API (`POST /v1/speech_sessions`), voice only, in one
+- **Full-stack (default):** `POST /v1/session`, face always rendered.
+- **Speech (`?engine=speech`):** Nova over the speech API (`POST /v1/speech_sessions`), voice only, in one
   WebSocket from the page (`page/speech.ts`): 24 kHz PCM both ways, her tools as
   `function_call` items, the live deck as `causeur.directive.set`, cues and typed turns as
   `session.commentary.append` (a typed turn carries Causeur's typed-reply prefix, which also cuts
@@ -17,7 +18,6 @@ track. The music is Spotify's own embed on the page; Nova works it through app t
   the face plays it in sync; otherwise it plays in the page. Without LiveKit for the site
   (`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`) she goes on by voice and the stage shows
   her portrait.
-- **Full-stack (`?engine=session`):** the earlier `POST /v1/session`, face always rendered.
 
 ## How it works
 
