@@ -380,6 +380,18 @@ describe('a handover to the next guest', () => {
     expect(h.bringOn).not.toHaveBeenCalled();
   });
 
+  it('does not ask her again to introduce the next guest once wrapped', () => {
+    const s = onAir();
+    const h = steps();
+    s.booth.handover(h);
+    s.turn('host');
+    s.turn('guest');                                  // her introduction asked for
+    s.booth.wrap();
+    const sent = s.sent.length;
+    vi.advanceTimersByTime(SPEAK_UP_MS * 3);
+    expect(s.sent.slice(sent)).not.toContainEqual({ to: 'host', kind: 'commentary', text: 'BRIDGE' });
+  });
+
   it('brings nobody on once the show is closed mid-handover', () => {
     const s = onAir();
     const h = steps();

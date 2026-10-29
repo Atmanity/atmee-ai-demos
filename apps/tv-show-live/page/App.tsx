@@ -312,6 +312,9 @@ export function App() {
         },
         onFrame() {},
         onEnd() {
+          // Whether her line was hushed when it ended: the booth may roll the trailer (and hush her)
+          // as the line ends, and the transcript is written FACE_LAG_MS later.
+          const hushed = hush.current;
           clearTimeout(talkingUntil.current[role]);
           talkingUntil.current[role] = setTimeout(() => { talking.current[role] = false; }, TURN_QUIET_MS);
           const aired = floor.wentOnAir(role);
@@ -320,7 +323,7 @@ export function App() {
           director.current?.speaking(role, false);
           const said = words.current[role].trim();
           words.current[role] = '';
-          if (said && aired && !hush.current) {
+          if (said && aired && !hushed) {
             advancer.current?.line({ who: role, text: said });
             booker.current?.line({ who: role, text: said });
           }
@@ -328,7 +331,7 @@ export function App() {
           const name = role === 'guest' ? segment.current?.name : undefined;
           setTimeout(() => {
             setSpeaking((l) => ({ ...l, [role]: undefined }));
-            if (said && aired && !hush.current) addLog(role, said, name);
+            if (said && aired && !hushed) addLog(role, said, name);
           }, FACE_LAG_MS);
         },
       });
@@ -476,6 +479,7 @@ export function App() {
   }
 
   async function wrapUp() {
+    hush.current = false;
     booth.current?.close();
     director.current?.close();
     setTrailer(false);
@@ -487,6 +491,7 @@ export function App() {
   }
 
   async function goOnAir(first: string, describe?: string) {
+    hush.current = false;
     const cast = describe ? null : castGuest;
     // An invention begun in the lobby carries on: its guest, written or built already, is the opening guest.
     const early = describe && lobbyInvention ? lobbyInvention : null;
@@ -665,6 +670,8 @@ export function App() {
       }),
       // Jada has introduced them: the new guest is put through, and says hello first.
       bringOn: () => later(async () => {
+        // Wrapped meanwhile: nobody new comes on.
+        if (live.current.wrapped) { handingOver.current = false; return; }
         const to = slotsRef.current[next]!;
         // On air now: no longer someone being brought on (left, they read as a guest still on
         // the way, and blocked the next invite and the suggestion to wrap).

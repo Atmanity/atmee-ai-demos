@@ -367,7 +367,8 @@ export function createBooth(opts: BoothOptions): Booth {
       wrapping = true;
       if (stage !== 'on-air') return setStage('over');
       // The wrap takes a handover's place at any step: nobody new is brought on once the show is wrapping.
-      if (handing) { handing = null; clearTimeout(handTimer); clearTimeout(bridgeTimer); }
+      // Her introduction of the next guest, if already asked for, is not asked again.
+      if (handing) { handing = null; clearTimeout(handTimer); clearTimeout(bridgeTimer); clearTimeout(speakUpTimer); lastSpeakUp = null; }
       direct(read(opts.wrap));
       waiting = read(opts.wrap);
       watchIdle();
