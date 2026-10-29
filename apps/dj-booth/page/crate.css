@@ -152,10 +152,12 @@ button { font: inherit; color: inherit; }
 .cr-ptt { flex: 1; max-width: 340px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 14px 20px; border-radius: 999px; border: 0; background: var(--accent); color: var(--bg); font-weight: 800; font-size: 16px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; box-shadow: 0 10px 30px color-mix(in srgb, var(--accent) 35%, transparent); transition: transform .12s ease, box-shadow .2s ease; }
 .cr-ptt small { font-weight: 500; font-size: 12px; opacity: .75; }
 /* What was heard sits on the button: two lines at most, so the button never changes height. */
-.cr-ptt { height: 72px; justify-content: center; }
-/* A fixed two-line window that keeps the newest words in view: older lines slide up out of it, under a fade. */
-.cr-ptt-words { display: flex; flex-direction: column; justify-content: flex-end; max-height: 2.5em; overflow: hidden; max-width: 100%; line-height: 1.25; text-align: center; overflow-wrap: anywhere; }
-.cr-ptt-words.is-long { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 .9em); mask-image: linear-gradient(to bottom, transparent 0, #000 .9em); }
+.cr-ptt { height: 80px; padding: 8px 22px; justify-content: center; }
+/* Two lines at most; a longer line is fitted from its end ("…the newest words"), measured by a hidden twin. */
+.cr-ptt { position: relative; }
+.cr-ptt-words { display: block; max-height: 2.5em; overflow: hidden; max-width: 100%; line-height: 1.25; text-align: center; overflow-wrap: anywhere; }
+.cr-ptt-measure { position: absolute; visibility: hidden; pointer-events: none; left: 22px; right: 22px; top: 0; max-height: 2.5em; }
+.cr-ptt:focus, .cr-ptt:focus-visible { outline: none; }
 .cr-ptt.is-held .cr-ptt-words, .cr-ptt-words.is-said { font-weight: 600; font-size: 15px; }
 .cr-ptt-dot { display: none; }
 .cr-ptt.is-held { transform: scale(.97); box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 30%, transparent), 0 10px 30px color-mix(in srgb, var(--accent) 45%, transparent); }

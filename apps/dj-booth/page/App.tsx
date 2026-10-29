@@ -126,15 +126,33 @@ function TuningIn({ avatar }: { avatar: Avatar }) {
   );
 }
 
+/**
+ * `text` as it fits `el` (which caps its height): whole, or "…" and the longest end of it
+ * that fits, cut at a word where it can be. Measured in `el`, a hidden twin of the shown line.
+ */
+function fitTail(el: HTMLElement, text: string): string {
+  const fits = (t: string) => { el.textContent = t; return el.scrollHeight <= el.clientHeight + 1; };
+  if (fits(text)) return text;
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (fits(`…${text.slice(-mid)}`)) lo = mid; else hi = mid - 1;
+  }
+  const tail = text.slice(-lo);
+  const space = tail.indexOf(' ');
+  return `…${space > 0 && space < 12 ? tail.slice(space + 1) : tail}`;
+}
+
 // How long the button keeps showing what was heard, once the words are final.
 const HEARD_SHOWN_MS = 3000;
 
 function PushToTalk({ avatar }: { avatar: Avatar }) {
   const onAir = avatar.phase === 'live';
   const [held, setHeld] = useState(false);
-  // Whether the words overflow the button's two lines: only then does the top fade in.
-  const words = useRef<HTMLSpanElement>(null);
-  const [long, setLong] = useState(false);
+  // What fits the button's two lines: the whole line, or "…" and as much of its end as fits.
+  const measure = useRef<HTMLSpanElement>(null);
+  const [fitted, setFitted] = useState('');
   // The words as they are recognised while the button is held, then the final line for a moment.
   const [said, setSaid] = useState('');
   const lineCount = useRef(avatar.lines.length);
@@ -178,24 +196,24 @@ function PushToTalk({ avatar }: { avatar: Avatar }) {
     addEventListener('keyup', keyup);
     return () => { removeEventListener('keydown', keydown); removeEventListener('keyup', keyup); clearTimeout(closing.current); };
   }, [down, up]);
-  const shown = held ? avatar.heard : said;
-  useLayoutEffect(() => {
-    const el = words.current;
-    setLong(Boolean(el && el.scrollHeight > el.clientHeight + 1));
-  }, [shown, held]);
+  const shown = held ? (avatar.heard || 'Listening…') : said ? `“${said}”` : '';
+  useLayoutEffect(() => { setFitted(measure.current && shown ? fitTail(measure.current, shown) : shown); }, [shown]);
   return (
     <button
       type="button" className={`cr-ptt ${held ? 'is-held' : ''}`} aria-pressed={held} disabled={!onAir}
-      onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); down(); }}
+      // The button never takes focus (the space bar works anywhere), so no focus ring sits on it.
+      onPointerDown={(e) => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); down(); }}
+      onMouseDown={(e) => e.preventDefault()} tabIndex={-1}
       onPointerUp={up} onPointerCancel={up} onContextMenu={(e) => e.preventDefault()}
     >
       <span className="cr-ptt-dot" aria-hidden="true" />
+      <span ref={measure} className="cr-ptt-words is-said cr-ptt-measure" aria-hidden="true" />
       {!onAir
         ? <span className="cr-ptt-words"><span>Getting Nova on air…</span></span>
         : held
-        ? <span ref={words} className={`cr-ptt-words ${long ? 'is-long' : ''}`} aria-live="polite"><span>{avatar.heard || 'Listening…'}</span></span>
+        ? <span className="cr-ptt-words is-said" aria-live="polite"><span>{fitted}</span></span>
         : said
-          ? <span ref={words} className={`cr-ptt-words is-said ${long ? 'is-long' : ''}`}><span>“{said}”</span></span>
+          ? <span className="cr-ptt-words is-said"><span>{fitted}</span></span>
           : <span className="cr-ptt-words"><span>Hold to talk to Nova</span></span>}
       <small>{!onAir ? 'the mic opens in a moment' : held ? 'let go to send' : said ? 'sent to Nova' : 'or hold the space bar'}</small>
     </button>
