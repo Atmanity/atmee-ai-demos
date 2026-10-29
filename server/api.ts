@@ -77,7 +77,10 @@ api.post('/apps/:app/session', async (req, res) => {
   if (conductorOf.get(avatarId) !== app.id) {
     const graph = app.conductor ?? null;
     const r = await setConductor(avatarId, graph?.graph ?? null, graph?.speakAfterS);
-    if (r.status >= 300 && !(graph === null && r.status === 404)) {
+    // Clearing an agenda the avatar may not have is best-effort: a key bound to one avatar can be
+    // refused it (403) and the app, which runs none, still starts. Setting one must succeed.
+    if (graph === null && r.status === 403) console.warn('[%s] could not clear the avatar\'s agenda (403): starting anyway', app.id);
+    else if (r.status >= 300 && !(graph === null && r.status === 404)) {
       console.warn('[%s] conductor -> %d %s', app.id, r.status, JSON.stringify(r.json).slice(0, 300));
       return void res.status(502).json({ error: 'conductor_failed' });
     }
@@ -102,7 +105,7 @@ const rendering = new Map<string, string>(); // avatar session id -> app id
 
 api.post('/apps/:app/render', async (req, res) => {
   const app = apps.get(req.params.app);
-  if (!app || app.way !== 'avatar-only') return void res.status(404).json({ error: 'unknown_app' });
+  if (!app || (app.way !== 'avatar-only' && !app.rendersFace)) return void res.status(404).json({ error: 'unknown_app' });
   if (!renderConfigured()) return void res.status(503).json({ error: 'livekit_not_configured', message: 'Set LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET' });
   const avatarId = avatarFor(app.id);
   if (!avatarId) return void res.status(500).json({ error: 'no_avatar', message: `Set avatarId in apps/${app.id}/avatar.json, ${avatarEnvName(app.id)} or AVATAR_DEFAULT` });
@@ -139,7 +142,10 @@ export async function endLiveSessions() {
   const renders = [...rendering.keys()];
   started.clear();
   rendering.clear();
-  await Promise.allSettled([...ids.map((id) => endSession(id)), ...renders.map((id) => endRender(id))]);
+  await Promise.allSettled([
+    ...ids.map((id) => endSession(id)), ...renders.map((id) => endRender(id)),
+    ...[...apps.values()].map((app) => app.shutdown?.()),
+  ]);
 }
 
 api.post('/apps/:app/session/:id/end', async (req, res) => {

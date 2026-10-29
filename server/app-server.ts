@@ -16,6 +16,11 @@ export interface AppServer {
    * (POST /v1/speech_sessions), and the face is an avatar-only render of that voice.
    */
   way?: 'full-stack' | 'avatar-only' | 'speech-to-speech';
+  /**
+   * The app also renders its avatar into the site's own LiveKit room on demand (POST
+   * /api/apps/<id>/render), as the face of a voice it gets elsewhere (a speech session).
+   */
+  rendersFace?: boolean;
   /** A conductor graph, or null to make sure the avatar runs none. */
   conductor?: { graph: unknown; speakAfterS?: number } | null;
   /** Longest session to ask for. */
@@ -27,6 +32,8 @@ export interface AppServer {
    */
   appTools?: AppTools;
   routes?: (router: Router) => void;
+  /** Ends whatever the app's own routes started that still bills (on shutdown, before the process exits). */
+  shutdown?: () => Promise<unknown>;
 }
 
 /** One function tool in the OpenAI function-tool shape, plus how its calls are delivered. */
