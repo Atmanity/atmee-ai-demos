@@ -4,7 +4,8 @@
 // catalogue record, handed to him here; his own eyes (the visitor's camera,
 // which he sees as he answers) are for pointing, never for facts.
 import type { AppTool } from '../../../server/app-server.ts';
-import { EXHIBITS, recordText, type Exhibit } from './catalogue.ts';
+import { EXHIBITS, exhibitById, recordText, type Exhibit } from './catalogue.ts';
+import { GUESTS, guestFor, type Guest } from './guests.ts';
 
 export const INSTRUCTIONS = `You are guiding one visitor through the Meridian on their phone. They hold the phone up as they walk, so you see what their camera sees when you answer, and they talk to you out loud, usually on earbuds.
 
@@ -14,6 +15,7 @@ The museum app tells you which work they are at: when they scan the QR code on a
 - What you see in the camera image is for pointing ("look at her hands", "see the tiny mountain in the hollow of the wave"), not for facts.
 - When they ask what something is, or they point at something and the app has not told you what it is, call identify_exhibit first and speak from its result.
 - When they ask about another work, where something is, or you suggest what to see next, call show_exhibit with its title, so its card is on their screen.
+- Some works have a guest: the figure from the painting, come to life. At such a work, once you have told its story, offer once to introduce them. When the visitor wants to meet them, call introduce_guest; you leave while they talk, and the visitor can call you back any time.
 - Tool results begin with their outcome. Follow it: if a work was not identified, say so honestly and offer to try again or to scan its label.
 - Keep each turn to two to four short spoken sentences. No lists, no stage directions, no reading out the record.`;
 
@@ -30,6 +32,13 @@ export const TOOLS: AppTool[] = [
   },
   {
     type: 'function',
+    name: 'introduce_guest',
+    description: 'Hand the visitor over to the guest of the work they are at (the figure from the painting, come to life), when they want to meet them. You leave while the guest talks with them.',
+    parameters: { type: 'object', properties: { guest: { type: 'string', description: 'Who, in your words (optional): "the girl".' } } },
+    'x-atmee': { mode: 'await', timeoutSeconds: 8 },
+  },
+  {
+    type: 'function',
     name: 'show_exhibit',
     description: 'Put a work\'s card on the visitor\'s screen and get its catalogue record: for a work they ask about that is not in front of them, where to find something, or the work you suggest next.',
     parameters: {
@@ -41,7 +50,7 @@ export const TOOLS: AppTool[] = [
   },
 ];
 
-export type ToolName = 'identify_exhibit' | 'show_exhibit';
+export type ToolName = 'identify_exhibit' | 'show_exhibit' | 'introduce_guest';
 export const isToolName = (name: string): name is ToolName => TOOLS.some((t) => t.name === name);
 
 /** The museum's floor plan, in one line per room. */
@@ -56,9 +65,11 @@ export function tourState(at: { current: Exhibit | null; seen: Exhibit[]; camera
   return [
     at.camera ? 'The visitor\'s camera is on: you see what they point it at.' : 'The visitor\'s camera is off: you cannot see anything.',
     at.current ? `They are at: "${at.current.title}". Its catalogue record:\n${recordText(at.current)}` : 'They are not at any work yet.',
+    guestFor(at.current) ? `This work has a guest: ${guestFor(at.current)!.who}. Offer once to introduce them (introduce_guest).` : '',
     at.seen.length ? `Seen so far: ${at.seen.map((e) => `"${e.title}"`).join(', ')}.` : 'They have not seen any work yet.',
     `The Meridian's rooms:\n${floorPlan()}`,
-  ].join('\n\n');
+    `Guests: ${GUESTS.map((g) => `${g.name} at "${exhibitById(g.exhibit)!.title}"`).join('; ')}.`,
+  ].filter(Boolean).join('\n\n');
 }
 
 /** How the app came to know where the visitor is. */
@@ -87,6 +98,13 @@ export const said = {
   unclear: (seen: string) => `Not identified: the picture is not clear enough to tell${seen ? ` (it looks like ${seen})` : ''}. Ask the visitor to hold the phone steady, closer to the work, and try again; or to scan the QR code on the label.`,
   noCamera: 'Not identified: the visitor\'s camera is not showing anything. Ask them to turn it on and point it at the work, or to scan the label.',
   failed: 'Not identified: the museum\'s recognition is not answering right now. Ask the visitor to scan the QR code on the label instead.',
+  handingOver: (g: Guest) => `Handing over: ${g.name} is on the way and will join in a few seconds. Say one short sentence introducing ${g.name} and saying goodbye for now; the visitor can call you back any time.`,
+  noGuest: (current: Exhibit | null) => `No guest: ${current ? `"${current.title}" has no guest` : 'the visitor is not at a work'}. Guests are ${GUESTS.map((g) => `${g.name} at "${exhibitById(g.exhibit)!.title}"`).join(' and ')}.`,
+  /** The visitor pressed "Meet …" themselves. */
+  handOverPressed: (g: Guest) => `The visitor pressed "${g.meet}". Say one short sentence introducing ${g.name} and saying goodbye for now; ${g.name} is joining.`,
+  guestCouldNotCome: (g: Guest) => `${g.name[0].toUpperCase()}${g.name.slice(1)} could not join just now. Say so in one sentence and carry on the tour.`,
+  /** Edmund back after a guest. */
+  welcomeBack: (g: Guest, current: Exhibit | null) => `Without greeting from scratch: you are back after the visitor talked with ${g.name}${current ? ` at "${current.title}"` : ''}. Welcome them back in one sentence and ask what they would like to see next.`,
   shown: (e: Exhibit) => `Shown: the card for "${e.title}" is on the visitor's screen. It is in ${e.gallery}. Catalogue record:\n${recordText(e)}`,
   notFound: (title: string) => `Not found: the Meridian has no work called "${title}". Its works are: ${EXHIBITS.map((e) => `"${e.title}"`).join(', ')}. Say so, and offer one of them.`,
 };

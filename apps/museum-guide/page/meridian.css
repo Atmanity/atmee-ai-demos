@@ -205,7 +205,7 @@ a { color: inherit; }
 
 .mr-detail { display: grid; gap: 6px; }
 .mr-detail .mr-link { justify-self: start; text-decoration: none; padding-top: 0; }
-.mr-detail-img { width: 100%; max-height: 40dvh; object-fit: contain; background: #e7dfd1; border: 8px solid #2b2119; margin-bottom: 6px; }
+.mr-detail-img { display: block; width: auto; max-width: 100%; max-height: 40dvh; margin: 0 auto 6px; border: 8px solid #2b2119; box-sizing: border-box; }
 .mr-detail h2 { margin: 0; font: 600 32px/1.02 var(--mr-serif); }
 .mr-detail-by { margin: 0; font-size: 15px; font-weight: 600; }
 .mr-detail-medium { margin: 0; font-size: 13.5px; color: #5b4f43; font-style: italic; }
@@ -277,3 +277,22 @@ a { color: inherit; }
 
 /* A label's room line, on the gallery labels and in a work's entry. */
 .mr-label .mr-card-where, .mr-detail .mr-card-where { margin: 0 0 2px; font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: #9a7a3e; }
+
+/* ---- A work's entry over the camera, as it is introduced ---- */
+.mr-info { position: absolute; z-index: 2; top: calc(max(10px, env(safe-area-inset-top)) + 50px); left: calc(var(--gutter) + 10px); right: calc(var(--gutter) + 10px); bottom: calc(var(--sheet) - 14px); display: flex; flex-direction: column; border-radius: 20px 20px 0 0; background: #f4efe6; color: var(--mr-ink); color-scheme: light; box-shadow: 0 10px 40px rgba(0, 0, 0, .45); overflow: hidden; animation: mr-up .22s ease-out; }
+.mr-info .mr-detail { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px calc(var(--ed) * .5 + 16px); -webkit-overflow-scrolling: touch; }
+.mr-info .mr-detail-img { max-height: 30dvh; }
+.mr-info-close { flex: none; margin: 0; border: 0; border-top: 1px solid #e2d8c7; padding: 14px calc(var(--ed) * .55 + 8px) 26px 18px; background: #fbf8f2; color: var(--mr-ink); font-weight: 700; font-size: 15.5px; text-align: left; cursor: pointer; }
+/* One way back: the bar at the bottom, in thumb's reach. */
+.mr-info .mr-detail-back { display: none; }
+.mr-info-close::before { content: "◉  "; color: var(--mr-red); }
+.mr-meet { background: var(--mr-ink); color: var(--mr-ivory); }
+/* While reading, the guide steps aside (smaller, still on screen so his video keeps playing). */
+.is-reading .mr-edmund { width: calc(var(--ed) * .55); }
+
+/* ---- Guests: one guide on screen at a time; the other fades out (never off screen) ---- */
+.mr-edmund.is-away { opacity: 0 !important; }
+.mr-now.is-guest { cursor: default; justify-content: space-between; }
+.mr-now.is-guest > span { display: grid; }
+.mr-callback { flex: none; border: 0; border-radius: 999px; padding: 10px 16px; background: var(--mr-brass); color: var(--mr-brass-ink); font-weight: 700; font-size: 14px; cursor: pointer; }
+.mr-callback:disabled { opacity: .5; }

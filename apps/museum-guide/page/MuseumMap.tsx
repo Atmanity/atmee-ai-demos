@@ -2,13 +2,11 @@
 // visitor has seen it, ringed where they are now), the works by room below
 // it, and a work's full catalogue entry when its pin or row is tapped.
 import { useState } from 'react';
-import { exhibitById, type Exhibit } from '../engine/catalogue.ts';
+import type { Exhibit } from '../engine/catalogue.ts';
 import { PLAN, pins, ROOMS } from '../engine/floorplan.ts';
 import { exhibitImage } from './images.ts';
+import { Tick, WorkInfo } from './WorkInfo.tsx';
 
-const Tick = ({ size = 12 }: { size?: number }) => (
-  <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true"><path d="M5 12.5 10 17.5 19 7" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-);
 
 function FloorPlan({ seen, current, selected, onPick }: { seen: Set<string>; current: string | null; selected: string | null; onPick: (e: Exhibit) => void }) {
   const all = pins();
@@ -50,47 +48,6 @@ function FloorPlan({ seen, current, selected, onPick }: { seen: Set<string>; cur
   );
 }
 
-function Detail({ exhibit, seen, here, onBack, onOpen, onAsk, onToggleSeen }: {
-  exhibit: Exhibit;
-  seen: boolean;
-  here: boolean;
-  onBack: () => void;
-  onOpen: (e: Exhibit) => void;
-  onAsk?: (e: Exhibit) => void;
-  onToggleSeen?: (e: Exhibit, seen: boolean) => void;
-}) {
-  const next = exhibitById(exhibit.next);
-  return (
-    <article className="mr-detail" aria-label={exhibit.title}>
-      <button type="button" className="mr-link" onClick={onBack}>‹ All works</button>
-      <img className="mr-detail-img" src={exhibitImage(exhibit)} alt={`${exhibit.title}, ${exhibit.artist}`} />
-      <p className="mr-card-where">{here ? 'You are here · ' : ''}{exhibit.gallery}</p>
-      <h2>{exhibit.title}</h2>
-      <p className="mr-detail-by">{exhibit.artist} · {exhibit.date}</p>
-      <p className="mr-detail-medium">{exhibit.medium}. The original hangs in {exhibit.original}.</p>
-      <div className="mr-detail-actions">
-        {onAsk && <button type="button" className="mr-primary" onClick={() => onAsk(exhibit)}>Ask Edmund about it</button>}
-        {onToggleSeen && (
-          <button type="button" className={`mr-seen-toggle ${seen ? 'is-on' : ''}`} aria-pressed={seen} onClick={() => onToggleSeen(exhibit, !seen)}>
-            {seen ? <><Tick /> Seen</> : 'Mark as seen'}
-          </button>
-        )}
-      </div>
-      <h3>The story</h3>
-      {exhibit.story.map((line) => <p key={line}>{line}</p>)}
-      <h3>Look for</h3>
-      <ul>{exhibit.lookFor.map((line) => <li key={line}>{line[0].toUpperCase() + line.slice(1)}</li>)}</ul>
-      {next && (
-        <button type="button" className="mr-next" onClick={() => onOpen(next)}>
-          <img src={exhibitImage(next)} alt="" />
-          <span><small>Next on the route · {next.gallery.split(',')[0]}</small><b>{next.title}</b></span>
-          <span aria-hidden="true">›</span>
-        </button>
-      )}
-    </article>
-  );
-}
-
 export function MuseumMap({ seen, current, initial = null, onClose, onAsk, onToggleSeen }: {
   seen: Exhibit[];
   current: Exhibit | null;
@@ -117,7 +74,7 @@ export function MuseumMap({ seen, current, initial = null, onClose, onAsk, onTog
       <div className="mr-map-progress" aria-hidden="true"><span style={{ width: `${(seenIds.size / all.length) * 100}%` }} /></div>
       <div className="mr-map-body">
         {open ? (
-          <Detail exhibit={open} seen={seenIds.has(open.id)} here={current?.id === open.id} onBack={() => setOpen(null)} onOpen={pick} onAsk={onAsk} onToggleSeen={onToggleSeen} />
+          <WorkInfo exhibit={open} seen={seenIds.has(open.id)} here={current?.id === open.id} back="‹ All works" onBack={() => setOpen(null)} onOpen={pick} onAsk={onAsk} onToggleSeen={onToggleSeen} />
         ) : (
           <>
             <FloorPlan seen={seenIds} current={current?.id ?? null} selected={null} onPick={pick} />

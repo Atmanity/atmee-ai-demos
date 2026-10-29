@@ -4,13 +4,18 @@
 // catalogue's works a camera frame shows. The model only picks an id; the
 // catalogue (engine/catalogue.ts) is what Edmund is told about it.
 import type { AppServer } from '../../server/app-server.ts';
+import { endSession, startSession } from '../../server/atmee.ts';
 import { llmAvailable, structured } from '../../server/llm.ts';
 import { INSTRUCTIONS, TOOLS } from './engine/director.ts';
+import { GUEST_INSTRUCTIONS, GUEST_TOOLS, guestById } from './engine/guests.ts';
 import { fromModel, IDENTIFY_SCHEMA, IDENTIFY_SYSTEM, identifyPrompt, type ModelAnswer } from './engine/identify.ts';
 
 const ID = 'museum-guide';
 // A 768 px JPEG is well under this; anything bigger is not a frame from the page.
 const MAX_IMAGE_CHARS = 1_500_000;
+const GUEST_SECONDS = 900;
+// Guest sessions this server started (session id -> guest id), until they can no longer run.
+const guestSessions = new Map<string, string>();
 
 const app: AppServer = {
   id: ID,
@@ -19,7 +24,32 @@ const app: AppServer = {
   brand: { color: '#17120e', ink: '#f1e7d4' },
   maxSeconds: 1200,
   appTools: { instructions: INSTRUCTIONS, tools: TOOLS },
+  // Ends the guests' sessions on shutdown, as the site does Edmund's.
+  shutdown: () => Promise.allSettled([...guestSessions.keys()].map((id) => endSession(id))),
   routes(router) {
+    // A guest's session: the figure from a painting, on its own avatar, with the guest's tools.
+    // The page joins it as it joins Edmund's (useAvatar('museum-guide/guest/<id>')).
+    router.post('/guest/:guest/session', async (req, res) => {
+      const guest = guestById(req.params.guest);
+      if (!guest) return void res.status(404).json({ error: 'unknown_guest' });
+      const r = await startSession(guest.avatarId, Number(process.env.MAX_SECONDS) || GUEST_SECONDS,
+        { app: 'atmee-usecase-demos', usecase: `${ID}/guest/${guest.id}` }, { instructions: GUEST_INSTRUCTIONS, tools: GUEST_TOOLS });
+      if (!r.ok) {
+        console.warn('[%s] guest %s POST /v1/session -> %d %s', ID, guest.id, r.status, r.json?.error ?? '');
+        return void res.status(r.status).json({ error: r.json?.error || `http_${r.status}`, retryAfter: r.retryAfter });
+      }
+      guestSessions.set(r.session.sessionId, guest.id);
+      setTimeout(() => guestSessions.delete(r.session.sessionId), (GUEST_SECONDS + 120) * 1000).unref();
+      console.log('[%s] guest %s session %s', ID, guest.id, r.session.sessionId);
+      res.status(201).json(r.session);
+    });
+    router.post('/guest/:guest/session/:id/end', async (req, res) => {
+      if (guestSessions.get(req.params.id) !== req.params.guest) return void res.status(404).json({ error: 'not_found' });
+      const r = await endSession(req.params.id);
+      if (r.status === 200) guestSessions.delete(req.params.id);
+      res.status(r.status).json(r.json);
+    });
+
     router.post('/identify', async (req, res) => {
       const image = typeof req.body?.image === 'string' ? req.body.image.replace(/^data:image\/jpeg;base64,/, '') : '';
       const question = typeof req.body?.question === 'string' ? req.body.question.trim() : '';
