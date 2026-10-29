@@ -5,8 +5,8 @@
 // near the end of every record: the music ducks under her, and the next
 // record waits until she has finished introducing it.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BackToApps, CallStatus, clock as kitClock, useToolNet, ChatPanel, HangUpIcon, HostVideo, useAvatar, useCaptionToggle, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
-import { advance, dig, label, lined, listenerWants, nowBecomesNext, pick, playNow, queueNext, setPaused } from '../engine/deck.ts';
+import { BackToApps, CallStatus, clock as kitClock, ChatPanel, HangUpIcon, HostVideo, useAvatar, useCaptionToggle, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
+import { advance, dig, label, lined, nowBecomesNext, pick, playNow, queueNext, setPaused } from '../engine/deck.ts';
 import { crateText, deckState, said } from '../engine/director.ts';
 import { emptyDeck, type Deck, type Track } from '../engine/types.ts';
 import { DEFAULT_THEME, type Theme } from '../engine/theme.ts';
@@ -18,8 +18,6 @@ import nova from '../host/portrait.jpg';
 import './crate.css';
 
 const API = '/api/apps/dj-booth';
-// How long the page waits for Nova's own call before it skips (or pauses) for the listener itself.
-const NET_WAIT_MS = 4500;
 // The music's fades: a change of record fades the old one out over this, a duck dips over the same.
 const FADE_MS = 1200;
 const FADE_STEPS = 12;
@@ -59,13 +57,17 @@ function Lobby({ onStart, spotify }: { onStart: (mic: boolean) => void; spotify:
         <div className="cr-cta">
           <button type="button" className="cr-primary" onClick={() => onStart(true)}>Go on air</button>
         </div>
+        {spotify.problem && <p className="cr-small cr-problem">{spotify.problem}</p>}
+      </main>
+      {/* Spotify sits at the foot of the page: the way in is Go on air. */}
+      <footer className="cr-lobby-foot">
         {spotify.clientId && (
           <div className="cr-spotify">
             {spotify.connected ? (
-              <>
-                <span className="cr-spotify-on"><SpotifyIcon /> Spotify Premium connected: whole tracks, music volume</span>
-                <button type="button" className="cr-link" onClick={() => { disconnect(); location.reload(); }}>Disconnect</button>
-              </>
+              <span className="cr-spotify-chip" title="Whole tracks and a music volume, through your Spotify Premium">
+                <SpotifyIcon /><span>Spotify Premium connected</span>
+                <button type="button" onClick={() => { disconnect(); location.reload(); }}>Disconnect</button>
+              </span>
             ) : (
               <>
                 <button type="button" className="cr-spotify-connect" onClick={() => void connect(spotify.clientId!)}><SpotifyIcon /> Connect Spotify Premium</button>
@@ -74,8 +76,7 @@ function Lobby({ onStart, spotify }: { onStart: (mic: boolean) => void; spotify:
             )}
           </div>
         )}
-        {spotify.problem && <p className="cr-small cr-problem">{spotify.problem}</p>}
-      </main>
+      </footer>
     </div>
   );
 }
@@ -84,8 +85,67 @@ function Lobby({ onStart, spotify }: { onStart: (mic: boolean) => void; spotify:
 const TAIL_MS = 400;
 
 /** Hold to talk (the button, or the space bar outside the text box): the only way the mic opens. */
+/** The steps of a call coming up, in the booth's words. */
+const TUNING: Partial<Record<Avatar['phase'], string>> = {
+  starting: `Calling ${HOST}`,
+  warming: `${HOST} is warming up the booth`,
+  connecting: 'Patching you through',
+  arriving: `${HOST}'s stepping up to the mic`,
+};
+const TUNING_STEPS = Object.keys(TUNING);
+
+/**
+ * The booth while a call comes up. It goes the moment Nova is really there, her video playing
+ * or her voice heard, which is before the kit calls the call live (it waits a moment more for
+ * her agent), so no status ever sits over her greeting.
+ */
+function TuningIn({ avatar }: { avatar: Avatar }) {
+  const [present, setPresent] = useState(false);
+  useEffect(() => {
+    if (avatar.phase === 'starting') setPresent(false);
+    const video = avatar.videoRef.current;
+    if (!video) return;
+    const playing = () => setPresent(true);
+    video.addEventListener('playing', playing);
+    return () => video.removeEventListener('playing', playing);
+  }, [avatar.phase]);
+  const step = TUNING[avatar.phase];
+  const on = Boolean(step) && !present && !avatar.speaking;
+  // Kept mounted through its fade; the last words stay while it fades.
+  const last = useRef(step);
+  if (step) last.current = step;
+  return (
+    <div className={`cr-tuning ${on ? 'is-on' : ''}`} role="status" aria-live="polite" aria-hidden={!on}>
+      <div className="cr-eq" aria-hidden="true">{[0, 1, 2, 3, 4].map((i) => <span key={i} style={{ animationDelay: `${i * 0.13}s` }} />)}</div>
+      <p className="cr-tuning-words">{last.current}<span className="cr-ellipsis" aria-hidden="true" /></p>
+      {avatar.phase === 'warming' && avatar.detail && <p className="cr-tuning-detail">{avatar.detail}</p>}
+      <ol className="cr-tuning-steps" aria-hidden="true">
+        {TUNING_STEPS.map((p, i) => <li key={p} className={i <= TUNING_STEPS.indexOf(avatar.phase) ? 'is-done' : ''} />)}
+      </ol>
+    </div>
+  );
+}
+
+// How long the button keeps showing what was heard, once the words are final.
+const HEARD_SHOWN_MS = 3000;
+
 function PushToTalk({ avatar }: { avatar: Avatar }) {
   const [held, setHeld] = useState(false);
+  // The words as they are recognised while the button is held, then the final line for a moment.
+  const [said, setSaid] = useState('');
+  const lineCount = useRef(avatar.lines.length);
+  // The last words heard while held, kept on the button after letting go until the final line arrives.
+  const lastHeard = useRef('');
+  if (held && avatar.heard) lastHeard.current = avatar.heard;
+  useEffect(() => {
+    const fresh = avatar.lines.slice(lineCount.current);
+    lineCount.current = avatar.lines.length;
+    const mine = fresh.filter((l) => l.who === 'user' && !l.typed).at(-1);
+    if (!mine) return;
+    setSaid(mine.text);
+    const id = setTimeout(() => setSaid(''), HEARD_SHOWN_MS);
+    return () => clearTimeout(id);
+  }, [avatar.lines.length]);
   const holding = useRef(false);
   const closing = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const mic = useRef(avatar);
@@ -94,12 +154,15 @@ function PushToTalk({ avatar }: { avatar: Avatar }) {
     clearTimeout(closing.current);
     holding.current = true;
     setHeld(true);
+    setSaid('');
     mic.current.setMic(true);
   }, []);
   const up = useCallback(() => {
     if (!holding.current) return;
     holding.current = false;
     setHeld(false);
+    if (lastHeard.current) setSaid(lastHeard.current);
+    lastHeard.current = '';
     closing.current = setTimeout(() => mic.current.setMic(false), TAIL_MS);
   }, []);
   useEffect(() => {
@@ -117,8 +180,12 @@ function PushToTalk({ avatar }: { avatar: Avatar }) {
       onPointerUp={up} onPointerCancel={up} onContextMenu={(e) => e.preventDefault()}
     >
       <span className="cr-ptt-dot" aria-hidden="true" />
-      {held ? 'Listening… let go to send' : 'Hold to talk to Nova'}
-      <small>or hold the space bar</small>
+      {held
+        ? <span className="cr-ptt-words" aria-live="polite">{avatar.heard || 'Listening…'}</span>
+        : said
+          ? <span className="cr-ptt-words is-said">“{said}”</span>
+          : <span className="cr-ptt-words">Hold to talk to Nova</span>}
+      <small>{held ? 'let go to send' : said ? 'sent to Nova' : 'or hold the space bar'}</small>
     </button>
   );
 }
@@ -212,6 +279,8 @@ export function App() {
 
   // When a record was last put on "now", and when the listener last asked for anything: a request may cut a record off, Nova alone may not.
   const lastNowAt = useRef(0);
+  // Whether the show has had its first record: that one waits for Nova's opening.
+  const opened = useRef(false);
   const lastListenerAt = useRef(0);
 
   /** A record on now (a change-over when one is playing) or in line: what Nova is told. */
@@ -225,6 +294,15 @@ export function App() {
       return cutsOff ? said.heldForOpener(track, next.queue.length) : said.queued(track, next.queue.length);
     }
     lastNowAt.current = Date.now();
+    if (!opened.current) {
+      // The show's first record waits for Nova's opening: the style of the set, then the record.
+      opened.current = true;
+      clock.current = freshClock(track.id);
+      update(playNow(d, track));
+      spokeSinceHold.current = false;
+      setHolding(track);
+      return said.opener(track);
+    }
     if (d.playing && !d.paused) {
       changeOver(track);
       return said.changeOver(track);
@@ -234,9 +312,9 @@ export function App() {
   }, [changeOver, spin]);
 
   // Nova's tool calls: the deck changes, the player follows, the result is what Nova says next.
-  const onToolCall = useCallback(async ({ id, name, arguments: args }: ToolCall) => {
+  const onToolCall = useCallback(async ({ name, arguments: args }: ToolCall) => {
     const d = deckRef.current;
-    console.info('[crate] tool %s %o%s', name, args, id.startsWith('net-') ? ' (the page, for the listener)' : '');
+    console.info('[crate] tool %s %o', name, args);
     switch (name) {
       case 'search_tracks': {
         const query = String(args.query ?? '').trim().slice(0, 200);
@@ -311,18 +389,7 @@ export function App() {
   }, [deck.playing?.id]);
   useEffect(() => { if (deck.queue[0]) void themeOf(deck.queue[0]); }, [deck.queue[0]?.id]);
   const [pushToTalk, setPushToTalk] = useState(false);
-  // The listener's plain asks (skip, pause, carry on) happen even when Nova answers without the tool:
-  // the page does them itself a few seconds on and tells her.
-  const net = useToolNet({
-    match: (text) => { const name = listenerWants(text); return name ? { id: `net-${Date.now()}`, name, arguments: {} } : null; },
-    run: async (call) => String(await onToolCall(call)),
-    avatar: () => avatarRef.current!,
-    waitMs: NET_WAIT_MS,
-  });
-  const avatar = useAvatar('dj-booth', {
-    onToolCall: net.watch(onToolCall),
-    onUserSaid: (text) => { lastListenerAt.current = Date.now(); net.heard(text); },
-  });
+  const avatar = useAvatar('dj-booth', { onToolCall, onUserSaid: () => { lastListenerAt.current = Date.now(); } });
   avatarRef.current = avatar;
   const live = avatar.phase === 'live';
 
@@ -459,7 +526,9 @@ export function App() {
           <div className={`cr-stage is-${stage}`}>
             {/* Mounted all along: the call's video plays into it, shown or not. */}
             <HostVideo avatar={avatar} captions={cc.on && !muffled} onToggleCaptions={cc.toggle} name={HOST} poster={nova} className="cr-host-video">
-              <CallStatus avatar={avatar} name={HOST} again="Call Nova back" />
+              <TuningIn avatar={avatar} />
+              {/* After a call ends or fails: the kit's card, with its way back in. */}
+              {(avatar.phase === 'ended' || avatar.phase === 'failed') && <CallStatus avatar={avatar} name={HOST} again="Call Nova back" />}
             </HostVideo>
             {deck.playing?.cover && (
               <div className="cr-record" aria-hidden={stage === 'face'}>

@@ -38,15 +38,3 @@ export const advance = (deck: Deck): Deck => ({ ...deck, playing: deck.queue[0] 
 export const setPaused = (deck: Deck, paused: boolean): Deck => (deck.playing ? { ...deck, paused } : deck);
 
 export const label = (t: Track) => `"${t.title}" by ${t.artist}${t.year ? ` (${t.year})` : ''}`;
-
-/**
- * What the listener's own words clearly ask the decks to do, for the page to do itself when
- * the host does not call the tool (useToolNet). Only plain asks; anything vaguer is the host's.
- */
-export function listenerWants(text: string): 'skip_track' | 'pause_music' | 'resume_music' | null {
-  const t = text.toLowerCase();
-  if (/\b(skip|next (song|track|record|one)|change (the |this )?(song|track|record|music)|another (song|track|record)|(don'?t|do not) like (this|it)|not this (song|one))\b/.test(t)) return 'skip_track';
-  if (/\b(resume|unpause|carry on|keep playing|play (it|the music) again)\b/.test(t)) return 'resume_music';
-  if (/\b(pause|stop the music|music off)\b/.test(t)) return 'pause_music';
-  return null;
-}

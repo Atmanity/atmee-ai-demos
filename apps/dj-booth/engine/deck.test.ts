@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { advance, dig, listenerWants, nowBecomesNext, pick, playNow, queueNext, setPaused } from './deck.ts';
+import { advance, dig, nowBecomesNext, pick, playNow, queueNext, setPaused } from './deck.ts';
 import { crateText, deckState, said, TOOLS, INSTRUCTIONS } from './director.ts';
 import { emptyDeck, type Track } from './types.ts';
 
@@ -77,7 +77,10 @@ describe('the host keeps the show going', () => {
   });
 
   test('the show opens on the host\'s own pick, unasked', () => {
-    expect(said.start()).toContain('pick one opening record yourself');
+    expect(said.start()).toContain('decide the style of tonight\'s set, pick one opening record');
+    expect(said.opener(a)).toContain('first describe the style of music you will play tonight');
+    expect(said.opener(a)).toContain('saying its title "Alpha" and its artist Artist');
+    expect(said.opener(a)).toContain('It starts as you finish');
     expect(said.start()).toContain('never "now": the opener plays to its end');
   });
 });
@@ -94,22 +97,6 @@ describe('the line keeps order and no repeats', () => {
     expect(nowBecomesNext(t0, 0, t0 + 5_000)).toBe(true);
     expect(nowBecomesNext(t0, t0 + 2_000, t0 + 5_000)).toBe(false);
     expect(nowBecomesNext(t0, 0, t0 + 25_000)).toBe(false);
-  });
-});
-
-describe('what the listener plainly asks the decks for', () => {
-  test('skips, in the ways people say it', () => {
-    for (const s of ['I mean, skip this song.', 'Next song please', 'can you change the song', 'I don\'t like this', 'play another track']) expect(listenerWants(s), s).toBe('skip_track');
-  });
-
-  test('pause and resume', () => {
-    expect(listenerWants('pause it for a sec')).toBe('pause_music');
-    expect(listenerWants('ok carry on')).toBe('resume_music');
-    expect(listenerWants('unpause')).toBe('resume_music');
-  });
-
-  test('anything else is the host\'s to read', () => {
-    for (const s of ['play some disco', 'who sings this?', 'I like this one', 'next week I\'m in Tokyo']) expect(listenerWants(s), s).toBeNull();
   });
 });
 
