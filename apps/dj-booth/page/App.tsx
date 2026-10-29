@@ -13,7 +13,7 @@ import { DEFAULT_THEME, type Theme } from '../engine/theme.ts';
 import { useSpotifyPlayer, type Playback } from './player.ts';
 import { useSdkPlayer } from './sdk-player.ts';
 import { accessToken, connect, connected, disconnect, finishConnect } from './spotify-auth.ts';
-import { ANSWER_WINDOW_MS, freshClock, heard, HOLD_MAX_MS, INTRO_TALK_MS, INTRO_WAIT_MS, musicLevel, QUIET_MS, tick, type Clock, type Hold } from '../engine/booth.ts';
+import { answering, ANSWER_WINDOW_MS, freshClock, heard, HOLD_MAX_MS, INTRO_TALK_MS, INTRO_WAIT_MS, musicLevel, QUIET_MS, tick, type Clock, type Hold } from '../engine/booth.ts';
 import nova from '../host/portrait.jpg';
 import './crate.css';
 
@@ -458,6 +458,20 @@ export function App() {
     return () => clearTimeout(id);
   }, [holding, avatar.speaking]);
 
+  // Seeking: the position under the listener's finger while they drag, applied when they let go.
+  const [scrub, setScrub] = useState<number | null>(null);
+  const scrubRef = useRef<number | null>(null);
+  scrubRef.current = scrub;
+  const commitSeek = useCallback(() => {
+    const to = scrubRef.current;
+    if (to === null) return;
+    setScrub(null);
+    void player.seek(to);
+    // Jumping back into a record that has had its break lets it have another before it ends.
+    if (deckRef.current.playing) clock.current = freshClock(deckRef.current.playing.id);
+    setOnBreak(false);
+  }, [player]);
+
   // The volumes: the music ducks under Nova (in her breaks, and whenever she speaks over a record).
   const [musicVolume, setMusicVolume] = useState(0.8);
   const [novaVolume, setNovaVolume] = useState(1);
@@ -468,13 +482,23 @@ export function App() {
   const musicOn = live && Boolean(deck.playing) && !deck.paused && !holding;
   const [muffled, setMuffled] = useState(false);
   const wasSpeaking = useRef(false);
+  // When Nova's last answer to the listener ended (its follow-up may come right after), and whether she is answering now.
+  const answerEndedAt = useRef(0);
+  const isAnswer = useRef(false);
   useEffect(() => {
+    const now = Date.now();
     const starting = avatar.speaking && !wasSpeaking.current;
+    const ending = !avatar.speaking && wasSpeaking.current;
     wasSpeaking.current = avatar.speaking;
+    if (ending && isAnswer.current) answerEndedAt.current = now;
     if (avatar.speaking && !starting) return;
-    const verdict = !heard({ musicOn, onBreak, sinceListenerMs: Date.now() - lastListenerAt.current, positionMs: progress?.position ?? 0 });
+    const since = { sinceListenerMs: now - lastListenerAt.current, sinceAnswerMs: now - answerEndedAt.current };
+    const verdict = !heard({ musicOn, onBreak, positionMs: progress?.position ?? 0, ...since });
     setMuffled(verdict);
-    if (starting && verdict) console.info('[crate] an unprompted line over the record plays silent');
+    if (starting) {
+      isAnswer.current = answering(since.sinceListenerMs, since.sinceAnswerMs);
+      if (verdict) console.info('[crate] an unprompted line over the record plays silent');
+    }
   }, [avatar.speaking, musicOn, onBreak, (progress?.position ?? 0) < INTRO_TALK_MS]);
   const voiced = avatar.speaking && !muffled;
   const ducked = voiced || onBreak || Boolean(holding);
@@ -529,6 +553,9 @@ export function App() {
       void avatar.start({ mic, micMuted: mic });
     }} />;
   }
+
+  const duration = progress?.duration || deck.playing?.durationMs || 0;
+  const seekable = live && Boolean(deck.playing) && !holding && duration > 0;
 
   const pct = progress && progress.duration > 0 ? Math.min(100, (progress.position / progress.duration) * 100) : 0;
   const kicker = holding ? 'Up after Nova' : deck.playing ? (deck.paused ? 'Paused' : onBreak ? 'Nova on the mic' : 'Now playing') : 'The decks are quiet';
@@ -597,10 +624,15 @@ export function App() {
             <h1 className="cr-title" key={`t-${deck.playing?.id ?? 'none'}`}><span>{deck.playing ? deck.playing.title : 'Ask Nova for a record'}</span></h1>
             <p className="cr-artist" key={`a-${deck.playing?.id ?? 'none'}`}>{deck.playing ? `${deck.playing.artist}${deck.playing.year ? ` · ${deck.playing.year}` : ''}` : '\u00a0'}</p>
             <div className="cr-time">
-              <span>{progress && !holding ? mmss(progress.position) : '0:00'}</span>
-              <div className="cr-bar" role="progressbar" aria-label="Time in the record" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(holding ? 0 : pct)}>
-                <span style={{ width: `${holding ? 0 : pct}%` }} />
-              </div>
+              <span>{scrub !== null ? mmss(scrub) : progress && !holding ? mmss(progress.position) : '0:00'}</span>
+              {/* Drag or click to jump in the record; the jump happens on release. */}
+              <input
+                type="range" className="cr-seek" aria-label="Position in the record" min={0} max={duration || 1} step={1000}
+                value={scrub ?? (holding ? 0 : progress?.position ?? 0)} disabled={!seekable}
+                style={{ '--pct': `${scrub !== null && duration ? (scrub / duration) * 100 : holding ? 0 : pct}%` } as React.CSSProperties}
+                onChange={(e) => setScrub(Number(e.target.value))}
+                onPointerUp={() => commitSeek()} onKeyUp={() => commitSeek()} onBlur={() => commitSeek()}
+              />
               <span>{progress && progress.duration > 0 ? mmss(progress.duration) : deck.playing?.durationMs ? mmss(deck.playing.durationMs) : '–:––'}</span>
             </div>
           </div>

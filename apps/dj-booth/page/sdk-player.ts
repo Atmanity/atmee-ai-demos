@@ -68,8 +68,9 @@ export function useSdkPlayer(token: () => Promise<string>, onUpdate: (p: Playbac
 
   const pause = useCallback(async () => { await player.current?.pause(); }, []);
   const resume = useCallback(async () => { await player.current?.resume(); }, []);
+  const seek = useCallback(async (ms: number) => { await player.current?.seek(Math.max(0, Math.round(ms))); }, []);
   const setVolume = useCallback((v: number) => { void player.current?.setVolume(Math.max(0, Math.min(1, v))); }, []);
 
   const host = useRef<HTMLDivElement>(null);
-  return useMemo(() => ({ host, load, pause, resume, setVolume, prepare, canVolume: true }), [load, pause, resume, setVolume, prepare]);
+  return useMemo(() => ({ host, load, pause, resume, seek, setVolume, prepare, canVolume: true }), [load, pause, resume, seek, setVolume, prepare]);
 }

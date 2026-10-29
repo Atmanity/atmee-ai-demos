@@ -57,18 +57,26 @@ export function tick(clock: Clock, id: string, p: Playback): { clock: Clock; cue
 /** The music's volume: the listener's level, ducked while the host talks or holds a break. */
 export const musicLevel = (volume: number, ducked: boolean) => Math.max(0, Math.min(1, volume * (ducked ? DUCK : 1)));
 
-/** How long after the listener spoke, typed or pressed something the host may answer over a record. */
-export const ANSWER_WINDOW_MS = 40_000;
+/** How soon after the listener's words the host's answer must start to be heard over a record. */
+export const ANSWER_WINDOW_MS = 20_000;
+/** How soon after an answer ends a follow-up (its reply to a tool's result) may start and still be heard. */
+export const FOLLOW_UP_MS = 6_000;
 
 /** How far into a record the host may still talk over it, as a DJ talks up to the vocal. */
 export const INTRO_TALK_MS = 20_000;
 
 /**
  * Whether the listener hears what the host starts saying now. Between records and in its
- * break, always; over a playing record, in its first INTRO_TALK_MS, or as an answer to the
- * listener however far in. Anything else (Causeur's check-ins after a silence, which a session
- * cannot turn off) would cut into the music unasked, so the page plays it silent.
+ * break, always; over a playing record, in its first INTRO_TALK_MS, or as its answer to the
+ * listener: starting within ANSWER_WINDOW_MS of their words, or within FOLLOW_UP_MS of that
+ * answer ending. Anything else (Causeur's check-ins after a silence, which a session cannot
+ * turn off) would cut into the music unasked, so the page plays it silent.
  */
-export function heard({ musicOn, onBreak, sinceListenerMs, positionMs }: { musicOn: boolean; onBreak: boolean; sinceListenerMs: number; positionMs: number }): boolean {
-  return !musicOn || onBreak || positionMs < INTRO_TALK_MS || sinceListenerMs <= ANSWER_WINDOW_MS;
+export function heard({ musicOn, onBreak, positionMs, sinceListenerMs, sinceAnswerMs }: {
+  musicOn: boolean; onBreak: boolean; positionMs: number; sinceListenerMs: number; sinceAnswerMs: number;
+}): boolean {
+  return !musicOn || onBreak || positionMs < INTRO_TALK_MS || sinceListenerMs <= ANSWER_WINDOW_MS || sinceAnswerMs <= FOLLOW_UP_MS;
 }
+
+/** Whether an utterance starting now answers the listener (for the follow-up allowance). */
+export const answering = (sinceListenerMs: number, sinceAnswerMs: number) => sinceListenerMs <= ANSWER_WINDOW_MS || sinceAnswerMs <= FOLLOW_UP_MS;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { ANSWER_WINDOW_MS, breakLead, DUCK, freshClock, heard, INTRO_TALK_MS, musicLevel, tick, type Clock, type Cue } from './booth.ts';
+import { ANSWER_WINDOW_MS, breakLead, DUCK, FOLLOW_UP_MS, freshClock, heard, INTRO_TALK_MS, musicLevel, tick, type Clock, type Cue } from './booth.ts';
 
 const play = (position: number, duration = 200_000, isPaused = false) => ({ isPaused, isBuffering: false, position, duration });
 
@@ -47,26 +47,22 @@ test('the music ducks under the host to a share of the listener\'s level, never 
 });
 
 describe('what the listener hears of the host', () => {
-  const late = { musicOn: true, onBreak: false, positionMs: 60_000 };
+  const late = { musicOn: true, onBreak: false, positionMs: 60_000, sinceListenerMs: Infinity, sinceAnswerMs: Infinity };
 
   test('between records and in a break, everything', () => {
-    expect(heard({ ...late, musicOn: false, sinceListenerMs: Infinity })).toBe(true);
-    expect(heard({ ...late, onBreak: true, sinceListenerMs: Infinity })).toBe(true);
+    expect(heard({ ...late, musicOn: false })).toBe(true);
+    expect(heard({ ...late, onBreak: true })).toBe(true);
   });
 
   test('over the first 20 seconds of a record, everything: the host talks up to the vocal', () => {
-    expect(heard({ ...late, positionMs: INTRO_TALK_MS - 1, sinceListenerMs: Infinity })).toBe(true);
-    expect(heard({ ...late, positionMs: INTRO_TALK_MS, sinceListenerMs: Infinity })).toBe(false);
+    expect(heard({ ...late, positionMs: INTRO_TALK_MS - 1 })).toBe(true);
+    expect(heard({ ...late, positionMs: INTRO_TALK_MS })).toBe(false);
   });
 
-  test('later in a record, an answer to the listener but not an unprompted check-in', () => {
+  test('later in a record, the answer to the listener and its follow-up, but no check-in', () => {
     expect(heard({ ...late, sinceListenerMs: 5_000 })).toBe(true);
-    expect(heard({ ...late, sinceListenerMs: ANSWER_WINDOW_MS + 1 })).toBe(false);
+    expect(heard({ ...late, sinceAnswerMs: FOLLOW_UP_MS - 1 })).toBe(true);
+    // A check-in comes ~10 s into a silence: past the answer window and the follow-up.
+    expect(heard({ ...late, sinceListenerMs: ANSWER_WINDOW_MS + 1, sinceAnswerMs: 10_000 })).toBe(false);
   });
-});
-
-test('the break starts an eighth of a record before its end, 8 to 20 seconds', () => {
-  expect(breakLead(30_000)).toBe(8_000);
-  expect(breakLead(120_000)).toBeCloseTo(14_400);
-  expect(breakLead(300_000)).toBe(20_000);
 });

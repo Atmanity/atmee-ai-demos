@@ -259,3 +259,16 @@ button { font: inherit; color: inherit; }
 .cr-app { -webkit-tap-highlight-color: transparent; }
 .cr-app button:focus, .cr-app a:focus, .cr-app input:focus { outline: none; }
 .cr-app button:focus-visible, .cr-app a:focus-visible, .cr-app input[type=range]:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* The progress bar is a slider: drag or click to jump in the record. */
+.cr-seek { flex: 1; min-width: 0; height: 18px; margin: 0; background: none; -webkit-appearance: none; appearance: none; cursor: pointer; }
+.cr-seek:disabled { cursor: default; }
+.cr-seek::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: linear-gradient(to right, var(--accent) var(--pct, 0%), color-mix(in srgb, var(--ink) 14%, transparent) var(--pct, 0%)); }
+.cr-seek::-moz-range-track { height: 6px; border-radius: 3px; background: linear-gradient(to right, var(--accent) var(--pct, 0%), color-mix(in srgb, var(--ink) 14%, transparent) var(--pct, 0%)); }
+.cr-seek::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -4px; border-radius: 50%; background: var(--ink); box-shadow: 0 1px 4px rgba(0, 0, 0, .4); opacity: 0; transition: opacity .2s ease, transform .15s ease; }
+.cr-seek::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 50%; background: var(--ink); opacity: 0; transition: opacity .2s ease; }
+.cr-seek:not(:disabled):hover::-webkit-slider-thumb, .cr-seek:not(:disabled):active::-webkit-slider-thumb, .cr-seek:focus-visible::-webkit-slider-thumb { opacity: 1; }
+.cr-seek:not(:disabled):hover::-moz-range-thumb, .cr-seek:not(:disabled):active::-moz-range-thumb { opacity: 1; }
+.cr-seek:active::-webkit-slider-thumb { transform: scale(1.2); }
+/* On touch, the thumb is always there to grab. */
+@media (hover: none) { .cr-seek:not(:disabled)::-webkit-slider-thumb { opacity: 1; } }

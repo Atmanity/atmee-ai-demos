@@ -14,6 +14,8 @@ export interface Player {
   load(track: Track): Promise<void>;
   pause(): Promise<void>;
   resume(): Promise<void>;
+  /** Jump to this many milliseconds into the record. */
+  seek(ms: number): Promise<void>;
   /** 0 to 1; a no-op where the player has no volume. */
   setVolume(v: number): void;
   /** Ready the player within a click, where the browser lets it play sound. */
@@ -26,6 +28,7 @@ interface Controller {
   play(): void;
   pause(): void;
   resume(): void;
+  seek(seconds: number): void;
   addListener(event: string, fn: (e: { data: any }) => void): void;
 }
 
@@ -77,7 +80,8 @@ export function useSpotifyPlayer(onUpdate: (p: Playback) => void): Player {
 
   const pause = useCallback(async () => { (await controller.current)?.pause(); }, []);
   const resume = useCallback(async () => { (await controller.current)?.resume(); }, []);
+  const seek = useCallback(async (ms: number) => { (await controller.current)?.seek(ms / 1000); }, []);
 
   // The embed has no volume: the music plays at the listener's system level.
-  return useMemo(() => ({ host, load, pause, resume, setVolume: () => {}, prepare: () => {}, canVolume: false }), [load, pause, resume]);
+  return useMemo(() => ({ host, load, pause, resume, seek, setVolume: () => {}, prepare: () => {}, canVolume: false }), [load, pause, resume, seek]);
 }
