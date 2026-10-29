@@ -85,3 +85,12 @@ button { font: inherit; }
 .cr-ptt.is-held { background: var(--cr-amber); color: var(--cr-bg); }
 .cr-ptt.is-held small { color: var(--cr-bg); }
 .cr-ptt.is-held .cr-ptt-dot { background: var(--cr-red); animation: cr-pulse .8s infinite; }
+
+/* The mixer */
+.cr-mixer { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; padding: 12px 16px; border-radius: 12px; background: var(--cr-panel); }
+.cr-mixer label { display: flex; align-items: center; gap: 10px; flex: 1 1 180px; font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--cr-dim); }
+.cr-mixer label[title] { opacity: .55; }
+.cr-mixer input[type=range] { flex: 1; min-width: 0; accent-color: var(--cr-amber); }
+.cr-mixer small { flex-basis: 100%; color: var(--cr-dim); }
+.cr-link { padding: 0; border: 0; background: none; color: var(--cr-amber); font-weight: 700; text-decoration: underline; cursor: pointer; }
+.cr-problem { color: var(--cr-red) !important; }

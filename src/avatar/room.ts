@@ -36,6 +36,8 @@ export interface JoinOptions {
   video?: HTMLVideoElement | null | (() => HTMLVideoElement | null);
   audio?: HTMLAudioElement | null | (() => HTMLAudioElement | null);
   mic?: MediaStream | null;             // null: typing only (a silent track is published)
+  /** Publish the microphone muted (push to talk): nothing is heard until setMicMuted(false). */
+  micMuted?: boolean;
   onPhase?: (phase: Phase, detail?: Record<string, unknown>) => void;
   /** The avatar's words; `done` once the utterance is complete. */
   onAvatarSpeech?: (text: string, done: boolean) => void;
@@ -289,6 +291,8 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
     if (mic) {
       const published = await room.localParticipant.publishTrack(mic.getAudioTracks()[0], { source: Track.Source.Microphone });
       micTrack = published.track as typeof micTrack;
+      // Before the agent arrives, so not a frame of it is heard.
+      if (opts.micMuted) await micTrack!.mute();
     } else {
       silence = await publishSilence(room);
     }

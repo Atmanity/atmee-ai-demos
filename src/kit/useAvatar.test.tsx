@@ -93,3 +93,13 @@ test('whether the host takes files follows its agent, and ends with the call', a
   await act(async () => { await result.current.end(); });
   expect(result.current.filesAccepted).toBe(false);
 });
+
+test('a push-to-talk start joins with the microphone muted, and says the mic is off', async () => {
+  const stream = { getAudioTracks: () => [{}], getTracks: () => [] } as unknown as MediaStream;
+  Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: async () => stream } });
+  const { result } = renderHook(() => useAvatar('demo'));
+  await act(async () => { await result.current.start({ mic: true, micMuted: true }); });
+  expect(joins[0].opts.mic).toBe(stream);
+  expect(joins[0].opts.micMuted).toBe(true);
+  expect(result.current.micOn).toBe(false);
+});

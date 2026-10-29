@@ -53,9 +53,15 @@ describe('what the host is told', () => {
     expect(deckState(emptyDeck)).toContain('Nothing is playing. Nothing is queued.');
   });
 
-  test('an end cue with nothing queued asks the host to line up the next record', () => {
-    expect(said.ending(a, null)).toContain('nothing is queued');
-    expect(said.ending(a, b)).toContain('"Bravo" by Artist (1999) is up next');
+  test('a break back-announces the record ending and introduces the next, at length', () => {
+    const text = said.break(a, b, 2);
+    expect(text).toContain('"Alpha" by Artist (1999) is ending');
+    expect(text).toContain('introduce "Bravo" by Artist (1999): the artist, the story of the song');
+    expect(text).not.toContain('line up');
+  });
+
+  test('a break with nothing lined up first finds the next record', () => {
+    expect(said.break(a, null, 0)).toContain('nothing is lined up. First search for the next record');
   });
 
   test('every tool waits for the page, and the instructions fit the session limit', () => {
@@ -65,11 +71,9 @@ describe('what the host is told', () => {
 });
 
 describe('the host keeps the show going', () => {
-  test('a record that starts with a short line asks for more, a full line does not', () => {
-    expect(said.onAir(a, 0)).toContain('queue two more');
-    expect(said.playing(a, 1)).toContain('queue one more');
-    expect(said.playing(a, 2)).not.toContain('queue');
-    expect(said.onAir(a, 2)).toContain('Introduce the song and its artist');
+  test('a break with a short line quietly tops it up before talking', () => {
+    expect(said.break(a, b, 0)).toContain('without saying so, search and line up two more records');
+    expect(said.break(a, b, 1)).toContain('line up one more record');
   });
 
   test('the show opens on the host\'s own pick, unasked', () => {

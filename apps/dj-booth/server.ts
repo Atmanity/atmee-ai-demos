@@ -16,6 +16,10 @@ const app: AppServer = {
   maxSeconds: 900,
   appTools: { instructions: INSTRUCTIONS, tools: TOOLS },
   routes(router) {
+    // The app's client id is public: the page signs a Premium listener in with it (PKCE, no secret)
+    // to play through Spotify's Web Playback SDK, the player with a volume.
+    router.get('/config', (_req, res) => res.json({ clientId: process.env.SPOTIFY_CLIENT_ID || null }));
+
     router.post('/search', async (req, res) => {
       if (!spotify.configured) return void res.status(503).json({ error: 'spotify_not_configured' });
       const query = String((req.body as { query?: unknown })?.query ?? '').trim().slice(0, 200);

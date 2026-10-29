@@ -1,20 +1,23 @@
 // Crate: a live radio booth hosted by Nova. Nova digs through Spotify and
 // works the decks through the booth's tools; the page answers those calls,
-// drives the Spotify embed, keeps Nova's picture of the deck current and
-// tells it when a record is about to run out, so it can talk over the outro.
+// drives the player (the listener's Spotify Premium, else the embed's
+// previews), keeps Nova's picture of the deck current and gives her a break
+// near the end of every record: the music ducks under her, and the next
+// record waits until she has finished introducing it.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BackToApps, CallStatus, ChatPanel, HangUpIcon, HostVideo, useAvatar, useCaptionToggle, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
 import { advance, dig, label, pick, playNow, queueNext, setPaused } from '../engine/deck.ts';
 import { crateText, deckState, said } from '../engine/director.ts';
 import { emptyDeck, type Deck, type Track } from '../engine/types.ts';
 import { useSpotifyPlayer, type Playback } from './player.ts';
+import { useSdkPlayer } from './sdk-player.ts';
+import { accessToken, connect, connected, disconnect, finishConnect } from './spotify-auth.ts';
+import { freshClock, HOLD_MAX_MS, musicLevel, QUIET_MS, tick, type Clock } from '../engine/booth.ts';
 import nova from '../host/portrait.jpg';
 import './crate.css';
 
 const API = '/api/apps/dj-booth';
 const HOST = 'Nova';
-// How long before a record ends the booth cues Nova.
-const CUE_MS = 8000;
 
 function Logo() {
   return (
@@ -29,19 +32,29 @@ function Logo() {
   );
 }
 
-function Lobby({ onStart }: { onStart: (mic: boolean) => void }) {
+/** Whether the booth plays through the listener's Spotify Premium (whole tracks, a volume) or the embed (previews). */
+interface SpotifyLink { clientId: string | null; connected: boolean; problem: string }
+
+function Lobby({ onStart, spotify }: { onStart: (mic: boolean) => void; spotify: SpotifyLink }) {
   return (
     <div className="cr-lobby">
       <header className="cr-top"><BackToApps /><Logo /></header>
       <main className="cr-hero">
         <img className="cr-hero-face" src={nova} alt="" />
         <h1>Your own radio show, hosted live.</h1>
-        <p>Nova digs through Spotify and spins whatever you ask for, or picks for you, talking you in and out of every record.</p>
+        <p>Nova digs through Spotify, builds the set and talks you in and out of every record, between the songs, like real radio.</p>
         <div className="cr-cta">
           <button type="button" className="cr-primary" onClick={() => onStart(true)}>Go on air with your voice</button>
           <button type="button" className="cr-secondary" onClick={() => onStart(false)}>Request by typing</button>
         </div>
-        <p className="cr-small">Signed in to Spotify in this browser, you hear whole tracks; otherwise 30-second previews.</p>
+        {spotify.clientId && (spotify.connected ? (
+          <p className="cr-small">Playing through your Spotify Premium: whole tracks, with a volume. <button type="button" className="cr-link" onClick={() => { disconnect(); location.reload(); }}>Disconnect</button></p>
+        ) : (
+          <p className="cr-small">
+            <button type="button" className="cr-link" onClick={() => void connect(spotify.clientId!)}>Connect Spotify Premium</button> for whole tracks and a music volume; without it the booth plays 30-second previews.
+          </p>
+        ))}
+        {spotify.problem && <p className="cr-small cr-problem">{spotify.problem}</p>}
       </main>
     </div>
   );
@@ -95,40 +108,62 @@ export function App() {
   const deckRef = useRef(deck);
   const update = useCallback((next: Deck) => { deckRef.current = next; setDeck(next); }, []);
   const [progress, setProgress] = useState<Playback | null>(null);
+  const avatarRef = useRef<Avatar | null>(null);
 
-  // Which record the booth has already cued and seen out, so each is told once.
-  const cued = useRef<string | null>(null);
-  const ended = useRef<string | null>(null);
-  const avatarRef = useRef<ReturnType<typeof useAvatar> | null>(null);
+  // Spotify: the listener's Premium through the Web Playback SDK when connected, else the embed.
+  const [spotify, setSpotify] = useState<SpotifyLink>({ clientId: null, connected: connected(), problem: '' });
+  useEffect(() => {
+    void (async () => {
+      const { clientId } = await fetch(`${API}/config`).then((r) => r.json()).catch(() => ({ clientId: null }));
+      const signedIn = clientId ? await finishConnect(clientId) : false;
+      setSpotify((s) => ({ ...s, clientId, connected: signedIn || connected() }));
+    })();
+  }, []);
+  const token = useCallback(() => accessToken(spotify.clientId ?? ''), [spotify.clientId]);
+  // A Premium player that fails (no Premium, an old token) falls back to the embed for the rest of the visit.
+  const [sdkFailed, setSdkFailed] = useState(false);
+  const useSdk = spotify.connected && Boolean(spotify.clientId) && !sdkFailed;
 
-  const player = useSpotifyPlayer((p) => {
+  // The radio clock: each record's break near its end, its end, and the next record held until Nova finishes.
+  const clock = useRef<Clock>(freshClock());
+  const [onBreak, setOnBreak] = useState(false);
+  const [holding, setHolding] = useState<Track | null>(null);
+  const onPlayback = (p: Playback) => {
     setProgress(p);
     const on = deckRef.current.playing;
-    if (!on || p.duration <= 0) return;
-    const left = p.duration - p.position;
-    // Only an empty line needs a word before the end: a queued record is introduced as it starts.
-    if (!p.isPaused && left <= CUE_MS && cued.current !== on.id && !deckRef.current.queue.length) {
-      cued.current = on.id;
-      avatarRef.current?.event(said.ending(on, null), 15);
+    if (!on || holding) return;
+    const { clock: next, cue } = tick(clock.current, on.id, p);
+    clock.current = next;
+    if (cue === 'break') {
+      setOnBreak(true);
+      const d = deckRef.current;
+      avatarRef.current?.event(said.break(on, d.queue[0] ?? null, Math.max(0, d.queue.length - 1)), 30);
+    } else if (cue === 'ended') {
+      const after = advance(deckRef.current);
+      update(after);
+      if (after.playing) setHolding(after.playing);
+      else {
+        setOnBreak(false);
+        avatarRef.current?.event(said.ranOut(), 30);
+      }
     }
-    // The end: the embed stops at (or snaps back from) the last second.
-    if (left <= 600 && ended.current !== on.id) {
-      ended.current = on.id;
-      const next = advance(deckRef.current);
-      update(next);
-      if (next.playing) {
-        spin(next.playing, next);
-        avatarRef.current?.event(said.onAir(next.playing, next.queue.length), 20);
-      } else avatarRef.current?.event(said.ranOut(), 30);
-    }
+  };
+  const embed = useSpotifyPlayer(onPlayback);
+  const sdk = useSdkPlayer(token, onPlayback, (problem) => {
+    console.warn('[crate] spotify player: %s', problem);
+    setSdkFailed(true);
+    setSpotify((s) => ({ ...s, problem: `${problem}. Playing previews instead.` }));
   });
+  const player = useSdk ? sdk : embed;
 
   const spin = useCallback((track: Track, from: Deck = deckRef.current) => {
-    cued.current = ended.current = null;
+    clock.current = freshClock(track.id);
+    setHolding(null);
+    setOnBreak(false);
     update(playNow(from, track));
     setProgress(null);
     void player.load(track);
-  }, [player.load]);
+  }, [player]);
 
   const search = useCallback(async (query: string): Promise<string> => {
     const res = await fetch(`${API}/search`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query }) });
@@ -157,7 +192,7 @@ export function App() {
           return said.queued(track, next.queue.length);
         }
         spin(track);
-        return said.playing(track, d.queue.length);
+        return said.playing(track);
       }
       case 'pause_music':
         if (!d.playing) return said.nothingOn();
@@ -173,11 +208,11 @@ export function App() {
         const next = advance(d);
         if (next.playing) spin(next.playing, next);
         else { update(next); void player.pause(); }
-        return said.skipped(next.playing, next.queue.length);
+        return said.skipped(next.playing);
       }
     }
     throw new Error(`unknown tool ${name}`);
-  }, [search, spin]);
+  }, [search, spin, player]);
 
   const cc = useCaptionToggle('dj-booth', false);
   const [pushToTalk, setPushToTalk] = useState(false);
@@ -185,13 +220,42 @@ export function App() {
   avatarRef.current = avatar;
   const live = avatar.phase === 'live';
 
+  // After a break, the next record waits until Nova has been quiet a moment (or too long has passed).
+  useEffect(() => {
+    if (!holding) return;
+    if (avatar.speaking) {
+      const giveUp = setTimeout(() => spin(holding), HOLD_MAX_MS);
+      return () => clearTimeout(giveUp);
+    }
+    const go = setTimeout(() => spin(holding), QUIET_MS);
+    return () => clearTimeout(go);
+  }, [holding, avatar.speaking]);
+
+  // The volumes: the music ducks under Nova (in her breaks, and whenever she speaks over a record).
+  const [musicVolume, setMusicVolume] = useState(0.8);
+  const [novaVolume, setNovaVolume] = useState(1);
+  const ducked = avatar.speaking || onBreak || Boolean(holding);
+  const level = useRef(musicVolume);
+  useEffect(() => {
+    // A short fade, not a jump.
+    const target = musicLevel(musicVolume, ducked);
+    const from = level.current;
+    let step = 0;
+    const id = setInterval(() => {
+      step += 1;
+      level.current = from + (target - from) * (step / 6);
+      player.setVolume(level.current);
+      if (step >= 6) clearInterval(id);
+    }, 60);
+    return () => clearInterval(id);
+  }, [musicVolume, ducked, player]);
+  useEffect(() => { if (avatar.audioRef.current) avatar.audioRef.current.volume = novaVolume; }, [novaVolume, avatar.phase]);
+
   useEffect(() => { if (avatar.phase === 'starting') avatar.event(said.start(), 60); }, [avatar.phase]);
-  // Push to talk: the microphone opens only while the button is held, so the music never reaches Nova as speech.
-  useEffect(() => { if (live) avatar.setMic(false); }, [live]);
   // Nova's picture of the deck follows the deck.
   useEffect(() => { avatar.state(deckState(deck)); }, [deck]);
   // The music stops with the show.
-  useEffect(() => { if (avatar.phase === 'ended' || avatar.phase === 'failed') void player.pause(); }, [avatar.phase]);
+  useEffect(() => { if (avatar.phase === 'ended' || avatar.phase === 'failed') { setHolding(null); void player.pause(); } }, [avatar.phase]);
 
   // The listener's own hands on the decks: Nova cannot see the screen, so it is told.
   function press(what: string, act: () => void) {
@@ -199,9 +263,17 @@ export function App() {
     if (live) avatar.event(said.pressed(what), 20);
   }
 
-  if (avatar.phase === 'idle') return <Lobby onStart={(mic) => { setPushToTalk(mic); void avatar.start({ mic }); }} />;
+  if (avatar.phase === 'idle') {
+    return <Lobby spotify={spotify} onStart={(mic) => {
+      player.prepare();
+      setPushToTalk(mic);
+      // Push to talk: the microphone joins muted and opens only while the button is held.
+      void avatar.start({ mic, micMuted: mic });
+    }} />;
+  }
 
   const pct = progress && progress.duration > 0 ? Math.min(100, (progress.position / progress.duration) * 100) : 0;
+  const kicker = holding ? 'Up after Nova' : deck.playing ? (deck.paused ? 'Paused' : onBreak ? 'Nova on the mic' : 'Now playing') : 'The decks are quiet';
 
   return (
     <div className="cr-app">
@@ -224,10 +296,10 @@ export function App() {
           <div className="cr-now">
             {deck.playing?.art ? <img src={deck.playing.art} alt="" /> : <div className="cr-blank" aria-hidden="true" />}
             <div>
-              <p className="cr-kicker">{deck.playing ? (deck.paused ? 'Paused' : 'Now playing') : 'The decks are quiet'}</p>
+              <p className="cr-kicker">{kicker}</p>
               <p className="cr-title">{deck.playing ? deck.playing.title : 'Ask Nova for a record'}</p>
               {deck.playing && <p className="cr-artist">{deck.playing.artist}</p>}
-              <div className="cr-bar" aria-hidden="true"><span style={{ width: `${pct}%` }} /></div>
+              <div className="cr-bar" aria-hidden="true"><span style={{ width: `${holding ? 0 : pct}%` }} /></div>
             </div>
           </div>
           <div className="cr-buttons">
@@ -237,10 +309,22 @@ export function App() {
             })}>{deck.paused ? 'Resume' : 'Pause'}</button>
             <button type="button" disabled={!deck.playing} onClick={() => {
               const next = advance(deckRef.current);
-              press(`skipped ${deckRef.current.playing ? label(deckRef.current.playing) : 'the record'}`, () => {
+              press(`skipped ${deckRef.current.playing ? label(deckRef.current.playing) : 'the record'}${next.playing ? `; ${label(next.playing)} is on now` : ''}`, () => {
                 if (next.playing) spin(next.playing, next); else { update(next); void player.pause(); }
               });
             }}>Skip</button>
+          </div>
+          <div className="cr-mixer">
+            <label title={player.canVolume ? undefined : 'Connect Spotify Premium (on the start page) for a music volume'}>
+              <span>Music</span>
+              <input type="range" min={0} max={1} step={0.05} value={musicVolume} disabled={!player.canVolume}
+                onChange={(e) => setMusicVolume(Number(e.target.value))} aria-label="Music volume" />
+            </label>
+            <label>
+              <span>{HOST}</span>
+              <input type="range" min={0} max={1} step={0.05} value={novaVolume} onChange={(e) => setNovaVolume(Number(e.target.value))} aria-label={`${HOST}'s volume`} />
+            </label>
+            {!player.canVolume && <small>Previews play at your system volume: connect Spotify Premium for a music volume.</small>}
           </div>
           <div ref={player.host} className="cr-embed" />
 
@@ -268,7 +352,7 @@ export function App() {
           </div>
         </section>
 
-        <ChatPanel avatar={avatar} name={HOST} className="cr-chat" placeholder="Request a song, an artist, a mood…" empty={<>Ask for anything: "play some 80s synth-pop".</>} />
+        <ChatPanel avatar={avatar} name={HOST} className="cr-chat" placeholder="Request a song, an artist, a mood…" empty={<>Hold the button to talk, or type: "play some 80s synth-pop".</>} />
       </main>
     </div>
   );

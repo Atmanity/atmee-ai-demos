@@ -1,9 +1,25 @@
 // Spotify's embed, driven from the page through its iFrame API. It plays a
 // 30-second preview unless the listener is signed in to Spotify in this browser.
-import { useCallback, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import type { Track } from '../engine/types.ts';
 
-export interface Playback { isPaused: boolean; isBuffering: boolean; position: number; duration: number }
+import type { Playback } from '../engine/booth.ts';
+
+export type { Playback };
+
+/** What the booth plays through: the embed (previews, no volume) or the Web Playback SDK (sdk-player.ts). */
+export interface Player {
+  /** Where the embed mounts; unused by the SDK. */
+  host: React.RefObject<HTMLDivElement | null>;
+  load(track: Track): Promise<void>;
+  pause(): Promise<void>;
+  resume(): Promise<void>;
+  /** 0 to 1; a no-op where the player has no volume. */
+  setVolume(v: number): void;
+  /** Ready the player within a click, where the browser lets it play sound. */
+  prepare(): void;
+  canVolume: boolean;
+}
 
 interface Controller {
   loadUri(uri: string): void;
@@ -27,7 +43,7 @@ function loadApi(): Promise<any> {
 
 const uriOf = (t: Track) => `spotify:track:${t.id}`;
 
-export function useSpotifyPlayer(onUpdate: (p: Playback) => void) {
+export function useSpotifyPlayer(onUpdate: (p: Playback) => void): Player {
   const host = useRef<HTMLDivElement>(null);
   const controller = useRef<Promise<Controller> | null>(null);
   const last = useRef<Playback | null>(null);
@@ -62,5 +78,6 @@ export function useSpotifyPlayer(onUpdate: (p: Playback) => void) {
   const pause = useCallback(async () => { (await controller.current)?.pause(); }, []);
   const resume = useCallback(async () => { (await controller.current)?.resume(); }, []);
 
-  return { host, load, pause, resume };
+  // The embed has no volume: the music plays at the listener's system level.
+  return useMemo(() => ({ host, load, pause, resume, setVolume: () => {}, prepare: () => {}, canVolume: false }), [load, pause, resume]);
 }
