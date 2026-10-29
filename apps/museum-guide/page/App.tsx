@@ -453,7 +453,7 @@ function Tour({ opening }: { opening: Exhibit | null }) {
       guestAside(true);
     },
     onEnded: () => {
-      if (ending.current) { callGen.current++; setScreen((s) => (s === 'tour' ? 'visit' : s)); return; }
+      if (ending.current) { guestHungUp.current = false; callGen.current++; setScreen((s) => (s === 'tour' ? 'visit' : s)); return; }
       guestReady.current = false;
       if (guestHungUp.current) { guestHungUp.current = false; return; }
       // Dropped while talking: Edmund comes back (and is told whom the visitor met).
@@ -481,6 +481,8 @@ function Tour({ opening }: { opening: Exhibit | null }) {
   }, [guestStarts]);
   // The guest could not come: Edmund carries on.
   useEffect(() => {
+    // A start that failed before a call existed ends nothing: no hang-up is still to come.
+    if (guestCall.phase === 'failed') guestHungUp.current = false;
     if (guestCall.phase !== 'failed' || mode.current !== 'to-guest') return;
     setMode('host');
     const g = guestNow.current;
@@ -552,6 +554,9 @@ function Tour({ opening }: { opening: Exhibit | null }) {
     lastArrival.current = current ? { id: current.id, at: Date.now() } : null;
     if (current) { setSeen([current]); setInfo(current); }
     guestReady.current = false;
+    // Nothing about the last tour's guest calls carries over.
+    guestHungUp.current = false;
+    guestDropped.current = false;
     callGen.current++;
     // In the visitor's language: the call is set to it, and Edmund keeps to it.
     const rule = languageRule(lang);

@@ -219,6 +219,41 @@ describe('a guest warmed up ahead', () => {
     expect(calls.guest.end).toHaveBeenCalledTimes(1);
   });
 
+  it('forgets a hang-up still to come when the tour is begun again', async () => {
+    const { update } = await onTour();
+    act(() => calls.label!(pearl()));
+    update();
+    await act(async () => {});
+    guestArrives(update);
+    // Moving on hangs the girl up; the tour ends before her end arrives.
+    fireEvent.click(screen.getByRole('button', { name: 'Back to camera' }));
+    act(() => calls.label!(exhibitById('night-watch')!));
+    update();
+    fireEvent.click(screen.getByRole('button', { name: 'End' }));
+    calls.host.phase = 'ended';
+    act(() => { calls.handlers.host.onEnded?.(); });
+    update();
+    fireEvent.click(screen.getByRole('button', { name: 'Begin a new tour' }));
+    calls.host.phase = 'idle';
+    update();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Begin the tour' })); });
+    calls.host.phase = 'live';
+    await act(async () => { calls.handlers.host.onLive?.(); update(); });
+    act(() => calls.label!(pearl()));
+    update();
+    await act(async () => {});
+    const starts = (calls.guest.start as ReturnType<typeof vi.fn>).mock.calls.length;
+    // In this tour the warm girl's call really drops: Meet places her again.
+    calls.guest.phase = 'live';
+    act(() => { calls.handlers.guest.onLive?.(); });
+    calls.guest.phase = 'ended';
+    act(() => { calls.handlers.guest.onEnded?.(); });
+    update();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Meet the girl' })[0]);
+    await act(async () => {});
+    expect(calls.guest.start).toHaveBeenCalledTimes(starts + 1);
+  });
+
   it('is placed again at Meet when their warm call dropped meanwhile', async () => {
     const { update } = await onTour();
     act(() => calls.label!(pearl()));
