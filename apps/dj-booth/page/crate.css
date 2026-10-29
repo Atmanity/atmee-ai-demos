@@ -272,3 +272,18 @@ button { font: inherit; color: inherit; }
 .cr-seek:active::-webkit-slider-thumb { transform: scale(1.2); }
 /* On touch, the thumb is always there to grab. */
 @media (hover: none) { .cr-seek:not(:disabled)::-webkit-slider-thumb { opacity: 1; } }
+
+/* The stage with Nova's voice alone: rings that swell while she speaks. */
+.cr-voice { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; opacity: 0; pointer-events: none; transition: opacity .5s ease;
+  background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--accent) 18%, var(--surface)), var(--surface) 70%); }
+.cr-stage.is-voice .cr-voice { opacity: 1; }
+.cr-stage.is-voice .cr-host-video { opacity: 0; }
+.cr-voice span { position: absolute; width: 34%; aspect-ratio: 1; border-radius: 50%; border: 2px solid var(--accent); opacity: .5; }
+.cr-voice span:nth-child(2) { width: 48%; opacity: .3; }
+.cr-voice span:nth-child(3) { width: 62%; opacity: .15; }
+.cr-voice.is-speaking span { animation: cr-swell 1.2s ease-in-out infinite; }
+.cr-voice.is-speaking span:nth-child(2) { animation-delay: .15s; }
+.cr-voice.is-speaking span:nth-child(3) { animation-delay: .3s; }
+@keyframes cr-swell { 50% { transform: scale(1.12); opacity: .7; } }
+.cr-voice b { font-family: var(--display); font-weight: 400; font-size: 26px; color: var(--ink); }
+@media (prefers-reduced-motion: reduce) { .cr-voice.is-speaking span { animation: none; } }

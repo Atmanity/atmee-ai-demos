@@ -25,6 +25,8 @@ const VOICED_RMS = 250;
 const QUIET_END_MS = 700;
 /** Causeur reads a commentary that starts with this as the user typing (causeur/live/envelope.py). */
 const TYPED_REPLY = "Reply to the caller now, don't repeat what they said. Do not wait for the caller to speak first. After that, pause and listen.\n\n";
+/** How long the show waits for the face before it goes on by voice alone. */
+const FACE_START_TIMEOUT_MS = 25_000;
 /** A refused cue is tried again this often, while it is still worth saying, and only once she has been quiet this long. */
 const RETRY_MS = 1500;
 const QUIET_FOR_CUE_MS = 800;
@@ -51,7 +53,11 @@ const rms = (pcm: Int16Array) => {
 
 export interface SpeechCall extends Avatar {
   /** The face, rendered on demand. */
-  face: { phase: Avatar['phase']; start(): Promise<void>; end(): Promise<void> };
+  face: { phase: Avatar['phase']; speaking: boolean; start(): Promise<void>; end(): Promise<void> };
+  /** The face did not come up in time as the show began: the show is voice only. */
+  faceOff: boolean;
+  /** Where the utterance in progress plays: through the face (lips in sync) or in the page (voice only). */
+  voiceVia: 'face' | 'page' | null;
 }
 
 export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): SpeechCall {
@@ -64,6 +70,9 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
   const [lines, setLines] = useState<Line[]>([]);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [micOn, setMicOn] = useState(false);
+  const [faceOff, setFaceOff] = useState(false);
+  const faceOffRef = useRef(false);
+  const [voiceVia, setVoiceVia] = useState<'face' | 'page' | null>(null);
   const face = useAvatarOnly(app);
   const faceRef = useRef(face);
   faceRef.current = face;
@@ -153,15 +162,24 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
       voiced.current = true;
       setSpeaking(true);
       // An utterance goes to the face when it is up as she starts, else it plays here.
-      if (faceRef.current.phase === 'live' && !writer.current && !writerOpening.current) {
+      if (faceRef.current.phase === 'live' && !faceOffRef.current && !writer.current && !writerOpening.current) {
         writerOpening.current = true;
-        void faceRef.current.open().then((w) => { writer.current = w; writerOpening.current = false; });
+        setVoiceVia('face');
+        console.info('[speech] her words go to the face');
+        void faceRef.current.open().then((w) => { writer.current = w; writerOpening.current = false; }, (err) => {
+          writerOpening.current = false;
+          console.warn('[speech] the face would not take her words: %s', (err as Error).message);
+        });
+      } else if (!writer.current) {
+        setVoiceVia('page');
+        console.info('[speech] her words play here (face %s)', faceRef.current.phase);
       }
     }
     if (loud) quietSince.current = now;
     if (voiced.current && !loud && now - quietSince.current > QUIET_END_MS) {
       voiced.current = false;
       setSpeaking(false);
+      setVoiceVia(null);
       const w = writer.current;
       writer.current = null;
       void w?.end();
@@ -204,7 +222,8 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
         setCaption(captionRef.current);
         break;
       case 'causeur.input_transcript': {
-        const text = String(msg.text ?? '').trim();
+        // Causeur tags what was said over her ([interruption]) or as a backchannel: not the listener's words.
+        const text = String(msg.text ?? '').replace(/\[(?:interruption|backchannel)\]\s*/gi, '').trim();
         if (!msg.final) { setHeard(text); break; }
         setHeard('');
         // A typed turn comes back as a transcript too: shown once, as typed.
@@ -290,6 +309,21 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
     }
     micGate.current = Boolean(stream) && !micMuted;
     setMicOn(micGate.current);
+    // The face first, so her greeting comes through it; one that is not up in time is let go, and
+    // the show is voice only.
+    faceOffRef.current = false;
+    setFaceOff(false);
+    const late = await Promise.race([
+      faceRef.current.start().then(() => false),
+      new Promise<boolean>((r) => setTimeout(r, FACE_START_TIMEOUT_MS, true)),
+    ]);
+    for (let i = 0; i < 10 && faceRef.current.phase !== 'live' && !late; i++) await new Promise((r) => setTimeout(r, 50));
+    if (late || faceRef.current.phase !== 'live') {
+      faceOffRef.current = true;
+      setFaceOff(true);
+      void faceRef.current.end();
+      console.info('[speech] the face did not come up in time: voice only');
+    }
     try {
       const res = await fetch(`/api/apps/${app}/speech`, { method: 'POST' });
       const info = await res.json().catch(() => ({}));
@@ -362,6 +396,7 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
     async feedMic() { throw new Error('feedMic is not supported over the speech API'); },
     resumeAudio() { void playCtx.current?.resume(); face.resumeAudio(); },
     async sendFiles() { throw new Error('files are not supported over the speech API'); },
-    face: { phase: face.phase, start: face.start, end: face.end },
-  }), [phase, detail, errorCode, speaking, caption, heard, lines, secondsLeft, micOn, face, start, end, addLine, typed, pump, send]);
+    face: { phase: face.phase, speaking: face.speaking, start: face.start, end: face.end },
+    faceOff, voiceVia,
+  }), [phase, detail, errorCode, speaking, caption, heard, lines, secondsLeft, micOn, face, faceOff, voiceVia, start, end, addLine, typed, pump, send]);
 }

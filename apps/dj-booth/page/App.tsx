@@ -21,7 +21,7 @@ import './crate.css';
 const API = '/api/apps/dj-booth';
 // The face on demand: kept up this long after the listener spoke, and ended after this long unneeded.
 const FACE_LISTENER_MS = 30_000;
-const FACE_IDLE_MS = 20_000;
+const FACE_IDLE_MS = 45_000;
 // The music's fades: a change of record fades the old one out over this, a duck dips over the same.
 const FADE_MS = 1200;
 const FADE_STEPS = 12;
@@ -554,6 +554,8 @@ export function App() {
     return () => clearTimeout(id);
   }, [needFace, face.phase]);
   useEffect(() => { if (!live && face.phase === 'live') void face.end(); }, [live]);
+  useEffect(() => { if (engine === 'speech') console.info('[crate] face %s', face.phase); }, [face.phase]);
+  useEffect(() => { if (engine === 'speech') console.info('[crate] face %s', face.speaking ? 'plays her words' : 'idle'); }, [face.speaking]);
 
   /** The listener changed the record by hand: Nova stops mid-sentence (silent at once) and talks about the new one. */
   function cutIn(what: string, track: Track) {
@@ -597,13 +599,19 @@ export function App() {
 
   // The stage shows Nova only when she is on the mic; the rest of the time, the record.
   // Full when no music plays (between records, paused, quiet decks); over music, a small round overlay on the cover.
+  // On the speech engine the face shows only when it is really the one saying her words (or up and
+  // idle while she is quiet); her voice in the page alone shows as a voice, never as a frozen face.
   const [talking, setTalking] = useState(false);
   useEffect(() => {
     if (voiced) return void setTalking(true);
     const id = setTimeout(() => setTalking(false), FACE_LINGER_MS);
     return () => clearTimeout(id);
   }, [voiced]);
-  const stage: 'face' | 'overlay' | 'record' = !musicOn ? 'face' : talking ? 'overlay' : 'record';
+  const faceShown = engine === 'session'
+    || (speechCall.face.phase === 'live' && !speechCall.faceOff && speechCall.voiceVia !== 'page');
+  const stage: 'face' | 'overlay' | 'record' | 'voice' = musicOn
+    ? (talking && faceShown ? 'overlay' : 'record')
+    : faceShown ? 'face' : deck.playing?.cover ? 'record' : 'voice';
 
   if (avatar.phase === 'idle') {
     return <Lobby spotify={spotify} onStart={(mic) => {
@@ -675,6 +683,11 @@ export function App() {
                 <img key={deck.playing.cover} src={deck.playing.cover} alt={`${deck.playing.title} cover`} />
               </div>
             )}
+            {/* Her voice without her face: the face is not up, or not the one speaking. */}
+            <div className={`cr-voice ${avatar.speaking ? 'is-speaking' : ''}`} aria-hidden={stage !== 'voice'}>
+              <span /><span /><span />
+              <b>{HOST}</b>
+            </div>
             <span className="cr-stage-tag">{stage === 'record' ? `${HOST} on the decks` : `${HOST} on the mic`}</span>
           </div>
 
