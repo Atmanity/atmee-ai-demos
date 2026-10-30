@@ -4,6 +4,8 @@
 // it the whole voice as one piece. createVoice finds the stretches of speech in
 // it (on at the first sound, off after a moment of quiet): when the avatar
 // speaks, for the booth and the transcript.
+import { Resampler24to16 } from '../../../src/kit/index.ts';
+
 export const SPEECH_RATE = 24_000;
 export const FACE_RATE = 16_000;
 /** Below this peak a frame counts as silence (PCM16; the session pads with digital zeros). */
@@ -16,29 +18,14 @@ export const isQuiet = (frame: Int16Array, peak = QUIET_PEAK) => {
   return true;
 };
 
-/** 24 kHz to 16 kHz (2 samples out for every 3 in), by linear interpolation, keeping its place across frames. */
+/**
+ * 24 kHz to 16 kHz (2 samples out for every 3 in), keeping its place across frames. Filtered
+ * (the kit's resampler): sound above 8 kHz, the hiss of an "s", is taken out rather than folded
+ * back down into what the face plays, as plain interpolation would.
+ */
 export function createResampler() {
-  const step = SPEECH_RATE / FACE_RATE;   // 1.5 input samples per output sample
-  let prev = 0;                           // the previous frame's last sample, at position -1
-  let t = 0;                              // the next output's position, in samples of the frame being read
-  return (input: Int16Array): Int16Array => {
-    const out: number[] = [];
-    for (; ; t += step) {
-      if (t < 0) {
-        // Between the previous frame's last sample and this one's first.
-        const f = t + 1;
-        out.push(Math.round(prev * (1 - f) + input[0] * f));
-        continue;
-      }
-      const i = Math.floor(t);
-      if (i + 1 >= input.length) break;   // needs the next frame's first sample
-      const f = t - i;
-      out.push(Math.round(input[i] * (1 - f) + input[i + 1] * f));
-    }
-    t -= input.length;
-    prev = input[input.length - 1] ?? prev;
-    return Int16Array.from(out);
-  };
+  const resampler = new Resampler24to16();
+  return (input: Int16Array): Int16Array => resampler.push(input);
 }
 
 export interface VoiceEvents {

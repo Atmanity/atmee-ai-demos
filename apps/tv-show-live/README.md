@@ -62,7 +62,7 @@ No platform changes.
 - **Two speech sessions, wired to each other.** The server reserves each one and pins its role
   (`scenario`, `user_name`, and a plain-delivery `instructions`). The page keeps each input fed in
   real time and forwards every frame of each avatar's voice to the other. Each face gets its voice
-  as one unbroken stream, resampled to 16 kHz (a piece per stretch of speech lost 1.3 s of 13.8 s
+  as one unbroken stream, resampled to 16 kHz through the kit's filtered resampler, so an "s" is not folded back down as hiss (a piece per stretch of speech lost 1.3 s of 13.8 s
   to dropouts; one stream lost 0.05 s).
 - **The booth** (`show/booth.ts`, tested in `booth.test.ts`): Jada greets the viewers; she is
   directed to introduce the film and roll the trailer; once the trailer is over she speaks up on

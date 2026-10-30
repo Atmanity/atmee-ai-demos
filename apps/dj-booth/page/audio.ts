@@ -1,60 +1,6 @@
 // Nova's voice over the speech API, played well: a continuous player with a jitter buffer (the
 // stream comes as 20 ms pieces over a WebSocket, so it needs a cushion the way WebRTC has one),
-// smooth volume changes, and a proper 24 -> 16 kHz resampler for the face (which takes 16 kHz).
-
-/**
- * 24 kHz PCM to 16 kHz, without aliasing: up by 2 to 48 kHz, a windowed-sinc low-pass below the
- * new Nyquist (8 kHz), down by 3. Kept across calls, so a stream of pieces resamples as one.
- */
-export class Resampler24to16 {
-  private static readonly TAPS = Resampler24to16.design(96, 7_400 / 48_000);
-  /** The last input samples at 48 kHz (zero-stuffed), for the filter's memory across pieces. */
-  private history = new Float32Array(Resampler24to16.TAPS.length - 1);
-  /** Where the next output sample falls in the 48 kHz stream, relative to the next piece. */
-  private phase = 0;
-
-  /** A Blackman-windowed sinc low-pass, `n` taps, cutoff as a fraction of the sample rate. */
-  private static design(n: number, cutoff: number): Float32Array {
-    const taps = new Float32Array(n);
-    const mid = (n - 1) / 2;
-    let sum = 0;
-    for (let i = 0; i < n; i++) {
-      const x = i - mid;
-      const sinc = x === 0 ? 2 * cutoff : Math.sin(2 * Math.PI * cutoff * x) / (Math.PI * x);
-      const w = 0.42 - 0.5 * Math.cos((2 * Math.PI * i) / (n - 1)) + 0.08 * Math.cos((4 * Math.PI * i) / (n - 1));
-      taps[i] = sinc * w;
-      sum += taps[i];
-    }
-    // Unity gain at DC; the zero-stuffing halves the level, so the filter doubles it back.
-    for (let i = 0; i < n; i++) taps[i] = (taps[i] / sum) * 2;
-    return taps;
-  }
-
-  push(pcm: Int16Array): Int16Array {
-    const taps = Resampler24to16.TAPS;
-    const h = this.history.length;
-    // The piece at 48 kHz (every other sample zero), after the remembered tail.
-    const up = new Float32Array(h + pcm.length * 2);
-    up.set(this.history);
-    for (let i = 0; i < pcm.length; i++) up[h + i * 2] = pcm[i] / 0x8000;
-    const out: number[] = [];
-    let at = this.phase;
-    for (; at + h < up.length; at += 3) {
-      let acc = 0;
-      // Only every other input is nonzero (those an even distance after the history): skip the zeros.
-      for (let k = ((at % 2) + 2) % 2; k < taps.length; k += 2) acc += taps[k] * up[at + h - k];
-      out.push(acc);
-    }
-    this.phase = at + h - up.length;
-    this.history = up.slice(up.length - h);
-    const pcm16 = new Int16Array(out.length);
-    for (let i = 0; i < out.length; i++) {
-      const s = Math.max(-1, Math.min(1, out[i]));
-      pcm16[i] = s < 0 ? Math.round(s * 0x8000) : Math.round(s * 0x7fff);
-    }
-    return pcm16;
-  }
-}
+// and smooth volume changes. The face's 24 -> 16 kHz resampler is the kit's (src/avatar/pcm.ts).
 
 /** The jitter buffer's cushion: how much is held before playing, and before resuming after running dry. */
 export const START_MS = 200;

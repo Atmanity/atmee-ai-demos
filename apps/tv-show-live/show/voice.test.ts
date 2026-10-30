@@ -13,11 +13,18 @@ describe('the resampler', () => {
     expect(total).toBeLessThanOrEqual(50 * 320);
   });
 
-  it('interpolates a straight line into a straight line, also where two frames meet', () => {
-    const resample = createResampler();
-    const out = [...resample(ramp(0, 480)), ...resample(ramp(480, 480))];
-    // The input is the line y = x, so output k sits at 1.5 k.
-    out.forEach((v, k) => expect(v).toBe(Math.round(1.5 * k)));
+  it('keeps speech, and takes out what 16 kHz cannot hold instead of folding it back down', () => {
+    const tone = (hz: number) => Int16Array.from({ length: 24_000 }, (_, i) => Math.round(Math.sin((2 * Math.PI * hz * i) / 24_000) * 16_000));
+    const rms = (pcm: Int16Array) => Math.sqrt(pcm.slice(200).reduce((s, v) => s + v * v, 0) / (pcm.length - 200));
+    const through = (hz: number) => {
+      const resample = createResampler();
+      const input = tone(hz);
+      const out: number[] = [];
+      for (let at = 0; at < input.length; at += 480) out.push(...resample(input.subarray(at, at + 480)));
+      return rms(Int16Array.from(out));
+    };
+    expect(through(1_000)).toBeGreaterThan(10_000);   // a 16 000-peak tone keeps its ~11 300 RMS
+    expect(through(10_500)).toBeLessThan(300);         // linear interpolation left it at ~6 700, at 5.5 kHz
   });
 });
 
