@@ -57,7 +57,7 @@ export function Lobby({ onStart }: { onStart: (mic: boolean) => void }) {
           ))}
         </section>
       </main>
-      <p className="cl-small cl-club">Teaching younger children? Try <a href="/apps/math-club/">Math Club</a>: five talking maths games with Mochi the red panda.</p>
+      <p className="cl-small cl-club">Teaching younger children? Try <a href="/apps/math-club/">Math Club</a>: five talking maths games with Mochi the otter.</p>
       <footer className="cl-foot">Chalkline · quadratics, from factoring to the formula</footer>
     </div>
   );

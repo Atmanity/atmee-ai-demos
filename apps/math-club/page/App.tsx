@@ -83,19 +83,32 @@ export function App() {
   const ref = useRef(club);
   const body = useRef<HTMLDivElement>(null);
 
-  const leap = useCallback((high: boolean) => {
-    body.current?.animate([
-      { transform: 'translateY(0) scale(1.08, .9)' },
-      { transform: `translateY(${high ? -42 : -26}%) scale(.94, 1.08)`, offset: .45 },
-      { transform: 'translateY(0) scale(1.12, .86)', offset: .8 },
-      { transform: 'translateY(0) scale(1)' },
-    ], { duration: 720, easing: 'ease-out' });
-  }, []);
-  const tumble = useCallback(() => {
-    body.current?.animate([
-      { transform: 'rotate(0)' }, { transform: 'translateX(-5%) rotate(-12deg)' }, { transform: 'translateX(5%) rotate(10deg)' }, { transform: 'rotate(0)' },
-    ], { duration: 620, easing: 'ease-in-out' });
-  }, []);
+  // The acting: the avatar moves in place, so the page throws the whole body around.
+  const act = useCallback((frames: Keyframe[], duration: number, easing = 'ease-out') => { body.current?.animate(frames, { duration, easing }); }, []);
+  const leap = useCallback((high: boolean) => act([
+    { transform: 'translateY(0) scale(1.1, .88)' },
+    { transform: `translateY(${high ? -44 : -28}%) scale(.92, 1.1)`, offset: .45 },
+    { transform: 'translateY(0) scale(1.14, .84)', offset: .8 },
+    { transform: 'translateY(0) scale(1)' },
+  ], 720), [act]);
+  const spin = useCallback(() => act([
+    { transform: 'translateY(0) rotate(0) scale(1)' },
+    { transform: 'translateY(-48%) rotate(180deg) scale(.95)', offset: .5 },
+    { transform: 'translateY(0) rotate(360deg) scale(1.08, .9)', offset: .85 },
+    { transform: 'translateY(0) rotate(360deg) scale(1)' },
+  ], 900), [act]);
+  const stumble = useCallback(() => act([
+    { transform: 'rotate(0)' },
+    { transform: 'translateX(-6%) rotate(-16deg) scale(1.04, .94)', offset: .25 },
+    { transform: 'translateX(5%) rotate(12deg)', offset: .55 },
+    { transform: 'translateX(-2%) rotate(-5deg)', offset: .8 },
+    { transform: 'rotate(0)' },
+  ], 720, 'ease-in-out'), [act]);
+  const perk = useCallback(() => act([
+    { transform: 'translateY(0) scale(1)' },
+    { transform: 'translateY(-6%) scale(1.05, .97)', offset: .4 },
+    { transform: 'translateY(0) scale(1)' },
+  ], 320), [act]);
 
   // The game moves here first, so two calls in one breath each see the last one's result.
   const apply = useCallback((name: string, args: Record<string, unknown>) => {
@@ -104,10 +117,11 @@ export function App() {
     ref.current = move.club;
     setClub(move.club);
     if (move.fx.length) { setFx(move.fx); setFxKey((k) => k + 1); }
-    if (move.fx.includes('jump')) { leap(move.fx.includes('star')); if (move.fx.includes('star')) setTimeout(() => leap(true), 760); }
-    if (move.fx.includes('tumble')) tumble();
+    if (move.fx.includes('jump')) { leap(move.fx.includes('star')); if (move.fx.includes('star')) setTimeout(spin, 760); }
+    if (move.fx.includes('tumble')) stumble();
+    if (move.fx.includes('finish')) spin();
     return move;
-  }, [leap, tumble]);
+  }, [leap, spin, stumble]);
 
   // An answer counts only if the child said something since the last one: the host must not answer for them.
   const spoke = useRef(false);
@@ -120,6 +134,9 @@ export function App() {
   }, [apply]);
   const avatar = useAvatar('math-club', { onToolCall, onUserSaid: () => { spoke.current = true; } });
   const live = avatar.phase === 'live';
+  // Mochi perks up the moment the child starts talking.
+  const talking = Boolean(avatar.heard);
+  useEffect(() => { if (talking) perk(); }, [talking, perk]);
 
   const press = (name: string, args: Record<string, unknown> = {}) => {
     const move = apply(name, args);

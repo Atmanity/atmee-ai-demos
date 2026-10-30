@@ -5,14 +5,16 @@ import { useEffect, useRef, type RefObject } from 'react';
 const SIZE = 1024;
 const VERTEX = `attribute vec2 p; varying vec2 uv; void main() { uv = vec2((p.x + 1.) / 2., (1. - p.y) / 2.); gl_Position = vec4(p, 0., 1.); }`;
 const FRAGMENT = `precision mediump float; varying vec2 uv; uniform sampler2D t; uniform vec2 px;
-float solid(vec2 at) { vec4 c = texture2D(t, at); return 1. - smoothstep(.03, .15, c.g - max(c.r, c.b)); }
+float solid(vec2 at) { vec4 c = texture2D(t, at); return 1. - smoothstep(.2, .32, c.g - max(c.r, c.b)); }
 void main() {
   // Pulled in by a pixel of the source, then softened: compression smears green into the edge.
   float inner = min(min(solid(uv + vec2(px.x, 0.)), solid(uv - vec2(px.x, 0.))), min(solid(uv + vec2(0., px.y)), solid(uv - vec2(0., px.y))));
   float a = smoothstep(.15, .85, min(solid(uv), inner));
   vec4 c = texture2D(t, uv);
   float other = max(c.r, c.b);
-  gl_FragColor = vec4(c.r, min(c.g, other * mix(.82, 1., a)), c.b, a);
+  // Green light bounces onto the skin; teal keeps its blue, so only green-without-blue is pulled back.
+  float clean = min(c.g, max(c.r * .9, c.b));
+  gl_FragColor = vec4(c.r, min(clean, other * mix(.82, 1., a)), c.b, a);
 }`;
 
 export function Cutout({ video, image, className = '' }: { video?: RefObject<HTMLVideoElement | null>; image: string; className?: string }) {
