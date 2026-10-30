@@ -1,6 +1,6 @@
 // The five worlds. Each draws what the game has reached so far; the answers
 // the child has not found yet are never on screen.
-import type { CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import type { Club, GameId, Round } from '../engine/games.ts';
 import { roundOf } from '../engine/games.ts';
 import apple from '../art/apple.webp';
@@ -44,17 +44,52 @@ function Blocks({ round, step, solved }: { round: Round; step: number; solved: b
 
 const Coins = ({ n, paid }: { n: number; paid: boolean }) => <div className="w-coins">{Array.from({ length: n }, (_, i) => <img key={i} src={coin} alt="" className={paid ? 'is-paid' : ''} style={style({ '--d': `${i * 60}ms` })} />)}</div>;
 
+const APPLE_GRAMS = 500;
+const DIAL_KG = 5;
+const SWEEP = 270;
+/** The dial's angle for a weight: zero at bottom left, clockwise to five kilograms at bottom right. */
+const angleOf = (grams: number) => -135 + (grams / (DIAL_KG * 1000)) * SWEEP;
+const kilos = (grams: number) => `${Math.floor(grams / 1000)} kg${grams % 1000 ? ` ${grams % 1000} g` : ''}`;
+
+/** A working scale: the needle shows the weight of the apples on it, and each apple adds 500 g. */
+function Scale({ grams, target, solved }: { grams: number; target: number; solved: boolean }) {
+  const [weight, setWeight] = useState(grams);
+  useEffect(() => {
+    if (!solved) return setWeight(grams);
+    const id = setInterval(() => setWeight((w) => { if (w + APPLE_GRAMS >= target) clearInterval(id); return Math.min(target, w + APPLE_GRAMS); }), 520);
+    return () => clearInterval(id);
+  }, [solved, grams, target]);
+  const point = (grams: number, radius: number) => {
+    const t = (angleOf(grams) - 90) * Math.PI / 180;
+    return { x: 100 + Math.cos(t) * radius, y: 100 + Math.sin(t) * radius };
+  };
+  const ticks = Array.from({ length: DIAL_KG * 10 + 1 }, (_, i) => i * 100);
+  const goal = point(target, 80);
+  return (
+    <div className="w-scale">
+      <div className="w-pile">{Array.from({ length: weight / APPLE_GRAMS }, (_, i) => <img key={i} src={apple} alt="" />)}</div>
+      <img src={scale} alt="" />
+      <svg className="w-dial" viewBox="0 0 200 200" role="img" aria-label={`The scale shows ${kilos(weight)}. The customer needs ${kilos(target)}.`}>
+        {ticks.map((g) => { const big = g % 1000 === 0; const mid = g % 500 === 0; const from = point(g, big ? 72 : mid ? 76 : 79); const to = point(g, 84); return <line key={g} x1={from.x} y1={from.y} x2={to.x} y2={to.y} className={big ? 'big' : ''} />; })}
+        {Array.from({ length: DIAL_KG + 1 }, (_, kg) => { const at = point(kg * 1000, 59); return <text key={kg} x={at.x} y={at.y + 6} className="num">{kg}</text>; })}
+        <path d={`M${goal.x - 7} ${goal.y - 7} L${goal.x + 7} ${goal.y - 7} L${goal.x} ${goal.y + 5} Z`} className="goal" transform={`rotate(${angleOf(target)} ${goal.x} ${goal.y}) translate(0 -14)`} />
+        <text x="100" y="74" className="unit">kilograms</text>
+        <g className="needle" style={{ transform: `rotate(${angleOf(weight)}deg)` }}>
+          <line x1="100" y1="118" x2="100" y2="30" />
+        </g>
+        <circle cx="100" cy="100" r="7" className="hub" />
+        <rect x="64" y="126" width="72" height="24" rx="6" className={`lcd ${weight >= target ? 'is-done' : ''}`} />
+        <text x="100" y="143" className="read">{kilos(weight)}</text>
+      </svg>
+      <p className="w-goal">Goal: {kilos(target)}</p>
+    </div>
+  );
+}
+
 function Shop({ round, solved }: { round: Round; solved: boolean }) {
   return (
     <div className="w-prop w-shop">
-      {round.kind === 'scale' && (
-        <div className="w-scale">
-          <div className="w-pile">{Array.from({ length: solved ? 7 : 4 }, (_, i) => <img key={i} src={apple} alt="" />)}</div>
-          <img src={scale} alt="" />
-          <i className="w-needle" style={style({ '--turn': solved ? '150deg' : '60deg' })} />
-          <b>{solved ? '3 kg 500 g' : '2 kg'}</b>
-        </div>
-      )}
+      {round.kind === 'scale' && <Scale grams={round.n} target={round.m} solved={solved} />}
       {round.kind === 'coins' && round.m === 100 && <div className="w-sale"><img src={honey} alt="" className="w-item" /><p>45</p><Coins n={5} paid={solved} /></div>}
       {round.kind === 'coins' && round.m === 3 && <div className="w-sale"><div className="w-pile">{[0, 1, 2].map((i) => <img key={i} src={apple} alt="" />)}</div><p>12</p><Coins n={5} paid={solved} /></div>}
       {round.kind === 'bags' && (

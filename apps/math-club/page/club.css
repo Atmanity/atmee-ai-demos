@@ -108,10 +108,22 @@ button:focus-visible { outline: 4px solid var(--sun); outline-offset: 3px; }
 .w-shop { display: flex; align-items: flex-end; justify-content: center; }
 .w-scale { position: relative; height: 62vh; aspect-ratio: .78; }
 .w-scale > img { height: 100%; filter: drop-shadow(0 12px 10px rgba(0, 0, 0, .3)); }
-.w-needle { position: absolute; left: 50%; top: 67%; width: 7px; height: 12vh; margin: -12vh 0 0 -3px; border-radius: 4px; background: var(--coral); transform-origin: bottom; transform: rotate(var(--turn)); transition: transform .9s cubic-bezier(.3, 1.6, .5, 1); }
-.w-scale b { position: absolute; left: 50%; top: 74%; transform: translateX(-50%); white-space: nowrap; font: 800 3.8vh 'Baloo 2', sans-serif; color: var(--ink); }
+.w-dial { position: absolute; left: 50%; top: 63.4%; width: 88%; aspect-ratio: 1; transform: translate(-50%, -50%); overflow: visible; }
+.w-dial line { stroke: #3a3350; stroke-width: 1.2; stroke-linecap: round; }
+.w-dial line.big { stroke-width: 2.6; }
+.w-dial text { text-anchor: middle; font-family: 'Baloo 2', sans-serif; font-weight: 800; fill: #3a3350; }
+.w-dial .num { font-size: 18px; }
+.w-dial .unit { font-size: 8px; font-family: 'Nunito', sans-serif; fill: #6a5f80; }
+.w-dial .goal { fill: #2f9e75; }
+.w-dial .needle { transform-origin: 100px 100px; transition: transform .5s cubic-bezier(.3, 1.8, .5, 1); }
+.w-dial .needle line { stroke: var(--coral); stroke-width: 3.6; }
+.w-dial .hub { fill: #3a3350; }
+.w-dial .lcd { fill: #2a2140; }
+.w-dial .lcd.is-done { fill: #1f7a5a; }
+.w-dial .read { font-size: 13px; fill: #fff; }
+.w-goal { position: absolute; left: 96%; top: 38%; margin: 0; padding: 4px 14px; border-radius: 14px; background: #2f9e75; color: #fff; font: 800 3vh 'Baloo 2', sans-serif; white-space: nowrap; }
 .w-pile { position: absolute; left: 50%; bottom: 100%; margin-bottom: -5vh; transform: translateX(-50%); display: flex; justify-content: center; z-index: 1; }
-.w-pile img { width: 9vh; margin: 0 -1.2vh; animation: mc-pop .4s both; filter: drop-shadow(0 4px 3px rgba(0, 0, 0, .3)); }
+.w-pile img { width: 8vh; margin: 0 -1.6vh; animation: mc-drop-in .42s cubic-bezier(.3, 1.5, .5, 1) both; filter: drop-shadow(0 4px 3px rgba(0, 0, 0, .3)); }
 .w-sale { display: grid; justify-items: center; gap: 1vh; }
 .w-sale .w-pile { position: static; margin: 0; transform: none; }
 .w-sale .w-pile img { width: 17vh; }
@@ -143,6 +155,7 @@ button:focus-visible { outline: 4px solid var(--sun); outline-offset: 3px; }
 .w-label { margin: 0; padding: 4px 16px; border-radius: 12px; background: var(--cream); font-size: 20px; }
 
 @keyframes mc-idle { 50% { transform: translateY(-.4%); } }
+@keyframes mc-drop-in { from { translate: 0 -12vh; opacity: 0; } }
 @keyframes mc-pop { from { scale: 0; } to { scale: 1; } }
 @keyframes mc-hop { 50% { translate: 0 -18px; } }
 @keyframes mc-drop { from { transform: translate(-50%, -20px); opacity: 0; } }
