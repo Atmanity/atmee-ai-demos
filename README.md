@@ -236,6 +236,7 @@ session_service's `/v1/speech_sessions` and Causeur's speech server in public mo
 | app | product | what it is | README |
 |---|---|---|---|
 | front-desk | **Callwell** | a clinic's front desk on the phone: Rosa books, moves and cancels appointments in the clinic's own book | [apps/front-desk](apps/front-desk/README.md) |
+| pocket-npc | **Pocket NPC** | a tavern keeper in a 2D game, drawn and animated by the game from his voice; he hands out the quest and trades | [apps/pocket-npc](apps/pocket-npc/README.md) |
 
 ### Run them
 

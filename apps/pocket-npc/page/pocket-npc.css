@@ -1,0 +1,118 @@
+/* Pocket NPC: a game screen. Firelight and parchment: the tavern scene on the
+   left with what Brannoc says over it; the quest log, the purse and his shelf
+   on the right, as a game's side panels; on a phone, one column, the scene first. */
+:root {
+  --npc-night: #1a110c;
+  --npc-wood: #2a1a12;
+  --npc-ember: #e0702e;
+  --npc-gold: #f3c35b;
+  --npc-parch: #f4e8cf;
+  --npc-parch-2: #eadbb8;
+  --npc-ink: #2b1d14;
+  --npc-muted: #7a634c;
+  --npc-line: #d8c49c;
+  --npc-font: "Alegreya", Georgia, serif;
+  --npc-sans: "Alegreya Sans", "Avenir Next", system-ui, sans-serif;
+  --call-accent: var(--npc-ember);
+  --call-accent-ink: #fff;
+  --call-surface: var(--npc-parch);
+  --call-ink: var(--npc-ink);
+  --call-muted: var(--npc-muted);
+  --call-line: var(--npc-line);
+  --call-font: var(--npc-sans);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--npc-night); color: var(--npc-parch); }
+body { font-family: var(--npc-sans); -webkit-font-smoothing: antialiased; }
+button { font: inherit; cursor: pointer; }
+button:disabled { opacity: .55; cursor: default; }
+:focus-visible { outline: 2px solid var(--npc-gold); outline-offset: 2px; }
+h1, h2, h3 { margin: 0; font-family: var(--npc-font); }
+
+.npc { min-height: 100vh; display: flex; flex-direction: column; background: radial-gradient(1200px 600px at 30% 0%, #3a2214, var(--npc-night)); }
+
+/* ── the bar ───────────────────────────────────────────────────────────── */
+.npc-top { display: flex; align-items: center; gap: 14px; padding: 12px max(16px, env(safe-area-inset-left, 0px)); border-bottom: 1px solid rgb(243 195 91 / .18); flex-wrap: wrap; }
+.npc-top .call-back { color: var(--npc-parch); border-color: rgb(244 232 207 / .3); background: transparent; }
+.npc-logo { color: var(--npc-gold); text-decoration: none; font-family: var(--npc-font); font-weight: 800; font-size: 23px; display: inline-flex; align-items: baseline; gap: 10px; }
+.npc-logo small { font-family: var(--npc-sans); font-weight: 500; font-size: 13px; color: rgb(244 232 207 / .7); padding-left: 10px; border-left: 1px solid rgb(244 232 207 / .25); }
+.npc-way { margin-left: auto; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: rgb(243 195 91 / .14); color: var(--npc-gold); }
+.npc-clock { font-variant-numeric: tabular-nums; color: rgb(244 232 207 / .75); font-size: 14px; }
+
+/* ── the layout ────────────────────────────────────────────────────────── */
+.npc-main { flex: 1; width: 100%; max-width: 1200px; margin: 0 auto; padding: 22px max(16px, env(safe-area-inset-left, 0px)) 36px; display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+.npc-stage, .npc-side { display: grid; gap: 14px; min-width: 0; }
+
+/* ── the scene ─────────────────────────────────────────────────────────── */
+.npc-frame { position: relative; border-radius: 18px; overflow: hidden; border: 3px solid #5a3a22; box-shadow: 0 20px 50px rgb(0 0 0 / .45), inset 0 0 0 1px rgb(243 195 91 / .2); transition: border-color .2s; }
+.npc-frame.is-speaking, .npc-frame.is-pleased { border-color: var(--npc-gold); }
+.npc-scene { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; }
+.npc-bubble { position: absolute; left: 4%; right: 4%; top: 4%; margin: 0; padding: 12px 16px; border-radius: 16px; background: var(--npc-parch); color: var(--npc-ink); font-family: var(--npc-font); font-size: clamp(15px, 1.8vw, 19px); line-height: 1.35; box-shadow: 0 6px 18px rgb(0 0 0 / .35); max-height: 38%; overflow: auto; }
+.npc-bubble::after { content: ""; position: absolute; left: 48%; bottom: -10px; border: 10px solid transparent; border-top-color: var(--npc-parch); border-bottom: 0; }
+.npc-bubble.is-saying { box-shadow: 0 6px 18px rgb(0 0 0 / .35), 0 0 0 2px var(--npc-gold); }
+.npc-you { position: absolute; left: 4%; right: 30%; bottom: 4%; margin: 0; padding: 8px 12px; border-radius: 12px; background: rgb(26 17 12 / .82); color: var(--npc-parch); font-size: 15px; }
+.npc-you b { color: var(--npc-gold); margin-right: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+.npc-you.is-saying { opacity: .8; }
+.npc-toast { position: absolute; right: 4%; bottom: 4%; margin: 0; padding: 8px 14px; border-radius: 999px; background: var(--npc-gold); color: var(--npc-ink); font-weight: 700; animation: npc-pop .35s ease-out; }
+.npc-toast.is-quest { background: var(--npc-ember); color: #fff; }
+@keyframes npc-pop { from { transform: translateY(8px) scale(.9); opacity: 0; } to { transform: none; opacity: 1; } }
+.npc-overlay { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 12px; padding: 24px; text-align: center; background: rgb(20 12 8 / .7); }
+.npc-lobby { background: linear-gradient(to top, rgb(20 12 8 / .95) 30%, rgb(20 12 8 / .35)); align-content: end; }
+.npc-lobby h1 { font-size: clamp(30px, 4vw, 44px); color: var(--npc-gold); }
+.npc-lobby p { margin: 0; max-width: 34em; line-height: 1.5; }
+.npc-lobby small { max-width: 40em; color: rgb(244 232 207 / .7); line-height: 1.5; }
+.npc-overlay strong { font-family: var(--npc-font); font-size: 22px; color: var(--npc-gold); }
+.npc-go { padding: 12px 24px; border: 0; border-radius: 999px; background: var(--npc-ember); color: #fff; font-weight: 700; font-size: 17px; box-shadow: 0 8px 20px rgb(224 112 46 / .35); }
+.npc-go:hover { background: #c95e20; }
+.npc-hear { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 10px 18px; border-radius: 999px; border: 0; background: var(--npc-gold); font-weight: 700; }
+.npc-spin { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgb(243 195 91 / .3); border-top-color: var(--npc-gold); animation: npc-spin .9s linear infinite; }
+@keyframes npc-spin { to { transform: rotate(360deg); } }
+
+.npc-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.npc-state { margin-right: auto; font-weight: 700; color: var(--npc-gold); }
+.npc-state.is-listening { color: #9fd3a8; }
+.npc-btn { padding: 10px 20px; border-radius: 999px; border: 1px solid rgb(244 232 207 / .35); background: transparent; color: var(--npc-parch); font-weight: 700; }
+.npc-btn.is-on { background: var(--npc-parch); color: var(--npc-ink); }
+.npc-leave { background: #8c2f2f; border-color: #8c2f2f; }
+
+/* ── the side panels: parchment ────────────────────────────────────────── */
+.npc-card { background: var(--npc-parch); color: var(--npc-ink); border-radius: 14px; padding: 16px 18px; display: grid; gap: 10px; box-shadow: inset 0 0 0 1px var(--npc-line), 0 8px 24px rgb(0 0 0 / .3); }
+.npc-card h2 { font-size: 20px; }
+.npc-muted { margin: 0; color: var(--npc-muted); }
+.npc-quest { padding: 10px 12px; border-radius: 10px; background: var(--npc-parch-2); border-left: 4px solid var(--npc-ember); animation: npc-pop .4s ease-out; }
+.npc-quest h3 { font-size: 17px; }
+.npc-quest p { margin: 4px 0 0; font-size: 14px; line-height: 1.45; }
+.npc-silver { margin: 0; display: flex; align-items: center; gap: 8px; font-family: var(--npc-font); font-weight: 800; font-size: 22px; }
+.npc-coin { width: 22px; height: 22px; }
+.npc-coin circle { fill: var(--npc-gold); stroke: #a87a1e; stroke-width: 1.5; }
+.npc-coin circle + circle { fill: none; }
+.npc-pack ul, .npc-wares ul, .npc-runs, .npc-hood ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.npc-pack li { padding: 6px 10px; border-radius: 8px; background: var(--npc-parch-2); font-weight: 500; animation: npc-pop .4s ease-out; }
+.npc-wares li { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: baseline; padding: 4px 0; border-bottom: 1px dashed var(--npc-line); }
+.npc-wares em { font-style: normal; font-weight: 700; }
+.npc-wares small { color: var(--npc-muted); }
+.npc-wares li.is-gone { opacity: .45; text-decoration: line-through; }
+.npc-hood li { display: grid; gap: 1px; padding: 8px 10px; border-radius: 8px; background: var(--npc-parch-2); border-left: 4px solid; font-size: 14px; }
+.npc-hood li.is-atmee { border-color: #4f46e5; }
+.npc-hood li.is-game { border-color: var(--npc-ember); }
+.npc-hood li span { color: var(--npc-muted); }
+.npc-runs li { display: grid; gap: 1px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--npc-line); font-size: 14px; }
+.npc-runs li b { color: #2f6b45; }
+.npc-runs li.is-refused b { color: #8c2f2f; }
+.npc-runs li span { color: var(--npc-muted); }
+
+.npc-summary h2 { font-size: 24px; }
+.npc-summary p { margin: 0; line-height: 1.5; }
+.npc-summary dl { margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.npc-summary dl div { padding: 10px; border-radius: 10px; background: var(--npc-parch-2); }
+.npc-summary dt { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--npc-muted); font-weight: 700; }
+.npc-summary dd { margin: 4px 0 0; font-weight: 800; font-size: 19px; }
+.npc-summary .npc-go { justify-self: start; }
+
+@media (max-width: 880px) {
+  .npc-main { grid-template-columns: minmax(0, 1fr); }
+  .npc-way { margin-left: 0; }
+  .npc-you { right: 4%; bottom: auto; top: 44%; }
+  .npc-toast { bottom: 4%; }
+}
