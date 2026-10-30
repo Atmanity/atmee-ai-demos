@@ -155,6 +155,10 @@ api.post('/apps/:app/speech', async (req, res) => {
   const avatarId = speechAvatarFor(app.id);
   if (!avatarId) return void res.status(503).json({ error: 'no_avatar', message: `Set ${avatarEnvName(app.id)} to an avatar with a voice` });
   const maxSeconds = Number(process.env.MAX_SECONDS) || app.maxSeconds || 600;
+  // A page that goes (a tab closed, a link followed) while its session is being reserved can
+  // neither use it nor end it: once it comes, it is ended here instead of left reserved.
+  let gone = false;
+  res.on('close', () => { if (!res.writableEnded) gone = true; });
   const r = await startSpeechSession(avatarId, maxSeconds, app.speech.settings(), app.speech.language);
   if (!r.ok) {
     // The code is for the page; the message (which limit, which field) is for you.
@@ -162,6 +166,11 @@ api.post('/apps/:app/speech', async (req, res) => {
     return void res.status(r.status).json({ error: r.json?.error || `http_${r.status}`, retryAfter: r.retryAfter });
   }
   const id = r.session.sessionId;
+  if (gone) {
+    console.log('[%s] speech session %s ended: its page went before it came', app.id, id);
+    await endSpeechSession(id).catch(() => null);
+    return;
+  }
   speaking.set(id, { app: app.id, ended: false });
   // Kept a while past its end, for the page's summary of what it cost.
   setTimeout(() => speaking.delete(id), (r.session.maxSeconds + 900) * 1000).unref();

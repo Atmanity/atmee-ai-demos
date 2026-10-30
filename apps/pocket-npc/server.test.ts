@@ -75,6 +75,23 @@ test('the server reserves the call with the avatar and its pinned settings; the 
     .toEqual(['give_quest', 'sell_item', 'give_item', 'look_at_player']);
 });
 
+test('a call whose page went while it was being reserved is ended, not left reserved', async () => {
+  process.env.AVATAR_POCKET_NPC = 'npc-avatar';
+  let reservedId = '';
+  reply = ((path: string) => path !== '/v1/speech_sessions' ? null : new Promise<Response>((done) => setTimeout(() => {
+    reservedId = `sp-${++reserved}`;
+    done(Response.json({ sessionId: reservedId, url: 'wss://speech.test/v1/speech_sessions', token: 'jwt',
+      tokenExpiresAt: '2026-10-27T12:01:00Z', actualDurationSeconds: 600 }, { status: 201 }));
+  }, 300))) as unknown as typeof reply;
+  const leaving = new AbortController();
+  const asked = fetch(url('/apps/pocket-npc/speech'), { method: 'POST', signal: leaving.signal }).catch(() => null);
+  setTimeout(() => leaving.abort(), 50);       // the tab closes before the session comes
+  await asked;
+  await vi.waitFor(() => expect(calls.at(-1)).toMatchObject({ method: 'POST', path: `/v1/speech_sessions/${reservedId}/end` }), { timeout: 3000 });
+  // And it is no call of the page's: nothing reads or ends it again.
+  expect((await fetch(url(`/apps/pocket-npc/speech/${reservedId}`))).status).toBe(404);
+});
+
 test("a refusal reaches the page as its code: an avatar with no voice, a key's cap", async () => {
   process.env.AVATAR_POCKET_NPC = 'mute-avatar';
   reply = (path) => (path === '/v1/speech_sessions' ? Response.json({ error: 'avatar_has_no_voice', message: 'the avatar has no voice' }, { status: 422 }) : null);
