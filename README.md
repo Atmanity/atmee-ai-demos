@@ -185,6 +185,7 @@ Each was run live on staging; its README has the runs and what the API could not
 | chess-opponent | **Kibitz** | chess with Sasha, a club player who plays her own moves and says why | [apps/chess-opponent](apps/chess-opponent/README.md) |
 | poker-table | **Blindside** | heads-up hold'em against Dex: say your move, he talks back | [apps/poker-table](apps/poker-table/README.md) |
 | stroke-tutor | **Hanshi** | stroke order with Ren, a calligraphy teacher who watches every stroke | [apps/stroke-tutor](apps/stroke-tutor/README.md) |
+| math-club | **Math Club** | Kids learn fractions and times tables with Mochi, a cartoon red panda | [apps/math-club](apps/math-club/README.md) |
 | bls-tutor | **Bystander** | CPR and first-aid drills with Alex, a calm paramedic | [apps/bls-tutor](apps/bls-tutor/README.md) |
 | quadratic-whiteboard | **Chalkline** | an equation's working, one exact line at a time, read out by Ada | [apps/quadratic-whiteboard](apps/quadratic-whiteboard/README.md) |
 | trajectory-coach | **Arcwise** | a projectile range: aim, fire, and Theo explains where it landed | [apps/trajectory-coach](apps/trajectory-coach/README.md) |

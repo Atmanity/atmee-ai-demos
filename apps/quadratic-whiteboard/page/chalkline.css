@@ -274,3 +274,5 @@ button, input { font: inherit; }
   .cl-line-text, .cl-dust, .cl-voice.is-speaking::before { animation: none; }
   .cl-primary, .cl-secondary, .cl-key, .cl-method { transition: none; }
 }
+.cl-club { text-align: center; }
+.cl-club a { color: inherit; font-weight: 700; }
