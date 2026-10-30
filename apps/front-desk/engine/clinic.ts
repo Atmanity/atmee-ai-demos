@@ -146,18 +146,46 @@ export function pickTime(input: unknown): string | null {
   return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
 }
 
-/** The clinicians a caller asks for: a name ("Patel", "Dr. Okafor", "Lena"), "the nurse", "a doctor"; all when they name none. */
+/** Words that ask for a kind of clinician, or anyone, rather than name one. */
+const NOT_A_NAME = new Set(['a', 'an', 'the', 'any', 'anyone', 'anybody', 'someone', 'whoever', 'whichever', 'either',
+  'available', 'free', 'first', 'next', 'earliest', 'same', 'usual', 'regular', 'my', 'our', 'one', 'or', 'and', 'please',
+  'doctor', 'doctors', 'dr', 'nurse', 'nurses', 'practitioner', 'np', 'gp', 'physician', 'family', 'clinician', 'provider',
+  'who', 'with', 'see', 'for', 'can', 'else', 'other', 'another', 'new', 'female', 'male', 'woman', 'man', 'lady']);
+
+/**
+ * A clinician the caller named who does not work here ("Dr. Smith", "Nurse Jones", "Smith"), as
+ * said; null for a clinician who does, a kind of clinician ("a doctor", "the same doctor"), or none.
+ */
+export function unknownClinician(input: unknown): string | null {
+  const text = String(input ?? '').toLowerCase();
+  const said = text.split(/[^a-z'-]+/).filter(Boolean);
+  if (namedClinicians(said).length) return null;
+  const name = said.filter((w) => w.length > 2 && !NOT_A_NAME.has(w));
+  return name.length ? String(input).trim() : null;
+}
+
+// Whole words only: "the same doctor" is not Dr. Sam Okafor.
+const namedClinicians = (said: string[]) => {
+  const words = new Set(said);
+  return CLINICIANS.filter((c) => c.name.toLowerCase().split(/[\s.]+/).some((w) => w.length > 2 && w !== 'dr' && words.has(w)));
+};
+
+/**
+ * The clinicians a caller asks for: a name ("Patel", "Dr. Okafor", "Lena"), "the nurse", "a doctor";
+ * all when they name none, and none for a name of no one here (`unknownClinician`).
+ */
 export function pickClinicians(input: unknown): Clinician[] {
   const text = String(input ?? '').toLowerCase();
-  // Whole words only: "the same doctor" is not Dr. Sam Okafor.
-  const said = new Set(text.split(/[^a-z]+/));
-  const named = CLINICIANS.filter((c) => c.name.toLowerCase().split(/[\s.]+/).some((w) => w.length > 2 && w !== 'dr' && said.has(w)));
+  const named = namedClinicians(text.split(/[^a-z]+/));
   if (named.length) return named;
+  if (unknownClinician(input)) return [];
   if (/\bnurse|practitioner|\bnp\b/.test(text)) return CLINICIANS.filter((c) => c.nurse);
   if (/\bdoctor|\bdr\b|physician|\bgp\b/.test(text)) return CLINICIANS.filter((c) => !c.nurse);
   return CLINICIANS;
 }
 
+const noSuchClinician = (name: string) =>
+  `no ${name} works at the clinic. Its clinicians are ${CLINICIANS.map((c) => `${c.short} (${c.role})`).join(', ')}. Ask which one they would like.`;
 const isNurseVisit = (reason: unknown) => NURSE_VISIT.test(String(reason ?? ''));
 const words = (s: string) => s.toLowerCase().replace(/[^\p{L}\s'-]/gu, ' ').split(/\s+/).filter(Boolean);
 const titleCase = (s: string) => s.trim().replace(/\s+/g, ' ').replace(/(^|[\s'-])(\p{L})/gu, (_, a, b) => a + b.toUpperCase());
@@ -214,6 +242,8 @@ export class FrontDesk {
     if (asked && !day && !/\b(any|soon|next|earliest|first)\b/i.test(asked)) {
       return { ok: false, text: `Refused: the desk books only ${this.daysWord()}, on weekdays. Offer a day in that range.` };
     }
+    const stranger = unknownClinician(args.who);
+    if (stranger) return { ok: false, text: noSuchClinician(stranger) };
     const nurse = isNurseVisit(args.reason);
     const who = pickClinicians(args.who).filter((c) => !c.nurse || nurse || !String(args.reason ?? '').trim());
     const part = String(args.part_of_day ?? '').toLowerCase();
@@ -256,6 +286,8 @@ export class FrontDesk {
     if (!time || !TIMES.includes(time)) return { ok: false, text: `Refused, nothing is booked: appointments start on the half hour, 9 AM to 11:30 AM and 1:30 PM to 4 PM. Ask for a time and check it first.` };
     const reason = String(args.reason ?? '').trim();
     if (!reason) return { ok: false, text: 'Refused, nothing is booked: the desk needs to know what the visit is for. Ask.' };
+    const stranger = unknownClinician(args.who);
+    if (stranger) return { ok: false, text: `Refused, nothing is booked: ${noSuchClinician(stranger)}` };
     const nurse = isNurseVisit(reason);
     const asked = pickClinicians(args.who);
     const fits = asked.filter((c) => !c.nurse || nurse);

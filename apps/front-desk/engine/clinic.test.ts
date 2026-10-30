@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { CLINICIANS, FrontDesk, RULES, TOOLS, bookingDays, clinicFacts, pickClinicians, pickDay, pickTime } from './clinic.ts';
+import { CLINICIANS, FrontDesk, RULES, TOOLS, bookingDays, clinicFacts, pickClinicians, pickDay, pickTime, unknownClinician } from './clinic.ts';
 
 // Monday 26 October 2026, 8 AM in Portland (15:00 UTC).
 const MONDAY = new Date('2026-10-26T15:00:00Z');
@@ -41,6 +41,16 @@ describe('the days the desk books', () => {
     expect(pickClinicians('the same doctor').map((c) => c.id)).toEqual(['patel', 'okafor']);
     expect(pickClinicians('Sam').map((c) => c.id)).toEqual(['okafor']);
   });
+
+  test("a name of no one here is that, never a role: Dr. Smith is not 'a doctor'", () => {
+    for (const who of ['Dr. Smith', 'Doctor Smith', 'Nurse Jones', 'Smith', 'Jane Smith']) {
+      expect(unknownClinician(who)).toBe(who);
+      expect(pickClinicians(who)).toEqual([]);
+    }
+    for (const who of ['Dr. Patel', 'the nurse', 'a doctor', 'any doctor', 'the same doctor', 'nurse practitioner', 'whoever is free', 'a female doctor', 'any other doctor', '']) {
+      expect(unknownClinician(who)).toBeNull();
+    }
+  });
 });
 
 describe('the book, as the tools change it', () => {
@@ -67,6 +77,18 @@ describe('the book, as the tools change it', () => {
     const r = new FrontDesk(MONDAY).check_availability({ day: 'Saturday' });
     expect(r).toMatchObject({ ok: false });
     expect(r.text).toContain('Monday, October 26 to Friday, October 30');
+  });
+
+  test('a clinician who does not work here is refused, not swapped for another doctor', () => {
+    const desk = new FrontDesk(MONDAY);
+    const open = desk.check_availability({ day: 'Thursday', reason: 'a check-up' }).offered![0];
+    const checked = desk.check_availability({ day: 'Thursday', who: 'Dr. Smith', reason: 'a check-up' });
+    expect(checked.ok).toBe(false);
+    expect(checked.text).toMatch(/no Dr\. Smith works at the clinic\. Its clinicians are Dr\. Patel/);
+    const booked = desk.book_appointment({ patient_name: 'Jordan Lee', day: 'Thursday', time: open.time, who: 'Dr. Smith', reason: 'a check-up' });
+    expect(booked.ok).toBe(false);
+    expect(booked.text).toMatch(/^Refused, nothing is booked: no Dr\. Smith works at the clinic/);
+    expect(desk.isOpen(open.date, open.time, open.clinician)).toBe(true);
   });
 
   test('a booking needs a full name, an offered day, a slot and a reason, and takes the slot', () => {
