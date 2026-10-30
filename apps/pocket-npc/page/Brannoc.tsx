@@ -1,6 +1,6 @@
 // Brannoc and his tavern, drawn by the game: no video stream, no Atmee
 // renderer. Every frame the page reads the level of the voice as it plays
-// (useSpeech().levels(), the same audio the speaker gets, after the jitter
+// (useSpeech().levels(), the same audio the speaker gets, after the player's
 // buffer) and moves his jaw, moustache, brows and head with it; he blinks on
 // his own, perks up while the player talks, and beams for a moment when the
 // game hands something over. A game engine would drive its own rig the same

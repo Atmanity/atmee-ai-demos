@@ -23,7 +23,7 @@ the game's server ──► POST /v1/speech_sessions  (API key; avatarId = the v
 the page ──► wss://…/v1/speech_sessions   subprotocols atmee-live, atmee-token.<jwt>
    input_audio.append  ───► the microphone, 24 kHz PCM16, every 20 ms
    playback.*          ◄─── his voice, each reply as fast as it is made ──► held whole ──► speaker
-                                                                     └──► level (RMS) ──► jaw, moustache, brows, head
+                                                                            └──► level (RMS) ──► jaw, moustache, brows, head
    playback.ack        ───► when each reply began to play, and how much of it played
    a tool round        ◄─── give_quest, sell_item, give_item, look_at_player ──► engine/tavern.ts
    response.item.create ──► each result; response.create ──► he goes on
