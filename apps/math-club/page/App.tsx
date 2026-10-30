@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { BackToApps, CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, type ToolCall } from '../../../src/kit/index.ts';
 import { clubState, opening, pressed } from '../engine/director.ts';
 import { answer, explained, gameOf, GAMES, newClub, next, roundOf, setLevel, stepOf, type Club, type Fx, type Move } from '../engine/games.ts';
+import { cleanSpeech, leakedCall } from '../engine/leak.ts';
 import mochi from '../host/portrait.jpg';
 import { Cutout } from './Cutout.tsx';
 import { World } from './Worlds.tsx';
@@ -120,6 +121,19 @@ export function App() {
   const avatar = useAvatar('math-club', { onToolCall, onUserSaid: () => { spoke.current = true; } });
   const live = avatar.phase === 'live';
 
+  // A tool call written into the words instead of made: the page makes it once, and tells Mochi if it went another way.
+  const leaked = useRef('');
+  useEffect(() => {
+    const call = leakedCall(avatar.caption);
+    if (!call) { leaked.current = ''; return; }
+    const key = JSON.stringify(call);
+    if (key === leaked.current) return;
+    leaked.current = key;
+    void onToolCall({ id: `leak-${Date.now()}`, ...call }).then((result) => {
+      if (!/^(Right|Done)/.test(result)) avatar.event(`That did not count: ${result} Correct what you just said, briefly.`, 30);
+    });
+  }, [avatar.caption]);
+
   const press = (name: string, args: Record<string, unknown> = {}) => {
     const move = apply(name, args);
     if (move && live) avatar.event(pressed(move.outcome), 30);
@@ -166,7 +180,7 @@ export function App() {
       )}
 
       <div className={`mc-mochi ${avatar.speaking ? 'is-talking' : ''}`}>
-        {live && avatar.caption && <p className="mc-bubble">{avatar.caption}</p>}
+        {live && cleanSpeech(avatar.caption) && <p className="mc-bubble">{cleanSpeech(avatar.caption)}</p>}
         <div ref={body} className="mc-body"><Cutout video={avatar.videoRef} image={mochi} /></div>
         <i className="mc-shadow" />
       </div>
