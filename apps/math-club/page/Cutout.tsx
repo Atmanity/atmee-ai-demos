@@ -4,12 +4,15 @@ import { useEffect, useRef, type RefObject } from 'react';
 
 const SIZE = 1024;
 const VERTEX = `attribute vec2 p; varying vec2 uv; void main() { uv = vec2((p.x + 1.) / 2., (1. - p.y) / 2.); gl_Position = vec4(p, 0., 1.); }`;
-const FRAGMENT = `precision mediump float; varying vec2 uv; uniform sampler2D t;
+const FRAGMENT = `precision mediump float; varying vec2 uv; uniform sampler2D t; uniform vec2 px;
+float solid(vec2 at) { vec4 c = texture2D(t, at); return 1. - smoothstep(.03, .15, c.g - max(c.r, c.b)); }
 void main() {
+  // Pulled in by a pixel of the source, then softened: compression smears green into the edge.
+  float inner = min(min(solid(uv + vec2(px.x, 0.)), solid(uv - vec2(px.x, 0.))), min(solid(uv + vec2(0., px.y)), solid(uv - vec2(0., px.y))));
+  float a = smoothstep(.15, .85, min(solid(uv), inner));
   vec4 c = texture2D(t, uv);
   float other = max(c.r, c.b);
-  float a = 1. - smoothstep(.04, .17, c.g - other);
-  gl_FragColor = vec4(c.r, min(c.g, other), c.b, a * a);
+  gl_FragColor = vec4(c.r, min(c.g, other * mix(.82, 1., a)), c.b, a);
 }`;
 
 export function Cutout({ video, image, className = '' }: { video?: RefObject<HTMLVideoElement | null>; image: string; className?: string }) {
@@ -37,6 +40,7 @@ export function Cutout({ video, image, className = '' }: { video?: RefObject<HTM
     el.width = SIZE;
     el.height = SIZE;
     gl.viewport(0, 0, SIZE, SIZE);
+    const px = gl.getUniformLocation(program, 'px');
     const still = new Image();
     still.src = image;
     let frame = 0;
@@ -45,6 +49,8 @@ export function Cutout({ video, image, className = '' }: { video?: RefObject<HTM
       const v = video?.current;
       const source = v && v.readyState >= 2 && v.videoWidth ? v : still.complete && still.naturalWidth ? still : null;
       if (!source) return;
+      const width = source instanceof HTMLVideoElement ? source.videoWidth : source.naturalWidth;
+      gl.uniform2f(px, 1.4 / width, 1.4 / width);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     };

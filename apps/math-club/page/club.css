@@ -63,10 +63,13 @@ button:focus-visible { outline: 4px solid var(--sun); outline-offset: 3px; }
 .mc-body canvas { width: 100%; height: 100%; display: block; animation: mc-idle 2.4s ease-in-out infinite; transform-origin: bottom; }
 .is-talking .mc-body canvas { animation: mc-talk .46s ease-in-out infinite; }
 .mc-shadow { position: absolute; left: 24%; right: 24%; bottom: 6%; height: 6%; border-radius: 50%; background: rgba(0, 0, 0, .28); z-index: -1; filter: blur(4px); }
-.mc-bubble { position: absolute; z-index: 2; left: 66%; top: -2%; width: min(320px, 26vw); margin: 0; padding: 10px 14px; border-radius: 18px 18px 18px 4px; background: #fff; font-size: 16px; box-shadow: 0 8px 18px rgba(42, 33, 64, .22); }
+.mc-bubble { position: absolute; z-index: 2; left: 72%; top: -6%; width: min(320px, 26vw); margin: 0; padding: 10px 14px; border-radius: 18px 18px 18px 4px; background: #fff; font-size: 16px; box-shadow: 0 8px 18px rgba(42, 33, 64, .22); }
 .mc-call { position: absolute; z-index: 7; inset: 0; pointer-events: none; display: grid; place-items: center; }
 .mc-host-video { background: none !important; width: 100%; height: 100%; }
-.mc-host-video video, .mc-host-video .call-poster { opacity: 0 !important; position: absolute; width: 2px; height: 2px; }
+/* The hidden video stays full size: the stream drops its quality for a small element. */
+.mc-host-video video { opacity: 0 !important; position: absolute; left: 0; top: 0; width: 720px !important; height: 720px !important; max-width: none; }
+.mc-host-video .call-poster { display: none; }
+.mc-call { overflow: hidden; }
 .mc-host-video button, .mc-host-video a { pointer-events: auto; }
 
 .mc-dock { position: absolute; z-index: 6; inset: auto 16px 12px; display: flex; align-items: center; justify-content: center; gap: 12px; }
@@ -106,10 +109,12 @@ button:focus-visible { outline: 4px solid var(--sun); outline-offset: 3px; }
 
 .w-shop { display: flex; flex-direction: column; justify-content: flex-end; }
 .w-awning { position: absolute; left: -3%; right: -3%; top: 0; height: 62px; z-index: 1; border-radius: 0 0 26px 26px; background: repeating-linear-gradient(90deg, var(--coral) 0 56px, var(--cream) 56px 112px); box-shadow: 0 8px 12px rgba(0, 0, 0, .14); }
-.w-counter { position: absolute; inset: 40px 0 0; display: grid; place-items: end center; padding: 18px; border-radius: 18px 18px 0 0; background: linear-gradient(180deg, #c98a4e, #a96d38); box-shadow: inset 0 8px 0 #e2ab72; }
-.w-scale { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.w-shop::before, .w-shop::after { content: ''; position: absolute; top: 40px; bottom: 50%; width: 16px; background: #a96d38; }
+.w-shop::before { left: 2%; } .w-shop::after { right: 2%; }
+.w-counter { position: absolute; inset: auto 0 0; height: 54%; display: grid; place-items: end center; padding: 18px; border-radius: 18px 18px 0 0; background: linear-gradient(180deg, #c98a4e, #a96d38); box-shadow: inset 0 8px 0 #e2ab72; }
+.w-scale { position: absolute; left: 50%; bottom: 8%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .w-scale b { font: 800 30px 'Baloo 2', sans-serif; color: #fff; }
-.w-dial { position: relative; width: 22vh; height: 22vh; border-radius: 50%; border: 8px solid #6a5f80; background: #fff; }
+.w-dial { position: relative; width: 24vh; height: 24vh; border-radius: 50%; border: 8px solid #6a5f80; background: #fff; }
 .w-dial i { position: absolute; left: 50%; top: 50%; width: 6px; height: 9vh; margin: -9vh 0 0 -3px; background: var(--coral); transform-origin: bottom; transform: rotate(var(--turn)); transition: transform .9s cubic-bezier(.3, 1.6, .5, 1); }
 .w-apples { display: flex; gap: 4px; } .w-apples span { width: 5vh; height: 5vh; border-radius: 50%; background: radial-gradient(circle at 34% 30%, #ff9a8a, #e0303a); animation: mc-pop .4s both; }
 .w-price { width: 100%; text-align: center; font: 800 32px 'Baloo 2', sans-serif; color: #fff; }
