@@ -7,6 +7,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import type { AppServer } from './app-server.ts';
 import { avatarApi, endSession, sessionLanguage, setConductor, startSession } from './atmee.ts';
 import { endRender, renderConfigured, startRender } from './render.ts';
+import { endSpeechSession, readSpeechSession, startSpeechSession } from './speech-sessions.ts';
 import { avatarEnvName, avatarFor, hostNameOf } from './hosts.js';
 
 const apps = new Map<string, AppServer>();
@@ -43,11 +44,22 @@ function caught(router: Router): Router {
 
 export const api = caught(Router());
 
+/**
+ * A speech app's avatar: its own AVATAR_<APP_ID> only, never avatar.json or AVATAR_DEFAULT. The
+ * avatar's voice is the app's character's, so the app stays off until one is chosen for it.
+ */
+export const speechAvatarFor = (id: string) => process.env[avatarEnvName(id)] || '';
+
+// The functions each host may call: a speech app's are the tools its server pins.
+const toolCount = (app: AppServer) => (app.speech ? app.speech.settings().delegation?.responses?.tools?.length ?? 0 : app.appTools?.tools.length ?? 0);
+
 api.get('/apps', (_req, res) => {
   // tools and agenda: what the home page counts (the functions each host may call, and whether it keeps to a conductor).
-  res.json([...apps.values()].map(({ id, title, tagline, brand, way, appTools, conductor }) => ({
-    id, title, tagline, brand, way: way ?? 'full-stack', host: hostNameOf(id), avatar: Boolean(avatarFor(id)),
-    tools: appTools?.tools.length ?? 0, agenda: Boolean(conductor?.graph),
+  // A speech app without its avatar is off, and not listed.
+  res.json([...apps.values()].filter((app) => !app.speech || speechAvatarFor(app.id)).map((app) => ({
+    id: app.id, title: app.title, tagline: app.tagline, brand: app.brand, way: app.way ?? 'full-stack', host: hostNameOf(app.id),
+    avatar: Boolean(app.speech ? speechAvatarFor(app.id) : avatarFor(app.id)),
+    tools: toolCount(app), agenda: Boolean(app.conductor?.graph),
   })));
 });
 
@@ -136,14 +148,68 @@ api.post('/apps/:app/render/:id/end', async (req, res) => {
   res.status(r.status).json(r.json);
 });
 
+// The speech apps on the speech kit (`AppServer.speech`): a voice call the page holds over a
+// WebSocket to Atmee's speech server. Each start reserves the visitor's own session, with the
+// settings the app pins. An app that reserves its own sessions (Crate, The Gilded Reel) has
+// routes of the same names: these pass it on to them.
+const speaking = new Map<string, { app: string; ended: boolean }>(); // speech session id -> its app
+
+api.post('/apps/:app/speech', async (req, res, next) => {
+  const app = apps.get(req.params.app);
+  if (!app?.speech) return next();
+  const avatarId = speechAvatarFor(app.id);
+  if (!avatarId) return void res.status(503).json({ error: 'no_avatar', message: `Set ${avatarEnvName(app.id)} to an avatar with a voice` });
+  const maxSeconds = Number(process.env.MAX_SECONDS) || app.maxSeconds || 600;
+  // A page that goes (a tab closed, a link followed) while its session is being reserved can
+  // neither use it nor end it: once it comes, it is ended here instead of left reserved.
+  let gone = false;
+  res.on('close', () => { if (!res.writableEnded) gone = true; });
+  const r = await startSpeechSession(avatarId, maxSeconds, app.speech.settings(), app.speech.language);
+  if (!r.ok) {
+    // The code is for the page; the message (which limit, which field) is for you.
+    console.warn('[%s] POST /v1/speech_sessions -> %d %s %s', app.id, r.status, r.json?.error ?? '', r.json?.message ?? '');
+    return void res.status(r.status).json({ error: r.json?.error || `http_${r.status}`, retryAfter: r.retryAfter });
+  }
+  const id = r.session.sessionId;
+  if (gone) {
+    console.log('[%s] speech session %s ended: its page went before it came', app.id, id);
+    await endSpeechSession(id).catch(() => null);
+    return;
+  }
+  speaking.set(id, { app: app.id, ended: false });
+  // Kept a while past its end, for the page's summary of what it cost.
+  setTimeout(() => speaking.delete(id), (r.session.maxSeconds + 900) * 1000).unref();
+  console.log('[%s] speech session %s on avatar %s', app.id, id, avatarId.slice(0, 8));
+  res.status(201).json(r.session);
+});
+
+// The call's state: once it ended, why, and what it cost (the page's summary).
+api.get('/apps/:app/speech/:id', async (req, res, next) => {
+  if (!apps.get(req.params.app)?.speech) return next();
+  if (speaking.get(req.params.id)?.app !== req.params.app) return void res.status(404).json({ error: 'not_found' });
+  const r = await readSpeechSession(req.params.id);
+  res.status(r.status).json(r.json);
+});
+
+api.post('/apps/:app/speech/:id/end', async (req, res, next) => {
+  if (!apps.get(req.params.app)?.speech) return next();
+  const call = speaking.get(req.params.id);
+  if (call?.app !== req.params.app) return void res.status(404).json({ error: 'not_found' });
+  const r = await endSpeechSession(req.params.id);
+  if (r.status === 200) call.ended = true;
+  res.status(r.status).json(r.json);
+});
+
 /** Ends every session and render this server started and has not seen end: on shutdown, so a rollout leaves nothing billing. */
 export async function endLiveSessions() {
   const ids = [...started.keys()];
   const renders = [...rendering.keys()];
+  const calls = [...speaking].filter(([, call]) => !call.ended).map(([id]) => id);
   started.clear();
   rendering.clear();
+  speaking.clear();
   await Promise.allSettled([
-    ...ids.map((id) => endSession(id)), ...renders.map((id) => endRender(id)),
+    ...ids.map((id) => endSession(id)), ...renders.map((id) => endRender(id)), ...calls.map((id) => endSpeechSession(id)),
     ...[...apps.values()].map((app) => app.shutdown?.()),
   ]);
 }

@@ -348,6 +348,7 @@
     "market-desk": ["📈", ["Markets", "Live quotes"], "Call Reese", "advice"],
     "travel-guide": ["🗺️", ["Travel", "Live map"], "Plan with Lumi", "advice"],
     "room-planner": ["🏠", ["Home", "Floor plan"], "Draw with Iris", "advice"],
+    "front-desk": ["📞", ["Health", "Voice call"], "Call Rosa", "work"],
     "dj-booth": ["🎧", ["Music", "Spotify"], "Go on air with Nova", "play"],
     "parcel-help-desk": ["📦", ["Support", "Own agent"], "Talk to Tess", "work"],
     "presenter-studio": ["🎙️", ["Studio", "Any audio"], "Put Remy on air", "work"],
@@ -510,7 +511,13 @@
     // How many apps each way has, on its card below.
     for (const badge of document.querySelectorAll("[data-way-count]")) {
       const n = grid.querySelectorAll(`.app[data-way="${badge.dataset.wayCount}"]`).length;
-      if (n) badge.textContent = `${NUMBER[n] || n} app${n === 1 ? "" : "s"} here`;
+      if (!n) continue;
+      badge.textContent = `${NUMBER[n] || n} app${n === 1 ? "" : "s"} here`;
+      // A way that was coming soon has apps here now: its card is a real one, with its button.
+      const card = badge.closest(".way-card");
+      card.classList.remove("soon");
+      const show = card.querySelector("[data-show-way]");
+      if (show) show.hidden = false;
     }
     buildWall();
     buildFilters();
