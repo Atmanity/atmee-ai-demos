@@ -61,9 +61,25 @@ No platform changes.
   0.6 s into the dissolve when measured live, instead of after five seconds of silence.
 - **Two speech sessions, wired to each other.** The server reserves each one and pins its role
   (`scenario`, `user_name`, and a plain-delivery `instructions`). The page keeps each input fed in
-  real time and forwards every frame of each avatar's voice to the other. Each face gets its voice
-  as one unbroken stream, resampled to 16 kHz through the kit's filtered resampler, so an "s" is not folded back down as hiss (a piece per stretch of speech lost 1.3 s of 13.8 s
-  to dropouts; one stream lost 0.05 s).
+  real time and forwards every frame of each avatar's voice to the other.
+- **Each voice under playback control.** Each session asks for `playback_control: "playback-v2"`:
+  every reply (a delivery) comes as fast as the voice makes it, and goes at once to the face it
+  starts on, as a piece of its own, resampled to 16 kHz through the kit's filtered resampler
+  (`src/speech/face.ts`). The face holds it, so a stall on the way is not a gap on screen, and
+  what its renderer reports is the server's acknowledgment: played out, all of it; cut after the
+  server's clear, where it got to. The page also replays each delivery on its own clock, in 20 ms
+  frames with silence between (`show/playout.ts`), and that is what everything else reads, as it
+  read the paced voice: when an avatar speaks, the floor, the booth, the director, and the other
+  avatar hearing it (whose input refuses audio far ahead of real time). A reply's start is
+  acknowledged from that clock, so the session times its words and turns as it did; off the
+  floor (the listener's "mm-hmm") or while the trailer runs, the face gets silence of the same
+  length. A face now starts a reply about 2 s after the page's clock, not 4.5 s: the page measures
+  it on each of Jada's replies and times the trailer, captions and transcript by it. A server
+  without playback control starts the session paced, and then each face gets its voice as one
+  unbroken stream for the whole show, as before: paced, a piece per stretch of speech lost 1.3 s
+  of 13.8 s to dropouts (each piece started the renderer with nothing ahead of it), and one stream
+  0.05 s. Under control a piece per reply loses nothing: measured live, each face reported at
+  least what it was sent (19.20 s for 18.57 s, 42.24 s for 41.86 s, 4.48 s for 4.18 s).
 - **The booth** (`show/booth.ts`, tested in `booth.test.ts`): Jada greets the viewers; she is
   directed to introduce the film and roll the trailer; once the trailer is over she speaks up on
   her own (commentary, retried until she does) to react and invite Inès on; Inès's line opens, her
@@ -111,8 +127,10 @@ No platform changes.
 | Gemini (`server/llm.ts`), from the server's `/judge` | auto-advance's judge: one small call per judged answer |
 | `POST /v1/speech_sessions/{id}/end`, `POST /v1/avatar_sessions/{id}/end` | all four, at the end, from End the show, or when one drops |
 
-On each speech WebSocket: `session.start`, `session.input_audio.append`, `session.output_audio.delta`,
-`session.output_transcript.delta`, `causeur.directive.set`, `session.commentary.append`.
+On each speech WebSocket: `session.start` (with `playback_control`), `session.input_audio.append`,
+`causeur.playback.start` / `.audio` / `.end` / `.clear` and `causeur.playback.ack` (or, paced,
+`session.output_audio.delta`), `session.output_transcript.delta`, `causeur.directive.set`,
+`session.commentary.append`.
 
 ## The cast (staging, the demo account)
 
@@ -125,8 +143,9 @@ On each speech WebSocket: `session.start`, `session.input_audio.append`, `sessio
 ## Limitations
 
 - **Four things bill at once**: two speech sessions and two renders.
-- **The show plays about 4 s late** (both renders equally, like a broadcast delay); each avatar
-  hears the other's raw voice as it is made.
+- **The show plays about 2 s late** under playback control (4 s paced), both renders equally, like
+  a broadcast delay; each avatar hears the other's voice on the page's clock, that much before the
+  viewers do.
 - **The camera is the renderer's**: it zooms and drifts on its own, and there is no setting for a
   locked-off camera or a fixed render prompt per avatar (checked in the renderer's code). Whole
   shots in boxes keep that from showing.
