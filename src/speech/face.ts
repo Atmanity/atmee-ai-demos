@@ -39,10 +39,17 @@ export class FaceDelivery {
   private playedOut = -1;
   private done = false;
 
+  /**
+   * Resolves once the face began to play this delivery (its own piece's start, not the face's
+   * speaking in general, which may still be the last piece's). Never, for one cut before it began.
+   */
+  readonly faceStarted: Promise<void>;
+
   constructor(face: Face, readonly delivery: Delivery, private readonly send: (event: Record<string, unknown>) => void,
     private readonly cut: () => Promise<void> = () => face.interrupt()) {
     this.writer = face.open().catch(() => null);
     this.writes = this.writer;
+    this.faceStarted = this.writer.then((w) => w?.started ?? new Promise<void>(() => {}));
   }
 
   /** The face began to play it (its renderer's lk.playback_started). */

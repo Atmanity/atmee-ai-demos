@@ -52,6 +52,12 @@ export interface RenderOptions {
 /** A piece of speech written as it comes (a live microphone). */
 export interface SpeechWriter {
   write(pcm: Int16Array): Promise<void>;
+  /**
+   * Resolves once the avatar began to play this piece (its lk.playback_started for it: the avatar
+   * plays its pieces in order and reports each one's start). Never resolves for a piece cut, or
+   * given up on, before it began.
+   */
+  started?: Promise<void>;
   /** Closes the piece; resolves once the avatar has played it, or it was cut. */
   end(): Promise<Played>;
 }
@@ -171,8 +177,12 @@ export async function renderAvatar(opts: RenderOptions): Promise<RenderedAvatar>
   let speaking = false;
   const setSpeaking = (on: boolean) => { if (on !== speaking) { speaking = on; opts.onSpeaking?.(on); } };
 
+  // The pieces opened and not yet begun, oldest first: each lk.playback_started is the oldest one's.
+  const starting: { begin: () => void }[] = [];
   room.registerRpcMethod(PLAYBACK_STARTED, async (data: RpcInvocationData) => {
-    if (data.callerIdentity === info.avatarIdentity) setSpeaking(true);
+    if (data.callerIdentity !== info.avatarIdentity) return '';
+    setSpeaking(true);
+    starting.shift()?.begin();
     return '';
   });
   room.registerRpcMethod(PLAYBACK_FINISHED, async (data: RpcInvocationData) => {
@@ -219,6 +229,7 @@ export async function renderAvatar(opts: RenderOptions): Promise<RenderedAvatar>
     failArrival(new RenderError(reason));
     removeEventListener('pagehide', onHide);
     playback.cutAll();
+    starting.length = 0;
     setSpeaking(false);
     await endOnServer();
     await room.disconnect();
@@ -261,7 +272,13 @@ export async function renderAvatar(opts: RenderOptions): Promise<RenderedAvatar>
     const writer = await inTurn(() => openStream(rate));
     let samples = 0;
     let closed = false;
+    const piece = { begin: () => {} };
+    const started = new Promise<void>((resolve) => { piece.begin = resolve; });
+    starting.push(piece);
+    // A piece settled before it began (cut, given up on) takes no later piece's start.
+    const notBegun = () => { const at = starting.indexOf(piece); if (at >= 0) starting.splice(at, 1); };
     return {
+      started,
       async write(pcm) {
         if (closed || ended || !pcm.length) return;
         samples += pcm.length;
@@ -273,7 +290,9 @@ export async function renderAvatar(opts: RenderOptions): Promise<RenderedAvatar>
         // Given up on a while after it should have played, counted from its turn: the avatar plays in real time.
         const done = playback.add((samples / rate + 30) * 1000);
         await writer.close();
-        return done;
+        const played = await done;
+        if (played.interrupted) notBegun();
+        return played;
       },
     };
   }
@@ -291,6 +310,8 @@ export async function renderAvatar(opts: RenderOptions): Promise<RenderedAvatar>
     async interrupt() {
       if (ended) return;
       const cut = playback.mark();
+      // What was cut, begun or not, is over: a start reported after this is the next piece's.
+      starting.length = 0;
       await room.localParticipant.performRpc({ destinationIdentity: info.avatarIdentity, method: CLEAR_BUFFER, payload: '' }).catch(() => {});
       // The avatar reports the cut piece; what was queued behind it was cleared with it and gets no report.
       setTimeout(() => { cut(); if (!playback.pending) setSpeaking(false); }, 1500);

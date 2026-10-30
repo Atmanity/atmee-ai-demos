@@ -244,9 +244,15 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
     route.held = [];
     if (route.ended) route.face.end();
     if (route.cleared) void route.face.clear();
-    // Its start comes with the face's next start of speaking (the effect below), never from the
-    // face's state now: that may still be the last piece's, and would report this one too early.
-  }, [send, playbackFinished]);
+    // Its start is the face's start of this piece, never the face's speaking in general (that may
+    // still be the last piece's, or stay on across pieces): she talks, and the server is told so.
+    const face = route.face;
+    void face.faceStarted.then(() => {
+      if (route.over || route.cleared || route.face !== face) return;
+      face.started();
+      playbackStarted(id);
+    });
+  }, [send, playbackStarted, playbackFinished]);
   const onDelivery = useCallback((msg: Record<string, any>) => {
     const id = msg.delivery_id;
     if (!Number.isInteger(id)) return;
@@ -288,16 +294,6 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
       else if (route.output === 'page') player.current?.clear(id);
     }
   }, [playbackStarted, toFaceRoute, toPageRoute]);
-  // The face's own start, for the delivery it is playing.
-  useEffect(() => {
-    if (!face.speaking) return;
-    // The face began to play: she talks from now, and the server is told so.
-    for (const route of routes.current.values()) {
-      if (route.output !== 'face' || route.over) continue;
-      route.face?.started();
-      playbackStarted(route.delivery.delivery_id);
-    }
-  }, [face.speaking, playbackStarted]);
   // A reply's words are all said (its transcript is over): its line is closed.
   const closeLine = useCallback(() => {
     const text = captionRef.current.trim();

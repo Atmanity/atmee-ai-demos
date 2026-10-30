@@ -136,3 +136,22 @@ describe('a delivery played by a face', () => {
     expect(acks().map((a) => a.status)).toEqual(['finished']);
   });
 });
+
+describe("a face delivery's own start", () => {
+  test('is its piece starting on the face, not anything else the face does', async () => {
+    let begin = () => {};
+    const started = new Promise<void>((r) => { begin = r; });
+    const face: Face = {
+      async open() { return { started, async write() {}, end: () => new Promise<Played>(() => {}) }; },
+      async interrupt() {},
+    };
+    const d = new FaceDelivery(face, delivery, () => {});
+    let seen = false;
+    void d.faceStarted.then(() => { seen = true; });
+    await settle();
+    expect(seen).toBe(false);
+    begin();
+    await settle();
+    expect(seen).toBe(true);
+  });
+});
