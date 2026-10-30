@@ -8,8 +8,8 @@
 // settles at once. Framework-free; src/kit/useSpeech.ts wraps it for React.
 import { MicError, openSpeechAudio, type SpeechAudio } from './audio.ts';
 import {
-  INPUT_TRANSCRIPT, ToolReply, ToolRounds, base64ToPcm, endReason, pcmToBase64, subprotocols, toolOutput, userText,
-  type ToolCall,
+  INPUT_TRANSCRIPT, PLAYBACK_CONTROL, ToolReply, ToolRounds, base64ToPcm, endReason, pcmToBase64, playbackAck,
+  refusedPlaybackControl, subprotocols, toolOutput, userText, type Delivery, type ToolCall,
 } from './protocol.ts';
 
 export { ToolReply, type ToolCall } from './protocol.ts';
@@ -135,6 +135,12 @@ export async function startSpeech(opts: SpeechOptions): Promise<SpeechCall> {
   let muted = false;
   let closedReason: string | undefined;
   let refusal: string | undefined;
+  // Playback control, asked for when the voice plays at its own rate, and in
+  // use once session.started echoes it. Its open deliveries, by id, for
+  // their acknowledgments.
+  let controlled = false;
+  let askedForControl = audio.controlled;
+  const deliveries = new Map<number, Delivery>();
   const rounds = new ToolRounds();
   const silence = () => new Int16Array(480);
 
@@ -174,13 +180,29 @@ export async function startSpeech(opts: SpeechOptions): Promise<SpeechCall> {
   const send = (event: Record<string, unknown>) => {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(event));
   };
+  const sessionStart = (event_id: string) => send({ type: 'session.start', event_id, session: {
+    model: 'causeur', input_transcript: INPUT_TRANSCRIPT,
+    ...(askedForControl ? { playback_control: PLAYBACK_CONTROL } : {}),
+  } });
+  audio.onPlayback = (report) => {
+    const id = 'started' in report ? report.started : report.finished;
+    const delivery = deliveries.get(id);
+    if (!delivery) return;
+    if ('started' in report) {
+      send(playbackAck(delivery, { status: 'started' }));
+      return;
+    }
+    send(playbackAck(delivery, { status: 'finished', played_samples: report.played, interrupted: report.interrupted }));
+    // One that played out is kept, as a clear may still come for it; a cleared one is over.
+    if (report.interrupted) deliveries.delete(id);
+  };
 
   // Every message until the socket closes.
   const startedOrRefused = new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => reject(new SpeechError(opened ? 'start_timeout' : 'connect_timeout')), OPEN_TIMEOUT_MS + START_TIMEOUT_MS);
     ws.onopen = () => {
       opened = true;
-      send({ type: 'session.start', event_id: 'start', session: { model: 'causeur', input_transcript: INPUT_TRANSCRIPT } });
+      sessionStart('start');
     };
     ws.onmessage = (e: MessageEvent<string>) => {
       let msg: Record<string, any>;
@@ -189,7 +211,25 @@ export async function startSpeech(opts: SpeechOptions): Promise<SpeechCall> {
         case 'session.output_audio.delta':
           if (typeof msg.delta === 'string') audio.play(base64ToPcm(msg.delta));
           return;
+        case 'causeur.playback.start': {
+          const id = Number(msg.delivery_id);
+          // Only the latest few are kept: an old one is answered no more.
+          for (const old of deliveries.keys()) if (old < id - 4) deliveries.delete(old);
+          deliveries.set(id, { delivery_id: id, playback_id: msg.playback_id, start_sample: Number(msg.start_sample) });
+          audio.open(id);
+          return;
+        }
+        case 'causeur.playback.audio':
+          if (typeof msg.delta === 'string') audio.deliver(Number(msg.delivery_id), base64ToPcm(msg.delta));
+          return;
+        case 'causeur.playback.end':
+          audio.end(Number(msg.delivery_id));
+          return;
+        case 'causeur.playback.clear':
+          audio.clear(Number(msg.delivery_id));
+          return;
         case 'session.started':
+          controlled = msg.session?.playback_control === PLAYBACK_CONTROL;
           started = true;
           clearTimeout(timer);
           resolve();
@@ -200,14 +240,15 @@ export async function startSpeech(opts: SpeechOptions): Promise<SpeechCall> {
         case 'causeur.input_transcript': {
           const said = userText(String(msg.text ?? ''));
           // The user's words cut the avatar off: what is still queued of its voice goes.
-          if (said.interruption) audio.flush();
+          // With playback control the server clears the delivery itself, and is told where it stopped.
+          if (said.interruption && !controlled) audio.flush();
           opts.onUserText?.(said.text, msg.final === true, { interruption: said.interruption, backchannel: said.backchannel });
           return;
         }
         case 'session.input_transcript.delta': {
           // A server without whole messages: each finalised chunk as a line of its own.
           const said = userText(String(msg.delta ?? ''));
-          if (said.interruption) audio.flush();
+          if (said.interruption && !controlled) audio.flush();
           if (said.text) opts.onUserText?.(said.text, true, { interruption: said.interruption, backchannel: said.backchannel });
           return;
         }
@@ -219,7 +260,14 @@ export async function startSpeech(opts: SpeechOptions): Promise<SpeechCall> {
         case 'error': {
           const code = String(msg.error?.code ?? 'error');
           const message = String(msg.error?.message ?? '');
-          if (!started && msg.error?.client_event_id === 'start') {
+          if (!started && msg.error?.client_event_id === 'start' && askedForControl
+              && refusedPlaybackControl(message)) {
+            // A server without playback control: the same socket starts it paced.
+            askedForControl = false;
+            sessionStart('start-paced');
+            return;
+          }
+          if (!started && (msg.error?.client_event_id === 'start' || msg.error?.client_event_id === 'start-paced')) {
             refusal = message;
             clearTimeout(timer);
             reject(new SpeechError('start_refused', message));

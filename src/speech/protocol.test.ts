@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'vitest';
-import { MAX_TOOL_OUTPUT, ToolReply, ToolRounds, base64ToPcm, endReason, parseArguments, pcmToBase64, subprotocols, toolOutput, userText } from './protocol.ts';
+import {
+  MAX_TOOL_OUTPUT, ToolReply, ToolRounds, base64ToPcm, endReason, parseArguments, pcmToBase64, playbackAck,
+  refusedPlaybackControl, subprotocols, toolOutput, userText,
+} from './protocol.ts';
 
 describe('audio on the wire: PCM16 as base64', () => {
   test('a frame survives the round trip, signs and extremes included', () => {
@@ -85,5 +88,25 @@ describe('why a call ended', () => {
     expect(endReason(undefined, 1013)).toBe('server_full');
     expect(endReason(undefined, 1012)).toBe('server_restarting');
     expect(endReason(undefined, 1006)).toBe('disconnected');
+  });
+});
+
+describe('playback control on the wire', () => {
+  const delivery = { delivery_id: 3, playback_id: 41, start_sample: 2400 };
+
+  test('an acknowledgment names its delivery as the server opened it', () => {
+    expect(playbackAck(delivery, { status: 'started' })).toEqual({
+      type: 'causeur.playback.ack', delivery_id: 3, playback_id: 41, start_sample: 2400, status: 'started' });
+    expect(playbackAck(delivery, { status: 'finished', played_samples: 960, interrupted: true })).toEqual({
+      type: 'causeur.playback.ack', delivery_id: 3, playback_id: 41, start_sample: 2400, status: 'finished',
+      played_samples: 960, interrupted: true, position_source: 'renderer_reported' });
+  });
+
+  test('a server without playback control refused the start for asking; another refusal is not that', () => {
+    expect(refusedPlaybackControl("Unsupported session fields: ['playback_control']; supported: audio, model")).toBe(true);
+    expect(refusedPlaybackControl('Unsupported playback control protocol')).toBe(true);
+    // A refusal of another field lists playback_control among what is supported.
+    expect(refusedPlaybackControl("Unsupported session fields: ['safety']; supported: audio, playback_control")).toBe(false);
+    expect(refusedPlaybackControl('Supported model: causeur')).toBe(false);
   });
 });

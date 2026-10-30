@@ -220,10 +220,13 @@ voice, over a WebSocket the page holds. The site's server reserves each call
 settings the app pins for it (`AppServer.speech.settings()`: who the avatar is in the call, its
 instructions, its tools); the page gets only the WebSocket address and a token for one connection
 within a minute, and cannot change anything pinned. The page streams the microphone as 24 kHz
-PCM16 in 20 ms frames (silence too), plays the voice through a small jitter buffer, and runs the
+PCM16 in 20 ms frames (silence too), plays the voice, and runs the
 tools the model calls, answering each with `response.item.create`. End goes through the server
 (`POST /v1/speech_sessions/{id}/end`), then the page closes the socket, so the session settles at
-once; the page then reads what it cost. The code is shared: `src/speech/` (framework-free) and
+once; the page then reads what it cost. The page asks for playback control: each reply comes as
+fast as the voice makes it, the page holds all of it and says when it began to play and how much
+of it played, so a stall on the way is not heard as a gap. A server without it starts the session
+paced, in real time, and the page plays it through a small jitter buffer. The code is shared: `src/speech/` (framework-free) and
 `useSpeech` in the kit.
 
 A speech app is off, and not listed, until its own `AVATAR_<APP_ID>` names an avatar **with a
