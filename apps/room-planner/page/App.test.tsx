@@ -44,7 +44,7 @@ vi.mock('../../../src/kit/index.ts', async (importOriginal) => {
         record: () => {}, note: () => {},
         state: (text: string) => fake.states.push(text),
         event: (text: string) => fake.events.push(text),
-        mute() {}, unmute() {}, setMic() {}, resumeAudio() {},
+        mute() {}, unmute() {}, setMic() {}, async feedMic() {}, resumeAudio() {},
         // The host reads every file it is handed.
         sendFiles: async (files: File[], options?: { caption?: string; onStatus?: (p: { index: number; name: string; status: string }) => void }) => {
           fake.shared.push({ names: files.map((f) => f.name), caption: options?.caption });

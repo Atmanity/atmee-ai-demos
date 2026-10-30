@@ -1,0 +1,287 @@
+{
+ "ui": {
+  "eyebrow": "Eine private Tour mit dem Museumsdirektor",
+  "headline": "Jedes Werk erzählt eine Geschichte. Edmund kennt sie alle.",
+  "lede": "Halten Sie Ihr Smartphone in den Galerien hoch. Richten Sie es auf ein Gemälde oder auf den Code auf dessen Schild, und Edmund Hale, der Museumsdirektor des Meridian, erklärt Ihnen, was Sie vor sich sehen. Sie können ihm jederzeit laut Fragen stellen.",
+  "opening": "Sie sind bei {title}, {gallery}.",
+  "language": "Sprache",
+  "begin": "Tour beginnen",
+  "starting": "Wird gestartet …",
+  "uses": "Verwendet Kamera und Mikrofon, während Sie mit Edmund sprechen. In den Galerien empfehlen sich Kopfhörer.",
+  "sheetLink": "Nicht im Meridian? Öffnen Sie die Schildcodes auf einem anderen Bildschirm",
+  "sheetAfter": " und richten Sie Ihr Smartphone darauf.",
+  "cameraBlocked": "Der Kamerazugriff ist blockiert. Erlauben Sie ihn in den Einstellungen Ihres Browsers für diese Website und beginnen Sie von vorn.",
+  "cameraMissing": "Auf diesem Gerät konnte keine Kamera gefunden werden.",
+  "calling": "{name} wird angerufen …",
+  "callingDetail": "Das dauert einen kurzen Moment.",
+  "warming": "{name} bereitet sich vor",
+  "warmingDetail": "Alle Guides sind im Gespräch. Bitte kurz warten …",
+  "connecting": "Verbindung zu {name} wird hergestellt …",
+  "arriving": "{name} tritt bei …",
+  "arrivingDetail": "Gleich da.",
+  "ended": "Anruf beendet",
+  "failed": "{name} konnte nicht erreicht werden",
+  "failedDetail": "Bitte versuchen Sie es gleich noch einmal.",
+  "tryAgain": "Erneut versuchen",
+  "end": "Beenden",
+  "tapToHear": "Tippen, um {name} zu hören",
+  "cameraOff": "Kamera ausschalten",
+  "cameraOn": "Kamera einschalten",
+  "cameraOffNote": "Die Kamera ist ausgeschaltet. {name} kann nicht sehen, worauf Sie blicken.",
+  "cameraBlockedToast": "Die Kamera ist blockiert: Erlauben Sie den Zugriff in Ihren Browsereinstellungen und versuchen Sie es erneut.",
+  "cameraOffAtStart": "Die Kamera ist aus: Erlauben Sie den Zugriff in Ihren Browsereinstellungen, um sie auf Werke zu richten. Sie können weiterhin mit {name} sprechen.",
+  "looking": "Erkennt …",
+  "label": "Beschilderung: {title}",
+  "notAWork": "Kein Werk aus dem Meridian",
+  "onTheWay": "{name} ist unterwegs …",
+  "hostOnTheWay": "{name} ist auf dem Rückweg …",
+  "hostCouldNotComeBack": "{name} konnte gerade nicht zurückkehren. Bitte versuchen Sie es gleich noch einmal.",
+  "talkingWith": "Im Gespräch mit",
+  "fromWork": "von {title}",
+  "callBack": "{name} zurückrufen",
+  "youAreAt": "Sie befinden sich bei",
+  "pointHint": "Richten Sie die Kamera auf ein Werk oder den Code auf dem Schild.",
+  "askHint": "Mikrofon halten und {name} alles fragen.",
+  "you": "Sie",
+  "conversation": "Gespräch mit {name}",
+  "done": "Fertig",
+  "askPlaceholder": "{name} fragen …",
+  "chatEmpty": "Hier tippen, wenn es in der Galerie zu laut zum Sprechen ist.",
+  "map": "Karte",
+  "type": "Tippen",
+  "holdToTalk": "Halten zum Sprechen",
+  "listening": "Hört zu …",
+  "whatIsThis": "Was ist das?",
+  "callHost": "{name} anrufen",
+  "mapLabel": "Museumsplan, {n} von {total} gesehen",
+  "backToCamera": "Zurück zur Kamera",
+  "allWorks": "‹ Alle Werke",
+  "youAreHere": "Sie sind hier · ",
+  "originalHangs": "Das Original hängt in {where}.",
+  "theStory": "Die Geschichte",
+  "lookFor": "Achten Sie auf",
+  "nextOnRoute": "Als Nächstes auf der Route · {room}",
+  "askAbout": "Edmund dazu befragen",
+  "markSeen": "Als gesehen markieren",
+  "seen": "Gesehen",
+  "museumMap": "Museumsplan",
+  "seenCount": "{n} von {total} Werken gesehen",
+  "close": "Schließen",
+  "entrance": "Eingang",
+  "gallery": "Galerie {n}",
+  "hereSuffix": " · Sie sind hier",
+  "notSeenYet": "Noch nicht gesehen",
+  "floorPlan": "Lageplan des Meridian",
+  "thanks": "Vielen Dank für Ihren Besuch",
+  "visitOne": "Ihr Rundgang: ein Werk",
+  "visitMany": "Ihr Rundgang: {n} Werke",
+  "comeBack": "Kommen Sie bald wieder",
+  "noneSeen": "Sie haben dieses Mal bei keinem Werk verweilt. Edmund wird hier sein.",
+  "newTour": "Neue Tour beginnen",
+  "seeMap": "Museumsplan ansehen",
+  "theOriginal": "Das Original: {where}",
+  "info": "Info",
+  "larger": "{name} größer zeigen",
+  "smaller": "{name} kleiner zeigen"
+ },
+ "works": {
+  "mona-lisa": {
+   "title": "Mona Lisa",
+   "artist": "Leonardo da Vinci",
+   "date": "um 1503 bis 1519",
+   "medium": "Öl auf Pappelholz, 77 mal 53 Zentimeter",
+   "gallery": "Galerie 1, Renaissance-Saal",
+   "original": "der Louvre, Paris",
+   "story": [
+    "Die Dargestellte wird weithin als Lisa Gherardini identifiziert, die Ehefrau des florentinischen Seidenhändlers Francesco del Giocondo.",
+    "Leonardo arbeitete jahrelang an dem Porträt und übergab es der Familie nie.",
+    "Er milderte jede Kontur durch Sfumato ab – hauchdünne Lasuren, die Licht sanft in Schatten übergehen lassen, weshalb das Lächeln zu flackern scheint.",
+    "1911 wurde es von Vincenzo Peruggia, einem dort beschäftigten Handwerker, aus dem Louvre gestohlen und 1913 in Florenz wiedergefunden."
+   ],
+   "lookFor": [
+    "ihre Mundwinkel, in denen das Lächeln liegt",
+    "die Landschaft im Hintergrund mit kurviger Straße und Brücke",
+    "ihre Hände, die übereinander ruhen"
+   ]
+  },
+  "birth-of-venus": {
+   "title": "Die Geburt der Venus",
+   "artist": "Sandro Botticelli",
+   "date": "um 1484 bis 1486",
+   "medium": "Tempera auf Leinwand, etwa 1,7 mal 2,8 Meter",
+   "gallery": "Galerie 1, Renaissance-Saal",
+   "original": "die Uffizien, Florenz",
+   "story": [
+    "Venus, die Göttin der Liebe, erreicht auf einer Jakobsmuschel das Ufer, dem Meer bereits voll erwachsen entstiegen.",
+    "Links bläst Zephyr, der Westwind, sie an Land, getragen an der Seite einer Gefährtin.",
+    "Rechts eilt eine der Horen herbei, die Göttinnen der Jahreszeiten, um sie in einen mit Blumen bestickten Mantel zu hüllen.",
+    "Es ist in Tempera gemalt, mit Ei gebundenen Pigmenten, was dem Werk sein mattes, kreidiges Licht verleiht."
+   ],
+   "lookFor": [
+    "die Rosen, die um die Windgötter durch die Luft wehen",
+    "die Jakobsmuschel unter ihren Füßen",
+    "ihr langes Haar, das sie schützend um sich legt"
+   ]
+  },
+  "pearl-earring": {
+   "title": "Das Mädchen mit dem Perlenohrring",
+   "artist": "Johannes Vermeer",
+   "date": "um 1665",
+   "medium": "Öl auf Leinwand, 44,5 mal 39 Zentimeter",
+   "gallery": "Galerie 2, Goldenes Zeitalter der Niederlande",
+   "original": "das Mauritshuis, Den Haag",
+   "story": [
+    "Es ist kein Porträt einer namentlich bekannten Person, sondern eine Tronie – eine niederländische Kopfstudie eines Gesichts, Charakters oder Ausdrucks.",
+    "Niemand weiß, wer das Mädchen war.",
+    "Das Blau ihres Turbans ist Ultramarin, hergestellt aus gemahlenem Lapislazuli und kostbarer als Gold.",
+    "Der Ohrring besteht aus nur wenigen Pinselstrichen aus Licht, ganz ohne gemalten Haken; manche Fachleute halten ihn für zu groß für eine echte Perle.",
+    "Untersuchungen aus dem Jahr 2018 zeigten, dass hinter ihr einst ein grüner Vorhang hing, der im dunklen Hintergrund verblasst ist."
+   ],
+   "lookFor": [
+    "den einzelnen Lichtreflex auf dem Ohrring",
+    "den winzigen weißen Glanzpunkt in ihrem Mundwinkel",
+    "das Ultramarinblau des Turbans im Kontrast zum herabfallenden gelben Tuch"
+   ]
+  },
+  "night-watch": {
+   "title": "Die Nachtwache",
+   "artist": "Rembrandt van Rijn",
+   "date": "1642",
+   "medium": "Öl auf Leinwand, etwa 3,8 mal 4,5 Meter",
+   "gallery": "Galerie 2, Goldenes Zeitalter der Niederlande",
+   "original": "das Rijksmuseum, Amsterdam",
+   "story": [
+    "Es ist ein Gruppenporträt einer Amsterdamer Bürgerwehr, gemalt für den Festsaal der Bogenschützengilde.",
+    "Rembrandt zeigt die Truppe im Aufbruch und in Bewegung, statt sie wie damals üblich in Reih und Glied aufzustellen.",
+    "Es handelt sich keineswegs um eine Nachtszene: Nachgedunkelter Firnis ließ es so wirken, der Beiname entstand erst später.",
+    "1715 wurde das Gemälde an allen vier Seiten beschnitten, um an eine Wand im Amsterdamer Rathaus zu passen; dabei gingen mehrere Figuren verloren."
+   ],
+   "lookFor": [
+    "den Hauptmann in Schwarz mit roter Schärpe in der Bildmitte",
+    "den Schatten seiner Hand auf dem gelben Mantel des Leutnants",
+    "das Mädchen in Gold auf der linken Seite, mit einem Huhn am Gürtel"
+   ]
+  },
+  "wanderer": {
+   "title": "Der Wanderer über dem Nebelmeer",
+   "artist": "Caspar David Friedrich",
+   "date": "um 1818",
+   "medium": "Öl auf Leinwand, 94,8 mal 74,8 Zentimeter",
+   "gallery": "Galerie 3, Romantik und Moderne",
+   "original": "die Hamburger Kunsthalle, Hamburg",
+   "story": [
+    "Es ist eines der bedeutendsten Meisterwerke der deutschen Romantik.",
+    "Friedrich malte Figuren oft von hinten, sodass wir an derselben Stelle stehen und mit ihren Augen blicken.",
+    "Die Felsen und Gipfel stammen aus Skizzen realer Berge im sächsischen Elbsandsteingebirge, zusammengefügt zu einer Landschaft, die es so nirgends gibt."
+   ],
+   "lookFor": [
+    "den Rücken der Gestalt, genau in der Bildmitte",
+    "seinen Wanderstock",
+    "die Nebelschichten zwischen den Berggipfeln"
+   ]
+  },
+  "starry-night": {
+   "title": "Sternennacht",
+   "artist": "Vincent van Gogh",
+   "date": "Juni 1889",
+   "medium": "Öl auf Leinwand, 73,7 mal 92,1 Zentimeter",
+   "gallery": "Galerie 3, Romantik und Moderne",
+   "original": "das Museum of Modern Art, New York",
+   "story": [
+    "Van Gogh malte das Bild während seines Aufenthalts in der Heilanstalt Saint-Paul-de-Mausole in Saint-Rémy-de-Provence.",
+    "Es zeigt den Blick aus seinem nach Osten gerichteten Fenster kurz vor Sonnenaufgang.",
+    "Er schrieb seinem Bruder Theo, er habe vor Tagesanbruch die Landschaft gesehen, in der nichts als der Morgenstern stand, der riesengroß wirkte.",
+    "Das Dorf war aus seinem Fenster nicht zu sehen; er ergänzte es aus seiner Fantasie."
+   ],
+   "lookFor": [
+    "den mächtigen Wirbel in der Mitte des Himmels",
+    "die dunkle Zypresse links, die wie eine Flamme emporsteigt",
+    "den Kirchturm des Dorfes"
+   ]
+  },
+  "the-kiss": {
+   "title": "Der Kuss",
+   "artist": "Gustav Klimt",
+   "date": "1907 bis 1908",
+   "medium": "Öl und Blattgold auf Leinwand, 180 mal 180 Zentimeter",
+   "gallery": "Galerie 3, Romantik und Moderne",
+   "original": "das Belvedere, Wien",
+   "story": [
+    "Es entstammt Klimts sogenannter Goldener Phase, in der er echtes Blattgold in seine Gemälde einarbeitete.",
+    "Der österreichische Staat erwarb das Werk bereits 1908 bei seiner ersten Ausstellung in Wien.",
+    "Die Liebenden sind von einem gemeinsamen goldenen Gewand umhüllt, doch ihre Muster bleiben voneinander getrennt."
+   ],
+   "lookFor": [
+    "das Gewand des Mannes aus schwarzen und weißen Rechtecken",
+    "das Gewand der Frau aus bunten Kreisen und Blumen",
+    "den Rand der Blumenwiese unter ihren Füßen, wo der Abgrund beginnt"
+   ]
+  },
+  "great-wave": {
+   "title": "Die große Welle vor Kanagawa",
+   "artist": "Katsushika Hokusai",
+   "date": "um 1830 bis 1832",
+   "medium": "Farbholzschnitt, Tusche und Farbe auf Papier, etwa 26 mal 38 Zentimeter",
+   "gallery": "Galerie 4, Japanische Holzschnitte",
+   "original": "viele Museen, da es in Tausenden von Abzügen gedruckt wurde; ein Exemplar besitzt das Metropolitan Museum of Art, New York",
+   "story": [
+    "Es ist das berühmteste Blatt aus Hokusais Bildserie »36 Ansichten des Berges Fuji«.",
+    "Hokusai war bereits um die siebzig, als er das Werk schuf.",
+    "Das tiefe Blau ist Preußischblau, ein Pigment, das damals erst frisch nach Japan gelangt war.",
+    "Da es sich um einen Holzschnitt handelt, wurden von denselben Druckstöcken tausende Abzüge gedruckt, die damals zu günstigen Preisen verkauft wurden."
+   ],
+   "lookFor": [
+    "den Berg Fuji, winzig im Wellental",
+    "die Gischt an der Wellenkrone, die sich wie Krallen krümmt",
+    "die Ruderer, die sich tief in den drei Booten ducken"
+   ]
+  }
+ },
+ "rooms": {
+  "1": [
+   "Renaissance"
+  ],
+  "2": [
+   "Niederländisches",
+   "Goldenes Zeitalter"
+  ],
+  "3": [
+   "Romantik und",
+   "Moderne"
+  ],
+  "4": [
+   "Japanische",
+   "Holzschnitte"
+  ]
+ },
+ "pins": {
+  "mona-lisa": "Mona Lisa",
+  "birth-of-venus": "Venus",
+  "pearl-earring": "Perlenohrring",
+  "night-watch": "Nachtwache",
+  "wanderer": "Wanderer",
+  "starry-night": "Sternennacht",
+  "the-kiss": "Der Kuss",
+  "great-wave": "Große Welle"
+ },
+ "guests": {
+  "girl": {
+   "name": "Das Mädchen",
+   "meet": "Lernen Sie das Mädchen kennen"
+  },
+  "wanderer": {
+   "name": "Der Wanderer",
+   "meet": "Lernen Sie den Wanderer kennen"
+  },
+  "mona": {
+   "name": "Mona Lisa",
+   "meet": "Mona Lisa kennenlernen"
+  }
+ },
+ "names": {
+  "museum": "das Meridian-Museum",
+  "hostFull": "Edmund Hale",
+  "host": "Edmund",
+  "title": "Museumsdirektor"
+ }
+}

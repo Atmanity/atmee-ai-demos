@@ -55,7 +55,7 @@ test('a speech app is off, and not listed, until its own AVATAR_<APP_ID> is set:
 
   process.env.AVATAR_FRONT_DESK = 'desk-avatar';
   const listed = (await (await fetch(url('/apps'))).json()) as { id: string; way: string; tools: number; host: string }[];
-  expect(listed.find((a) => a.id === 'front-desk')).toMatchObject({ way: 'speech', tools: 4, host: 'Rosa' });
+  expect(listed.find((a) => a.id === 'front-desk')).toMatchObject({ way: 'speech-to-speech', tools: 4, host: 'Rosa' });
 });
 
 test('the server reserves the call with the avatar and its pinned settings; the page gets only where to connect', async () => {
@@ -89,6 +89,22 @@ test('a call whose page went while it was being reserved is ended, not left rese
   await vi.waitFor(() => expect(calls.at(-1)).toMatchObject({ method: 'POST', path: `/v1/speech_sessions/${reservedId}/end` }), { timeout: 3000 });
   // And it is no call of the page's: nothing reads or ends it again.
   expect((await fetch(url(`/apps/front-desk/speech/${reservedId}`))).status).toBe(404);
+});
+
+test("an app that reserves its own calls (Crate) keeps its own /speech routes: the kit's pass it on", async () => {
+  process.env.AVATAR_DJ_BOOTH = 'nova-avatar';
+  try {
+    const r = await post('/apps/dj-booth/speech');
+    expect(r.status).toBe(201);
+    const { sessionId } = await r.json();
+    // Crate's own request: its language and its tools, not a kit app's pinned settings.
+    expect(calls.at(-1)).toMatchObject({ method: 'POST', path: '/v1/speech_sessions', body: { avatarId: 'nova-avatar', language: 'en' } });
+    expect(calls.at(-1)!.body.settings.delegation.responses.tools.length).toBeGreaterThan(0);
+    // And Crate's own end, which knows the call (the kit's would not).
+    expect((await post(`/apps/dj-booth/speech/${sessionId}/end`)).status).toBe(200);
+  } finally {
+    delete process.env.AVATAR_DJ_BOOTH;
+  }
 });
 
 test("a refusal reaches the page as its code: an avatar with no voice, a key's cap", async () => {

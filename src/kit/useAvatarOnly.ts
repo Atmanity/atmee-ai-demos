@@ -4,10 +4,10 @@
 // app's own LiveKit room. The phases are the full-stack hook's, so the kit's
 // BackToApps works with it.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { RenderError, renderAvatar, type Played, type RenderedAvatar, type SpeechWriter } from '../avatar/render.ts';
+import { RenderError, renderAvatar, type AvatarPrompts, type Played, type RenderedAvatar, type SpeechWriter } from '../avatar/render.ts';
 import type { AvatarPhase } from './useAvatar.ts';
 
-export type { Played, SpeechWriter } from '../avatar/render.ts';
+export type { AvatarPrompts, Played, SpeechWriter } from '../avatar/render.ts';
 
 export interface AvatarOnly {
   phase: AvatarPhase;
@@ -23,10 +23,12 @@ export interface AvatarOnly {
   end(): Promise<void>;
   /** Hands the avatar a whole piece to say; resolves once it played (or was cut). */
   say(pcm: Int16Array): Promise<Played>;
-  /** Opens a piece to write as it comes (a live microphone); null when not live. */
-  open(): Promise<SpeechWriter | null>;
+  /** Opens a piece to write as it comes (a live microphone); null when not live. `rate`: its PCM's, 16 kHz unless said. */
+  open(rate?: number): Promise<SpeechWriter | null>;
   /** Cuts what the avatar is saying. */
   interrupt(): Promise<void>;
+  /** The renderer's free-form prompts (see RenderedAvatar.setPrompt). */
+  setPrompt(update: { talking?: string | null; listening?: string | null }): Promise<AvatarPrompts | null>;
   resumeAudio(): void;
 }
 
@@ -104,8 +106,9 @@ export function useAvatarOnly(app: string, handlers: { onEnded?: () => void } = 
 
   const end = useCallback(async () => { await render.current?.end(); }, []);
   const say = useCallback(async (pcm: Int16Array): Promise<Played> => render.current?.say(pcm) ?? { interrupted: true, position: 0 }, []);
-  const open = useCallback(async () => render.current?.open() ?? null, []);
+  const open = useCallback(async (rate?: number) => render.current?.open(rate) ?? null, []);
   const interrupt = useCallback(async () => { await render.current?.interrupt(); }, []);
+  const setPrompt = useCallback(async (update: { talking?: string | null; listening?: string | null }) => render.current?.setPrompt(update) ?? null, []);
 
   useEffect(() => () => { void render.current?.end(); }, []);
   useEffect(() => {
@@ -116,7 +119,7 @@ export function useAvatarOnly(app: string, handlers: { onEnded?: () => void } = 
 
   return useMemo(() => ({
     phase, detail, errorCode, speaking, secondsLeft, audioBlocked, videoRef, audioRef,
-    start, end, say, open, interrupt,
+    start, end, say, open, interrupt, setPrompt,
     resumeAudio: () => { void resumeRef.current(); },
-  }), [phase, detail, errorCode, speaking, secondsLeft, audioBlocked, start, end, say, open, interrupt]);
+  }), [phase, detail, errorCode, speaking, secondsLeft, audioBlocked, start, end, say, open, interrupt, setPrompt]);
 }

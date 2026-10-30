@@ -19,7 +19,7 @@ const app: AppServer = {
   title: 'Callwell',
   tagline: 'A voice receptionist for a small clinic: call Rosa to book, move or cancel an appointment. No video, just the call.',
   brand: { color: '#0f766e', ink: '#ffffff' },
-  way: 'speech',
+  way: 'speech-to-speech',
   maxSeconds: 600,
   speech: {
     settings: () => ({

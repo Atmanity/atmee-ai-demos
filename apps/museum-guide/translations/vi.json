@@ -1,0 +1,287 @@
+{
+ "ui": {
+  "eyebrow": "Chuyến tham quan riêng cùng Giám đốc bảo tàng",
+  "headline": "Mỗi tác phẩm đều có một câu chuyện. Edmund biết tất cả.",
+  "lede": "Hãy giơ điện thoại lên trong các phòng trưng bày. Hướng ống kính về phía bức tranh hoặc mã trên nhãn tác phẩm, Edmund Hale, Giám đốc Bảo tàng Meridian, sẽ thuyết minh về những gì bạn đang xem. Bạn có thể hỏi ông bất cứ điều gì bằng giọng nói.",
+  "opening": "Bạn đang ở {title}, {gallery}.",
+  "language": "Ngôn ngữ",
+  "begin": "Bắt đầu chuyến tham quan",
+  "starting": "Đang bắt đầu…",
+  "uses": "Ứng dụng sử dụng camera và micro khi bạn trò chuyện cùng Edmund. Nên dùng tai nghe khi ở trong phòng trưng bày.",
+  "sheetLink": "Không có mặt tại Bảo tàng Meridian? Mở nhãn tác phẩm trên màn hình khác",
+  "sheetAfter": " và hướng điện thoại vào đó.",
+  "cameraBlocked": "Camera đã bị chặn. Vui lòng cấp quyền truy cập trong phần cài đặt trình duyệt, sau đó bắt đầu lại.",
+  "cameraMissing": "Không thể mở camera trên thiết bị này.",
+  "calling": "Đang gọi cho {name}…",
+  "callingDetail": "Quá trình này mất vài giây.",
+  "warming": "{name} đang chuẩn bị",
+  "warmingDetail": "Tất cả hướng dẫn viên đều đang bận. Đang chờ kết nối…",
+  "connecting": "Đang kết nối với {name}…",
+  "arriving": "{name} đang tham gia…",
+  "arrivingDetail": "Sắp xong rồi.",
+  "ended": "Cuộc gọi đã kết thúc",
+  "failed": "Không thể kết nối với {name}",
+  "failedDetail": "Vui lòng thử lại sau giây lát.",
+  "tryAgain": "Thử lại",
+  "end": "Kết thúc",
+  "tapToHear": "Chạm để nghe {name}",
+  "cameraOff": "Tắt camera",
+  "cameraOn": "Bật camera",
+  "cameraOffNote": "Camera đang tắt. {name} không thể thấy tác phẩm bạn đang xem.",
+  "cameraBlockedToast": "Camera đã bị chặn: hãy cấp quyền trong cài đặt trình duyệt, sau đó thử lại.",
+  "cameraOffAtStart": "Camera đang tắt: hãy cấp quyền trong cài đặt trình duyệt để quét tác phẩm. Bạn vẫn có thể trò chuyện với {name}.",
+  "looking": "Đang quan sát…",
+  "label": "Nhãn: {title}",
+  "notAWork": "Không phải tác phẩm của Bảo tàng Meridian",
+  "onTheWay": "{name} đang tới…",
+  "hostOnTheWay": "{name} đang quay lại…",
+  "hostCouldNotComeBack": "{name} hiện chưa thể quay lại. Vui lòng thử lại sau giây lát.",
+  "talkingWith": "Đang trò chuyện với",
+  "fromWork": "từ {title}",
+  "callBack": "Gọi lại cho {name}",
+  "youAreAt": "Bạn đang ở",
+  "pointHint": "Hướng camera về phía tác phẩm hoặc mã trên nhãn.",
+  "askHint": "Nhấn giữ biểu tượng micro và hỏi {name} bất cứ điều gì.",
+  "you": "Bạn",
+  "conversation": "Cuộc trò chuyện với {name}",
+  "done": "Xong",
+  "askPlaceholder": "Hỏi {name}…",
+  "chatEmpty": "Nhập tin nhắn vào đây khi phòng trưng bày quá ồn để nói chuyện.",
+  "map": "Bản đồ",
+  "type": "Nhập chữ",
+  "holdToTalk": "Nhấn giữ để nói",
+  "listening": "Đang nghe…",
+  "whatIsThis": "Đây là tác phẩm gì?",
+  "callHost": "Gọi cho {name}",
+  "mapLabel": "Bản đồ bảo tàng, đã xem {n}/{total}",
+  "backToCamera": "Quay lại camera",
+  "allWorks": "‹ Tất cả tác phẩm",
+  "youAreHere": "Bạn đang ở đây · ",
+  "originalHangs": "Bản gốc được trưng bày tại {where}.",
+  "theStory": "Câu chuyện",
+  "lookFor": "Điểm cần chú ý",
+  "nextOnRoute": "Tiếp theo trên lộ trình · {room}",
+  "askAbout": "Hỏi Edmund về tác phẩm này",
+  "markSeen": "Đánh dấu đã xem",
+  "seen": "Đã xem",
+  "museumMap": "Bản đồ bảo tàng",
+  "seenCount": "Đã xem {n}/{total} tác phẩm",
+  "close": "Đóng",
+  "entrance": "Lối vào",
+  "gallery": "Phòng {n}",
+  "hereSuffix": " · bạn đang ở đây",
+  "notSeenYet": "Chưa xem",
+  "floorPlan": "Sơ đồ mặt sàn Bảo tàng Meridian",
+  "thanks": "Cảm ơn bạn đã ghé thăm",
+  "visitOne": "Chuyến tham quan của bạn: 1 tác phẩm",
+  "visitMany": "Chuyến tham quan của bạn: {n} tác phẩm",
+  "comeBack": "Hẹn sớm gặp lại bạn",
+  "noneSeen": "Lần này bạn chưa dừng lại ở tác phẩm nào. Edmund vẫn luôn ở đây.",
+  "newTour": "Bắt đầu chuyến tham quan mới",
+  "seeMap": "Xem bản đồ bảo tàng",
+  "theOriginal": "Bản gốc: {where}",
+  "info": "Thông tin",
+  "larger": "Phóng to {name}",
+  "smaller": "Thu nhỏ {name}"
+ },
+ "works": {
+  "mona-lisa": {
+   "title": "Mona Lisa",
+   "artist": "Leonardo da Vinci",
+   "date": "khoảng 1503 đến 1519",
+   "medium": "sơn dầu trên tấm gỗ dương, 77 × 53 cm",
+   "gallery": "Phòng 1, phòng Phục hưng",
+   "original": "Bảo tàng Louvre, Paris",
+   "story": [
+    "Người mẫu được cho là Lisa Gherardini, vợ của một thương nhân tơ lụa người Florence tên là Francesco del Giocondo.",
+    "Leonardo tiếp tục vẽ bức tranh trong nhiều năm và không bao giờ giao lại cho gia đình khách hàng.",
+    "Ông làm mềm các đường nét bằng kỹ thuật sfumato, những lớp màu láng mỏng manh hòa quyện ánh sáng vào bóng tối, khiến nụ cười dường như thoắt ẩn thoắt hiện.",
+    "Năm 1911, bức tranh bị Vincenzo Peruggia, một thợ phụ làm việc tại bảo tàng, đánh cắp khỏi bảo tàng Louvre và được tìm thấy tại Florence vào năm 1913."
+   ],
+   "lookFor": [
+    "khóe miệng nàng, nơi nụ cười hiện diện",
+    "phong cảnh phía sau với con đường uốn khúc và cây cầu",
+    "đôi bàn tay nàng đặt chéo lên nhau"
+   ]
+  },
+  "birth-of-venus": {
+   "title": "Sự ra đời của thần Vệ nữ",
+   "artist": "Sandro Botticelli",
+   "date": "khoảng 1484 đến 1486",
+   "medium": "màu keo trên vải canvas, khoảng 1,7 × 2,8 mét",
+   "gallery": "Phòng 1, phòng Phục hưng",
+   "original": "Phòng trưng bày Uffizi, Florence",
+   "story": [
+    "Venus, nữ thần tình yêu, dạt vào bờ trên một vỏ sò điệp, trỗi dậy đầy kiều diễm từ biển cả.",
+    "Ở bên trái, thần gió tây Zephyr cùng người bạn đồng hành thổi nàng hướng về đất liền.",
+    "Ở bên phải, một trong các nữ thần mùa màng Horae đang vội vã phủ lên nàng tấm áo choàng thêu đầy hoa.",
+    "Bức tranh được vẽ bằng màu keo (tempera) trộn với lòng đỏ trứng, tạo nên sắc sáng phấn nhạt đặc trưng."
+   ],
+   "lookFor": [
+    "những cánh hoa hồng bay trong không trung quanh các vị thần gió",
+    "vỏ sò điệp dưới chân nàng",
+    "mái tóc dài được nàng ôm lấy để che cơ thể"
+   ]
+  },
+  "pearl-earring": {
+   "title": "Thiếu nữ đeo hoa tai ngọc trai",
+   "artist": "Johannes Vermeer",
+   "date": "khoảng 1665",
+   "medium": "sơn dầu trên vải canvas, 44,5 × 39 cm",
+   "gallery": "Phòng 2, phòng Thời kỳ Hoàng kim Hà Lan",
+   "original": "Bảo tàng Mauritshuis, The Hague",
+   "story": [
+    "Đây không phải là chân dung của một nhân vật cụ thể: đó là một bức tronie, một dạng nghiên cứu khuôn mặt, tính cách hoặc biểu cảm theo phong cách Hà Lan.",
+    "Không ai biết cô gái này là ai.",
+    "Sắc xanh trên chiếc khăn xếp của cô là màu lam thạch (ultramarine), được tán từ đá ngọc lưu ly và đắt hơn cả vàng.",
+    "Chiếc hoa tai chỉ được vẽ bằng vài nét cọ bắt sáng mà không có móc đeo, một số học giả cho rằng nó quá lớn để là ngọc trai thật.",
+    "Nghiên cứu vào năm 2018 phát hiện từng có một tấm rèm xanh lá treo phía sau cô, nay đã phai dần vào nền tối."
+   ],
+   "lookFor": [
+    "vệt sáng điểm xuyết duy nhất trên chiếc hoa tai",
+    "chấm sáng trắng li ti nơi khóe môi cô",
+    "màu lam thạch của chiếc khăn xếp tương phản với dải vải vàng buông xuống"
+   ]
+  },
+  "night-watch": {
+   "title": "Tuần đêm",
+   "artist": "Rembrandt van Rijn",
+   "date": "1642",
+   "medium": "sơn dầu trên vải canvas, khoảng 3,8 × 4,5 mét",
+   "gallery": "Phòng 2, phòng Thời kỳ Hoàng kim Hà Lan",
+   "original": "Bảo tàng Rijksmuseum, Amsterdam",
+   "story": [
+    "Đây là bức chân dung tập thể của một đội dân quân thị dân, được vẽ cho hội trường của những người lính hỏa mai ở Amsterdam.",
+    "Rembrandt khắc họa họ khi đang xuất kích thay vì xếp hàng ngay ngắn như hầu hết các tranh chân dung tập thể thời bấy giờ.",
+    "Đây hoàn toàn không phải là cảnh ban đêm: lớp vec-ni sẫm màu theo thời gian khiến bức tranh trông như chụp vào ban đêm, và tên gọi này xuất hiện sau đó.",
+    "Năm 1715, tranh bị cắt bớt ở bốn cạnh để vừa với bức tường trong tòa thị chính Amsterdam, khiến một số nhân vật bị mất đi."
+   ],
+   "lookFor": [
+    "viên đại úy áo đen đeo dải băng đỏ ở vị trí trung tâm",
+    "bóng bàn tay của ông in trên chiếc áo khoác vàng của viên trung úy",
+    "cô bé mặc áo vàng bên trái với một con gà treo bên hông"
+   ]
+  },
+  "wanderer": {
+   "title": "Người lữ hành trên biển sương mù",
+   "artist": "Caspar David Friedrich",
+   "date": "khoảng 1818",
+   "medium": "sơn dầu trên vải canvas, 94,8 × 74,8 cm",
+   "gallery": "Phòng 3, phòng Lãng mạn và Hiện đại",
+   "original": "Bảo tàng Hamburger Kunsthalle, Hamburg",
+   "story": [
+    "Đây là một trong những kiệt tác vĩ đại của chủ nghĩa Lãng mạn Đức.",
+    "Friedrich thường vẽ nhân vật nhìn từ phía sau, để người xem như đứng cùng vị trí và phóng tầm mắt cùng nhân vật.",
+    "Các khối đá và đỉnh núi được lấy từ các bản phác thảo núi non có thật – dãy núi sa thạch Elbe ở Saxony – kết hợp thành một phong cảnh không có ở đời thực."
+   ],
+   "lookFor": [
+    "bóng lưng nhân vật ngay giữa bức tranh",
+    "cây gậy chống của ông",
+    "những tầng sương mù bồng bềnh giữa các đỉnh núi"
+   ]
+  },
+  "starry-night": {
+   "title": "Đêm đầy sao",
+   "artist": "Vincent van Gogh",
+   "date": "tháng 6 năm 1889",
+   "medium": "sơn dầu trên vải canvas, 73,7 × 92,1 cm",
+   "gallery": "Phòng 3, phòng Lãng mạn và Hiện đại",
+   "original": "Bảo tàng Nghệ thuật Hiện đại (MoMA), New York",
+   "story": [
+    "Van Gogh vẽ bức tranh này trong thời gian điều trị tại dưỡng trí viện Saint-Paul-de-Mausole ở Saint-Rémy-de-Provence.",
+    "Đây là khung cảnh nhìn từ cửa sổ hướng đông của ông, ngay trước lúc bình minh.",
+    "Ông viết thư cho em trai Theo kể rằng ông đã ngắm nhìn vùng quê từ cửa sổ trước rạng đông, nơi chỉ có sao mai tỏa sáng rực rỡ khác thường.",
+    "Ngôi làng không có trong tầm nhìn từ cửa sổ của ông: ông đã vẽ thêm từ trí tưởng tượng."
+   ],
+   "lookFor": [
+    "vòng xoáy khổng lồ ở giữa bầu trời",
+    "cây bách sẫm màu vươn cao như ngọn lửa ở bên trái",
+    "ngọn tháp chuông nhà thờ trong ngôi làng"
+   ]
+  },
+  "the-kiss": {
+   "title": "Nụ hôn",
+   "artist": "Gustav Klimt",
+   "date": "1907 đến 1908",
+   "medium": "sơn dầu và lá vàng trên vải canvas, 180 × 180 cm",
+   "gallery": "Phòng 3, phòng Lãng mạn và Hiện đại",
+   "original": "Bảo tàng Belvedere, Vienna",
+   "story": [
+    "Tác phẩm thuộc 'thời kỳ hoàng kim' của Klimt, khi ông dát những lá vàng thật lên các bức tranh của mình.",
+    "Chính phủ Áo đã mua lại bức tranh vào năm 1908 ngay khi nó được trưng bày lần đầu tại Vienna.",
+    "Hai người yêu nhau quấn quýt trong một chiếc áo choàng vàng rực, nhưng họa tiết trên áo mỗi người lại hoàn toàn khác biệt."
+   ],
+   "lookFor": [
+    "áo choàng của chàng trai với các khối chữ nhật đen trắng",
+    "áo choàng của cô gái với các hình tròn và hoa cỏ",
+    "rìa thảm hoa dưới chân nàng, nơi vách đá cheo leo"
+   ]
+  },
+  "great-wave": {
+   "title": "Sóng lừng ngoài khơi Kanagawa",
+   "artist": "Katsushika Hokusai",
+   "date": "khoảng 1830 đến 1832",
+   "medium": "tranh in khắc gỗ nhiều màu, mực và màu trên giấy, khoảng 26 × 38 cm",
+   "gallery": "Phòng 4, phòng Tranh in Nhật Bản",
+   "original": "nhiều bảo tàng, do tác phẩm được in hàng nghìn bản; một bản nằm tại Bảo tàng Nghệ thuật Metropolitan, New York",
+   "story": [
+    "Đây là bản in nổi tiếng nhất trong loạt tranh Ba mươi sáu cảnh núi Phú Sĩ của Hokusai.",
+    "Hokusai khoảng bảy mươi tuổi khi sáng tác tác phẩm này.",
+    "Sắc xanh thẫm là màu xanh Phổ, một loại sắc tố mới bắt đầu du nhập vào Nhật Bản thời bấy giờ.",
+    "Vì là tranh khắc gỗ, hàng nghìn bản in đã được dập từ cùng các bản khắc gỗ và được bán với giá rất rẻ vào thời điểm đó."
+   ],
+   "lookFor": [
+    "núi Phú Sĩ nhỏ bé trong lòng con sóng",
+    "bọt sóng tung trắng xóa nơi đầu ngọn sóng như những chiếc móng vuốt",
+    "những người chèo thuyền nép mình trên ba chiếc thuyền"
+   ]
+  }
+ },
+ "rooms": {
+  "1": [
+   "Phục hưng"
+  ],
+  "2": [
+   "Thời hoàng kim",
+   "Hà Lan"
+  ],
+  "3": [
+   "Lãng mạn",
+   "và Hiện đại"
+  ],
+  "4": [
+   "Tranh in",
+   "Nhật Bản"
+  ]
+ },
+ "pins": {
+  "mona-lisa": "Mona Lisa",
+  "birth-of-venus": "Venus",
+  "pearl-earring": "Hoa tai ngọc",
+  "night-watch": "Tuần đêm",
+  "wanderer": "Người lữ hành",
+  "starry-night": "Đêm đầy sao",
+  "the-kiss": "Nụ hôn",
+  "great-wave": "Sóng lừng"
+ },
+ "guests": {
+  "girl": {
+   "name": "Cô gái",
+   "meet": "Gặp gỡ cô gái"
+  },
+  "wanderer": {
+   "name": "Người lữ hành",
+   "meet": "Gặp gỡ người lữ hành"
+  },
+  "mona": {
+   "name": "Mona Lisa",
+   "meet": "Trò chuyện với Mona Lisa"
+  }
+ },
+ "names": {
+  "museum": "Bảo tàng Meridian",
+  "hostFull": "Edmund Hale",
+  "host": "Edmund",
+  "title": "Giám đốc bảo tàng"
+ }
+}
