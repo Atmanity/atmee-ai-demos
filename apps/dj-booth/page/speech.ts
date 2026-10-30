@@ -8,15 +8,25 @@
 //                   causeur.directive.set (the live deck), session.commentary.append (a cue to speak
 //                   about, or a typed turn with the typed-reply prefix), response.item.create +
 //                   response.create (tool results), session.close
-//   server -> page  session.started, session.output_audio.delta (20 ms, silence too),
-//                   session.output_transcript.delta, causeur.input_transcript, response.event
-//                   (function calls), session.closed, error
+//   server -> page  session.started, session.output_transcript.delta, causeur.input_transcript,
+//                   response.event (function calls), session.closed, error, and her voice: under
+//                   playback control (asked for in session.start) each reply as deliveries
+//                   (causeur.playback.start/audio/end/clear, then transcript_end), as fast as it is
+//                   made, acknowledged with causeur.playback.ack; from a server without it,
+//                   session.output_audio.delta (20 ms, in real time, silence too).
+//
+// Under playback control a delivery plays in one place for its whole length, decided as it opens:
+// through the face while it is up, else in the page. Whether she is talking comes from the
+// deliveries (voice-state.ts), since her audio arrives seconds ahead of its playing.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Avatar, AvatarHandlers, Line } from '../../../src/kit/index.ts';
 import { fromBase64, Resampler24to16, tapMicrophone, toBase64 } from '../../../src/kit/index.ts';
 import { useAvatarOnly } from '../../../src/kit/useAvatarOnly.ts';
 import type { SpeechWriter } from '../../../src/avatar/render.ts';
+import { FaceDelivery } from '../../../src/speech/face.ts';
+import { PLAYBACK_CONTROL, playbackAck, refusedPlaybackControl, type Delivery } from '../../../src/speech/protocol.ts';
 import { createVoicePlayer, type VoicePlayer } from './audio.ts';
+import { Talking, deliveryOutput } from './voice-state.ts';
 
 const RATE = 24_000;
 /** Mic audio goes out in pieces this long. */
@@ -33,6 +43,19 @@ const RETRY_MS = 1500;
 const QUIET_FOR_CUE_MS = 800;
 
 interface Cue { text: string; until: number; typed: boolean; id?: string }
+
+/**
+ * One delivery and where it plays. `pending`: it was meant for the face, whose writer is still
+ * opening; its audio, its end and a clear wait here, and go to the page if the face cannot take it.
+ */
+interface Route {
+  delivery: Delivery;
+  output: 'face' | 'page' | 'pending';
+  face?: FaceDelivery;
+  held: Int16Array[];
+  ended: boolean;
+  cleared: boolean;
+}
 
 const rms = (pcm: Int16Array) => {
   let sum = 0;
@@ -86,10 +109,20 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
   const send = useCallback((msg: Record<string, unknown>) => {
     if (ws.current?.readyState === WebSocket.OPEN) ws.current.send(JSON.stringify(msg));
   }, []);
+  const sessionStart = useCallback((eventId: string) => send({ type: 'session.start', event_id: eventId, session: {
+    model: 'causeur', input_transcript: 'causeur.input_transcript.v1',
+    ...(askedForControl.current ? { playback_control: PLAYBACK_CONTROL } : {}),
+  } }), [send]);
 
-  // Whether she is speaking now, and since when she has been quiet (from her voice's loudness).
+  // Whether she is speaking now, and since when she has been quiet: from her voice's loudness on
+  // the paced stream, from the deliveries under playback control.
   const quietSince = useRef(0);
   const voiced = useRef(false);
+  // Playback control: asked for when her voice can play at its own rate, in use once the server says so.
+  const askedForControl = useRef(false);
+  const controlled = useRef(false);
+  const talking = useRef(new Talking());
+  const routes = useRef(new Map<number, Route>());
 
   // ---- What the app tells Nova: the deck (directive), cues and typed turns (commentary) ----
   const directive = useRef('');
@@ -150,6 +183,112 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
     for (const held of heldForFace.current) play(held, false);
     heldForFace.current = [];
   }, [play]);
+
+  // ---- Under playback control: each delivery to its one output, and her talking from them ----
+  const playbackStarted = useCallback((id: number) => {
+    if (!talking.current.started(id)) return;
+    voiced.current = true;
+    setSpeaking(true);
+  }, []);
+  const playbackFinished = useCallback((id: number) => {
+    if (!talking.current.finished(id)) return;
+    voiced.current = false;
+    quietSince.current = Date.now();
+    setSpeaking(false);
+    setVoiceVia(null);
+  }, []);
+  // What the page's player reports goes to the server, and says when she talks.
+  const onReport = useCallback((report: { started: number } | { finished: number; played: number; interrupted: boolean }) => {
+    const id = 'started' in report ? report.started : report.finished;
+    const route = routes.current.get(id);
+    if (!route || route.output !== 'page') return;
+    if ('started' in report) {
+      send(playbackAck(route.delivery, { status: 'started' }));
+      playbackStarted(id);
+      return;
+    }
+    send(playbackAck(route.delivery, { status: 'finished', played_samples: report.played, interrupted: report.interrupted }));
+    playbackFinished(id);
+  }, [send, playbackStarted, playbackFinished]);
+  const toPageRoute = useCallback((route: Route, why?: string) => {
+    const id = route.delivery.delivery_id;
+    if (why) console.warn('[speech] the face would not take her words (%s): they play here', why);
+    route.output = 'page';
+    setVoiceVia('page');
+    player.current?.open(id);
+    for (const pcm of route.held) player.current?.deliver(id, pcm);
+    route.held = [];
+    if (route.ended) player.current?.end(id);
+    if (route.cleared) player.current?.clear(id);
+  }, []);
+  const toFaceRoute = useCallback((route: Route, writer: SpeechWriter) => {
+    const id = route.delivery.delivery_id;
+    route.output = 'face';
+    route.face = new FaceDelivery({ open: async () => writer, interrupt: () => faceRef.current.interrupt() }, route.delivery, (event) => {
+      send(event);
+      if (event.status === 'finished') playbackFinished(id);
+    });
+    for (const pcm of route.held) route.face.push(pcm);
+    route.held = [];
+    if (route.ended) route.face.end();
+    if (route.cleared) void route.face.clear();
+    // The face is playing her words already: its start, reported for the server, comes with its speaking.
+    if (faceRef.current.speaking) route.face.started();
+  }, [send, playbackFinished]);
+  const onDelivery = useCallback((msg: Record<string, any>) => {
+    const id = msg.delivery_id;
+    if (!Number.isInteger(id)) return;
+    let route = routes.current.get(id);
+    if (msg.type === 'causeur.playback.start') {
+      if (!Number.isInteger(msg.start_sample)) return;
+      for (const old of routes.current.keys()) if (old < id - 4) routes.current.delete(old);
+      route = { delivery: { delivery_id: id, playback_id: msg.playback_id, start_sample: msg.start_sample }, output: 'page', held: [], ended: false, cleared: false };
+      routes.current.set(id, route);
+      if (deliveryOutput(faceRef.current.phase, faceOffRef.current) === 'face') {
+        route.output = 'pending';
+        setVoiceVia('face');
+        console.info('[speech] her words go to the face');
+        // She talks once the face has her words; the server is told the face began with its speaking.
+        playbackStarted(id);
+        const pending = route;
+        void faceRef.current.open().then(
+          (w) => (w ? toFaceRoute(pending, w) : toPageRoute(pending, 'the face is gone')),
+          (err) => toPageRoute(pending, (err as Error).message));
+      } else {
+        console.info('[speech] her words play here (face %s)', faceRef.current.phase);
+        toPageRoute(route);
+      }
+      return;
+    }
+    if (!route) return;
+    if (msg.type === 'causeur.playback.audio') {
+      if (typeof msg.delta !== 'string') return;
+      const pcm = new Int16Array(fromBase64(msg.delta));
+      if (route.output === 'pending') route.held.push(pcm);
+      else if (route.output === 'face') route.face?.push(pcm);
+      else player.current?.deliver(id, pcm);
+    } else if (msg.type === 'causeur.playback.end') {
+      route.ended = true;
+      if (route.output === 'face') route.face?.end();
+      else if (route.output === 'page') player.current?.end(id);
+    } else if (msg.type === 'causeur.playback.clear') {
+      route.cleared = true;
+      if (route.output === 'face') void route.face?.clear();
+      else if (route.output === 'page') player.current?.clear(id);
+    }
+  }, [playbackStarted, toFaceRoute, toPageRoute]);
+  // The face's own start, for the delivery it is playing.
+  useEffect(() => {
+    if (!face.speaking) return;
+    for (const route of routes.current.values()) if (route.output === 'face') route.face?.started();
+  }, [face.speaking]);
+  // A reply's words are all said (its transcript is over): its line is closed.
+  const closeLine = useCallback(() => {
+    const text = captionRef.current.trim();
+    captionRef.current = '';
+    setCaption('');
+    if (text) { addLine({ who: 'avatar', text }); handlersRef.current.onAvatarSaid?.(text); }
+  }, [addLine]);
 
   const onAudio = useCallback((pcm: Int16Array) => {
     const now = Date.now();
@@ -216,12 +355,23 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
     const msg = JSON.parse(raw);
     switch (msg.type) {
       case 'session.started':
+        controlled.current = msg.session?.playback_control === PLAYBACK_CONTROL;
+        console.info('[speech] voice %s', controlled.current ? 'under playback control (held whole, acknowledged)' : 'paced');
         live.current = true;
         setPhase('live');
         pump();
         break;
       case 'session.output_audio.delta':
         onAudio(new Int16Array(fromBase64(msg.delta)));
+        break;
+      case 'causeur.playback.start':
+      case 'causeur.playback.audio':
+      case 'causeur.playback.end':
+      case 'causeur.playback.clear':
+        onDelivery(msg);
+        break;
+      case 'causeur.playback.transcript_end':
+        closeLine();
         break;
       case 'session.output_transcript.delta':
         captionRef.current += msg.delta;
@@ -254,6 +404,12 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
       }
       case 'error': {
         const message = String(msg.error?.message ?? '');
+        // A server without playback control refused the start for asking: the same socket starts it paced.
+        if (!live.current && msg.error?.client_event_id === 'start' && askedForControl.current && refusedPlaybackControl(message)) {
+          askedForControl.current = false;
+          sessionStart('start-paced');
+          break;
+        }
         if (msg.error?.client_event_id?.startsWith?.('cue-')) settle(msg.error.client_event_id, false, /between turns/i.test(message));
         else console.warn('[speech] %s', message);
         break;
@@ -263,7 +419,7 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
         setPhase('ended');
         break;
     }
-  }, [addLine, onAudio, pump, runTool, send, settle]);
+  }, [addLine, closeLine, onAudio, onDelivery, pump, runTool, send, sessionStart, settle]);
 
   // ---- The microphone: always sent (speech detection needs the silence), zeros when the button is up ----
   const startMic = useCallback(async (stream: MediaStream | null) => {
@@ -297,6 +453,7 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
     if (silenceTimer.current) clearInterval(silenceTimer.current);
     silenceTimer.current = null;
     void player.current?.close(); player.current = null;
+    routes.current.clear();
     void playCtx.current?.close(); playCtx.current = null;
     void faceRef.current.end();
   }, []);
@@ -313,6 +470,12 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
       console.warn('[speech] the voice player could not start: %s', (err as Error).message);
       return null;
     });
+    // Playback control counts her samples: only when they play at their own rate.
+    askedForControl.current = Boolean(player.current) && playCtx.current.sampleRate === RATE;
+    controlled.current = false;
+    talking.current = new Talking();
+    routes.current.clear();
+    if (player.current) player.current.onReport = onReport;
     let stream: MediaStream | null = null;
     if (mic) {
       try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
@@ -347,7 +510,7 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
       const socket = new WebSocket(info.url, ['atmee-live', `atmee-token.${info.token}`]);
       ws.current = socket;
       socket.onopen = () => {
-        send({ type: 'session.start', event_id: 'start', session: { model: 'causeur', input_transcript: 'causeur.input_transcript.v1' } });
+        sessionStart('start');
         setPhase('arriving');
         void startMic(stream);
       };
@@ -368,7 +531,7 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
       setDetail(code === 'api_key_spend_cap_reached' || code === 'insufficient_credits' ? 'Calls are paused right now. Please try again later.' : 'We could not place the call. Try again in a moment.');
       setPhase('failed');
     }
-  }, [app, cleanup, onMessage, send, startMic]);
+  }, [app, cleanup, onMessage, onReport, send, sessionStart, startMic]);
 
   const end = useCallback(async () => {
     send({ type: 'session.close' });

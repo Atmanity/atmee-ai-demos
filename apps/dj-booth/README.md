@@ -14,8 +14,15 @@ track. The music is Spotify's own embed on the page; Nova works it through app t
   her off). Her **face is rendered on demand** into the site's own LiveKit room
   (`POST /api/apps/dj-booth/render`, the avatar-only way): up for her breaks, a held record, the
   opening and whenever the listener starts talking (the talk button, or their first words), down
-  after 20 s of music with nobody talking. While it is up her voice streams into it (16 kHz) and
-  the face plays it in sync; otherwise it plays in the page. Without LiveKit for the site
+  after 20 s of music with nobody talking. The page asks for **playback control**: each reply comes
+  as fast as it is made, in deliveries, and plays in one place for its whole length, chosen as it
+  opens: through the face while it is up (sent at 16 kHz; the face's playback reports are passed on
+  to the server, `src/speech/face.ts`), otherwise in the page, which holds all of it and says when
+  it began to play and how much of it played (the kit's delivery player). Whether she is talking,
+  for the captions, the cues and the face, comes from those deliveries, not from when her audio
+  arrives (`page/voice-state.ts`). A server without playback control starts the session paced: her
+  voice then comes in real time, through a jitter buffer in the page, and her talking is read from
+  its loudness. Without LiveKit for the site
   (`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`) she goes on by voice and the stage shows
   her portrait.
 
