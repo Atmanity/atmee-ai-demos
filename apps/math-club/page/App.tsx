@@ -11,6 +11,8 @@ import './club.css';
 
 const HOST = 'Mochi';
 const TAIL_MS = 400;
+/** Taps on + and − move the screen at once; Mochi hears the result once they stop. */
+const QUIET_MS = 1200;
 
 function moveOf(c: Club, name: string, a: Record<string, unknown>): Move | null {
   switch (name) {
@@ -89,7 +91,7 @@ function Step({ label, value, onChange, disabled }: { label: string; value: numb
 
 function Confetti() {
   const colours = ['#ffd166', '#ef6c4d', '#f4f1e6', '#7fc8a9'];
-  return <div className="mc-confetti" aria-hidden="true">{Array.from({ length: 36 }, (_, i) => <i key={i} style={{ left: `${(i * 37) % 100}%`, background: colours[i % 4], animationDelay: `${(i % 9) * 40}ms` }} />)}</div>;
+  return <div className="mc-confetti" aria-hidden="true">{Array.from({ length: 36 }, (_, i) => <i key={i} style={{ left: `${(i * 37) % 100}%`, background: colours[i % 4], animationDelay: `${(i * 73) % 900}ms` }} />)}</div>;
 }
 
 function Lobby({ onGo }: { onGo: (cls: ClassId, level: number, mic: boolean) => void }) {
@@ -152,10 +154,18 @@ export function App() {
   const live = avatar.phase === 'live';
 
   // A button acts at once; Mochi cannot see the screen, so Mochi is told.
+  const avatarRef = useRef(avatar);
+  avatarRef.current = avatar;
+  const quiet = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const press = (name: string, args: Record<string, unknown> = {}) => {
     const move = apply(name, args);
-    if (move && live) avatar.event(pressed(move.outcome), 30);
+    if (!move || !live) return;
+    clearTimeout(quiet.current);
+    const tell = () => avatarRef.current.event(pressed(move.outcome), 30);
+    if ((name === 'set_pizza' || name === 'set_tray') && move.fx.join() === 'set') quiet.current = setTimeout(tell, QUIET_MS);
+    else tell();
   };
+  useEffect(() => { if (!live) clearTimeout(quiet.current); }, [live]);
 
   const opened = useRef(false);
   useEffect(() => {
