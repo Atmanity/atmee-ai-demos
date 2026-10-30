@@ -41,10 +41,13 @@ export const CLASSES: Record<ClassId, { title: string; thing: string; max: numbe
   },
 };
 
-export interface Club { cls: ClassId; level: number; i: number; a: number; b: number; built: boolean; solved: boolean; stars: number; done: boolean }
+/** What the child chose to put on: their word, shown on the pizza or the cookies. */
+export const TOPPINGS: Record<string, string> = { pepperoni: '#ef6c4d', mushroom: '#c9b8a3', olive: '#2b2b33', pineapple: '#ffe066', basil: '#4f9d69', chocolate: '#4a2a1a', sprinkles: '#ff7ab6', raisin: '#5b3a5e', strawberry: '#e63950', blueberry: '#3f5fbf' };
+
+export interface Club { cls: ClassId; level: number; i: number; topping: string; misses: number; a: number; b: number; built: boolean; solved: boolean; stars: number; done: boolean }
 export interface Move { club: Club; ok: boolean; outcome: string; fx: Fx[] }
 
-export const newClub = (cls: ClassId = 'fractions', level = 1): Club => ({ cls, level, i: 0, a: 1, b: cls === 'fractions' ? 0 : 1, built: false, solved: false, stars: 0, done: false });
+export const newClub = (cls: ClassId = 'fractions', level = 1): Club => ({ cls, level, i: 0, topping: cls === 'fractions' ? 'pepperoni' : 'chocolate', misses: 0, a: 1, b: cls === 'fractions' ? 0 : 1, built: false, solved: false, stars: 0, done: false });
 export const problems = (c: Club): Problem[] => CLASSES[c.cls].levels[c.level - 1];
 export const problem = (c: Club): Problem => problems(c)[c.i];
 
@@ -92,15 +95,18 @@ export function total(c: Club, value: unknown): Move {
   if (!c.built) return { club: c, ok: false, outcome: 'Not yet: the tray has to match the problem first.', fx: [] };
   const n = whole(value);
   if (n === null) return { club: c, ok: false, outcome: 'Not clear: ask how many cookies again.', fx: [] };
-  if (n !== c.a * c.b) return { club: c, ok: false, outcome: `Not quite: ${n} is not it. Suggest counting one row and adding it again. Do not say the total.`, fx: ['wrong'] };
+  if (n !== c.a * c.b) {
+    const misses = c.misses + 1;
+    return { club: { ...c, misses }, ok: false, outcome: `Not quite: ${n} is not it. ${misses >= 2 ? 'Offer to count together, one row at a time, out loud.' : 'Give one small hint.'} Do not say the total.`, fx: ['wrong'] };
+  }
   return star(c, `${c.a} times ${c.b} is ${n}.`);
 }
 
 export function next(c: Club): Move {
   if (c.done) return { club: c, ok: false, outcome: 'Not now: the class is finished.', fx: [] };
   if (!c.solved) return { club: c, ok: false, outcome: 'Not yet: finish this problem first.', fx: [] };
-  if (c.i + 1 >= problems(c).length) return { club: { ...c, done: true }, ok: true, outcome: `Done: level ${c.level} is finished with ${c.stars} stars.${c.level < LEVELS.length ? ` Ask if they want level ${c.level + 1}.` : ' That is the top level.'}`, fx: ['finish'] };
-  const after = { ...newClub(c.cls, c.level), i: c.i + 1, stars: c.stars };
+  if (c.i + 1 >= problems(c).length) return { club: { ...c, done: true }, ok: true, outcome: `Done: level ${c.level} is finished with ${c.stars} stars.${c.level >= LEVELS.length ? ' That is the top level.' : c.misses === 0 ? ` No mistakes at all, so dare them to try level ${c.level + 1}.` : ` Ask if they want level ${c.level + 1}.`}`, fx: ['finish'] };
+  const after = { ...newClub(c.cls, c.level), i: c.i + 1, stars: c.stars, topping: c.topping, misses: c.misses };
   return { club: after, ok: true, outcome: `Done: next problem. ${problem(after).story}`, fx: ['set'] };
 }
 
@@ -121,4 +127,12 @@ export function setLevel(c: Club, value: unknown): Move {
   if (level === c.level && !c.done) return { club: c, ok: true, outcome: `Done: we are already on level ${level}.`, fx: [] };
   const club = newClub(c.cls, level);
   return { club, ok: true, outcome: `Done: level ${level}. ${problem(club).story}`, fx: ['set'] };
+}
+
+/** Puts the child's favourite on the pizza or the cookies, in their own word. */
+export function setTopping(c: Club, value: unknown): Move {
+  const said = String(value ?? '').toLowerCase();
+  const topping = Object.keys(TOPPINGS).find((t) => said.includes(t) || said.includes(t.replace(/s$/, '')));
+  if (!topping) return { club: c, ok: false, outcome: `Not on the shelf: laugh about it, then offer ${Object.keys(TOPPINGS).filter((t) => (c.cls === 'fractions') === Object.keys(TOPPINGS).indexOf(t) < 5).join(', ')}.`, fx: [] };
+  return { club: { ...c, topping }, ok: true, outcome: `Done: ${topping} is on. Say you love it, then give the problem.`, fx: ['set'] };
 }

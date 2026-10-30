@@ -41,7 +41,7 @@ button:focus-visible, input:focus-visible { outline: 4px solid var(--butter); ou
 .mc-grown { font-size: 14px; opacity: .8; }
 
 .mc-app { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
-.mc-main { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: minmax(0, 1fr); gap: 18px; padding: 12px 18px; min-height: 0; }
+.mc-main { flex: 1; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 18px; padding: 12px 18px; min-height: 0; }
 .mc-stage { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 8px solid #7a5230; border-radius: 12px; background: var(--board-deep); padding: 12px 16px; overflow: hidden; }
 .mc-story { text-align: center; font-size: clamp(25px, 3.4vw, 38px); color: var(--chalk); animation: mc-drop .4s ease-out both; }
 .mc-story small { display: block; font: 800 15px 'Nunito', sans-serif; color: var(--mint); }
@@ -49,7 +49,8 @@ button:focus-visible, input:focus-visible { outline: 4px solid var(--butter); ou
 .mc-pizza { height: 100%; max-height: 100%; aspect-ratio: 1; flex: 0 1 auto; min-width: 0; }
 .mc-slice { transition: transform .45s cubic-bezier(.3, 1.6, .5, 1), opacity .3s; animation: mc-pop .35s ease-out both; transform-origin: center; }
 .mc-slice.is-taken { opacity: 1; }
-.mc-slice:not(.is-taken) { opacity: .62; }
+.mc-slice:not(.is-taken) { opacity: .9; }
+.mc-slice.is-taken { filter: drop-shadow(0 0 10px rgba(255, 209, 102, .7)); }
 .crust { fill: #d9964b; stroke: var(--board-deep); stroke-width: 3; }
 .cheese { fill: #ffd166; } .pep { fill: var(--sauce); }
 .mc-fraction { margin: 0; display: flex; flex-direction: column; align-items: center; font: 800 clamp(48px, 7vw, 84px)/1 'Baloo 2', sans-serif; color: var(--butter); }
@@ -76,11 +77,15 @@ button:focus-visible, input:focus-visible { outline: 4px solid var(--butter); ou
 .mc-finish h2 { font-size: clamp(32px, 5vw, 52px); color: var(--butter); }
 
 .mc-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; min-height: 0; overflow-y: auto; }
-.mc-host { border-radius: 24px; overflow: hidden; border: 6px solid var(--chalk); aspect-ratio: 1; flex: none; }
+.mc-host { border-radius: 28px; overflow: hidden; border: 8px solid var(--chalk); aspect-ratio: 1; flex: 1 1 auto; min-height: 0; max-height: 100%; align-self: center; max-width: 100%; transition: border-color .2s, box-shadow .2s; }
+.mc-host.is-talking { border-color: var(--butter); box-shadow: 0 0 0 8px rgba(255, 209, 102, .25); }
+.mc-ear { display: flex; align-items: center; gap: 12px; flex: none; }
+.mc-ear p { flex: 1; min-width: 0; margin: 0; padding: 10px 16px; border-radius: 18px; background: var(--chalk); color: var(--bark); font: 800 21px/1.2 'Baloo 2', sans-serif; }
+.mc-ear p.is-heard { animation: mc-pop .25s ease-out both; }
+.mc-ear small { display: block; font: 800 14px 'Nunito', sans-serif; color: #5b7267; }
+.mc-keys { align-self: center; color: var(--chalk); font-size: 15px; }
+.mc-next { align-self: center; margin-top: 8px; }
 .mc-host-video { width: 100%; height: 100%; }
-.mc-talk { display: flex; align-items: center; justify-content: center; gap: 10px; border: 0; border-radius: 20px; padding: 16px; background: var(--sauce); color: var(--chalk); font: 800 22px 'Baloo 2', sans-serif; box-shadow: 0 7px 0 #b0452c; touch-action: none; user-select: none; -webkit-user-select: none; }
-.mc-talk svg { width: 26px; height: 26px; }
-.mc-talk.is-open { background: var(--butter); color: var(--bark); transform: translateY(5px); box-shadow: 0 2px 0 #b0452c; }
 
 @keyframes mc-bob { 50% { translate: 0 -6px; } }
 @keyframes mc-pop { from { scale: 0; } to { scale: 1; } }
@@ -95,9 +100,8 @@ button:focus-visible, input:focus-visible { outline: 4px solid var(--butter); ou
   .mc-main { grid-template-columns: 1fr; grid-template-rows: auto; padding: 10px 12px; }
   .mc-stage { min-height: 60dvh; }
   .mc-table { height: 280px; flex: none; gap: 16px; }
-  .mc-side { flex-direction: row; overflow: visible; align-items: center; }
-  .mc-host { width: 112px; border-width: 4px; border-radius: 18px; }
-  .mc-talk { flex: 1; }
+  .mc-side { overflow: visible; }
+  .mc-host { width: min(86vw, 46dvh); flex: none; }
   .mc-switch { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -2,8 +2,9 @@
 
 Maths you can eat. A child aged six to ten learns fractions by cutting a pizza
 and times tables by filling a cookie tray, with Mochi the red panda as teacher.
-Say "cut it into four" and the pizza splits; the fraction and the star chart
-follow. Chalkline's front door links here for younger classes.
+The point is the conversation: Mochi fills the screen, the microphone stays open,
+the child's words appear as Mochi hears them, and Mochi asks, reacts and adapts
+while the pizza changes the way the child says. Chalkline's front door links here for younger classes.
 
 ## How it works
 

@@ -3,14 +3,13 @@
 // make the same moves. Children do not type: the call joins with the microphone
 // shut, and a big button opens it while held.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BackToApps, CallStatus, ChatPanel, HostVideo, MicIcon, useAvatar, type Avatar, type ToolCall } from '../../../src/kit/index.ts';
-import { build, choose, CLASSES, LEVELS, newClub, next, problem, problems, setLevel, total, type ClassId, type Club, type Fx, type Move } from '../engine/club.ts';
+import { BackToApps, CallControls, CallStatus, ChatPanel, HostVideo, useAvatar, type ToolCall } from '../../../src/kit/index.ts';
+import { build, choose, CLASSES, LEVELS, newClub, next, problem, problems, setLevel, setTopping, TOPPINGS, total, type ClassId, type Club, type Fx, type Move } from '../engine/club.ts';
 import { clubState, opening, pressed } from '../engine/director.ts';
 import mochi from '../host/portrait.jpg';
 import './club.css';
 
 const HOST = 'Mochi';
-const TAIL_MS = 400;
 /** Taps on + and − move the screen at once; Mochi hears the result once they stop. */
 const QUIET_MS = 1200;
 
@@ -22,25 +21,9 @@ function moveOf(c: Club, name: string, a: Record<string, unknown>): Move | null 
     case 'next_problem': return next(c);
     case 'choose_class': return choose(c, a.class);
     case 'set_level': return setLevel(c, a.level);
+    case 'set_topping': return setTopping(c, a.topping);
     default: return null;
   }
-}
-
-function HoldToTalk({ avatar }: { avatar: Avatar }) {
-  const [held, setHeld] = useState(false);
-  const tail = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const press = () => { clearTimeout(tail.current); setHeld(true); avatar.setMic(true); };
-  const letGo = () => { setHeld(false); clearTimeout(tail.current); tail.current = setTimeout(() => avatar.setMic(false), TAIL_MS); };
-  useEffect(() => () => clearTimeout(tail.current), []);
-  return (
-    <button
-      type="button" className={`mc-talk ${held ? 'is-open' : ''}`} aria-pressed={held}
-      onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); press(); }}
-      onPointerUp={letGo} onPointerCancel={letGo} onContextMenu={(e) => e.preventDefault()}
-    >
-      <MicIcon /><span>{held ? 'Mochi is listening' : 'Hold to talk'}</span>
-    </button>
-  );
 }
 
 /** A wedge from the centre of a pizza of radius r, as an SVG path. */
@@ -50,7 +33,7 @@ function wedge(i: number, n: number, r: number) {
   return `M0 0 L${at(i)} A${r} ${r} 0 ${n === 2 ? 0 : 0} 1 ${at(i + 1)} Z`;
 }
 
-function Pizza({ slices, taken }: { slices: number; taken: number }) {
+function Pizza({ slices, taken, topping = 'pepperoni' }: { slices: number; taken: number; topping?: string }) {
   return (
     <svg viewBox="-130 -130 260 260" className="mc-pizza" role="img" aria-label={`A pizza cut into ${slices} slices with ${taken} taken`}>
       {Array.from({ length: slices }, (_, i) => {
@@ -60,7 +43,7 @@ function Pizza({ slices, taken }: { slices: number; taken: number }) {
           <g key={`${slices}-${i}`} className={`mc-slice ${i < taken ? 'is-taken' : ''}`} style={{ transform: `translate(${Math.cos(mid) * out}px, ${Math.sin(mid) * out}px)` }}>
             <path d={wedge(i, slices, 104)} className="crust" />
             <path d={wedge(i, slices, 92)} className="cheese" />
-            {[0, 1, 2].map((k) => { const t = ((i + 0.25 + k * 0.25) / slices) * 2 * Math.PI - Math.PI / 2; const d = 42 + (k % 2) * 26; return <circle key={k} cx={Math.cos(t) * d} cy={Math.sin(t) * d} r={7} className="pep" />; })}
+            {[0, 1, 2].map((k) => { const t = ((i + 0.25 + k * 0.25) / slices) * 2 * Math.PI - Math.PI / 2; const d = 42 + (k % 2) * 26; return <circle key={k} cx={Math.cos(t) * d} cy={Math.sin(t) * d} r={7} fill={TOPPINGS[topping]} />; })}
           </g>
         );
       })}
@@ -68,10 +51,10 @@ function Pizza({ slices, taken }: { slices: number; taken: number }) {
   );
 }
 
-function Tray({ rows, each }: { rows: number; each: number }) {
+function Tray({ rows, each, topping = 'chocolate' }: { rows: number; each: number; topping?: string }) {
   return (
     <div className="mc-tray" role="img" aria-label={`A tray with ${rows} rows of ${each} cookies`} style={{ gridTemplateColumns: `repeat(${each}, 1fr)`, aspectRatio: `${each} / ${rows}` }}>
-      {Array.from({ length: rows * each }, (_, i) => <svg key={`${each}-${i}`} viewBox="0 0 40 40" className="mc-cookie" style={{ animationDelay: `${i * 22}ms` }} aria-hidden="true"><circle cx="20" cy="20" r="18" fill="#d9964b" /><circle cx="13" cy="14" r="3.2" fill="#4a2a1a" /><circle cx="26" cy="12" r="2.6" fill="#4a2a1a" /><circle cx="24" cy="26" r="3.4" fill="#4a2a1a" /><circle cx="12" cy="27" r="2.4" fill="#4a2a1a" /></svg>)}
+      {Array.from({ length: rows * each }, (_, i) => <svg key={`${each}-${i}`} viewBox="0 0 40 40" className="mc-cookie" style={{ animationDelay: `${i * 22}ms` }} aria-hidden="true"><circle cx="20" cy="20" r="18" fill="#d9964b" /><circle cx="13" cy="14" r="3.2" fill={TOPPINGS[topping]} /><circle cx="26" cy="12" r="2.6" fill={TOPPINGS[topping]} /><circle cx="24" cy="26" r="3.4" fill={TOPPINGS[topping]} /><circle cx="12" cy="27" r="2.4" fill={TOPPINGS[topping]} /></svg>)}
     </div>
   );
 }
@@ -103,7 +86,7 @@ function Lobby({ onGo }: { onGo: (cls: ClassId, level: number, mic: boolean) => 
       <main>
         <img src={mochi} alt="Mochi, a red panda teacher with a yellow neckerchief" className="mc-face" />
         <h1>Maths you can eat.</h1>
-        <p>Cut pizzas, bake cookies and win stars with Mochi the red panda.</p>
+        <p>Just talk to Mochi. Mochi listens, asks you questions, and cuts the pizza the way you say.</p>
         <div className="mc-classes">
           {(Object.keys(CLASSES) as ClassId[]).map((id) => (
             <button key={id} type="button" className={cls === id ? 'is-on' : ''} aria-pressed={cls === id} onClick={() => setCls(id)}>
@@ -115,9 +98,9 @@ function Lobby({ onGo }: { onGo: (cls: ClassId, level: number, mic: boolean) => 
         <div className="mc-levels" role="group" aria-label="Choose a level">
           {LEVELS.map((l) => <button key={l.n} type="button" className={level === l.n ? 'is-on' : ''} aria-pressed={level === l.n} onClick={() => setLevelPick(l.n)}><b>{l.n}</b><span>age {l.age}</span></button>)}
         </div>
-        <button type="button" className="mc-big" onClick={() => onGo(cls, level, true)}>Start class</button>
-        <button type="button" className="mc-quiet" onClick={() => onGo(cls, level, false)}>Play with taps only</button>
-        <p className="mc-grown">For grown-ups: Mochi hears what is said while the talk button is held. There is no account, and Mochi never asks for personal details.</p>
+        <button type="button" className="mc-big" onClick={() => onGo(cls, level, true)}>Talk to Mochi</button>
+        <button type="button" className="mc-quiet" onClick={() => onGo(cls, level, false)}>No microphone? Use buttons</button>
+        <p className="mc-grown">For grown-ups: Mochi hears everything said while a class is on, and a button mutes the microphone. There is no account, and Mochi never asks for personal details.</p>
       </main>
     </div>
   );
@@ -127,7 +110,8 @@ export function App() {
   const [club, setClub] = useState<Club>(() => newClub());
   const [fx, setFx] = useState<Fx[]>([]);
   const [fxKey, setFxKey] = useState(0);
-  const [withMic, setWithMic] = useState(false);
+  const [voice, setVoice] = useState(true);
+  const [showKeys, setShowKeys] = useState(false);
   const [answer, setAnswer] = useState('');
   const ref = useRef(club);
 
@@ -175,12 +159,13 @@ export function App() {
   useEffect(() => { if (live) avatar.state(clubState(club)); }, [club, live]);
 
   if (avatar.phase === 'idle') {
-    return <Lobby onGo={(cls, level, mic) => { const c = newClub(cls, level); ref.current = c; setClub(c); setWithMic(mic); void avatar.start({ mic, micMuted: mic }); }} />;
+    return <Lobby onGo={(cls, level, mic) => { const c = newClub(cls, level); ref.current = c; setClub(c); setVoice(mic); setShowKeys(!mic); void avatar.start({ mic }); }} />;
   }
 
   const cls = CLASSES[club.cls];
   const pizza = club.cls === 'fractions';
   const typing = new URLSearchParams(location.search).has('type');
+  const said = avatar.heard || [...avatar.lines].reverse().find((l) => l.who === 'user')?.text || '';
   return (
     <div className="mc-app">
       <header className="mc-top">
@@ -193,6 +178,16 @@ export function App() {
         </ol>
       </header>
       <main className="mc-main">
+        <aside className="mc-side">
+          <div className={`mc-host ${avatar.speaking ? 'is-talking' : ''}`}><HostVideo avatar={avatar} name={HOST} poster={mochi} className="mc-host-video"><CallStatus avatar={avatar} name={HOST} again="Call Mochi again" /></HostVideo></div>
+          {voice && live && (
+            <div className="mc-ear">
+              <p className={said ? 'is-heard' : ''} aria-live="polite">{said ? <><small>Mochi heard</small>“{said}”</> : <small>{avatar.micOn ? 'Mochi is listening. Say something!' : 'The microphone is off'}</small>}</p>
+              <CallControls avatar={avatar} className="mc-mic" />
+            </div>
+          )}
+          {typing && <ChatPanel avatar={avatar} name={HOST} placeholder="Say something to Mochi" />}
+        </aside>
         <section className="mc-stage" aria-live="polite">
           {club.done ? (
             <div className="mc-finish">
@@ -205,31 +200,29 @@ export function App() {
             <>
               <h2 className="mc-story" key={`${club.cls}${club.i}`}><small>Problem {club.i + 1}</small>{problem(club).story}</h2>
               <div className="mc-table">
-                {pizza ? <Pizza slices={club.a} taken={club.b} /> : <Tray rows={club.a} each={club.b} />}
+                {pizza ? <Pizza slices={club.a} taken={club.b} topping={club.topping} /> : <Tray rows={club.a} each={club.b} topping={club.topping} />}
                 {pizza && <p className="mc-fraction" aria-hidden="true"><b>{club.b}</b><i /><b>{club.a}</b></p>}
               </div>
-              <div className="mc-controls">
-                <Step label={pizza ? 'Slices' : 'Rows'} value={club.a} disabled={club.solved} onChange={(n) => press(pizza ? 'set_pizza' : 'set_tray', pizza ? { slices: n } : { rows: n })} />
-                <Step label={pizza ? 'Take' : 'In each row'} value={club.b} disabled={club.solved} onChange={(n) => press(pizza ? 'set_pizza' : 'set_tray', pizza ? { taken: n } : { each: n })} />
-                {club.built && !club.solved && (
-                  <form className="mc-total" onSubmit={(e) => { e.preventDefault(); press('check_total', { total: answer }); setAnswer(''); }}>
-                    <label>How many?<input inputMode="numeric" value={answer} onChange={(e) => setAnswer(e.target.value)} autoFocus /></label>
-                    <button type="submit" disabled={!answer}>Check</button>
-                  </form>
-                )}
-                {club.solved && <button type="button" className="mc-big mc-next" onClick={() => press('next_problem')}>Next!</button>}
-              </div>
+              {club.solved && <button type="button" className="mc-big mc-next" onClick={() => press('next_problem')}>Next!</button>}
+              {showKeys && !club.solved && (
+                <div className="mc-controls">
+                  <Step label={pizza ? 'Slices' : 'Rows'} value={club.a} disabled={false} onChange={(n) => press(pizza ? 'set_pizza' : 'set_tray', pizza ? { slices: n } : { rows: n })} />
+                  <Step label={pizza ? 'Take' : 'In each row'} value={club.b} disabled={false} onChange={(n) => press(pizza ? 'set_pizza' : 'set_tray', pizza ? { taken: n } : { each: n })} />
+                  {club.built && (
+                    <form className="mc-total" onSubmit={(e) => { e.preventDefault(); spoke.current = true; press('check_total', { total: answer }); setAnswer(''); }}>
+                      <label>How many?<input inputMode="numeric" value={answer} onChange={(e) => setAnswer(e.target.value)} autoFocus /></label>
+                      <button type="submit" disabled={!answer}>Check</button>
+                    </form>
+                  )}
+                </div>
+              )}
+              {voice && !showKeys && !club.solved && <button type="button" className="mc-quiet mc-keys" onClick={() => setShowKeys(true)}>Use buttons instead</button>}
             </>
           )}
           {fx.includes('star') && <svg key={fxKey} className="mc-fly" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3 6.6 7 .8-5.2 4.8 1.4 7L12 17.7 5.8 21.2l1.4-7L2 9.4l7-.8z" /></svg>}
           {(fx.includes('star') || fx.includes('finish')) && <Confetti key={`c${fxKey}`} />}
           {fx.includes('wrong') && <p className="mc-try" key={`w${fxKey}`}>Try again!</p>}
         </section>
-        <aside className="mc-side">
-          <div className="mc-host"><HostVideo avatar={avatar} name={HOST} poster={mochi} className="mc-host-video"><CallStatus avatar={avatar} name={HOST} again="Call Mochi again" /></HostVideo></div>
-          {withMic && live && <HoldToTalk avatar={avatar} />}
-          {typing && <ChatPanel avatar={avatar} name={HOST} placeholder="Say something to Mochi" />}
-        </aside>
       </main>
     </div>
   );

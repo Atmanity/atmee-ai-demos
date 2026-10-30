@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { build, choose, CLASSES, LEVELS, newClub, next, problem, problems, setLevel, total, type Club } from './club.ts';
+import { build, choose, CLASSES, LEVELS, newClub, next, problem, problems, setLevel, setTopping, total, type Club } from './club.ts';
 import { clubState, INSTRUCTIONS, TOOLS } from './director.ts';
 
 const solveAll = (c: Club) => {
@@ -67,6 +67,30 @@ it('moves on only after a star, and finishes with every star', () => {
 it('changes class from a child\'s words', () => {
   expect(choose(newClub(), 'the cookies one').club.cls).toBe('times');
   expect(choose(newClub(), 'dinosaurs').outcome).toMatch(/^Not clear/);
+});
+
+describe('listening to the child', () => {
+  it('takes their topping in their words and keeps it for the next problem', () => {
+    const c = setTopping(newClub(), 'um, pineapple please!').club;
+    expect(c.topping).toBe('pineapple');
+    expect(next(build(c, 2, 1).club).club.topping).toBe('pineapple');
+  });
+  it('plays along with a topping it does not have', () => {
+    const m = setTopping(newClub(), 'dinosaurs');
+    expect(m.ok).toBe(false);
+    expect(m.outcome).toContain('mushroom');
+    expect(m.outcome).not.toContain('sprinkles');
+  });
+  it('offers to count together after a second wrong total, still without the answer', () => {
+    const c = build(newClub('times', 2), 3, 4).club;
+    const m = total(total(c, 9).club, 8);
+    expect(m.outcome).toMatch(/count together/);
+    expect(m.outcome).not.toMatch(/\b12\b/);
+  });
+  it('dares them up a level after a clean run', () => {
+    let c = newClub();
+    for (const p of problems(c)) { const b = build(c, p.a, p.b).club; const n = next(b); c = n.club; if (c.done) expect(n.outcome).toMatch(/dare them/); }
+  });
 });
 
 describe('levels', () => {
