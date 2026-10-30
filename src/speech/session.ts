@@ -230,6 +230,9 @@ export async function startSpeech(opts: SpeechOptions): Promise<SpeechCall> {
           return;
         case 'session.started':
           controlled = msg.session?.playback_control === PLAYBACK_CONTROL;
+          // Which audio the call has, for whoever compares how it sounds.
+          console.info('[speech] voice %s', controlled ? 'under playback control (held whole, acknowledged)'
+            : audio.controlled ? 'paced: the server does not offer playback control' : 'paced: no 24 kHz audio context');
           started = true;
           clearTimeout(timer);
           resolve();
