@@ -21,6 +21,13 @@ describe('the days the desk books', () => {
     expect(pickDay(days, '2026-10-30', '2026-10-26')?.date).toBe('2026-10-30');
     expect(pickDay(days, 'Saturday', '2026-10-26')).toBeNull();
     expect(pickDay(days, 'November 12', '2026-10-26')).toBeNull();
+    // A word that only begins like a day or a month is neither: "month" is not Monday.
+    for (const said of ['next month', 'sometime this month', 'a wedding', 'whatever suits you', 'a friend can come']) {
+      expect(pickDay(days, said, '2026-10-26')).toBeNull();
+    }
+    expect(pickDay(days, 'Mondays are best', '2026-10-26')?.weekday).toBe(1);
+    expect(pickDay(days, 'tues', '2026-10-26')?.date).toBe('2026-10-27');
+    expect(pickDay(days, 'Oct 29', '2026-10-26')?.date).toBe('2026-10-29');
   });
 
   test('times as people say them, the afternoon assumed for a bare 1 to 7', () => {

@@ -102,6 +102,19 @@ export function bookingDays(now: Date): Day[] {
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
 
+/**
+ * The index in `names` of the name a word of `text` stands for: the name itself, its plural, or
+ * the start of it, three letters or more ("thurs", "sept"). Never a longer word that merely begins
+ * the same way: "month" is not Monday, nor "market" March.
+ */
+function nameIn(text: string, names: readonly string[]): number {
+  const said = text.split(/[^a-z]+/).filter((w) => w.length >= 3);
+  return names.findIndex((name) => {
+    const n = name.toLowerCase();
+    return said.some((w) => w === `${n}s` || n.startsWith(w));
+  });
+}
+
 /** The booking day a caller means: "today", "tomorrow", "Thursday", "October 30", "the 30th", "2026-10-30"; null when none of the days. */
 export function pickDay(days: Day[], input: unknown, today: string): Day | null {
   const text = String(input ?? '').toLowerCase().trim();
@@ -110,7 +123,7 @@ export function pickDay(days: Day[], input: unknown, today: string): Day | null 
   if (iso) return days.find((d) => d.date === iso[0]) ?? null;
   if (/\btoday\b/.test(text)) return days.find((d) => d.date === today) ?? null;
   if (/\btomorrow\b/.test(text)) return days.find((d) => d.date === addDays(today, 1)) ?? null;
-  const month = MONTHS.findIndex((m) => new RegExp(`\\b${m.slice(0, 3)}\\w*\\b`).test(text));
+  const month = nameIn(text, MONTHS);
   const dayNumber = text.match(/\b(\d{1,2})(st|nd|rd|th)?\b/);
   if (dayNumber) {
     const n = Number(dayNumber[1]);
@@ -122,7 +135,7 @@ export function pickDay(days: Day[], input: unknown, today: string): Day | null 
     });
     if (hit) return hit;
   }
-  const weekday = WEEKDAYS.findIndex((w) => new RegExp(`\\b${w.slice(0, 3)}[a-z]*\\b`).test(text));
+  const weekday = nameIn(text, WEEKDAYS);
   if (weekday >= 0) return days.find((d) => d.weekday === weekday) ?? null;
   return null;
 }
