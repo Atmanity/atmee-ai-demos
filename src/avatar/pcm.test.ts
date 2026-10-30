@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { Resampler24to16 } from './audio.ts';
+import { Resampler24to16 } from './pcm.ts';
 
 const tone = (hz: number, seconds: number, rate = 24_000, amp = 0.5) =>
   Int16Array.from({ length: Math.round(rate * seconds) }, (_, i) => Math.round(Math.sin((2 * Math.PI * hz * i) / rate) * amp * 0x7fff));

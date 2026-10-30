@@ -13,10 +13,10 @@
 //                   (function calls), session.closed, error
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Avatar, AvatarHandlers, Line } from '../../../src/kit/index.ts';
-import { fromBase64, tapMicrophone, toBase64 } from '../../../src/kit/index.ts';
+import { fromBase64, Resampler24to16, tapMicrophone, toBase64 } from '../../../src/kit/index.ts';
 import { useAvatarOnly } from '../../../src/kit/useAvatarOnly.ts';
 import type { SpeechWriter } from '../../../src/avatar/render.ts';
-import { createVoicePlayer, Resampler24to16, type VoicePlayer } from './audio.ts';
+import { createVoicePlayer, type VoicePlayer } from './audio.ts';
 
 const RATE = 24_000;
 /** Mic audio goes out in pieces this long. */
