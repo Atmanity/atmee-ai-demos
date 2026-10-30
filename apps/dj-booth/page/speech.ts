@@ -26,7 +26,7 @@ import type { SpeechWriter } from '../../../src/avatar/render.ts';
 import { FaceDelivery } from '../../../src/speech/face.ts';
 import { PLAYBACK_CONTROL, playbackAck, refusedPlaybackControl, type Delivery } from '../../../src/speech/protocol.ts';
 import { createVoicePlayer, type VoicePlayer } from './audio.ts';
-import { Talking, deliveryOutput } from './voice-state.ts';
+import { Talking, cueMayGo, deliveryOutput, retryAfter } from './voice-state.ts';
 
 const RATE = 24_000;
 /** Mic audio goes out in pieces this long. */
@@ -39,10 +39,8 @@ const TYPED_REPLY = "Reply to the caller now, don't repeat what they said. Do no
 /** How long the show waits for the face before it goes on by voice alone. */
 const FACE_START_TIMEOUT_MS = 25_000;
 /** A refused cue is tried again this often, while it is still worth saying, and only once she has been quiet this long. */
-const RETRY_MS = 1500;
-const QUIET_FOR_CUE_MS = 800;
 
-interface Cue { text: string; until: number; typed: boolean; id?: string }
+interface Cue { text: string; until: number; typed: boolean; id?: string; refused?: boolean }
 
 /**
  * One delivery and where it plays. `pending`: it was meant for the face, whose writer is still
@@ -137,11 +135,11 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
       send({ type: 'causeur.directive.set', directive: directive.current });
     }
     cues.current = cues.current.filter((c) => c.until > Date.now());
-    // A typed turn goes before a cue, and at once (it may cut her off: the listener is waiting).
-    // A cue waits for a quiet moment: Causeur refuses one while a turn is on.
+    // A typed turn goes before a cue (cueMayGo says when each may go: Causeur refuses either while she speaks).
     const next = cues.current.find((c) => c.typed) ?? cues.current[0];
     if (!next) return;
-    if (!next.typed && (voiced.current || Date.now() - quietSince.current < QUIET_FOR_CUE_MS || Date.now() < retryAt.current)) return;
+    const now = Date.now();
+    if (!cueMayGo(next, { talking: voiced.current, quietForMs: now - quietSince.current, now, retryAt: retryAt.current })) return;
     next.id = `cue-${++cueSeq.current}`;
     inFlight.current = next;
     send({ type: 'session.commentary.append', event_id: next.id, content: next.typed ? TYPED_REPLY + next.text : next.text });
@@ -152,7 +150,10 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
     if (!cue || cue.id !== id) return;
     inFlight.current = null;
     if (accepted || !retry) cues.current = cues.current.filter((c) => c !== cue);
-    else retryAt.current = Date.now() + RETRY_MS;
+    else {
+      cue.refused = true;
+      retryAt.current = retryAfter(cue, Date.now());
+    }
   }, []);
   useEffect(() => {
     const id = setInterval(pump, 250);
@@ -562,7 +563,7 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
       typed(text);
     },
     record(text) { addLine({ who: 'user', text, typed: true }); },
-    // A typed turn cuts her off: Causeur takes it as the listener speaking over her.
+    // A typed turn while she speaks waits for her to finish: Causeur refuses one mid-reply.
     interrupt(text) { lastTyped.current = text; typed(text); },
     state(text) { directive.current = text.slice(0, 3900); pump(); },
     note(text) { send({ type: 'session.instructions.append', content: text.slice(0, 3900) }); },

@@ -38,3 +38,25 @@ export class Talking {
     return this.talking ? 0 : this.now() - this.quietSince;
   }
 }
+
+/** What the cue pump knows when it may send: Nova's voice now, and when her last refusal was. */
+export interface CueMoment { talking: boolean; quietForMs: number; now: number; retryAt: number }
+
+/** How long a cue waits after its refusal, and how long she must have been quiet for one. */
+export const RETRY_MS = 1500;
+export const TYPED_RETRY_MS = 500;
+export const QUIET_FOR_CUE_MS = 800;
+
+/**
+ * Whether a cue may go now. Causeur refuses commentary while she is speaking, a typed turn too
+ * (it waits for her, it does not cut her off). A cue waits for a quiet moment; a typed turn goes at
+ * once, the listener is waiting, and once refused waits only for her to stop, not a quiet spell,
+ * rather than being sent again and refused every few hundred milliseconds while she talks.
+ */
+export function cueMayGo(cue: { typed: boolean; refused?: boolean }, at: CueMoment): boolean {
+  if (cue.typed) return !cue.refused || (!at.talking && at.now >= at.retryAt);
+  return !at.talking && at.quietForMs >= QUIET_FOR_CUE_MS && at.now >= at.retryAt;
+}
+
+/** When a refused cue may be sent again. */
+export const retryAfter = (cue: { typed: boolean }, now: number) => now + (cue.typed ? TYPED_RETRY_MS : RETRY_MS);

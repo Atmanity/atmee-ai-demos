@@ -10,8 +10,8 @@ track. The music is Spotify's own embed on the page; Nova works it through app t
 - **Speech (`?engine=speech`):** Nova over the speech API (`POST /v1/speech_sessions`), voice only, in one
   WebSocket from the page (`page/speech.ts`): 24 kHz PCM both ways, her tools as
   `function_call` items, the live deck as `causeur.directive.set`, cues and typed turns as
-  `session.commentary.append` (a typed turn carries Causeur's typed-reply prefix, which also cuts
-  her off). Her **face is rendered on demand** into the site's own LiveKit room
+  `session.commentary.append` (a typed turn carries Causeur's typed-reply prefix; Causeur refuses one while she speaks,
+  so it waits for her to finish and goes the moment she does). Her **face is rendered on demand** into the site's own LiveKit room
   (`POST /api/apps/dj-booth/render`, the avatar-only way): up for her breaks, a held record, the
   opening and whenever the listener starts talking (the talk button, or their first words), down
   after 20 s of music with nobody talking. The page asks for **playback control**: each reply comes
