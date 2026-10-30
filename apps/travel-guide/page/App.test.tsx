@@ -44,7 +44,7 @@ beforeEach(() => {
     videoRef: { current: null }, audioRef: { current: null },
     start: vi.fn(() => { kit.avatar = { ...kit.avatar, phase: 'starting' }; }),
     end: vi.fn(), say: vi.fn(), record: vi.fn(), state: vi.fn(), note: vi.fn(), event: vi.fn(),
-    mute: vi.fn(), unmute: vi.fn(), setMic: vi.fn(), resumeAudio: vi.fn(),
+    mute: vi.fn(), unmute: vi.fn(), setMic: vi.fn(), feedMic: vi.fn(async () => {}), resumeAudio: vi.fn(),
   };
   let seq = 0;
   let trips = 0;

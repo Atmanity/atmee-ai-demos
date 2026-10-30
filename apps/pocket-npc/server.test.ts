@@ -55,7 +55,7 @@ test('a speech app is off, and not listed, until its own AVATAR_<APP_ID> is set:
 
   process.env.AVATAR_POCKET_NPC = 'npc-avatar';
   const listed = (await (await fetch(url('/apps'))).json()) as { id: string; way: string; tools: number; host: string }[];
-  expect(listed.find((a) => a.id === 'pocket-npc')).toMatchObject({ way: 'speech', tools: 4, host: 'Brannoc' });
+  expect(listed.find((a) => a.id === 'pocket-npc')).toMatchObject({ way: 'speech-to-speech', tools: 4, host: 'Brannoc' });
 });
 
 test('the server reserves the call with the avatar and its pinned settings; the page gets only where to connect', async () => {

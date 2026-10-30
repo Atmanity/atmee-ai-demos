@@ -39,7 +39,7 @@ vi.mock('../../../src/kit/index.ts', async (importOriginal) => {
         start: async () => setPhase('starting'), end: async () => setPhase('ended'),
         say: (text: string) => handlers.onUserSaid?.(text, 'typed'), record: noop,
         state: (text: string) => { harness.states.push(text); }, note: (text: string) => { harness.notes.push(text); },
-        event: (text: string) => { harness.events.push(text); }, mute: noop, unmute: noop, setMic: noop, resumeAudio: noop,
+        event: (text: string) => { harness.events.push(text); }, mute: noop, unmute: noop, setMic: noop, feedMic: async () => {}, resumeAudio: noop,
       };
     },
   };

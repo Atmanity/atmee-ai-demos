@@ -13,13 +13,20 @@ export interface AppServer {
    * How the app uses the avatar. `full-stack` (default): Atmee runs the whole conversation
    * (POST /v1/session). `avatar-only`: the app's own agent speaks and the avatar is its face,
    * rendered into the app's own LiveKit room (POST /v1/avatars/{id}/avatar_sessions).
-   * `speech`: a voice call with no video; the app pins the conversation's settings and its page
-   * runs the tools, over a WebSocket to Atmee's speech server (POST /v1/speech_sessions).
+   * `speech-to-speech`: Atmee's realtime speech hears and answers over a WebSocket
+   * (POST /v1/speech_sessions); the face, if any, is an avatar-only render of that voice.
    */
-  way?: 'full-stack' | 'avatar-only' | 'speech';
+  way?: 'full-stack' | 'avatar-only' | 'speech-to-speech';
   /**
-   * A speech app's calls (way `speech`): the settings its server pins for each one, which the
-   * page cannot change, and the conversation's language. The voice is always the avatar's.
+   * The app also renders its avatar into the site's own LiveKit room on demand (POST
+   * /api/apps/<id>/render), as the face of a voice it gets elsewhere (a speech session).
+   */
+  rendersFace?: boolean;
+  /**
+   * A speech-to-speech app whose page holds the call with the speech kit (src/speech/): the
+   * settings its server pins for each one, which the page cannot change, and the conversation's
+   * language. The site's /api/apps/<id>/speech routes reserve and end its calls; the voice is
+   * always the avatar's. An app that reserves its own sessions in its routes leaves it out.
    */
   speech?: { language?: string; settings: () => SpeechSettings };
   /** A conductor graph, or null to make sure the avatar runs none. */
@@ -33,6 +40,8 @@ export interface AppServer {
    */
   appTools?: AppTools;
   routes?: (router: Router) => void;
+  /** Ends whatever the app's own routes started that still bills (on shutdown, before the process exits). */
+  shutdown?: () => Promise<unknown>;
 }
 
 /** One function tool in the OpenAI function-tool shape, plus how its calls are delivered. */

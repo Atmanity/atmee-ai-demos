@@ -1,0 +1,355 @@
+/* The Meridian: a dark gallery, brass and ivory. The tour is a phone screen:
+   on a wider screen it keeps a phone's column in the middle. */
+:root {
+  --mr-ink: #17120e;
+  --mr-ink-2: #241c16;
+  --mr-ivory: #f1e7d4;
+  --mr-ivory-2: #c9bba3;
+  --mr-brass: #c9a25a;
+  --mr-brass-ink: #1b140d;
+  --mr-red: #b8432f;
+  --mr-serif: 'Cormorant Garamond', 'Iowan Old Style', Georgia, serif;
+  --mr-sans: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+  --call-accent: var(--mr-brass);
+  --call-accent-ink: var(--mr-brass-ink);
+  --call-font: var(--mr-sans);
+  --call-surface: #2a221b;
+  --call-ink: var(--mr-ivory);
+  --call-muted: var(--mr-ivory-2);
+  --call-line: rgba(241, 231, 212, .14);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #0d0a08; color: var(--mr-ivory); font-family: var(--mr-sans); -webkit-font-smoothing: antialiased; }
+button { font: inherit; }
+/* The display face has no Chinese or Japanese: those pages take a serif of their own (the page's lang picks the glyph forms). */
+:root:lang(zh-TW) { --mr-serif: 'Cormorant Garamond', 'Noto Serif TC', 'Songti TC', serif; }
+:root:lang(ja) { --mr-serif: 'Cormorant Garamond', 'Noto Serif JP', 'Hiragino Mincho ProN', serif; }
+:root:lang(zh-CN) { --mr-serif: 'Cormorant Garamond', 'Noto Serif SC', 'Songti SC', serif; }
+:root:lang(ko) { --mr-serif: 'Cormorant Garamond', 'Noto Serif KR', 'AppleMyungjo', serif; }
+/* Cormorant's old-style figures read as letters in a CJK heading ("1" as "I"). */
+h1, h2, b { font-variant-numeric: lining-nums; }
+a { color: inherit; }
+
+.mr-wordmark { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; font: 600 15px var(--mr-sans); letter-spacing: .16em; text-transform: uppercase; }
+.mr-primary { border: 0; border-radius: 999px; padding: 12px 22px; background: var(--mr-brass); color: var(--mr-brass-ink); font-weight: 650; cursor: pointer; }
+.mr-primary.is-big { padding: 16px 28px; font-size: 17px; width: 100%; max-width: 360px; }
+.mr-primary:disabled { opacity: .6; cursor: default; }
+.mr-primary:focus-visible, .mr-chip:focus-visible, .mr-round:focus-visible, .mr-shutter:focus-visible, .mr-size:focus-visible, .mr-x:focus-visible { outline: 2px solid var(--mr-brass); outline-offset: 2px; }
+.mr-eyebrow { margin: 0; font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--mr-brass); }
+.mr-small { margin: 0; font-size: 13px; line-height: 1.5; color: var(--mr-ivory-2); }
+
+/* ---- Front door and the visit ---- */
+.mr-lobby { min-height: 100dvh; background: radial-gradient(120% 70% at 50% 0%, #3a2c20 0%, var(--mr-ink) 62%); padding: max(14px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
+.mr-lobby-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 960px; margin: 0 auto; }
+.mr-lobby-main { max-width: 960px; margin: 0 auto; display: grid; gap: 8px; align-items: center; }
+/* Small enough on a phone that the headline and the way in are on the first screen. */
+.mr-portrait { margin: 6px auto 4px; width: min(62vw, 300px); max-height: 34dvh; aspect-ratio: 1; padding: 10px; background: linear-gradient(135deg, #8a6a2e, #e2c27a 30%, #9a7637 55%, #d9b766 80%, #7d5f27); box-shadow: 0 18px 40px rgba(0, 0, 0, .55), inset 0 0 0 2px rgba(60, 40, 15, .5); }
+.mr-portrait img { display: block; width: 100%; height: 100%; object-fit: cover; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .4); }
+.mr-lobby-copy { display: grid; gap: 14px; justify-items: start; }
+.mr-lobby h1, .mr-visit h1 { margin: 0; font: 600 clamp(30px, 8.2vw, 54px)/1.08 var(--mr-serif); letter-spacing: -.01em; text-wrap: balance; }
+.mr-lede { margin: 0; font-size: 16.5px; line-height: 1.55; color: #e3d6bf; max-width: 46ch; }
+/* The language: one button in the top bar, a sheet of every language. */
+.mr-lobby-end { display: flex; align-items: center; gap: 12px; }
+.mr-lang { display: inline-flex; align-items: center; gap: 7px; border: 1px solid rgba(241, 231, 212, .3); border-radius: 999px; padding: 7px 12px; background: rgba(23, 18, 14, .5); color: var(--mr-ivory); font-size: 14px; font-weight: 600; cursor: pointer; }
+.mr-lang-caret { font-size: 10px; color: var(--mr-ivory-2); }
+.mr-lang:focus-visible { outline: 2px solid var(--mr-brass); outline-offset: 2px; }
+.mr-lang-backdrop { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-end; justify-content: center; background: rgba(8, 6, 4, .55); animation: mr-fade .18s ease-out; }
+.mr-lang-sheet { width: min(100%, 460px); max-height: 82dvh; display: flex; flex-direction: column; border-radius: 22px 22px 0 0; background: #f4efe6; color: var(--mr-ink); color-scheme: light; padding: 14px max(16px, env(safe-area-inset-left, 0px)) calc(14px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-right, 0px)); box-shadow: 0 -10px 40px rgba(0, 0, 0, .4); animation: mr-up .22s ease-out; }
+.mr-lang-head { display: flex; justify-content: space-between; align-items: center; padding: 2px 4px 10px; }
+.mr-lang-head b { font: 600 24px var(--mr-serif); }
+.mr-lang-head .mr-link { padding: 0; text-decoration: none; }
+.mr-lang-sheet ul { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: grid; gap: 2px; }
+.mr-lang-sheet li button { width: 100%; display: flex; align-items: baseline; gap: 10px; padding: 13px 12px; border: 0; border-radius: 12px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.mr-lang-sheet li button:hover { background: #ebe3d5; }
+.mr-lang-sheet li button.is-on { background: #e7dcc8; }
+.mr-lang-sheet li button:focus-visible { outline: 2px solid var(--mr-brass); outline-offset: -2px; }
+.mr-lang-name { font-size: 18px; font-weight: 600; }
+.mr-lang-en { font-size: 13px; color: #6a5d50; }
+.mr-lang-tick { margin-left: auto; color: #8a6a2e; font-weight: 700; }
+@keyframes mr-fade { from { opacity: 0; } }
+/* Spaced capitals are for Latin: Chinese, Japanese and Korean labels keep their own spacing. */
+:root:lang(zh-TW) .mr-eyebrow, :root:lang(zh-CN) .mr-eyebrow, :root:lang(ja) .mr-eyebrow, :root:lang(ko) .mr-eyebrow,
+:root:lang(zh-TW) .mr-card-where, :root:lang(zh-CN) .mr-card-where, :root:lang(ja) .mr-card-where, :root:lang(ko) .mr-card-where,
+:root:lang(zh-TW) .mr-subs-who, :root:lang(zh-CN) .mr-subs-who, :root:lang(ja) .mr-subs-who, :root:lang(ko) .mr-subs-who { letter-spacing: .04em; }
+.mr-opening { margin: 0; padding: 10px 14px; border: 1px solid rgba(201, 162, 90, .45); border-radius: 12px; background: rgba(201, 162, 90, .1); font-size: 15px; }
+.mr-trouble { margin: 0; color: #f0a596; font-size: 14px; }
+@media (min-width: 820px) {
+  .mr-lobby-main { grid-template-columns: 1fr 1.1fr; min-height: calc(100dvh - 80px); }
+  .mr-portrait { width: min(36vw, 440px); max-height: none; }
+}
+
+.mr-visit-main { max-width: 640px; margin: 24px auto 0; display: grid; gap: 16px; justify-items: start; }
+.mr-seen { list-style: none; margin: 4px 0 8px; padding: 0; display: grid; gap: 10px; width: 100%; }
+.mr-seen li { display: flex; gap: 14px; align-items: center; padding: 10px; border-radius: 14px; background: rgba(241, 231, 212, .06); }
+.mr-seen img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; flex: none; }
+.mr-seen div { display: grid; gap: 2px; font-size: 13.5px; color: var(--mr-ivory-2); }
+.mr-seen b { font: 600 20px/1.15 var(--mr-serif); color: var(--mr-ivory); }
+
+/* ---- The tour: the camera full-bleed, Edmund standing on the sheet, everything to
+   read and press in that one sheet under the picture (never over it). ---- */
+/* The camera fills the whole window at any width; the panel keeps a phone's width, centred,
+   and Edmund stands at its right edge (--gutter: the space beside the panel). */
+.mr-tour { position: relative; height: 100dvh; overflow: hidden; background: #000; --sheet: 190px; --gutter: max(0px, (100% - 560px) / 2); }
+.mr-camera { position: absolute; inset: 0 0 calc(var(--sheet) - 24px); overflow: hidden; background: #000; }
+/* Centred; the page sets its pixel size so it covers the box (object-fit is the fallback before it knows the stream's size). */
+.mr-camera video { position: absolute; left: 50%; top: 50%; width: 100%; height: 100%; transform: translate(-50%, -50%); object-fit: cover; }
+/* Wider than the panel: the camera runs on behind it, so nothing beside the panel is black. */
+@media (min-width: 561px) { .mr-camera { inset: 0; } }
+/* Only enough shade under the top bar to read it. */
+.mr-shade { position: absolute; inset: 0 0 auto; height: 110px; pointer-events: none; background: linear-gradient(rgba(0, 0, 0, .5), transparent); }
+
+.mr-bar { position: absolute; top: 0; left: 0; right: 0; z-index: 6; display: flex; align-items: center; gap: 10px; padding: max(10px, env(safe-area-inset-top)) 12px 8px; }
+.mr-back { color: var(--mr-ivory); font-size: 13px; }
+.mr-bar-title { flex: 1; display: flex; justify-content: center; }
+.mr-bar .mr-wordmark { font-size: 12px; text-shadow: 0 1px 6px rgba(0, 0, 0, .6); }
+.mr-bar-end { display: flex; align-items: center; gap: 8px; }
+.mr-clock { font-variant-numeric: tabular-nums; font-size: 12.5px; color: var(--mr-ivory); padding: 5px 9px; border-radius: 999px; background: rgba(23, 18, 14, .5); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.mr-cam { width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(241, 231, 212, .3); background: rgba(23, 18, 14, .55); color: var(--mr-ivory); display: grid; place-items: center; cursor: pointer; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.mr-cam svg { width: 19px; height: 19px; }
+.mr-cam.is-off { background: var(--mr-ivory); color: var(--mr-ink); border-color: transparent; }
+.mr-cam:disabled { opacity: .45; }
+.mr-cam:focus-visible { outline: 2px solid var(--mr-brass); outline-offset: 2px; }
+/* The camera turned off: said where the picture was, with the way back. */
+.mr-camoff { position: absolute; z-index: 2; left: 50%; top: calc((100% - var(--sheet)) / 2 + 20px); transform: translate(-50%, -50%); width: min(80%, 300px); display: grid; justify-items: center; text-align: center; gap: 12px; color: var(--mr-ivory-2); }
+.mr-camoff svg { width: 40px; height: 40px; color: var(--mr-ivory); }
+.mr-camoff p { margin: 0; font-size: 15px; line-height: 1.45; }
+.mr-end { border: 0; border-radius: 999px; padding: 7px 14px; background: var(--mr-red); color: #fff; font-size: 13.5px; font-weight: 700; cursor: pointer; }
+.mr-end:disabled { opacity: .5; }
+.mr-end:focus-visible { outline: 2px solid var(--mr-brass); outline-offset: 2px; }
+.mr-chip { border: 1px solid rgba(241, 231, 212, .3); background: rgba(23, 18, 14, .55); color: var(--mr-ivory); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+
+/* Framing corners in the middle of the picture until a work is found. */
+.mr-reticle { position: absolute; z-index: 1; left: 50%; top: calc((100% - var(--sheet)) / 2 + 20px); width: min(52vw, 240px); aspect-ratio: 1; transform: translate(-50%, -50%); pointer-events: none; opacity: .7;
+  --c: rgba(241, 231, 212, .9);
+  background:
+    linear-gradient(var(--c), var(--c)) top left / 24px 2px, linear-gradient(var(--c), var(--c)) top left / 2px 24px,
+    linear-gradient(var(--c), var(--c)) top right / 24px 2px, linear-gradient(var(--c), var(--c)) top right / 2px 24px,
+    linear-gradient(var(--c), var(--c)) bottom left / 24px 2px, linear-gradient(var(--c), var(--c)) bottom left / 2px 24px,
+    linear-gradient(var(--c), var(--c)) bottom right / 24px 2px, linear-gradient(var(--c), var(--c)) bottom right / 2px 24px;
+  background-repeat: no-repeat; }
+.mr-toast { position: absolute; z-index: 6; left: 50%; top: calc(max(10px, env(safe-area-inset-top)) + 50px); transform: translateX(-50%); display: inline-flex; align-items: center; gap: 8px; padding: 8px 15px; border-radius: 999px; background: rgba(23, 18, 14, .82); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); font-size: 14px; font-weight: 600; white-space: nowrap; animation: mr-in .2s ease-out; }
+.mr-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--mr-brass); animation: mr-pulse 1s ease-in-out infinite; }
+
+
+.mr-spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid rgba(241, 231, 212, .25); border-top-color: var(--mr-brass); animation: mr-spin 1s linear infinite; }
+.mr-hear { position: absolute; z-index: 7; left: 50%; top: 40%; transform: translate(-50%, -50%); border: 0; border-radius: 999px; padding: 12px 20px; background: var(--mr-ivory); color: var(--mr-ink); font-weight: 700; cursor: pointer; }
+
+/* The panel: where you are, what Edmund says, and the dock. (Not .mr-sheet: that is the gallery labels page.) */
+.mr-panel { position: absolute; z-index: 4; left: var(--gutter); right: var(--gutter); bottom: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px calc(10px + env(safe-area-inset-bottom)); border-radius: 22px 22px 0 0; background: rgba(23, 18, 14, .93); -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2); box-shadow: 0 -8px 30px rgba(0, 0, 0, .35); }
+/* The guide: a video tile beside what they say (never over the camera). */
+.mr-guide { --tile: 124px; display: grid; grid-template-columns: var(--tile) minmax(0, 1fr); gap: 12px; align-items: stretch; }
+/* Enlarged: the guide fills the panel's width (up to half the screen's height), the words under them. */
+.mr-guide.is-big { --tile: min(100%, 46dvh, 420px); grid-template-columns: minmax(0, 1fr); justify-items: center; }
+.mr-guide.is-big .mr-guide-text { width: 100%; height: 108px; }
+.mr-tile { position: relative; width: var(--tile); max-width: 100%; aspect-ratio: 1; cursor: pointer; transition: width .3s ease, box-shadow .25s; border-radius: 18px; overflow: hidden; background: #2b2119; box-shadow: 0 0 0 1px rgba(241, 231, 212, .12); }
+.mr-tile.is-speaking { box-shadow: 0 0 0 2px var(--mr-brass), 0 0 18px rgba(201, 162, 90, .35); }
+/* Both calls play here; the one on stage shows (the other stays on screen, unseen, so it keeps playing). */
+.mr-tile img, .mr-tile video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.mr-tile video { opacity: 0; transition: opacity .45s; }
+.mr-tile video.is-on { opacity: 1; }
+.mr-tile-name { position: absolute; left: 6px; right: 6px; bottom: 6px; padding: 2px 6px; border-radius: 8px; background: rgba(23, 18, 14, .72); color: var(--mr-ivory); font-size: 11px; font-weight: 700; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mr-guide-text { height: var(--tile); display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 6px; min-width: 0; overflow: hidden; }
+.mr-guide-text .mr-subs { height: auto; min-height: 0; }
+.mr-tile-grow { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 8px; background: rgba(23, 18, 14, .6); color: var(--mr-ivory); }
+.mr-tile-grow svg { width: 14px; height: 14px; }
+.mr-callstate { display: grid; gap: 6px; align-content: start; }
+.mr-callstate b { font: 600 18px var(--mr-serif); }
+.mr-callstate-detail { margin: 0; font-size: 14px; color: var(--mr-ivory-2); }
+.mr-callstate .mr-primary { justify-self: start; }
+.mr-nowline { margin: 0; padding: 0; border: 0; background: none; color: var(--mr-ivory); text-align: left; font-size: 14px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.mr-nowline small { font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--mr-brass); }
+.mr-nowline b { font: 600 17px var(--mr-serif); }
+.mr-nowline span { color: var(--mr-ivory-2); }
+.mr-nowline.is-guest, .mr-nowline.is-empty { cursor: default; color: var(--mr-ivory-2); white-space: normal; }
+/* A hand-over under way: the one coming shows in the tile, a ring turning round them, the panel's edge shimmering. */
+.mr-tile-coming { position: absolute; inset: 0; overflow: hidden; animation: mr-fade .3s ease-out; }
+.mr-tile-coming img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: brightness(.72) saturate(.8); }
+/* A band of light passing over the portrait while they are on the way. */
+.mr-tile-coming::after { content: ""; position: absolute; inset: -20% -60%; background: linear-gradient(105deg, transparent 40%, rgba(241, 231, 212, .22) 50%, transparent 60%); animation: mr-sweep 1.8s ease-in-out infinite; }
+@keyframes mr-sweep { from { transform: translateX(-45%); } to { transform: translateX(45%); } }
+/* And the frame breathing in brass, like a line ringing. */
+.mr-tile.is-waiting { animation: mr-ringing 1.6s ease-in-out infinite; }
+@keyframes mr-ringing { 0%, 100% { box-shadow: 0 0 0 1px rgba(201, 162, 90, .25); } 50% { box-shadow: 0 0 0 2px var(--mr-brass), 0 0 18px rgba(201, 162, 90, .35); } }
+.mr-nowline.is-coming { display: flex; align-items: center; gap: 8px; color: var(--mr-ivory); cursor: default; white-space: normal; }
+.mr-panel.is-handing::before { content: ""; position: absolute; left: 22px; right: 22px; top: 0; height: 2px; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--mr-brass), transparent); background-size: 40% 100%; background-repeat: no-repeat; animation: mr-shimmer 1.4s ease-in-out infinite; }
+@keyframes mr-shimmer { from { background-position: -40% 0; } to { background-position: 140% 0; } }
+
+/* The tile names who is speaking: the subtitles need not. */
+.mr-guide .mr-subs-who { display: none; }
+
+/* Subtitles: one phrase at a time, its words lit as he says them, the rest waiting dimmed.
+   A fixed height (a name line, three lines of his, one of yours), so the panel and the guide on it keep still. */
+.mr-subs { height: calc(16px * 1.36 * 4 + 6px + 14px * 1.4); display: grid; gap: 4px; align-content: start; overflow: hidden; }
+.mr-subs p { margin: 0; }
+.mr-subs-who { font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--mr-brass); line-height: 14px; }
+.mr-subs-said { font-size: 16px; line-height: 1.36; color: color-mix(in srgb, var(--mr-ivory) 34%, transparent); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; animation: mr-phrase .25s ease-out; }
+.mr-subs-said span { transition: color .18s; }
+.mr-subs-said .is-said { color: var(--mr-ivory); }
+.mr-subs-hint { font-size: 14px; color: var(--mr-ivory-2); }
+.mr-subs-you { margin-top: 2px !important; font-size: 14px; line-height: 1.4; font-style: italic; color: var(--mr-ivory-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mr-subs-you b { font-style: normal; font-weight: 600; }
+@keyframes mr-phrase { from { opacity: 0; transform: translateY(4px); } }
+
+.mr-dock { display: grid; grid-template-columns: repeat(5, 1fr); align-items: end; gap: 2px; padding-top: 6px; border-top: 1px solid rgba(241, 231, 212, .1); }
+.mr-dock-btn { display: grid; justify-items: center; gap: 5px; padding: 4px 0; border: 0; background: none; color: var(--mr-ivory); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.mr-dock-btn:disabled { opacity: .4; cursor: default; }
+.mr-dock-ico { position: relative; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: rgba(241, 231, 212, .08); transition: background .15s, transform .1s; }
+.mr-dock-btn:active .mr-dock-ico { transform: scale(.94); }
+.mr-dock-btn.is-on .mr-dock-ico { background: rgba(201, 162, 90, .22); color: var(--mr-brass); }
+.mr-dock-btn.is-busy .mr-dock-ico { animation: mr-pulse 1s ease-in-out infinite; }
+.mr-dock-label { font-size: 11px; font-weight: 600; color: var(--mr-ivory-2); white-space: nowrap; }
+.mr-dock-btn:focus-visible { outline: none; }
+.mr-dock-btn:focus-visible .mr-dock-ico { outline: 2px solid var(--mr-brass); outline-offset: 2px; }
+.mr-badge { position: absolute; top: -2px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--mr-brass); color: var(--mr-brass-ink); font: 700 11px/18px var(--mr-sans); font-style: normal; text-align: center; }
+/* Hold to talk: the big one in the middle. */
+.mr-ptt { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.mr-ptt .mr-dock-ico { width: 64px; height: 64px; margin-top: -14px; background: var(--mr-ivory); color: var(--mr-ink); box-shadow: 0 0 0 4px rgba(201, 162, 90, .35); }
+.mr-ptt .mr-dock-ico svg { width: 26px; height: 26px; }
+.mr-ptt .mr-dock-label { color: var(--mr-ivory); }
+.mr-ptt.is-open .mr-dock-ico { background: var(--mr-brass); transform: scale(1.06); animation: mr-ring 1.2s ease-out infinite; }
+.mr-ptt.is-idle .mr-dock-ico { opacity: .4; }
+@keyframes mr-ring { 0% { box-shadow: 0 0 0 0 rgba(201, 162, 90, .55); } 100% { box-shadow: 0 0 0 16px rgba(201, 162, 90, 0); } }
+
+/* Typing: the sheet grows into the conversation. */
+.mr-panel-chat { height: min(56dvh, 460px); display: flex; flex-direction: column; gap: 8px; }
+.mr-panel-chat .call-chat { flex: 1; min-height: 0; }
+.mr-panel-head { display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+.mr-panel-head .mr-link { padding: 0; text-decoration: none; }
+
+@keyframes mr-in { from { opacity: 0; transform: translateY(-6px); } }
+@keyframes mr-up { from { transform: translateY(30px); opacity: 0; } }
+@keyframes mr-spin { to { transform: rotate(360deg); } }
+@keyframes mr-pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .mr-toast, .mr-map, .mr-ptt.is-open .mr-dock-ico, .mr-pin-here, .mr-dock-btn.is-busy .mr-dock-ico, .mr-subs-said, .mr-tile-coming::after, .mr-tile.is-waiting, .mr-panel.is-handing::before { animation: none; } .mr-subs-said span { transition: none; } .mr-spinner, .mr-dot { animation-duration: 3s; } }
+
+.mr-chip.is-dark { background: var(--mr-ink); color: var(--mr-ivory); border-color: transparent; }
+.mr-link { border: 0; background: none; padding: 6px 0; color: var(--mr-brass); font-weight: 650; font-size: 14.5px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+
+/* ---- The museum map: a printed floor plan ---- */
+.mr-map { position: absolute; inset: 0; z-index: 9; display: flex; flex-direction: column; background: #f4efe6; color: var(--mr-ink); color-scheme: light; animation: mr-up .22s ease-out; }
+.mr-visit .mr-map { position: fixed; max-width: 520px; margin: 0 auto; }
+.mr-map-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: max(14px, env(safe-area-inset-top)) 16px 10px; }
+.mr-map-top h2 { margin: 0; font: 600 28px/1 var(--mr-serif); }
+.mr-map-top p { margin: 4px 0 0; font-size: 13.5px; color: #5b4f43; }
+.mr-map-top p b { color: var(--mr-ink); }
+.mr-map-progress { height: 4px; margin: 0 16px; border-radius: 2px; background: #e2d8c7; overflow: hidden; }
+.mr-map-progress span { display: block; height: 100%; background: var(--mr-brass); transition: width .4s ease; }
+.mr-map-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px calc(24px + env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch; }
+
+.mr-plan { display: block; width: 100%; height: auto; max-height: 56dvh; margin: 0 auto 8px; font-family: var(--mr-sans); }
+.mr-plan-room { fill: #fbf8f2; stroke: #3a2c20; stroke-width: 1.6; }
+.mr-plan-room-n { font-size: 8px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; fill: #9a7a3e; }
+.mr-plan-room-name { font: 600 11px var(--mr-serif); fill: #3a2c20; }
+.mr-plan-route { fill: none; stroke: #c9a25a; stroke-width: 1.4; stroke-dasharray: 3 4; stroke-linecap: round; stroke-linejoin: round; opacity: .8; }
+.mr-plan-entrance path { stroke: #3a2c20; stroke-width: 3; stroke-linecap: round; }
+.mr-plan-entrance text { font-size: 8.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; fill: #5b4f43; text-anchor: middle; }
+.mr-pin { cursor: pointer; outline: none; }
+.mr-pin-dot { fill: #fff; stroke: #3a2c20; stroke-width: 1.6; transition: fill .2s; }
+.mr-pin-n { font-size: 11px; font-weight: 700; fill: #3a2c20; text-anchor: middle; }
+.mr-pin-tick { fill: none; stroke: var(--mr-ink); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.mr-pin.is-seen .mr-pin-dot { fill: var(--mr-brass); stroke: #8a6a2e; }
+.mr-pin-label { font-size: 8px; font-weight: 600; fill: #3a2c20; text-anchor: middle; }
+.mr-pin-here { fill: none; stroke: var(--mr-red); stroke-width: 2; animation: mr-here 1.6s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
+.mr-pin:hover .mr-pin-dot, .mr-pin:focus-visible .mr-pin-dot { stroke-width: 2.6; }
+.mr-pin:focus-visible .mr-pin-dot { stroke: var(--mr-brass); }
+@keyframes mr-here { 50% { opacity: .35; transform: scale(1.15); } }
+
+.mr-map-room h3 { margin: 16px 0 6px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #9a7a3e; }
+.mr-map-room ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.mr-map-row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 8px 10px; border: 1px solid #e2d8c7; border-radius: 14px; background: #fff; color: inherit; text-align: left; cursor: pointer; }
+.mr-map-row img { width: 46px; height: 46px; object-fit: cover; border-radius: 8px; flex: none; }
+.mr-map-check { width: 26px; height: 26px; flex: none; display: grid; place-items: center; border-radius: 50%; border: 1.6px solid #3a2c20; font-size: 12px; font-weight: 700; }
+.mr-map-row.is-seen .mr-map-check { background: var(--mr-brass); border-color: #8a6a2e; color: var(--mr-ink); }
+.mr-map-row-text { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.mr-map-row-text b { font: 600 18px/1.1 var(--mr-serif); }
+.mr-map-row-text small { font-size: 12.5px; color: #6a5d50; }
+.mr-map-more { font-size: 20px; color: #9a8b7a; }
+
+.mr-detail { display: grid; gap: 6px; }
+.mr-detail .mr-link { justify-self: start; text-decoration: none; padding-top: 0; }
+.mr-detail-img { display: block; width: auto; max-width: 100%; max-height: 40dvh; margin: 0 auto 6px; border: 8px solid #2b2119; box-sizing: border-box; }
+.mr-detail h2 { margin: 0; font: 600 32px/1.02 var(--mr-serif); }
+.mr-detail-by { margin: 0; font-size: 15px; font-weight: 600; }
+.mr-detail-medium { margin: 0; font-size: 13.5px; color: #5b4f43; font-style: italic; }
+.mr-detail h3 { margin: 14px 0 0; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #9a7a3e; }
+.mr-detail p, .mr-detail li { font-size: 15.5px; line-height: 1.55; color: #2e251d; }
+.mr-detail > p:not([class]) { margin: 0; }
+.mr-detail ul { margin: 0; padding-left: 20px; }
+.mr-detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 2px; }
+.mr-seen-toggle { display: inline-flex; align-items: center; gap: 6px; border: 1.5px solid #3a2c20; border-radius: 999px; padding: 10px 18px; background: transparent; color: var(--mr-ink); font-weight: 650; cursor: pointer; }
+.mr-seen-toggle.is-on { background: var(--mr-brass); border-color: #8a6a2e; }
+.mr-next { margin-top: 16px; display: flex; align-items: center; gap: 12px; padding: 10px; border: 1px solid #e2d8c7; border-radius: 14px; background: #fff; color: inherit; text-align: left; cursor: pointer; }
+.mr-next img { width: 52px; height: 52px; object-fit: cover; border-radius: 8px; }
+.mr-next span:nth-child(2) { flex: 1; display: grid; gap: 2px; }
+.mr-next small { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9a7a3e; }
+.mr-next b { font: 600 19px var(--mr-serif); }
+
+/* ---- The gallery labels: a screen to point the phone at, or a page to print ---- */
+.mr-sheet { min-height: 100dvh; background: #f4efe6; color: var(--mr-ink); padding: 24px 16px 40px; color-scheme: light; }
+.mr-sheet-top { max-width: 1100px; margin: 0 auto 24px; display: grid; grid-template-columns: 1fr auto; gap: 8px 20px; align-items: center; }
+.mr-sheet-top .mr-wordmark { grid-column: 1 / -1; }
+.mr-sheet-intro h1 { margin: 0 0 4px; font: 600 38px/1 var(--mr-serif); }
+.mr-sheet-intro p { margin: 0; max-width: 60ch; line-height: 1.5; color: #4a3f34; }
+.mr-sheet-top .mr-qr { width: 112px; }
+.mr-labels { list-style: none; margin: 0 auto; padding: 0; max-width: 1100px; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 22px; }
+.mr-labels li { display: grid; gap: 10px; break-inside: avoid; }
+.mr-work { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: #e7dfd1; border: 10px solid #2b2119; box-shadow: 0 8px 20px rgba(43, 33, 25, .25); }
+.mr-label { display: flex; justify-content: space-between; gap: 12px; padding: 12px 14px; background: #fff; border: 1px solid #ddd2c0; }
+.mr-label h2 { margin: 0 0 4px; font: 600 22px/1.05 var(--mr-serif); }
+.mr-label p { margin: 0; font-size: 12.5px; line-height: 1.45; color: #4a3f34; }
+.mr-label .mr-qr { width: 104px; height: 104px; flex: none; image-rendering: pixelated; }
+.mr-sheet-intro .mr-show { margin-top: 12px; }
+.mr-open { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.mr-open:focus-visible { outline: 3px solid var(--mr-brass); outline-offset: 3px; }
+.mr-open:hover .mr-work { box-shadow: 0 12px 28px rgba(43, 33, 25, .35); }
+.mr-work-code { display: grid; place-items: center; background: #fff; }
+.mr-work-code .mr-qr-big { height: 82%; width: auto; }
+.mr-work-name { margin: 0; font: 600 20px/1.1 var(--mr-serif); display: grid; gap: 2px; }
+.mr-work-name span { font: 13px var(--mr-sans); color: #6a5d50; }
+
+/* What shows: one choice for the whole sheet and its viewer. */
+.mr-show { display: inline-flex; padding: 3px; border-radius: 999px; background: rgba(43, 33, 25, .1); gap: 2px; }
+.mr-show button { border: 0; border-radius: 999px; padding: 7px 13px; background: transparent; color: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.mr-show button.is-on { background: var(--mr-ink); color: var(--mr-ivory); }
+.mr-show button:focus-visible { outline: 2px solid var(--mr-brass); outline-offset: 1px; }
+
+/* One work filling the window. */
+.mr-viewer { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; background: radial-gradient(ellipse at 50% 35%, #8a8074, #6a6158 75%); color: var(--mr-ivory); color-scheme: dark; }
+.mr-viewer-stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; gap: 28px; padding: 24px; }
+.mr-viewer-work { max-width: 100%; max-height: 100%; min-width: 0; object-fit: contain; box-shadow: 0 0 0 12px #2b2119, 0 20px 50px rgba(0, 0, 0, .6); }
+.mr-viewer.is-label .mr-viewer-work { max-width: min(100%, calc(100% - 360px)); }
+.mr-viewer .mr-label { flex: none; width: 320px; color: var(--mr-ink); }
+.mr-viewer .mr-label .mr-qr { width: 132px; height: 132px; }
+.mr-viewer-code { display: grid; justify-items: center; gap: 14px; height: 100%; max-height: 100%; }
+.mr-viewer-code .mr-qr-big { height: min(78vh, 90vw); width: auto; background: #fff; padding: 14px; border-radius: 10px; }
+.mr-viewer-code p { margin: 0; font: 600 26px var(--mr-serif); }
+.mr-qr-big { image-rendering: pixelated; }
+.mr-viewer-bar { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; padding: 10px 12px max(12px, env(safe-area-inset-bottom)); background: rgba(23, 18, 14, .9); }
+.mr-viewer-bar .mr-show { background: rgba(241, 231, 212, .1); }
+.mr-viewer-bar .mr-show button.is-on { background: var(--mr-ivory); color: var(--mr-ink); }
+.mr-viewer-count { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--mr-ivory-2); min-width: 44px; text-align: center; }
+/* Full screen: nothing but the work (the bar stays for leaving). */
+.mr-viewer:fullscreen .mr-viewer-stage { padding: 12px; }
+@media (max-width: 760px) {
+  .mr-viewer.is-label .mr-viewer-stage { flex-direction: column; gap: 16px; }
+  .mr-viewer.is-label .mr-viewer-work { max-width: 100%; max-height: calc(100% - 190px); }
+  .mr-viewer .mr-label { width: min(100%, 360px); }
+}
+@media print { .mr-sheet { padding: 0; } .mr-labels { gap: 14px; } .mr-show { display: none; } }
+
+/* A label's room line, on the gallery labels and in a work's entry. */
+.mr-label .mr-card-where, .mr-detail .mr-card-where { margin: 0 0 2px; font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: #9a7a3e; }
+
+/* ---- A work's entry over the camera, as it is introduced ---- */
+.mr-info { position: absolute; z-index: 2; top: calc(max(10px, env(safe-area-inset-top)) + 50px); left: calc(var(--gutter) + 10px); right: calc(var(--gutter) + 10px); bottom: calc(var(--sheet) - 14px); display: flex; flex-direction: column; border-radius: 20px 20px 0 0; background: #f4efe6; color: var(--mr-ink); color-scheme: light; box-shadow: 0 10px 40px rgba(0, 0, 0, .45); overflow: hidden; animation: mr-up .22s ease-out; }
+.mr-info .mr-detail { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px 20px; -webkit-overflow-scrolling: touch; }
+.mr-info .mr-detail-img { max-height: 30dvh; }
+.mr-info-close { flex: none; margin: 0; border: 0; border-top: 1px solid #e2d8c7; padding: 14px 18px 26px; background: #fbf8f2; color: var(--mr-ink); font-weight: 700; font-size: 15.5px; text-align: left; cursor: pointer; }
+/* One way back: the bar at the bottom, in thumb's reach. */
+.mr-info .mr-detail-back { display: none; }
+.mr-info-close::before { content: "◉  "; color: var(--mr-red); }
+.mr-meet { background: var(--mr-ink); color: var(--mr-ivory); }
+
+.mr-sheet-brand { display: flex; align-items: center; gap: 12px; }

@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import sharp from 'sharp';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import type { AppServer } from './app-server.ts';
-import { avatarApi, endSession, setConductor, startSession } from './atmee.ts';
+import { avatarApi, endSession, sessionLanguage, setConductor, startSession } from './atmee.ts';
 import { endRender, renderConfigured, startRender } from './render.ts';
 import { endSpeechSession, readSpeechSession, startSpeechSession } from './speech-sessions.ts';
 import { avatarEnvName, avatarFor, hostNameOf } from './hosts.js';
@@ -56,9 +56,9 @@ const toolCount = (app: AppServer) => (app.speech ? app.speech.settings().delega
 api.get('/apps', (_req, res) => {
   // tools and agenda: what the home page counts (the functions each host may call, and whether it keeps to a conductor).
   // A speech app without its avatar is off, and not listed.
-  res.json([...apps.values()].filter((app) => app.way !== 'speech' || speechAvatarFor(app.id)).map((app) => ({
+  res.json([...apps.values()].filter((app) => !app.speech || speechAvatarFor(app.id)).map((app) => ({
     id: app.id, title: app.title, tagline: app.tagline, brand: app.brand, way: app.way ?? 'full-stack', host: hostNameOf(app.id),
-    avatar: Boolean(app.way === 'speech' ? speechAvatarFor(app.id) : avatarFor(app.id)),
+    avatar: Boolean(app.speech ? speechAvatarFor(app.id) : avatarFor(app.id)),
     tools: toolCount(app), agenda: Boolean(app.conductor?.graph),
   })));
 });
@@ -89,7 +89,10 @@ api.post('/apps/:app/session', async (req, res) => {
   if (conductorOf.get(avatarId) !== app.id) {
     const graph = app.conductor ?? null;
     const r = await setConductor(avatarId, graph?.graph ?? null, graph?.speakAfterS);
-    if (r.status >= 300 && !(graph === null && r.status === 404)) {
+    // Clearing an agenda the avatar may not have is best-effort: a key bound to one avatar can be
+    // refused it (403) and the app, which runs none, still starts. Setting one must succeed.
+    if (graph === null && r.status === 403) console.warn('[%s] could not clear the avatar\'s agenda (403): starting anyway', app.id);
+    else if (r.status >= 300 && !(graph === null && r.status === 404)) {
       console.warn('[%s] conductor -> %d %s', app.id, r.status, JSON.stringify(r.json).slice(0, 300));
       return void res.status(502).json({ error: 'conductor_failed' });
     }
@@ -97,7 +100,7 @@ api.post('/apps/:app/session', async (req, res) => {
   }
 
   const maxSeconds = Number(process.env.MAX_SECONDS) || app.maxSeconds || 600;
-  const r = await startSession(avatarId, maxSeconds, { app: 'atmee-usecase-demos', usecase: app.id }, app.appTools);
+  const r = await startSession(avatarId, maxSeconds, { app: 'atmee-usecase-demos', usecase: app.id }, app.appTools, sessionLanguage(req.body?.language));
   if (!r.ok) {
     // The code is for the page; the message (which limit, which key) is for you.
     console.warn('[%s] POST /v1/session -> %d %s %s', app.id, r.status, r.json?.error ?? '', r.json?.message ?? '');
@@ -114,7 +117,7 @@ const rendering = new Map<string, string>(); // avatar session id -> app id
 
 api.post('/apps/:app/render', async (req, res) => {
   const app = apps.get(req.params.app);
-  if (!app || app.way !== 'avatar-only') return void res.status(404).json({ error: 'unknown_app' });
+  if (!app || (app.way !== 'avatar-only' && !app.rendersFace)) return void res.status(404).json({ error: 'unknown_app' });
   if (!renderConfigured()) return void res.status(503).json({ error: 'livekit_not_configured', message: 'Set LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET' });
   const avatarId = avatarFor(app.id);
   if (!avatarId) return void res.status(500).json({ error: 'no_avatar', message: `Set avatarId in apps/${app.id}/avatar.json, ${avatarEnvName(app.id)} or AVATAR_DEFAULT` });
@@ -145,13 +148,15 @@ api.post('/apps/:app/render/:id/end', async (req, res) => {
   res.status(r.status).json(r.json);
 });
 
-// The speech apps: a voice call the page holds over a WebSocket to Atmee's speech server.
-// Each start reserves the visitor's own session, with the settings the app pins.
+// The speech apps on the speech kit (`AppServer.speech`): a voice call the page holds over a
+// WebSocket to Atmee's speech server. Each start reserves the visitor's own session, with the
+// settings the app pins. An app that reserves its own sessions (Crate, The Gilded Reel) has
+// routes of the same names: these pass it on to them.
 const speaking = new Map<string, { app: string; ended: boolean }>(); // speech session id -> its app
 
-api.post('/apps/:app/speech', async (req, res) => {
+api.post('/apps/:app/speech', async (req, res, next) => {
   const app = apps.get(req.params.app);
-  if (!app || app.way !== 'speech' || !app.speech) return void res.status(404).json({ error: 'unknown_app' });
+  if (!app?.speech) return next();
   const avatarId = speechAvatarFor(app.id);
   if (!avatarId) return void res.status(503).json({ error: 'no_avatar', message: `Set ${avatarEnvName(app.id)} to an avatar with a voice` });
   const maxSeconds = Number(process.env.MAX_SECONDS) || app.maxSeconds || 600;
@@ -179,13 +184,15 @@ api.post('/apps/:app/speech', async (req, res) => {
 });
 
 // The call's state: once it ended, why, and what it cost (the page's summary).
-api.get('/apps/:app/speech/:id', async (req, res) => {
+api.get('/apps/:app/speech/:id', async (req, res, next) => {
+  if (!apps.get(req.params.app)?.speech) return next();
   if (speaking.get(req.params.id)?.app !== req.params.app) return void res.status(404).json({ error: 'not_found' });
   const r = await readSpeechSession(req.params.id);
   res.status(r.status).json(r.json);
 });
 
-api.post('/apps/:app/speech/:id/end', async (req, res) => {
+api.post('/apps/:app/speech/:id/end', async (req, res, next) => {
+  if (!apps.get(req.params.app)?.speech) return next();
   const call = speaking.get(req.params.id);
   if (call?.app !== req.params.app) return void res.status(404).json({ error: 'not_found' });
   const r = await endSpeechSession(req.params.id);
@@ -201,7 +208,10 @@ export async function endLiveSessions() {
   started.clear();
   rendering.clear();
   speaking.clear();
-  await Promise.allSettled([...ids.map((id) => endSession(id)), ...renders.map((id) => endRender(id)), ...calls.map((id) => endSpeechSession(id))]);
+  await Promise.allSettled([
+    ...ids.map((id) => endSession(id)), ...renders.map((id) => endRender(id)), ...calls.map((id) => endSpeechSession(id)),
+    ...[...apps.values()].map((app) => app.shutdown?.()),
+  ]);
 }
 
 api.post('/apps/:app/session/:id/end', async (req, res) => {

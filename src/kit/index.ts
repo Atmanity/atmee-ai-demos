@@ -5,7 +5,7 @@ export { useToolNet } from './useToolNet.ts';
 export { useAvatarOnly, type AvatarOnly, type Played, type SpeechWriter } from './useAvatarOnly.ts';
 export { useMicTap, type MicTap } from './useMicTap.ts';
 export { useSpeech, minutes, credits, SPEECH_ERRORS, END_WORDS, ToolReply, type Speech, type SpeechLine, type ToolRun, type CallSummary, type SpeechStatus, type ToolHandler, type ToolCall as SpeechToolCall } from './useSpeech.ts';
-export { SAMPLE_RATE, decodeTo16k, fromBase64, joinPcm, tapMicrophone, toBase64, wavFile } from '../avatar/pcm.ts';
+export { Resampler24to16, SAMPLE_RATE, decodeTo16k, fromBase64, joinPcm, tapMicrophone, toBase64, wavFile } from '../avatar/pcm.ts';
 export { AvatarStage, Composer, Transcript, clock } from './components.tsx';
 export { CallControls, CallStatus, ChatPanel, HostVideo, callCopy, HangUpIcon, MicIcon, MicOffIcon, SendIcon } from './parts.tsx';
 export { BackToApps, CaptionsButton, useCaptionToggle, captionsKey, APPS_HOME, type CaptionToggle } from './nav.tsx';

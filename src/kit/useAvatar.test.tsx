@@ -14,7 +14,8 @@ vi.mock('../avatar/room.ts', async (real) => ({
       note: async (t: string) => { if (failNote) throw new Error('room closed'); session.sent.push(`note:${t}`); },
       state: async (t: string) => { session.sent.push(`state:${t}`); },
       event: async (t: string) => { session.sent.push(`event:${t}`); },
-      say: async () => {}, send: async () => {}, setMicMuted: async () => {},
+      say: async () => {}, send: async () => {},
+      interrupt: async (t: string) => { session.sent.push(`interrupt:${t}`); }, setMicMuted: async () => {}, feedMic: async () => {},
       acceptsFiles: () => true,
       sendFiles: async (files: File[], o?: { caption?: string }) => {
         session.sent.push(`files:${files.map((f) => f.name).join(',')}:${o?.caption ?? ''}`);
@@ -92,4 +93,53 @@ test('whether the host takes files follows its agent, and ends with the call', a
   expect(result.current.filesAccepted).toBe(true);
   await act(async () => { await result.current.end(); });
   expect(result.current.filesAccepted).toBe(false);
+});
+
+test('a push-to-talk start joins with the microphone muted, and says the mic is off', async () => {
+  const stream = { getAudioTracks: () => [{}], getTracks: () => [] } as unknown as MediaStream;
+  Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: async () => stream } });
+  const { result } = renderHook(() => useAvatar('demo'));
+  await act(async () => { await result.current.start({ mic: true, micMuted: true }); });
+  expect(joins[0].opts.mic).toBe(stream);
+  expect(joins[0].opts.micMuted).toBe(true);
+  expect(result.current.micOn).toBe(false);
+});
+
+test('an interrupt goes to the call at once and is not shown as the user\'s line', async () => {
+  const { result } = renderHook(() => useAvatar('demo'));
+  await act(async () => { await result.current.start(); });
+  act(() => { result.current.interrupt('The listener pressed Skip.'); });
+  expect(joins[0].session.sent).toContain('interrupt:The listener pressed Skip.');
+  expect(result.current.lines).toHaveLength(0);
+});
+
+test('a start with a camera hands its track to the join, and one without hands none', async () => {
+  const camera = { kind: 'video' } as unknown as MediaStreamTrack;
+  const { result } = renderHook(() => useAvatar('demo'));
+  await act(async () => { await result.current.start({ camera }); });
+  expect(joins[0].opts.camera).toBe(camera);
+  await act(async () => { await result.current.end(); });
+  await act(async () => { await result.current.start(); });
+  expect(joins[1].opts.camera).toBeNull();
+});
+
+test('ending while the call is still being placed ends it as soon as it connects', async () => {
+  const { result } = renderHook(() => useAvatar('demo'));
+  let starting!: Promise<void>;
+  act(() => { starting = result.current.start(); });
+  await act(async () => { await result.current.end(); });
+  await act(async () => { await starting; });
+  expect(joins).toHaveLength(1);
+  expect(joins[0].session.ended).toBe(true);
+  expect(result.current.phase).toBe('ended');
+});
+
+test('ending a call still being placed resolves once it has hung up, so a start right after places a new call', async () => {
+  const { result } = renderHook(() => useAvatar('demo'));
+  act(() => { void result.current.start(); });
+  await act(async () => { await result.current.end(); });
+  expect(joins[0].session.ended).toBe(true);
+  await act(async () => { await result.current.start(); });
+  expect(joins).toHaveLength(2);
+  expect(joins[1].session.ended).toBe(false);
 });

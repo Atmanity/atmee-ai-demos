@@ -19,7 +19,7 @@ const app: AppServer = {
   title: 'Pocket NPC',
   tagline: "A game's own 2D character with Atmee's voice and conversation: talk Brannoc the innkeeper into a quest, and haggle for gear.",
   brand: { color: '#b4532a', ink: '#ffffff' },
-  way: 'speech',
+  way: 'speech-to-speech',
   maxSeconds: 600,
   speech: {
     settings: () => ({

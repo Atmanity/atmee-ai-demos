@@ -24,8 +24,8 @@ function fakeAvatar(phase: Avatar['phase']): Avatar {
   return {
     phase, detail: '', speaking: false, caption: '', heard: '', lines: [], secondsLeft: null, micOn: false, audioBlocked: false,
     videoRef: { current: null }, audioRef: { current: null },
-    start: vi.fn(async () => undefined), end: vi.fn(async () => undefined), say: vi.fn(), record: vi.fn(), state: vi.fn(), note: vi.fn(), event: vi.fn(),
-    mute: vi.fn(), unmute: vi.fn(), setMic: vi.fn(), resumeAudio: vi.fn(),
+    start: vi.fn(async () => undefined), end: vi.fn(async () => undefined), say: vi.fn(), record: vi.fn(), interrupt: vi.fn(), state: vi.fn(), note: vi.fn(), event: vi.fn(),
+    mute: vi.fn(), unmute: vi.fn(), setMic: vi.fn(), feedMic: vi.fn(async () => {}), resumeAudio: vi.fn(),
     filesAccepted: false, sendFiles: vi.fn(async () => []),
   };
 }
