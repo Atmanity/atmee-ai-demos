@@ -12,11 +12,12 @@ while the pizza changes the way the child says. Chalkline's front door links her
 | --- | --- |
 | `engine/club.ts` | The two classes and every rule; a button and a tool call make the same move |
 | `engine/director.ts` | Mochi's instructions, tools and live state; a times total never reaches the host |
-| `page/App.tsx` | The class picker, pizza, tray, star chart and hold to talk; a total from the host counts only after the child has spoken |
+| `page/App.tsx` | The class picker, Mochi, the pizza and tray, and what Mochi heard; a total from the host counts only after the child has spoken |
 
 Each class has five levels, for ages five to ten and up. Both classes share one
-call, so Mochi can change class or level when asked. Add `?type`
-to the address for a typing box (for testing).
+call, so Mochi can change class or level when asked. There are no
+buttons for the maths: the child talks. Add `?type` to the address for a typing
+box with no microphone (for testing).
 
 ## Host
 

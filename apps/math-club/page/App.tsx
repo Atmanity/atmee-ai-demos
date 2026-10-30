@@ -10,8 +10,6 @@ import mochi from '../host/portrait.jpg';
 import './club.css';
 
 const HOST = 'Mochi';
-/** Taps on + and − move the screen at once; Mochi hears the result once they stop. */
-const QUIET_MS = 1200;
 
 function moveOf(c: Club, name: string, a: Record<string, unknown>): Move | null {
   switch (name) {
@@ -59,25 +57,12 @@ function Tray({ rows, each, topping = 'chocolate' }: { rows: number; each: numbe
   );
 }
 
-function Step({ label, value, onChange, disabled }: { label: string; value: number; onChange: (n: number) => void; disabled: boolean }) {
-  return (
-    <div className="mc-step">
-      <span>{label}</span>
-      <div>
-        <button type="button" aria-label={`Less ${label}`} disabled={disabled} onClick={() => onChange(value - 1)}>−</button>
-        <b aria-live="polite">{value}</b>
-        <button type="button" aria-label={`More ${label}`} disabled={disabled} onClick={() => onChange(value + 1)}>+</button>
-      </div>
-    </div>
-  );
-}
-
 function Confetti() {
   const colours = ['#ffd166', '#ef6c4d', '#f4f1e6', '#7fc8a9'];
   return <div className="mc-confetti" aria-hidden="true">{Array.from({ length: 36 }, (_, i) => <i key={i} style={{ left: `${(i * 37) % 100}%`, background: colours[i % 4], animationDelay: `${(i * 73) % 900}ms` }} />)}</div>;
 }
 
-function Lobby({ onGo }: { onGo: (cls: ClassId, level: number, mic: boolean) => void }) {
+function Lobby({ onGo }: { onGo: (cls: ClassId, level: number) => void }) {
   const [cls, setCls] = useState<ClassId>('fractions');
   const [level, setLevelPick] = useState(1);
   return (
@@ -98,8 +83,7 @@ function Lobby({ onGo }: { onGo: (cls: ClassId, level: number, mic: boolean) => 
         <div className="mc-levels" role="group" aria-label="Choose a level">
           {LEVELS.map((l) => <button key={l.n} type="button" className={level === l.n ? 'is-on' : ''} aria-pressed={level === l.n} onClick={() => setLevelPick(l.n)}><b>{l.n}</b><span>age {l.age}</span></button>)}
         </div>
-        <button type="button" className="mc-big" onClick={() => onGo(cls, level, true)}>Talk to Mochi</button>
-        <button type="button" className="mc-quiet" onClick={() => onGo(cls, level, false)}>No microphone? Use buttons</button>
+        <button type="button" className="mc-big" onClick={() => onGo(cls, level)}>Talk to Mochi</button>
         <p className="mc-grown">For grown-ups: Mochi hears everything said while a class is on, and a button mutes the microphone. There is no account, and Mochi never asks for personal details.</p>
       </main>
     </div>
@@ -110,9 +94,6 @@ export function App() {
   const [club, setClub] = useState<Club>(() => newClub());
   const [fx, setFx] = useState<Fx[]>([]);
   const [fxKey, setFxKey] = useState(0);
-  const [voice, setVoice] = useState(true);
-  const [showKeys, setShowKeys] = useState(false);
-  const [answer, setAnswer] = useState('');
   const ref = useRef(club);
 
   // The class moves here first, so two calls in one breath each see the last one's result.
@@ -138,18 +119,10 @@ export function App() {
   const live = avatar.phase === 'live';
 
   // A button acts at once; Mochi cannot see the screen, so Mochi is told.
-  const avatarRef = useRef(avatar);
-  avatarRef.current = avatar;
-  const quiet = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const press = (name: string, args: Record<string, unknown> = {}) => {
     const move = apply(name, args);
-    if (!move || !live) return;
-    clearTimeout(quiet.current);
-    const tell = () => avatarRef.current.event(pressed(move.outcome), 30);
-    if ((name === 'set_pizza' || name === 'set_tray') && move.fx.join() === 'set') quiet.current = setTimeout(tell, QUIET_MS);
-    else tell();
+    if (move && live) avatar.event(pressed(move.outcome), 30);
   };
-  useEffect(() => { if (!live) clearTimeout(quiet.current); }, [live]);
 
   const opened = useRef(false);
   useEffect(() => {
@@ -158,13 +131,13 @@ export function App() {
   }, [avatar.phase, live]);
   useEffect(() => { if (live) avatar.state(clubState(club)); }, [club, live]);
 
+  const typing = new URLSearchParams(location.search).has('type');
   if (avatar.phase === 'idle') {
-    return <Lobby onGo={(cls, level, mic) => { const c = newClub(cls, level); ref.current = c; setClub(c); setVoice(mic); setShowKeys(!mic); void avatar.start({ mic }); }} />;
+    return <Lobby onGo={(cls, level) => { const c = newClub(cls, level); ref.current = c; setClub(c); const mic = !typing; void avatar.start({ mic }); }} />;
   }
 
   const cls = CLASSES[club.cls];
   const pizza = club.cls === 'fractions';
-  const typing = new URLSearchParams(location.search).has('type');
   const said = avatar.heard || [...avatar.lines].reverse().find((l) => l.who === 'user')?.text || '';
   return (
     <div className="mc-app">
@@ -180,7 +153,7 @@ export function App() {
       <main className="mc-main">
         <aside className="mc-side">
           <div className={`mc-host ${avatar.speaking ? 'is-talking' : ''}`}><HostVideo avatar={avatar} name={HOST} poster={mochi} className="mc-host-video"><CallStatus avatar={avatar} name={HOST} again="Call Mochi again" /></HostVideo></div>
-          {voice && live && (
+          {!typing && live && (
             <div className="mc-ear">
               <p className={said ? 'is-heard' : ''} aria-live="polite">{said ? <><small>Mochi heard</small>“{said}”</> : <small>{avatar.micOn ? 'Mochi is listening. Say something!' : 'The microphone is off'}</small>}</p>
               <CallControls avatar={avatar} className="mc-mic" />
@@ -204,19 +177,6 @@ export function App() {
                 {pizza && <p className="mc-fraction" aria-hidden="true"><b>{club.b}</b><i /><b>{club.a}</b></p>}
               </div>
               {club.solved && <button type="button" className="mc-big mc-next" onClick={() => press('next_problem')}>Next!</button>}
-              {showKeys && !club.solved && (
-                <div className="mc-controls">
-                  <Step label={pizza ? 'Slices' : 'Rows'} value={club.a} disabled={false} onChange={(n) => press(pizza ? 'set_pizza' : 'set_tray', pizza ? { slices: n } : { rows: n })} />
-                  <Step label={pizza ? 'Take' : 'In each row'} value={club.b} disabled={false} onChange={(n) => press(pizza ? 'set_pizza' : 'set_tray', pizza ? { taken: n } : { each: n })} />
-                  {club.built && (
-                    <form className="mc-total" onSubmit={(e) => { e.preventDefault(); spoke.current = true; press('check_total', { total: answer }); setAnswer(''); }}>
-                      <label>How many?<input inputMode="numeric" value={answer} onChange={(e) => setAnswer(e.target.value)} autoFocus /></label>
-                      <button type="submit" disabled={!answer}>Check</button>
-                    </form>
-                  )}
-                </div>
-              )}
-              {voice && !showKeys && !club.solved && <button type="button" className="mc-quiet mc-keys" onClick={() => setShowKeys(true)}>Use buttons instead</button>}
             </>
           )}
           {fx.includes('star') && <svg key={fxKey} className="mc-fly" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3 6.6 7 .8-5.2 4.8 1.4 7L12 17.7 5.8 21.2l1.4-7L2 9.4l7-.8z" /></svg>}
