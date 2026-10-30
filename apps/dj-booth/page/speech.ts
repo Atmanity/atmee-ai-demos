@@ -53,6 +53,8 @@ interface Route {
   held: Int16Array[];
   ended: boolean;
   cleared: boolean;
+  /** Its finish was reported: the face beginning a later delivery is not its start. */
+  over?: boolean;
 }
 
 const rms = (pcm: Int16Array) => {
@@ -175,6 +177,12 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
     p.setGain(faceRef.current.audioRef.current?.volume ?? 1);
     p.push(pcm, silent);
   }, []);
+  // Under playback control a reply comes all at once and plays for seconds after: the page's volume
+  // for Nova (the mixer, a check-in's muffle) is kept in step while it plays, not set as it comes.
+  useEffect(() => {
+    const id = setInterval(() => player.current?.setGain(faceRef.current.audioRef.current?.volume ?? 1), 100);
+    return () => clearInterval(id);
+  }, []);
   // Her words held while a face writer opens, and where they go if it cannot open: here, at once.
   const heldForFace = useRef<Int16Array[]>([]);
   const toPage = useCallback((why: string) => {
@@ -227,15 +235,21 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
     route.output = 'face';
     route.face = new FaceDelivery({ open: async () => writer, interrupt: () => faceRef.current.interrupt() }, route.delivery, (event) => {
       send(event);
-      if (event.status === 'finished') playbackFinished(id);
+      if (event.status === 'finished') {
+        route.over = true;
+        playbackFinished(id);
+      }
     });
     for (const pcm of route.held) route.face.push(pcm);
     route.held = [];
     if (route.ended) route.face.end();
     if (route.cleared) void route.face.clear();
-    // The face is playing her words already: its start, reported for the server, comes with its speaking.
-    if (faceRef.current.speaking) route.face.started();
-  }, [send, playbackFinished]);
+    // The face is playing her words already: she talks, and the server is told it began.
+    if (faceRef.current.speaking) {
+      route.face.started();
+      playbackStarted(id);
+    }
+  }, [send, playbackStarted, playbackFinished]);
   const onDelivery = useCallback((msg: Record<string, any>) => {
     const id = msg.delivery_id;
     if (!Number.isInteger(id)) return;
@@ -249,8 +263,7 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
         route.output = 'pending';
         setVoiceVia('face');
         console.info('[speech] her words go to the face');
-        // She talks once the face has her words; the server is told the face began with its speaking.
-        playbackStarted(id);
+        // She talks once the face plays them (its speaking), not as they come: they come seconds ahead.
         const pending = route;
         void faceRef.current.open().then(
           (w) => (w ? toFaceRoute(pending, w) : toPageRoute(pending, 'the face is gone')),
@@ -281,8 +294,13 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
   // The face's own start, for the delivery it is playing.
   useEffect(() => {
     if (!face.speaking) return;
-    for (const route of routes.current.values()) if (route.output === 'face') route.face?.started();
-  }, [face.speaking]);
+    // The face began to play: she talks from now, and the server is told so.
+    for (const route of routes.current.values()) {
+      if (route.output !== 'face' || route.over) continue;
+      route.face?.started();
+      playbackStarted(route.delivery.delivery_id);
+    }
+  }, [face.speaking, playbackStarted]);
   // A reply's words are all said (its transcript is over): its line is closed.
   const closeLine = useCallback(() => {
     const text = captionRef.current.trim();

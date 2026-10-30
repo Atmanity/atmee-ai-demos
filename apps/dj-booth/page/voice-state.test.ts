@@ -64,3 +64,17 @@ describe('when a cue may go', () => {
     expect(cueMayGo(cue, at(false, QUIET_FOR_CUE_MS, 10_000, 0))).toBe(true);
   });
 });
+
+describe('a delivery that is over', () => {
+  test('does not start her talking again: the face beginning the next one is not its start', () => {
+    const t = new Talking(() => 1000);
+    expect(t.started(1)).toBe(true);
+    expect(t.finished(1)).toBe(true);
+    expect(t.started(1)).toBe(false);         // the face began delivery 2; delivery 1 is over
+    expect(t.talking).toBe(false);
+    expect(t.started(2)).toBe(true);
+    expect(t.finished(2)).toBe(true);
+    expect(t.talking).toBe(false);
+  });
+});
+

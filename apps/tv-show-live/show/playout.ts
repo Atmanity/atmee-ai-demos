@@ -19,6 +19,14 @@ interface Entry { id: number; pcm: Int16Array[]; at: number; played: number; end
 
 export class LocalPlayout {
   private entries: Entry[] = [];
+  /** How much of each delivery that played out here played, the latest few: a clear may still come for one. */
+  private done = new Map<number, number>();
+
+  /** A delivery played out: kept a while, as the server answers a clear for it with all of it. */
+  private playedOut(e: Entry): void {
+    this.done.set(e.id, e.played);
+    for (const id of this.done.keys()) if (this.done.size > 5) this.done.delete(id);
+  }
 
   open(id: number): void {
     if (!this.entries.some((e) => e.id === id)) this.entries.push({ id, pcm: [], at: 0, played: 0, ended: false, started: false });
@@ -34,10 +42,10 @@ export class LocalPlayout {
     if (e) e.ended = true;
   }
 
-  /** The server cleared it: the rest is not played. How much of it was. */
+  /** The server cleared it: the rest is not played. How much of it was (all of it, if it had played out). */
   clear(id: number): number {
     const at = this.entries.findIndex((x) => x.id === id);
-    if (at < 0) return 0;
+    if (at < 0) return this.done.get(id) ?? 0;
     const [e] = this.entries.splice(at, 1);
     return e.played;
   }
@@ -57,6 +65,7 @@ export class LocalPlayout {
         // Played out, and all of it came: the next delivery may follow in the same frame.
         if (e.ended) {
           if (e.started) out.finished = { id: e.id, played: e.played };
+          this.playedOut(e);
           this.entries.shift();
           continue;
         }
@@ -75,6 +84,7 @@ export class LocalPlayout {
     const first = this.entries[0];
     if (first && first.ended && !first.pcm.length && first.started && !out.finished) {
       out.finished = { id: first.id, played: first.played };
+      this.playedOut(first);
       this.entries.shift();
     }
     return out;

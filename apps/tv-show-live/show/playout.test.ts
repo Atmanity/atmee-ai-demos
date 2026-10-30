@@ -67,3 +67,18 @@ describe("a seat's replies on the page's own clock", () => {
     expect(p.played(1)).toBe(0);
   });
 });
+
+describe('a clear for a delivery that already played out', () => {
+  it('is answered with all of it, as the server waits for', () => {
+    const p = new LocalPlayout();
+    p.open(1);
+    p.push(1, new Int16Array(FRAME * 3).fill(100));
+    p.end(1);
+    let finished: { id: number; played: number } | undefined;
+    for (let i = 0; i < 5 && !finished; i++) finished = p.next().finished;
+    expect(finished).toEqual({ id: 1, played: FRAME * 3 });
+    expect(p.clear(1)).toBe(FRAME * 3);
+    expect(p.clear(99)).toBe(0);                          // one it never had
+  });
+});
+

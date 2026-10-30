@@ -52,6 +52,12 @@ let faceLagMs = FACE_LAG_MS;
 // comes out of her face as it ends: her session takes a second or so to start the line, then
 // her face is faceLagMs behind. Cued at the end, she was silent on screen for five seconds.
 const inviteLeadMs = () => faceLagMs + 1_500;
+/**
+ * A lead tuned against the 4.5 s lag the faces had when the voice came paced, held in the same
+ * proportion to the lag measured now: at about 1 s, a fixed 1.5 s lead would be no wait at all,
+ * and the page would act a second before the faces show what it acts on.
+ */
+const scaledLead = (leadMs: number) => Math.round((leadMs * faceLagMs) / FACE_LAG_MS);
 const TRAILER_FADE_MS = 900;
 const CAPTION_LINGER_MS = 3_000;
 // The faces' free-form prompts. By default Jada's face gets one sentence, her look and her hands
@@ -649,7 +655,7 @@ export function App() {
         else line.commentary(text);
       },
       dialGuest: () => void openSeat('guest', slotsRef.current[0]!),
-      onStage: (next) => { setStage(next); director.current?.stage(next); look(facingAt(next), faceLagMs - 2_000); },
+      onStage: (next) => { setStage(next); director.current?.stage(next); look(facingAt(next), faceLagMs - scaledLead(2_000)); },
     });
     if (first) addLog('booth', `First topic: ${first}`);
     if (describe && !early) {
@@ -732,7 +738,7 @@ export function App() {
     addLog('booth', `Bring on ${to.name}`);
     const show = showRef.current;
     // Each step lands on the faces faceLagMs after it is said; the page acts once viewers have seen it.
-    const later = (f: () => void | Promise<void>) => setTimeout(() => { if (showRef.current === show) void f(); }, faceLagMs - 1_500);
+    const later = (f: () => void | Promise<void>) => setTimeout(() => { if (showRef.current === show) void f(); }, faceLagMs - scaledLead(1_500));
     booth.current.handover({
       farewell: farewellCue(from),
       goodbye: guestFarewellCue,

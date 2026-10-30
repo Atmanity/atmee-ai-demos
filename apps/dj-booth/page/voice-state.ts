@@ -11,6 +11,8 @@ export const deliveryOutput = (facePhase: string, faceOff: boolean): VoiceOutput
 
 export class Talking {
   private playing = new Set<number>();
+  /** Deliveries that are over: a late start for one (a face beginning the next) does not count. */
+  private over = new Set<number>();
   /** When the last delivery ended (by `now`); 0 before any. */
   quietSince = 0;
 
@@ -20,6 +22,7 @@ export class Talking {
 
   /** A delivery began to play; true when that starts her talking. */
   started(delivery: number): boolean {
+    if (this.over.has(delivery)) return false;
     const was = this.talking;
     this.playing.add(delivery);
     return !was;
@@ -27,6 +30,8 @@ export class Talking {
 
   /** A delivery is over; true when that leaves her quiet. One that never began changes nothing. */
   finished(delivery: number): boolean {
+    this.over.add(delivery);
+    if (this.over.size > 16) this.over.delete(this.over.values().next().value!);
     if (!this.playing.delete(delivery)) return false;
     if (this.talking) return false;
     this.quietSince = this.now();
