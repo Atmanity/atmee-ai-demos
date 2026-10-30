@@ -18,9 +18,10 @@ the clinic's server ──► POST /v1/speech_sessions  (API key; avatarId; sett
         │ ◄── { url, token (one connection, 60 s), sessionId }
         ▼
 the page ──► wss://…/v1/speech_sessions   subprotocols atmee-live, atmee-token.<jwt>
-   session.start            { model: causeur, input_transcript }   (nothing pinned can be set)
+   session.start            { model: causeur, input_transcript, playback_control }   (nothing pinned can be set)
    input_audio.append  ───► the microphone, 24 kHz PCM16, a frame every 20 ms, silence too
-   output_audio.delta  ◄─── Rosa's voice, paced in real time  ──► jitter buffer ──► speaker
+   playback.*          ◄─── Rosa's voice, each reply as fast as it is made  ──► held whole ──► speaker
+   playback.ack        ───► when each reply began to play, and how much of it played
    transcripts         ◄─── her words as they are said; yours as they are recognised
    a tool round        ◄─── check_availability, book_appointment, …  ──► engine/clinic.ts
    response.item.create ──► each result; response.create ──► she goes on
@@ -31,7 +32,7 @@ End ──► the clinic's server ──► POST /v1/speech_sessions/{id}/end, t
 |---|---|
 | What the call is | `server.ts` pins it per call (`speech.settings()`): `avatar_name`, `persona`, `scenario`, `self_introduction` from `avatar.json`, the clinic's `facts`, the booking `instructions`, the tools (`delegation.responses.tools`, `tool_choice: auto`) and the clinic's time zone (`avatar_timezone`, so "today" is Portland's). The voice is always the avatar's. A page that tried to set any of it would be refused, naming the field. |
 | The book and its rules | `engine/clinic.ts`, run in the page: three clinicians on their own days, half-hour slots for the next five working days, most taken by other patients, two named ones (Maria Gomez, Daniel Kim) to find or cancel. Each visitor gets a fresh week. Every result leads with its outcome (`Open:`, `Booked:`, `Refused, nothing is booked:`, `Cancelled:`, `Not found:`) and says what to ask next. Arguments are what Rosa heard ("Thursday", "the nurse", "10:30 AM") and are read leniently; a missing name, a taken slot or a day off comes back as a refusal she must say. |
-| The call | `src/speech/` (shared by the speech apps): `session.ts` places the call (our server, then the socket, `session.start`), streams the microphone, plays the voice, runs a tool round and answers it, and ends through our server; `audio.ts` holds the two AudioWorklets (the microphone resampled to 24 kHz frames, the voice through a 100 ms jitter buffer and resampled to the device); `lines.ts` assembles the transcript. `src/kit/useSpeech.ts` is the React hook. |
+| The call | `src/speech/` (shared by the speech apps): `session.ts` places the call (our server, then the socket, `session.start`), streams the microphone, plays the voice, runs a tool round and answers it, and ends through our server; `audio.ts` holds the two AudioWorklets (the microphone resampled to 24 kHz frames; the voice in a 24 kHz context the browser resamples to the speaker, each reply held whole and acknowledged by its samples, or, on a server without playback control, through a 100 ms jitter buffer); `lines.ts` assembles the transcript. `src/kit/useSpeech.ts` is the React hook. |
 | Interruptions | The speech server owns turn-taking: its voice detection pauses Rosa as you start talking and drops the reply once your words are recognised. The page keeps at most a few hundred ms of her voice queued and drops it when your words arrive marked `[interruption]`; her line is marked cut off. |
 | The screen | `page/App.tsx`: the call (Rosa's voice as a ring that swells, yours inside it, Mute, End), the live transcript, the booking as it is confirmed, the week (open, offered on this call, booked on this call), and **Under the hood**: who does what and each tool's result. After the call: how long it was, what was billed and what it cost (read back from the API once it settled), and what changed in the book. |
 
