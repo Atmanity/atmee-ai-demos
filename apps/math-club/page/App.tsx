@@ -31,6 +31,13 @@ const BLURBS: Record<string, string> = {
   cube: 'Unfold the cube',
 };
 
+/** A step as the child reads it: Teach Mochi's steps are written to Mochi. */
+function screenAsk(ask: string) {
+  if (ask.startsWith('Ask them to teach you')) return 'Why was Mochi wrong? Teach Mochi!';
+  const text = ask.replace(/^Say you are sure\. Ask: /, '');
+  return text[0].toUpperCase() + text.slice(1);
+}
+
 function Star({ on }: { on: boolean }) {
   return <svg viewBox="0 0 24 24" className={on ? 'is-on' : ''} aria-hidden="true"><path d="M12 2l3 6.6 7 .8-5.2 4.8 1.4 7L12 17.7 5.8 21.2l1.4-7L2 9.4l7-.8z" /></svg>;
 }
@@ -152,7 +159,7 @@ export function App() {
         <>
           <div className="mc-card" key={`${club.level}-${club.round}-${club.step}`}>
             <p className="mc-intro">{round.intro}</p>
-            <h2>{club.solved ? 'You did it!' : stepOf(club).ask.replace(/^Say you are sure\. Ask: /, '').replace(/^Ask them to teach you why your answer was wrong\.$/, 'Why was Mochi wrong? Teach Mochi!')}</h2>
+            <h2>{club.solved ? 'You did it!' : screenAsk(stepOf(club).ask)}</h2>
             {round.steps.length > 1 && <ol className="mc-steps">{round.steps.map((_, i) => <li key={i} className={i < club.step || club.solved ? 'done' : i === club.step ? 'now' : ''} />)}</ol>}
           </div>
           <World id={game.id} club={club} />
