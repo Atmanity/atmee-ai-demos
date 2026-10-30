@@ -244,12 +244,9 @@ export function useSpeechCall(app: string, handlers: AvatarHandlers = {}): Speec
     route.held = [];
     if (route.ended) route.face.end();
     if (route.cleared) void route.face.clear();
-    // The face is playing her words already: she talks, and the server is told it began.
-    if (faceRef.current.speaking) {
-      route.face.started();
-      playbackStarted(id);
-    }
-  }, [send, playbackStarted, playbackFinished]);
+    // Its start comes with the face's next start of speaking (the effect below), never from the
+    // face's state now: that may still be the last piece's, and would report this one too early.
+  }, [send, playbackFinished]);
   const onDelivery = useCallback((msg: Record<string, any>) => {
     const id = msg.delivery_id;
     if (!Number.isInteger(id)) return;
