@@ -212,21 +212,23 @@ export async function startSpeech(opts: SpeechOptions): Promise<SpeechCall> {
           if (typeof msg.delta === 'string') audio.play(base64ToPcm(msg.delta));
           return;
         case 'causeur.playback.start': {
-          const id = Number(msg.delivery_id);
+          // A delivery without a whole-number id could never be acknowledged: it is passed over.
+          const id = msg.delivery_id;
+          if (!Number.isInteger(id) || !Number.isInteger(msg.start_sample)) return;
           // Only the latest few are kept: an old one is answered no more.
           for (const old of deliveries.keys()) if (old < id - 4) deliveries.delete(old);
-          deliveries.set(id, { delivery_id: id, playback_id: msg.playback_id, start_sample: Number(msg.start_sample) });
+          deliveries.set(id, { delivery_id: id, playback_id: msg.playback_id, start_sample: msg.start_sample });
           audio.open(id);
           return;
         }
         case 'causeur.playback.audio':
-          if (typeof msg.delta === 'string') audio.deliver(Number(msg.delivery_id), base64ToPcm(msg.delta));
+          if (Number.isInteger(msg.delivery_id) && typeof msg.delta === 'string') audio.deliver(msg.delivery_id, base64ToPcm(msg.delta));
           return;
         case 'causeur.playback.end':
-          audio.end(Number(msg.delivery_id));
+          if (Number.isInteger(msg.delivery_id)) audio.end(msg.delivery_id);
           return;
         case 'causeur.playback.clear':
-          audio.clear(Number(msg.delivery_id));
+          if (Number.isInteger(msg.delivery_id)) audio.clear(msg.delivery_id);
           return;
         case 'session.started':
           controlled = msg.session?.playback_control === PLAYBACK_CONTROL;

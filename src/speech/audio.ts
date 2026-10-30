@@ -210,6 +210,7 @@ export class DeliveryBuffer {
   declare max: number;
   declare cushion: number;
   declare last: number;
+  declare ramp: number;
   declare underruns: number;
   declare doneId: number;
   declare donePlayed: number;
@@ -229,6 +230,7 @@ export class DeliveryBuffer {
     this.max = max;
     this.cushion = prime;
     this.last = 0;
+    this.ramp = 0;
     this.underruns = 0;
     this.doneId = -1;
     this.donePlayed = 0;
@@ -240,6 +242,8 @@ export class DeliveryBuffer {
   /** A new delivery: what is left of another is dropped. */
   open(id: number): void {
     this.id = id;
+    // Each reply starts from the base cushion: one stall does not slow every reply after it.
+    this.cushion = this.prime;
     this.head = 0;
     this.size = 0;
     this.played = 0;
@@ -294,6 +298,8 @@ export class DeliveryBuffer {
       if (this.id >= 0 && !this.playing && this.size > 0
           && (this.size >= this.cushion || this.ended)) {
         this.playing = true;
+        // From the faded quiet into the voice over a few milliseconds, not in one step.
+        this.ramp = 96;
         if (!this.started) {
           this.started = true;
           this.reports.push({ started: this.id });
@@ -301,11 +307,15 @@ export class DeliveryBuffer {
       }
       if (!this.playing) {
         // Quiet: the last sample fades rather than drop to zero.
-        this.last *= 0.995;
+        this.last = Math.abs(this.last) < 1e-6 ? 0 : this.last * 0.995;
         out[k] = this.last;
         continue;
       }
-      const s = this.buf[this.head];
+      let s = this.buf[this.head];
+      if (this.ramp > 0) {
+        s = this.last + (s - this.last) * (1 - this.ramp / 96);
+        this.ramp--;
+      }
       this.head++;
       this.size--;
       this.played++;
@@ -473,33 +483,47 @@ export async function openSpeechAudio({ primeMs = 100, maxMs = 600, deliveryPrim
   // The microphone at the device's rate (some browsers take a microphone only
   // there), the voice in a context of its own at its rate: the browser
   // resamples it to the speaker, and the delivery player counts its samples.
-  const context = new AudioContext({ latencyHint: 'interactive' });
-  let output = context;
+  // Whatever fails once the microphone is granted lets it go, and every
+  // context made so far.
+  const contexts: AudioContext[] = [];
+  let context: AudioContext;
+  let output: AudioContext;
+  let source: MediaStreamAudioSourceNode;
+  let capture: AudioWorkletNode;
+  let playback: AudioWorkletNode;
   try {
-    output = new AudioContext({ latencyHint: 'interactive', sampleRate: RATE });
-  } catch { /* the voice is resampled in the worklet, paced */ }
-  const contexts = output === context ? [context] : [context, output];
-  try {
+    context = new AudioContext({ latencyHint: 'interactive' });
+    contexts.push(context);
+    output = context;
+    try {
+      output = new AudioContext({ latencyHint: 'interactive', sampleRate: RATE });
+      contexts.push(output);
+    } catch { /* the voice is resampled in the worklet, paced */ }
     await Promise.all([addWorklet(context, CAPTURE_WORKLET), addWorklet(output, PLAYBACK_WORKLET)]);
+    const ms = (n: number) => Math.round((RATE * n) / 1000);
+    source = context.createMediaStreamSource(stream);
+    // The capture worklet's silent output goes to the speaker through a muted gain: a context
+    // whose graph reaches no destination may stop being rendered (Safari), and the microphone with it.
+    capture = new AudioWorkletNode(context, 'atmee-speech-capture', {
+      numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1], processorOptions: { rate: RATE, frame: FRAME },
+    });
+    playback = new AudioWorkletNode(output, 'atmee-speech-playback', {
+      numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1],
+      processorOptions: {
+        rate: RATE, prime: ms(primeMs), max: ms(maxMs),
+        deliveryPrime: ms(deliveryPrimeMs), deliveryGrow: ms(deliveryGrowMs), deliveryMax: ms(deliveryMaxMs),
+      },
+    });
+    const mute = context.createGain();
+    mute.gain.value = 0;
+    source.connect(capture);
+    capture.connect(mute).connect(context.destination);
+    playback.connect(output.destination);
   } catch (err) {
     stream.getTracks().forEach((t) => t.stop());
-    await Promise.all(contexts.map((c) => c.close()));
+    await Promise.all(contexts.map((c) => c.close().catch(() => {})));
     throw err;
   }
-  const ms = (n: number) => Math.round((RATE * n) / 1000);
-  const source = context.createMediaStreamSource(stream);
-  const capture = new AudioWorkletNode(context, 'atmee-speech-capture', {
-    numberOfInputs: 1, numberOfOutputs: 0, processorOptions: { rate: RATE, frame: FRAME },
-  });
-  const playback = new AudioWorkletNode(output, 'atmee-speech-playback', {
-    numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1],
-    processorOptions: {
-      rate: RATE, prime: ms(primeMs), max: ms(maxMs),
-      deliveryPrime: ms(deliveryPrimeMs), deliveryGrow: ms(deliveryGrowMs), deliveryMax: ms(deliveryMaxMs),
-    },
-  });
-  source.connect(capture);
-  playback.connect(output.destination);
 
   let level = 0;
   let micLevel = 0;

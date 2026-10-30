@@ -113,7 +113,9 @@ describe('a reply with playback control: held whole, played at its rate, acknowl
     db.end(1);
     expect(db.queued).toBe(RATE * 30);          // nothing dropped, however far ahead
     const { reports, loud } = play(db, RATE * 31);
-    expect(loud).toBe(RATE * 30);
+    // Every sample plays; the first few ramp in from quiet, so they are not the tone's own value.
+    expect(loud).toBeGreaterThanOrEqual(RATE * 30 - 96);
+    expect(loud).toBeLessThan(RATE * 30);
     expect(reports).toEqual([{ started: 1 }, { finished: 1, played: RATE * 30, interrupted: false }]);
   });
 
@@ -139,6 +141,27 @@ describe('a reply with playback control: held whole, played at its rate, acknowl
     expect(out[0]).toBeLessThan(4000 / 32768);  // ...rather than hold or drop to zero
     db.push(1, pcm(PRIME));                     // short of the new cushion: still waiting
     expect(play(db, 256).loud).toBe(0);
+  });
+
+  test('each reply starts from the base cushion: a stall in one does not slow the next', () => {
+    const db = player();
+    db.open(1);
+    db.push(1, pcm(PRIME));
+    play(db, PRIME + 128);                      // ran dry: the cushion grew
+    expect(db.cushion).toBe(PRIME + 2400);
+    db.open(2);
+    expect(db.cushion).toBe(PRIME);
+  });
+
+  test('the voice ramps in from quiet over a few milliseconds instead of stepping', () => {
+    const db = player();
+    db.open(1);
+    db.push(1, pcm(PRIME));
+    const out = new Float32Array(128);
+    db.pull(out);
+    expect(out[0]).toBeLessThan(0.01 * (4000 / 32768) + 1e-9);
+    expect(out[48]).toBeGreaterThan(0.3 * (4000 / 32768));
+    expect(out[100]).toBeCloseTo(4000 / 32768, 6);
   });
 
   test('a clear drops the rest and reports where it got to', () => {
