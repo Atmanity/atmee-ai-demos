@@ -1,23 +1,31 @@
 # Math Club
 
-Maths you can eat. A child aged six to ten learns fractions by cutting a pizza
-and times tables by filling a cookie tray, with Mochi the red panda as teacher.
-The point is the conversation: Mochi fills the screen, the microphone stays open,
-the child's words appear as Mochi hears them, and Mochi asks, reacts and adapts
-while the pizza changes the way the child says. Chalkline's front door links here for younger classes.
+Talk with Mochi, a cartoon red panda, and solve it out loud. Each of the five
+levels is a different game and a different way of teaching. Mochi stands inside
+the game, hears the child, asks, hints, and jumps when they get it.
+
+| Level | Game | How it teaches |
+| --- | --- | --- |
+| 1 | Firefly Catch | Counting with a friend, no fear of being wrong |
+| 2 | Block Builder | Socratic steps through carrying, with hints that climb |
+| 3 | Mochi's Shop | Story problems: Mochi is the shopkeeper, the child helps |
+| 4 | Teach Mochi | Mochi is wrong on purpose; the child corrects and explains |
+| 5 | Cube Lab | A cube unfolds into a net, then surface area |
 
 ## How it works
 
 | Part | What it does |
 | --- | --- |
-| `engine/club.ts` | The two classes and every rule; a button and a tool call make the same move |
-| `engine/director.ts` | Mochi's instructions, tools and live state; a times total never reaches the host |
-| `page/App.tsx` | The class picker, Mochi, the pizza and tray, and what Mochi heard; a total from the host counts only after the child has spoken |
+| `engine/games.ts` | The five games as ladders of steps; a wrong answer earns the next hint, never the answer |
+| `engine/director.ts` | Mochi's instructions, tools and live state; a pending answer never reaches the host |
+| `page/App.tsx` | The lobby, the game screen, what Mochi heard, and Mochi's jumps |
+| `page/Cutout.tsx` | Keys the green out of the host's video so Mochi stands in the world |
+| `page/Worlds.tsx` | The five worlds |
 
-Each class has five levels, for ages five to ten and up. Both classes share one
-call, so Mochi can change class or level when asked. There are no
-buttons for the maths: the child talks. Add `?type` to the address for a typing
-box with no microphone (for testing).
+An answer from the host counts only after the child has spoken. The jump is the
+page moving the cut-out; the avatar itself animates in place. There are no
+buttons for the maths. Add `?type` to the address for a typing box with no
+microphone (for testing).
 
 ## Host
 
