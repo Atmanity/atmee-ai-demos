@@ -24,7 +24,7 @@ describe('the resampler', () => {
       return rms(Int16Array.from(out));
     };
     expect(through(1_000)).toBeGreaterThan(10_000);   // a 16 000-peak tone keeps its ~11 300 RMS
-    expect(through(10_500)).toBeLessThan(300);         // linear interpolation left it at ~6 700, at 5.5 kHz
+    expect(through(10_500)).toBeLessThan(300);         // linear interpolation left it at ~8 150, at 5.5 kHz
   });
 });
 

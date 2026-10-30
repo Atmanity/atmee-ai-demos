@@ -4,7 +4,7 @@
 // it the whole voice as one piece. createVoice finds the stretches of speech in
 // it (on at the first sound, off after a moment of quiet): when the avatar
 // speaks, for the booth and the transcript.
-import { Resampler24to16 } from '../../../src/kit/index.ts';
+import { Resampler24to16 } from '../../../src/avatar/pcm.ts';
 
 export const SPEECH_RATE = 24_000;
 export const FACE_RATE = 16_000;
