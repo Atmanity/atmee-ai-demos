@@ -56,7 +56,7 @@ function Lobby({ onGo }: { onGo: (level: number) => void }) {
         <section className="mc-hero">
           <div>
             <h1>Math<br />Club</h1>
-            <p>Talk with Mochi. Solve it out loud. Watch Mochi jump.</p>
+            <p>Talk with Mochi. Solve it out loud. Watch Mochi cheer you on.</p>
             <button type="button" className="mc-go" onClick={() => onGo(level)}>Talk to Mochi</button>
           </div>
           <Cutout image={mochi} className="mc-hero-mochi" />
@@ -83,32 +83,17 @@ export function App() {
   const ref = useRef(club);
   const body = useRef<HTMLDivElement>(null);
 
-  // The acting: the avatar moves in place, so the page throws the whole body around.
+  // A little body language; the avatar's own face does the acting.
   const act = useCallback((frames: Keyframe[], duration: number, easing = 'ease-out') => { body.current?.animate(frames, { duration, easing }); }, []);
-  const leap = useCallback((high: boolean) => act([
-    { transform: 'translateY(0) scale(1.1, .88)' },
-    { transform: `translateY(${high ? -44 : -28}%) scale(.92, 1.1)`, offset: .45 },
-    { transform: 'translateY(0) scale(1.14, .84)', offset: .8 },
+  const hop = useCallback((height: number) => act([
+    { transform: 'translateY(0) scale(1.03, .97)' },
+    { transform: `translateY(-${height}%) scale(.99, 1.02)`, offset: .45 },
+    { transform: 'translateY(0) scale(1.03, .97)', offset: .82 },
     { transform: 'translateY(0) scale(1)' },
-  ], 720), [act]);
-  const spin = useCallback(() => act([
-    { transform: 'translateY(0) rotate(0) scale(1)' },
-    { transform: 'translateY(-48%) rotate(180deg) scale(.95)', offset: .5 },
-    { transform: 'translateY(0) rotate(360deg) scale(1.08, .9)', offset: .85 },
-    { transform: 'translateY(0) rotate(360deg) scale(1)' },
-  ], 900), [act]);
-  const stumble = useCallback(() => act([
-    { transform: 'rotate(0)' },
-    { transform: 'translateX(-6%) rotate(-16deg) scale(1.04, .94)', offset: .25 },
-    { transform: 'translateX(5%) rotate(12deg)', offset: .55 },
-    { transform: 'translateX(-2%) rotate(-5deg)', offset: .8 },
-    { transform: 'rotate(0)' },
-  ], 720, 'ease-in-out'), [act]);
-  const perk = useCallback(() => act([
-    { transform: 'translateY(0) scale(1)' },
-    { transform: 'translateY(-6%) scale(1.05, .97)', offset: .4 },
-    { transform: 'translateY(0) scale(1)' },
-  ], 320), [act]);
+  ], 620), [act]);
+  const wobble = useCallback(() => act([
+    { transform: 'rotate(0)' }, { transform: 'rotate(-4deg)', offset: .3 }, { transform: 'rotate(3deg)', offset: .65 }, { transform: 'rotate(0)' },
+  ], 560, 'ease-in-out'), [act]);
 
   // The game moves here first, so two calls in one breath each see the last one's result.
   const apply = useCallback((name: string, args: Record<string, unknown>) => {
@@ -117,11 +102,11 @@ export function App() {
     ref.current = move.club;
     setClub(move.club);
     if (move.fx.length) { setFx(move.fx); setFxKey((k) => k + 1); }
-    if (move.fx.includes('jump')) { leap(move.fx.includes('star')); if (move.fx.includes('star')) setTimeout(spin, 760); }
-    if (move.fx.includes('tumble')) stumble();
-    if (move.fx.includes('finish')) spin();
+    if (move.fx.includes('jump')) hop(move.fx.includes('star') ? 18 : 5);
+    if (move.fx.includes('tumble')) wobble();
+    if (move.fx.includes('finish')) hop(18);
     return move;
-  }, [leap, spin, stumble]);
+  }, [hop, wobble]);
 
   // An answer counts only if the child said something since the last one: the host must not answer for them.
   const spoke = useRef(false);
@@ -134,9 +119,6 @@ export function App() {
   }, [apply]);
   const avatar = useAvatar('math-club', { onToolCall, onUserSaid: () => { spoke.current = true; } });
   const live = avatar.phase === 'live';
-  // Mochi perks up the moment the child starts talking.
-  const talking = Boolean(avatar.heard);
-  useEffect(() => { if (talking) perk(); }, [talking, perk]);
 
   const press = (name: string, args: Record<string, unknown> = {}) => {
     const move = apply(name, args);

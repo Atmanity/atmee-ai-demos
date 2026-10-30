@@ -4,16 +4,26 @@ import { useEffect, useRef, type RefObject } from 'react';
 
 const SIZE = 1024;
 const VERTEX = `attribute vec2 p; varying vec2 uv; void main() { uv = vec2((p.x + 1.) / 2., (1. - p.y) / 2.); gl_Position = vec4(p, 0., 1.); }`;
+// Green measured against the pixel's own brightness, and judged against the background as it is in
+// this very frame (read at the corners, which Mochi never reaches): a poor stream washes the green
+// out in patches, and a fixed cut then lets those patches show.
 const FRAGMENT = `precision mediump float; varying vec2 uv; uniform sampler2D t; uniform vec2 px;
-float solid(vec2 at) { vec4 c = texture2D(t, at); return 1. - smoothstep(.2, .32, c.g - max(c.r, c.b)); }
+float green(vec2 at) { vec4 c = texture2D(t, at); return (c.g - max(c.r, c.b)) / max(c.g, .04); }
+float bg;
+float solid(vec2 at) { return 1. - smoothstep(bg * .46, bg * .7, green(at)); }
 void main() {
-  // Pulled in by a pixel of the source, then softened: compression smears green into the edge.
-  float inner = min(min(solid(uv + vec2(px.x, 0.)), solid(uv - vec2(px.x, 0.))), min(solid(uv + vec2(0., px.y)), solid(uv - vec2(0., px.y))));
-  float a = smoothstep(.15, .85, min(solid(uv), inner));
+  bg = max(.12, (green(vec2(.03, .03)) + green(vec2(.97, .03)) + green(vec2(.03, .97)) + green(vec2(.97, .97))) / 4.);
+  float s = solid(uv);
+  vec2 x = vec2(px.x * 2., 0.), y = vec2(0., px.y * 2.);
+  // Closes thin slits, where teal meets yellow and blends to green, then pulls the edge in by a pixel.
+  float closed = max(s, max(min(solid(uv + x), solid(uv - x)), min(solid(uv + y), solid(uv - y))));
+  vec2 dx = vec2(px.x, 0.), dy = vec2(0., px.y);
+  float inner = min(min(solid(uv + dx), solid(uv - dx)), min(solid(uv + dy), solid(uv - dy)));
+  float a = smoothstep(.15, .85, min(closed, max(inner, closed * step(.9, s))));
   vec4 c = texture2D(t, uv);
   float other = max(c.r, c.b);
   // Green light bounces onto the skin; teal keeps its blue, so only green-without-blue is pulled back.
-  float clean = min(c.g, max(c.r * .9, c.b));
+  float clean = min(c.g, max(c.r * .88, c.b));
   gl_FragColor = vec4(c.r, min(clean, other * mix(.82, 1., a)), c.b, a);
 }`;
 
@@ -52,7 +62,7 @@ export function Cutout({ video, image, className = '' }: { video?: RefObject<HTM
       const source = v && v.readyState >= 2 && v.videoWidth ? v : still.complete && still.naturalWidth ? still : null;
       if (!source) return;
       const width = source instanceof HTMLVideoElement ? source.videoWidth : source.naturalWidth;
-      gl.uniform2f(px, 1.4 / width, 1.4 / width);
+      gl.uniform2f(px, 2 / width, 2 / width);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     };

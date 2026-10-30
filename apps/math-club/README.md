@@ -2,7 +2,7 @@
 
 Talk with Mochi, a cartoon otter, and solve it out loud. Each of the five
 levels is a different game and a different way of teaching. Mochi stands inside
-the game, hears the child, asks, hints, and jumps when they get it.
+the game, hears the child, asks, hints, and hops when they get it.
 
 | Level | Game | How it teaches |
 | --- | --- | --- |

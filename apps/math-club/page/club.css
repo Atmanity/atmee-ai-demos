@@ -18,7 +18,7 @@ button:focus-visible { outline: 4px solid var(--sun); outline-offset: 3px; }
 .mc-hero { display: grid; grid-template-columns: 1fr minmax(0, min(520px, 58vh)); align-items: center; gap: 12px; }
 .mc-hero h1 { font-size: clamp(72px, 12vw, 136px); line-height: .86; color: var(--cream); text-shadow: 0 6px 0 var(--coral), 0 14px 30px rgba(42, 33, 64, .35); }
 .mc-hero p { font-size: 23px; max-width: 20em; margin: 16px 0 20px; }
-.mc-hero-mochi { width: 100%; aspect-ratio: 1; animation: mc-idle 2.4s ease-in-out infinite; transform-origin: bottom; }
+.mc-hero-mochi { width: 100%; aspect-ratio: 1; animation: mc-idle 3.6s ease-in-out infinite; transform-origin: bottom; }
 .mc-games { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
 .mc-games button { width: 100%; height: 100%; min-height: 128px; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; text-align: left; color: #fff; border: 4px solid transparent; border-radius: 22px; padding: 14px; box-shadow: 0 8px 18px rgba(42, 33, 64, .28); transition: transform .12s; }
 .mc-games button:hover { transform: translateY(-4px) rotate(-1deg); }
@@ -60,8 +60,7 @@ button:focus-visible { outline: 4px solid var(--sun); outline-offset: 3px; }
 
 .mc-mochi { position: absolute; z-index: 4; left: 1vw; bottom: 44px; width: min(66vh, 42vw); aspect-ratio: 1; }
 .mc-body { position: absolute; inset: 0; transform-origin: bottom center; }
-.mc-body canvas { width: 100%; height: 100%; display: block; animation: mc-idle 2.4s ease-in-out infinite; transform-origin: bottom; }
-.is-talking .mc-body canvas { animation: mc-talk .46s ease-in-out infinite; }
+.mc-body canvas { width: 100%; height: 100%; display: block; animation: mc-idle 3.6s ease-in-out infinite; transform-origin: bottom; }
 .mc-shadow { position: absolute; left: 24%; right: 24%; bottom: 6%; height: 6%; border-radius: 50%; background: rgba(0, 0, 0, .28); z-index: -1; filter: blur(4px); }
 .mc-bubble { position: absolute; z-index: 2; left: 72%; top: -6%; width: min(320px, 26vw); margin: 0; padding: 10px 14px; border-radius: 18px 18px 18px 4px; background: #fff; font-size: 16px; box-shadow: 0 8px 18px rgba(42, 33, 64, .22); }
 .mc-call { position: absolute; z-index: 7; inset: 0; pointer-events: none; display: grid; place-items: center; }
@@ -143,8 +142,7 @@ button:focus-visible { outline: 4px solid var(--sun); outline-offset: 3px; }
 .is-open .f-left { transform: translateX(calc(var(--s) * -1)); } .is-open .f-right { transform: translateX(var(--s)); } .is-open .f-top { transform: translateY(calc(var(--s) * -1)); } .is-open .f-bottom { transform: translateY(var(--s)); } .is-open .f-back { transform: translateX(calc(var(--s) * 2)); }
 .w-label { margin: 0; padding: 4px 16px; border-radius: 12px; background: var(--cream); font-size: 20px; }
 
-@keyframes mc-idle { 50% { transform: translateY(-1.6%) scale(1.012, .985); } }
-@keyframes mc-talk { 50% { transform: translateY(-3.6%) rotate(1.2deg) scale(.985, 1.02); } }
+@keyframes mc-idle { 50% { transform: translateY(-.4%); } }
 @keyframes mc-pop { from { scale: 0; } to { scale: 1; } }
 @keyframes mc-hop { 50% { translate: 0 -18px; } }
 @keyframes mc-drop { from { transform: translate(-50%, -20px); opacity: 0; } }
