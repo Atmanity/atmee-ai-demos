@@ -22,8 +22,9 @@ the game's server ──► POST /v1/speech_sessions  (API key; avatarId = the v
         ▼
 the page ──► wss://…/v1/speech_sessions   subprotocols atmee-live, atmee-token.<jwt>
    input_audio.append  ───► the microphone, 24 kHz PCM16, every 20 ms
-   output_audio.delta  ◄─── his voice ──► jitter buffer ──► speaker
-                                                  └──► level (RMS) ──► jaw, moustache, brows, head
+   playback.*          ◄─── his voice, each reply as fast as it is made ──► held whole ──► speaker
+                                                                     └──► level (RMS) ──► jaw, moustache, brows, head
+   playback.ack        ───► when each reply began to play, and how much of it played
    a tool round        ◄─── give_quest, sell_item, give_item, look_at_player ──► engine/tavern.ts
    response.item.create ──► each result; response.create ──► he goes on
 ```
@@ -32,7 +33,7 @@ the page ──► wss://…/v1/speech_sessions   subprotocols atmee-live, atmee
 |---|---|
 | Who he is | `server.ts` pins it per conversation (`speech.settings()`): `avatar_name`, `persona`, `scenario` and `self_introduction` from `avatar.json`, the tavern's `facts` (the shelf, the quest board, the gossip), the `instructions` for playing the scene, and the tools. The avatar gives only the **voice**: its own name and personality are replaced. That is how a game uses its own characters: one voiced avatar can play any of them. |
 | The game's state and rules | `engine/tavern.ts`, run in the page: 12 silver and a cloak to start, Brannoc's shelf (six wares, prices, stock), three quests on the board, two at a time, one cheap thing on the house per visit. Results lead with the outcome (`Sold:`, `Not sold: it costs 8 silver and the player has only 4`, `Quest given:`, `Already on the log:`). Brannoc never moves silver himself, so a sale the player can't afford is refused before anything changes hands. |
-| His face | `page/Brannoc.tsx`: the tavern and Brannoc as one SVG. Every animation frame reads `useSpeech().levels().voice`, the RMS of the audio the speaker is playing right now (after the jitter buffer, so it stays in sync), and sets the jaw's opening (fast to open, slower to close), lifts the moustache, raises the brows and nods the head. The page also sets his mood: `listening` (leaning in, brows up while your microphone is loud), `thinking` (quicker blinks), `pleased` for 2.5 s after a sale, gift or quest. There is no viseme data: the speech server sends audio and paced words, so this is level-driven, not phoneme-accurate lip sync. A game engine would do the same with its own rig (a jaw bone or blend shape per level). |
+| His face | `page/Brannoc.tsx`: the tavern and Brannoc as one SVG. Every animation frame reads `useSpeech().levels().voice`, the RMS of the audio the speaker is playing right now (after the player's buffer, so it stays in sync however far ahead the reply came), and sets the jaw's opening (fast to open, slower to close), lifts the moustache, raises the brows and nods the head. The page also sets his mood: `listening` (leaning in, brows up while your microphone is loud), `thinking` (quicker blinks), `pleased` for 2.5 s after a sale, gift or quest. There is no viseme data: the speech server sends audio and paced words, so this is level-driven, not phoneme-accurate lip sync. A game engine would do the same with its own rig (a jaw bone or blend shape per level). |
 | The call | `src/speech/` and `useSpeech` (shared by the speech apps): the socket, the microphone and voice worklets, the transcript, tool rounds, End through the server. |
 | The screen | `page/App.tsx`: the scene with his words in a speech bubble and yours under it, a toast for each thing handed over, Mute and End; the quest log, purse and pack, his shelf, and **Under the hood** with each tool's result. After the conversation: what you leave with, how long you talked, what was billed and what it cost. |
 
