@@ -35,7 +35,12 @@ export interface Delivery { delivery_id: number; playback_id: unknown; start_sam
 /** What the page played of a delivery, as the server is told it. */
 export type PlaybackAck =
   | { status: 'started' }
-  | { status: 'finished'; played_samples: number; interrupted: boolean };
+  | {
+    status: 'finished'; played_samples: number; interrupted: boolean;
+    /** How the page knows: what its output reported (the default), none of it reached the
+     * output, or no position at all, which the server settles from its own estimate. */
+    position_source?: 'renderer_reported' | 'not_submitted' | 'unavailable';
+  };
 
 /** The `causeur.playback.ack` for a delivery. */
 export function playbackAck(delivery: Delivery, ack: PlaybackAck): Record<string, unknown> {
@@ -44,7 +49,7 @@ export function playbackAck(delivery: Delivery, ack: PlaybackAck): Record<string
     playback_id: delivery.playback_id, start_sample: delivery.start_sample,
     ...(ack.status === 'started' ? { status: 'started' } : {
       status: 'finished', played_samples: ack.played_samples, interrupted: ack.interrupted,
-      position_source: 'renderer_reported',
+      position_source: ack.position_source ?? 'renderer_reported',
     }),
   };
 }

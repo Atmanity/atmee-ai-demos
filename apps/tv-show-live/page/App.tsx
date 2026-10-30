@@ -20,7 +20,9 @@ import { createFloor } from '../show/floor.ts';
 import { createDirector, type Director, type Shot, type ShotMode } from '../show/director.ts';
 import { FILM, GUESTS, HOST, SHOW, firstName, onCallFor, type Guest } from '../show/cast.ts';
 import { bridgeCue, facingAt, farewellCue, filmCue, goodbyeCue, guestFarewellCue, guestPrompts, holdCue, hostHandsPrompts, hostPrompts, LISTENING_EVERY_MS, type Facing, holdMoreCue, inviteCue, inviteNowCue, noteCue, nudgeCue, topicCue, welcomeCue, wrapCue } from '../show/script.ts';
-import { openSpeech, SpeechError, type SpeechLine } from '../show/speech.ts';
+import { openSpeech, SpeechError, type DeliveryEvent, type SpeechLine } from '../show/speech.ts';
+import { FaceDelivery, type Face } from '../../../src/speech/face.ts';
+import { playbackAck, type Delivery } from '../../../src/speech/protocol.ts';
 import { createResampler, createVoice, FACE_RATE } from '../show/voice.ts';
 import cam2 from '../studio/cam2.jpg';
 import wall from '../studio/wall.jpg';
@@ -42,10 +44,20 @@ const SHOT_MS = 5_200;          // each trailer still, held and pushed in on
 // The booth hears Jada's line end in her speech session; viewers hear it from her face about
 // 4 s later (measured). The trailer rolls once the face is through it, not over her last words.
 const FACE_LAG_MS = 4_500;
+// Under playback control a face has each reply ahead of time and starts it sooner (about 2 s after
+// the page's clock, measured live): the lag is measured on each of Jada's replies, from the page's
+// clock starting it to her face's renderer saying it began, and the page times by that.
+let faceLagMs = FACE_LAG_MS;
 // Her line after the trailer is cued this long before the trailer ends, so that what she says
 // comes out of her face as it ends: her session takes a second or so to start the line, then
-// her face is FACE_LAG_MS behind. Cued at the end, she was silent on screen for five seconds.
-const INVITE_LEAD_MS = FACE_LAG_MS + 1_500;
+// her face is faceLagMs behind. Cued at the end, she was silent on screen for five seconds.
+const inviteLeadMs = () => faceLagMs + 1_500;
+/**
+ * A lead tuned against the 4.5 s lag the faces had when the voice came paced, held in the same
+ * proportion to the lag measured now: at about 1 s, a fixed 1.5 s lead would be no wait at all,
+ * and the page would act a second before the faces show what it acts on.
+ */
+const scaledLead = (leadMs: number) => Math.round((leadMs * faceLagMs) / FACE_LAG_MS);
 const TRAILER_FADE_MS = 900;
 const CAPTION_LINGER_MS = 3_000;
 // The faces' free-form prompts. By default Jada's face gets one sentence, her look and her hands
@@ -200,7 +212,7 @@ export function App() {
     return () => clearTimeout(id);
   }, [trailerUp]);
   // Her voice is kept off her faces from the roll until her line after the trailer is cued:
-  // with her face FACE_LAG_MS behind, that is the trailer's time on screen. What she says while
+  // with her face faceLagMs behind, that is the trailer's time on screen. What she says while
   // hushed is neither shown nor logged; her line after it is, from its first word, though it
   // starts while the trailer is still fading out.
   const hush = useRef(false);
@@ -210,7 +222,7 @@ export function App() {
   const logId = useRef(0);
   const addLog = (who: LogLine['who'], text: string, name = who === 'guest' ? segment.current?.name : undefined) => setLog((l) => [...l.slice(-150), { id: ++logId.current, who, text, name }]);
   // What is being said, word by word, in step with the faces: words arrive with the voice, which
-  // the faces play FACE_LAG_MS later, so each word shows that much later, as heard.
+  // the faces play faceLagMs later, so each word shows that much later, as heard.
   const [speaking, setSpeaking] = useState<Partial<Record<Role, { name?: string; text: string }>>>({});
   // Captions on the video: the line being said, as heard; it lingers CAPTION_LINGER_MS after.
   const [caption, setCaption] = useState<{ who: Role; name: string; text: string } | null>(null);
@@ -313,7 +325,7 @@ export function App() {
         onFrame() {},
         onEnd() {
           // Whether her line was hushed when it ended: the booth may roll the trailer (and hush her)
-          // as the line ends, and the transcript is written FACE_LAG_MS later.
+          // as the line ends, and the transcript is written faceLagMs later.
           const hushed = hush.current;
           clearTimeout(talkingUntil.current[role]);
           talkingUntil.current[role] = setTimeout(() => { talking.current[role] = false; }, TURN_QUIET_MS);
@@ -332,12 +344,15 @@ export function App() {
           setTimeout(() => {
             setSpeaking((l) => ({ ...l, [role]: undefined }));
             if (said && aired && !hushed) addLog(role, said, name);
-          }, FACE_LAG_MS);
+          }, faceLagMs);
         },
       });
       return {
-        feed(pcm: Int16Array) {
+        // `toFaces`: false for a voice under playback control, whose deliveries reach the faces
+        // themselves, ahead of this clock (deliveries, below).
+        feed(pcm: Int16Array, toFaces = true) {
           voice.feed(pcm);
+          if (!toFaces) return;
           // Not heard (off the floor), or Jada during the trailer: the face
           // gets silence of the same length, so its stream keeps time.
           const quiet = !floor.onAir(role) || (role === 'host' && hush.current);
@@ -357,6 +372,77 @@ export function App() {
     return { host: make('host', ['host']), guest: make('guest', ['g0', 'g1']) };
   }, []);
 
+  // Under playback control, each delivery of a voice goes to the face it starts on, whole, as it
+  // comes: the face holds it, and its reports are the server's acknowledgments (src/speech/face.ts).
+  // Whether it goes on air is the floor's (and the trailer's) at its start, as for a stretch of
+  // the paced voice; off air, the face gets silence of the same length, so its count holds. Its
+  // start is told from the page's clock, where the booth, the director and the other avatar hear
+  // it (as the paced voice was timed); its end and any cut, from the face. With no face up, the
+  // page's clock tells all of it.
+  // When the page's clock started Jada's latest reply, until her face says it began (faceLagMs).
+  const hostStartedAt = useRef<number | null>(null);
+  useEffect(() => {
+    if (!hostFace.speaking || hostStartedAt.current === null) return;
+    const lag = performance.now() - hostStartedAt.current;
+    hostStartedAt.current = null;
+    if (lag < 300 || lag > 8_000) return;   // not this reply's start (a face already speaking, a stall)
+    faceLagMs = Math.round(lag);
+    console.info('[gilded-reel] her face is %d ms behind the page', faceLagMs);
+  }, [hostFace.speaking]);
+  const deliveries = useMemo(() => {
+    const make = (role: Role) => {
+      type Sink = { face: FaceDelivery; silent: boolean } | { delivery: Delivery; silent: boolean };
+      const sinks = new Map<number, Sink>();
+      // A face as a delivery takes it. Its report of each piece is logged beside what was written:
+      // a renderer that drops audio at a stream's start would report less than it was given.
+      const asFace = (seat: 'host' | 'g0' | 'g1', id: number): Face => ({
+        async open() {
+          const w = await faces.current[seat].open();
+          if (!w) throw new Error('the face is not live');
+          let written = 0;
+          return {
+            write: (pcm) => { written += pcm.length; return w.write(pcm); },
+            end: async () => {
+              const played = await w.end();
+              console.info('[gilded-reel] %s delivery %d on %s: wrote %ss, face reports %ss%s', role, id, seat,
+                (written / FACE_RATE).toFixed(2), played.position.toFixed(2), played.interrupted ? ' (cut)' : '');
+              return played;
+            },
+          };
+        },
+        interrupt: () => faces.current[seat].interrupt(),
+      });
+      return (event: DeliveryEvent, ack: (e: Record<string, unknown>) => void) => {
+        if (event.kind === 'open') {
+          const seat = role === 'host' ? 'host' : (`g${onTvRef.current}` as 'g0' | 'g1');
+          const face = faces.current[seat];
+          const silent = !floor.onAir(role) || (role === 'host' && hush.current);
+          for (const id of [...sinks.keys()]) if (id < event.delivery.delivery_id - 4) sinks.delete(id);
+          sinks.set(event.delivery.delivery_id, face.phase === 'live'
+            ? { face: new FaceDelivery(asFace(seat, event.delivery.delivery_id), event.delivery, ack), silent }
+            : { delivery: event.delivery, silent });
+          return;
+        }
+        const sink = sinks.get(event.id);
+        if (!sink) return;
+        if ('face' in sink) {
+          if (event.kind === 'audio') sink.face.push(sink.silent ? new Int16Array(event.pcm.length) : event.pcm);
+          else if (event.kind === 'end') sink.face.end();
+          else if (event.kind === 'clear') void sink.face.clear();
+          else if (event.kind === 'local-start') {
+            sink.face.started();
+            if (role === 'host') hostStartedAt.current = performance.now();
+          }
+          return;
+        }
+        if (event.kind === 'local-start') ack(playbackAck(sink.delivery, { status: 'started' }));
+        else if (event.kind === 'local-end') ack(playbackAck(sink.delivery, { status: 'finished', played_samples: event.played, interrupted: false }));
+        else if (event.kind === 'clear') ack(playbackAck(sink.delivery, { status: 'finished', played_samples: event.played, interrupted: true }));
+      };
+    };
+    return { host: make('host'), guest: make('guest') };
+  }, []);
+
   // rejoin: a guest whose line dropped, put back through once (their face is still up), the
   // conversation carrying on where it was.
   async function openSeat(role: Role, who?: Guest, rejoin = false): Promise<SpeechLine | undefined> {
@@ -364,15 +450,16 @@ export function App() {
     let opened: SpeechLine | undefined;
     try {
       const line = await openSpeech(seatApi(role === 'host' ? 'host' : `g-${who!.id}`), {
-        onAudio(b64, pcm) {
-          voices[role].feed(pcm);
+        onAudio(b64, pcm, replayed) {
+          voices[role].feed(pcm, !replayed);
           if (!talking.current[other]) lines.current[other]?.hear(b64);
         },
+        onDelivery(event, ack) { deliveries[role](event, ack); },
         onWords(delta) {
           words.current[role] += delta;
           if (!hush.current && floor.onAir(role)) {
             const name = role === 'guest' ? segment.current?.name : undefined;
-            setTimeout(() => setSpeaking((l) => ({ ...l, [role]: { name, text: (l[role]?.text ?? '') + delta } })), FACE_LAG_MS);
+            setTimeout(() => setSpeaking((l) => ({ ...l, [role]: { name, text: (l[role]?.text ?? '') + delta } })), faceLagMs);
           }
           // Auto-advance judges the guest's answer while it is still being given (show/advance.ts).
           if (role === 'guest' && floor.onAir('guest')) advancer.current?.hearing(words.current.guest);
@@ -549,7 +636,7 @@ export function App() {
     const now = () => segment.current ?? guest;
     booth.current = createBooth({
       film: filmCue(),
-      rollTrailer: () => { hush.current = true; const show = showRef.current; setTimeout(() => { if (showRef.current === show) { addLog('booth', `Roll the ${FILM.title} trailer`); setTrailer(true); } }, FACE_LAG_MS); },
+      rollTrailer: () => { hush.current = true; const show = showRef.current; setTimeout(() => { if (showRef.current === show) { addLog('booth', `Roll the ${FILM.title} trailer`); setTrailer(true); } }, faceLagMs); },
       invite: () => inviteCue(now()),
       guestReady: () => faces.current.g0.phase === 'live' && Boolean(slotsRef.current[0]),
       hold: () => holdCue(segment.current),
@@ -568,7 +655,7 @@ export function App() {
         else line.commentary(text);
       },
       dialGuest: () => void openSeat('guest', slotsRef.current[0]!),
-      onStage: (next) => { setStage(next); director.current?.stage(next); look(facingAt(next), FACE_LAG_MS - 2_000); },
+      onStage: (next) => { setStage(next); director.current?.stage(next); look(facingAt(next), faceLagMs - scaledLead(2_000)); },
     });
     if (first) addLog('booth', `First topic: ${first}`);
     if (describe && !early) {
@@ -650,8 +737,8 @@ export function App() {
     handingOver.current = true;
     addLog('booth', `Bring on ${to.name}`);
     const show = showRef.current;
-    // Each step lands on the faces FACE_LAG_MS after it is said; the page acts once viewers have seen it.
-    const later = (f: () => void | Promise<void>) => setTimeout(() => { if (showRef.current === show) void f(); }, FACE_LAG_MS - 1_500);
+    // Each step lands on the faces faceLagMs after it is said; the page acts once viewers have seen it.
+    const later = (f: () => void | Promise<void>) => setTimeout(() => { if (showRef.current === show) void f(); }, faceLagMs - scaledLead(1_500));
     booth.current.handover({
       farewell: farewellCue(from),
       goodbye: guestFarewellCue,
@@ -738,7 +825,7 @@ export function App() {
   }
   const goneGuests = useRef<string[]>([]);
 
-  // Shortly before the trailer ends, her line after it is cued (see INVITE_LEAD_MS); at its end it goes.
+  // Shortly before the trailer ends, her line after it is cued (see inviteLeadMs); at its end it goes.
   const trailerEnding = () => { hush.current = false; booth.current?.trailerDone(); };
   const trailerDone = () => {
     trailerEnding();
@@ -971,7 +1058,7 @@ function Trailer({ leaving, onEnding, onDone }: { leaving: boolean; onEnding: ()
   const shots = FILM.trailer;
   const score = useRef<ReturnType<typeof startScore>>(null);
   useEffect(() => {
-    const id = setTimeout(onEnding, Math.max(0, shots.length * SHOT_MS - INVITE_LEAD_MS));
+    const id = setTimeout(onEnding, Math.max(0, shots.length * SHOT_MS - inviteLeadMs()));
     return () => clearTimeout(id);
   }, []);
   useEffect(() => {
