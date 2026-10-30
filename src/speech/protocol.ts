@@ -21,6 +21,43 @@ export const subprotocols = (token: string) => ['atmee-live', `atmee-token.${tok
 /** Whole user messages, replaced as recognition goes, instead of appended chunks. */
 export const INPUT_TRANSCRIPT = 'causeur.input_transcript.v1';
 
+/**
+ * Playback control: each reply comes as fast as the voice makes it, in
+ * deliveries, and the page says what it played (LIVE_API.md, "Playback
+ * control for a public client"). Without it the reply is paced to real time,
+ * and a stall on the way is heard as a gap.
+ */
+export const PLAYBACK_CONTROL = 'playback-v2';
+
+/** A delivery as `causeur.playback.start` opens it: what its acknowledgments name. */
+export interface Delivery { delivery_id: number; playback_id: unknown; start_sample: number }
+
+/** What the page played of a delivery, as the server is told it. */
+export type PlaybackAck =
+  | { status: 'started' }
+  | { status: 'finished'; played_samples: number; interrupted: boolean };
+
+/** The `causeur.playback.ack` for a delivery. */
+export function playbackAck(delivery: Delivery, ack: PlaybackAck): Record<string, unknown> {
+  return {
+    type: 'causeur.playback.ack', delivery_id: delivery.delivery_id,
+    playback_id: delivery.playback_id, start_sample: delivery.start_sample,
+    ...(ack.status === 'started' ? { status: 'started' } : {
+      status: 'finished', played_samples: ack.played_samples, interrupted: ack.interrupted,
+      position_source: 'renderer_reported',
+    }),
+  };
+}
+
+/**
+ * A server that does not offer playback control refused session.start for
+ * asking: it named the field among those it refused (not merely among those
+ * it supports), or the protocol.
+ */
+export const refusedPlaybackControl = (message: string) =>
+  /Unsupported session fields: \[[^\]]*playback_control/.test(message)
+  || message.startsWith('Unsupported playback control protocol');
+
 /** 16-bit PCM as base64 (the bytes as they are: little-endian, as every browser runs). */
 export function pcmToBase64(pcm: Int16Array): string {
   const bytes = new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength);
