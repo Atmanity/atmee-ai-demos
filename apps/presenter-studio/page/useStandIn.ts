@@ -155,6 +155,7 @@ export function useStandIn(face: AvatarOnly, mic: MicTap, settings: Settings) {
       void mic.stop();
       setOn(false);
       setCaption('');
+      setProblem('Speech recognition stopped. Start again.');
     };
 
     const opened = await new Promise<boolean>((resolve) => {
@@ -176,8 +177,13 @@ export function useStandIn(face: AvatarOnly, mic: MicTap, settings: Settings) {
       ws.send(deaf ? new Int16Array(pcm.length) : pcm);
     });
     setStarting(false);
-    if (ok) setOn(true);
-    else { socket.current = null; ws.close(); }
+    // The socket can close while the microphone is opening: then the tap must not stay on.
+    if (ok && socket.current === ws) setOn(true);
+    else {
+      if (socket.current === ws) socket.current = null;
+      ws.close();
+      await mic.stop();
+    }
   }, [mic, release, starting]);
 
   /** Cuts what Remy is saying, and every clause still on its way. */

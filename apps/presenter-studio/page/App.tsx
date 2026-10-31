@@ -43,6 +43,10 @@ export function App() {
   const [tone, setTone] = useState('professional');
   const [headphones, setHeadphones] = useState(false);
   const standIn = useStandIn(face, mic, { language, target, tone, headphones });
+  const [canStandIn, setCanStandIn] = useState(true);
+  useEffect(() => {
+    fetch(`${API}/voice`).then((res) => res.json()).then((json) => setCanStandIn(json.standIn === true)).catch(() => {});
+  }, []);
   const total = median(standIn.rows.flatMap((r) => (r.totalMs === undefined ? [] : [r.totalMs])));
   const writer = useRef<SpeechWriter | null>(null);
   const liveSamples = useRef(0);
@@ -234,6 +238,7 @@ export function App() {
           {source === 'standin' && (
             <div className="fc-panel" role="tabpanel">
               <p className="fc-help">Talk normally. Remy says what you mean, cleaned up or translated, a few seconds behind. He only restates you: he never answers.</p>
+              {!canStandIn && <p className="fc-paused" role="status">Stand-in isn't set up on this site yet.</p>}
               <div className="fc-choices">
                 <label className="fc-choice"><span>I speak</span>
                   <select value={language} disabled={standIn.on || standIn.starting} onChange={(e) => setLanguage(e.target.value)}>{HEARD.map((h) => <option key={h.id} value={h.id}>{h.label}</option>)}</select>
@@ -245,7 +250,7 @@ export function App() {
                   <select value={tone} onChange={(e) => setTone(e.target.value)}>{TONES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select>
                 </label>
               </div>
-              <button type="button" className={`fc-talk ${standIn.on ? 'is-on' : ''}`} disabled={!live || standIn.starting} onClick={() => void (standIn.on ? standIn.stop() : standIn.start())}>
+              <button type="button" className={`fc-talk ${standIn.on ? 'is-on' : ''}`} disabled={!live || !canStandIn || standIn.starting} onClick={() => void (standIn.on ? standIn.stop() : standIn.start())}>
                 <span className="fc-meter" style={{ transform: `scale(${1 + mic.level * 0.35})` }} aria-hidden="true" />
                 {standIn.starting ? 'Starting…' : standIn.on ? 'Stop' : 'Start speaking'}
               </button>
