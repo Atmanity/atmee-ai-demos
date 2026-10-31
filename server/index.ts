@@ -12,9 +12,10 @@
 // password for every app).
 import { createServer } from 'node:http';
 import express from 'express';
-import { app as fiveApps, handleUpgrade, requirePassword, shutdown as endFiveSessions } from '../server.js';
-import { api, endLiveSessions } from './api.ts';
-import { isMiniAppPath } from './site.ts';
+import { WebSocketServer } from 'ws';
+import { app as fiveApps, handleUpgrade, passesGate, requirePassword, shutdown as endFiveSessions } from '../server.js';
+import { api, appSocket, endLiveSessions } from './api.ts';
+import { appSocketId, isMiniAppPath, socketAllowed } from './site.ts';
 
 // Its own variable: PORT is what server.js reads when it runs on its own (3333).
 const PORT = Number(process.env.SITE_PORT || 5190);
@@ -68,7 +69,17 @@ app.get(['/apps', '/apps/'], (_req, res) => res.redirect(302, '/'));
 app.use((req, res, next) => (isMiniAppPath(req.path, production) ? miniapps(req, res, next) : fiveApps(req, res, next)));
 
 const server = createServer(app);
-server.on('upgrade', handleUpgrade);
+// An app's own socket passes the same gates as its routes; every other upgrade is the five apps'.
+const appSockets = new WebSocketServer({ noServer: true });
+const ownHosts = local ? [`localhost:${PORT}`, `127.0.0.1:${PORT}`] : null;
+server.on('upgrade', (req, socket, head) => {
+  const url = new URL(req.url ?? '/', 'http://site');
+  const id = appSocketId(url.pathname);
+  if (!id) return handleUpgrade(req, socket, head);
+  const take = appSocket(id);
+  if (!take || !passesGate(req) || !socketAllowed(req.headers.host, req.headers.origin, ownHosts)) return void socket.destroy();
+  appSockets.handleUpgrade(req, socket, head, (client) => take(client, url));
+});
 server.listen(PORT, HOST, () => console.log(`http://localhost:${PORT}/  (every app: the five and the fourteen)`));
 
 // Ctrl-C locally, SIGTERM from Kubernetes on a rollout: end every app's live sessions first.

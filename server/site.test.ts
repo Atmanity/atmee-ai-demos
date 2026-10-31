@@ -2,7 +2,23 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 import WebSocket from 'ws';
-import { isMiniAppPath } from './site.ts';
+import { appSocketId, isMiniAppPath, socketAllowed } from './site.ts';
+
+test("an app's socket has its own path; anything else stays the five apps' upgrade", () => {
+  expect(appSocketId('/api/apps/presenter-studio/socket')).toBe('presenter-studio');
+  for (const p of ['/', '/api/apps/socket', '/api/apps/a/b/socket', '/api/apps/a/socket/x']) expect(appSocketId(p)).toBeNull();
+});
+
+test('a socket opens only from the site itself', () => {
+  const own = ['localhost:5190', '127.0.0.1:5190'];
+  expect(socketAllowed('localhost:5190', 'http://localhost:5190', own)).toBe(true);
+  expect(socketAllowed('localhost:5190', 'http://evil.example', own)).toBe(false);
+  expect(socketAllowed('evil.example', 'http://evil.example', own)).toBe(false);
+  expect(socketAllowed('demos.example', 'https://demos.example', null)).toBe(true);
+  expect(socketAllowed('demos.example', 'https://evil.example', null)).toBe(false);
+  expect(socketAllowed('demos.example', undefined, null)).toBe(false);
+  expect(socketAllowed('demos.example', 'not a url', null)).toBe(false);
+});
 
 test('the mini-apps own /apps and /api/apps (and their page files); everything else is the five apps', () => {
   for (const p of ['/apps', '/apps/', '/apps/guess-the-city/', '/api/apps', '/api/apps/guess-the-city/session']) expect(isMiniAppPath(p, true)).toBe(true);

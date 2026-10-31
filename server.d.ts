@@ -7,6 +7,8 @@ import type { Duplex } from 'node:stream';
 export declare const app: Express;
 /** The DEMO_PASSWORD gate (HTTP basic auth, then a cookie); passes everything when no password is set. */
 export declare const requirePassword: RequestHandler;
+/** Whether a request has the DEMO_PASSWORD gate's cookie or password (always, with no password set). */
+export declare function passesGate(req: IncomingMessage): boolean;
 /** Takes a WebSocket upgrade for the five apps (the livestream chat). */
 export declare function handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void;
 /** Ends the five apps' live sessions (for the process's own shutdown). */

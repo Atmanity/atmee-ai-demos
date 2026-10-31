@@ -191,6 +191,7 @@ function hasPassword(req) {
   const decoded = Buffer.from(m[1], "base64").toString("utf8");
   return same(decoded.slice(decoded.indexOf(":") + 1), PASSWORD);
 }
+export const passesGate = (req) => !PASSWORD || hasTicket(req) || hasPassword(req);
 export function requirePassword(req, res, next) {
   if (!PASSWORD || hasTicket(req)) return next();
   if (hasPassword(req)) {

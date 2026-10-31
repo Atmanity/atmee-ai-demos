@@ -10,6 +10,8 @@ export interface StructuredRequest {
   schema: Record<string, unknown>;   // a JSON schema (Gemini's responseSchema subset)
   images?: { mimeType: string; base64: string }[];
   temperature?: number;
+  /** A model other than the default, for a call that has to be fast. */
+  model?: string;
 }
 
 export const llmAvailable = () => Boolean(KEY);
@@ -18,7 +20,8 @@ export async function structured<T>(req: StructuredRequest): Promise<T> {
   if (!KEY) throw new Error('GEMINI_API_KEY is not set');
   const parts: unknown[] = [{ text: req.user }];
   for (const image of req.images ?? []) parts.push({ inline_data: { mime_type: image.mimeType, data: image.base64 } });
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${KEY}`, {
+  const model = req.model ?? MODEL;
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${KEY}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -29,6 +32,6 @@ export async function structured<T>(req: StructuredRequest): Promise<T> {
   });
   const json: any = await res.json();
   const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error(`${MODEL}: ${res.status} ${JSON.stringify(json).slice(0, 300)}`);
+  if (!text) throw new Error(`${model}: ${res.status} ${JSON.stringify(json).slice(0, 300)}`);
   return JSON.parse(text) as T;
 }

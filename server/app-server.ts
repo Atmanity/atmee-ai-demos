@@ -1,6 +1,7 @@
 // What an app gives the server: its id, how it is built, the agenda its avatar
 // runs (if any), and its own routes under /api/apps/<id>/ (model calls, data, media).
 import type { Router } from 'express';
+import type { WebSocket } from 'ws';
 import type { SpeechSettings } from './speech-sessions.ts';
 
 export interface AppServer {
@@ -40,6 +41,8 @@ export interface AppServer {
    */
   appTools?: AppTools;
   routes?: (router: Router) => void;
+  /** Takes a WebSocket on /api/apps/<id>/socket: for audio that streams, which routes can't carry. */
+  socket?: (client: WebSocket, url: URL) => void;
   /** Ends whatever the app's own routes started that still bills (on shutdown, before the process exits). */
   shutdown?: () => Promise<unknown>;
 }

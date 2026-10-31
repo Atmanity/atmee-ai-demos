@@ -2,17 +2,22 @@
 // audio and Remy is the face that says it (useAvatarOnly): a script read by a
 // voice the user picks (voiced by the app's server), a recording the user
 // drops in (decoded here), or the user's own microphone, streamed to Remy as
-// they speak. Nothing decides what he says but the user.
+// they speak. Nothing decides what he says but the user; Stand-in restates
+// the user's own words, and never answers them.
 import { useEffect, useRef, useState } from 'react';
 import { BackToApps, decodeTo16k, fromBase64, useAvatarOnly, useMicTap, usePageDrop, SAMPLE_RATE, type Played, type SpeechWriter } from '../../../src/kit/index.ts';
+import { HEARD, TARGETS, TONES } from '../engine/options.ts';
 import remy from '../host/portrait.jpg';
 import './facecast.css';
+import { median, useStandIn } from './useStandIn.ts';
 
 const API = '/api/apps/presenter-studio';
 const HOST = 'Remy';
 const MAX_RECORDING_S = 120;
 
-type Source = 'script' | 'recording' | 'live';
+type Source = 'script' | 'recording' | 'live' | 'standin';
+const TAB: Record<Source, string> = { script: 'Script', recording: 'Recording', live: 'Live mic', standin: 'Stand-in' };
+const seconds = (ms?: number) => (ms === undefined ? '–' : (ms / 1000).toFixed(1));
 interface LogEntry { source: string; seconds: number; outcome: 'on air' | 'played' | 'cut' }
 
 export const SAMPLES = [
@@ -33,6 +38,12 @@ export function App() {
   const [hearBack, setHearBack] = useState(false);
   const [log, setLog] = useState<LogEntry[]>([]);
   const [onAir, setOnAir] = useState('');
+  const [language, setLanguage] = useState('multi');
+  const [target, setTarget] = useState('same');
+  const [tone, setTone] = useState('professional');
+  const [headphones, setHeadphones] = useState(false);
+  const standIn = useStandIn(face, mic, { language, target, tone, headphones });
+  const total = median(standIn.rows.flatMap((r) => (r.totalMs === undefined ? [] : [r.totalMs])));
   const writer = useRef<SpeechWriter | null>(null);
   const liveSamples = useRef(0);
   // Whether the talk button is down now: a press let go while the piece or the microphone was still opening ends there.
@@ -47,7 +58,7 @@ export function App() {
   // A recording dropped anywhere on the page is the recording (the browser would otherwise open the
   // file in the tab and end the studio); not while the microphone is live.
   usePageDrop((files) => {
-    if (writer.current || !files.length) return;
+    if (writer.current || standIn.on || !files.length) return;
     setSource('recording');
     void pick(files[0]);
   });
@@ -150,7 +161,7 @@ export function App() {
             {face.phase === 'idle' && (
               <div className="fc-lobby">
                 <h1>Any audio. A face that says it.</h1>
-                <p>Write a script for Remy to read in his own voice, drop in a recording, or talk live into your microphone: he says it to camera, lips in time. The audio is all this app's; Atmee renders only the face.</p>
+                <p>Write a script for Remy to read in his own voice, drop in a recording, talk live into your microphone, or let him stand in for you, cleaning up and translating what you say. The audio is all this app's; Atmee renders only the face.</p>
                 <button type="button" className="fc-go" onClick={() => void face.start()}>Open the studio</button>
               </div>
             )}
@@ -173,9 +184,9 @@ export function App() {
 
         <section className="fc-desk" aria-label="What Remy says">
           <div className="fc-tabs" role="tablist" aria-label="Where the audio comes from">
-            {(['script', 'recording', 'live'] as const).map((s) => (
-              <button key={s} type="button" role="tab" aria-selected={source === s} className={source === s ? 'is-on' : ''} onClick={() => { if (!writer.current) setSource(s); }}>
-                {s === 'script' ? 'Script' : s === 'recording' ? 'Recording' : 'Live mic'}
+            {(['script', 'recording', 'live', 'standin'] as const).map((s) => (
+              <button key={s} type="button" role="tab" aria-selected={source === s} className={source === s ? 'is-on' : ''} onClick={() => { if (!writer.current && !standIn.on) setSource(s); }}>
+                {TAB[s]}
               </button>
             ))}
           </div>
@@ -220,8 +231,47 @@ export function App() {
             </div>
           )}
 
-          {face.speaking && <button type="button" className="fc-cut" onClick={() => void face.interrupt()}>Cut</button>}
-          {(problem || mic.error) && <p className="fc-problem" role="alert">{problem || mic.error}</p>}
+          {source === 'standin' && (
+            <div className="fc-panel" role="tabpanel">
+              <p className="fc-help">Talk normally. Remy says what you mean, cleaned up or translated, a few seconds behind. He only restates you: he never answers.</p>
+              <div className="fc-choices">
+                <label className="fc-choice"><span>I speak</span>
+                  <select value={language} disabled={standIn.on} onChange={(e) => setLanguage(e.target.value)}>{HEARD.map((h) => <option key={h.id} value={h.id}>{h.label}</option>)}</select>
+                </label>
+                <label className="fc-choice"><span>Remy says it in</span>
+                  <select value={target} onChange={(e) => setTarget(e.target.value)}>{TARGETS.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select>
+                </label>
+                <label className="fc-choice"><span>Tone</span>
+                  <select value={tone} onChange={(e) => setTone(e.target.value)}>{TONES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select>
+                </label>
+              </div>
+              <button type="button" className={`fc-talk ${standIn.on ? 'is-on' : ''}`} disabled={!live || standIn.starting} onClick={() => void (standIn.on ? standIn.stop() : standIn.start())}>
+                <span className="fc-meter" style={{ transform: `scale(${1 + mic.level * 0.35})` }} aria-hidden="true" />
+                {standIn.starting ? 'Starting…' : standIn.on ? 'Stop' : 'Start speaking'}
+              </button>
+              <label className="fc-check"><input type="checkbox" aria-label="I'm on headphones" checked={headphones} onChange={(e) => setHeadphones(e.target.checked)} /> I'm on headphones (otherwise the mic pauses while Remy speaks, and words said then are lost)</label>
+              {standIn.micPaused && <p className="fc-paused" role="status">Mic paused while Remy speaks</p>}
+              {standIn.behind > 1 && <p className="fc-paused" role="status">Remy is {standIn.behind} clauses behind you</p>}
+              {standIn.caption && <p className="fc-caption" aria-live="polite">{standIn.caption}</p>}
+              {standIn.rows.length > 0 && (
+                <>
+                  <p className="fc-delay">Typical delay: <b>{total === null ? '–' : `${seconds(total)} s`}</b> after you stop speaking</p>
+                  <ol className="fc-rows" aria-label="What Remy said">
+                    {standIn.rows.map((r) => (
+                      <li key={r.id}>
+                        <span className="fc-heard">{r.heard}</span>
+                        <span className="fc-said">{r.said || (r.status === 'working' ? '…' : '')}</span>
+                        <small>{r.status} · heard {seconds(r.hearMs)} · rewrite {seconds(r.rewriteMs)} · voice {seconds(r.voiceMs)} · face {seconds(r.faceMs)} · total <b>{seconds(r.totalMs)} s</b></small>
+                      </li>
+                    ))}
+                  </ol>
+                </>
+              )}
+            </div>
+          )}
+
+          {face.speaking && <button type="button" className="fc-cut" onClick={() => void (standIn.on ? standIn.cut() : face.interrupt())}>Cut</button>}
+          {(problem || mic.error || standIn.problem) && <p className="fc-problem" role="alert">{problem || mic.error || standIn.problem}</p>}
           <p className="fc-note">Avatar-only: the audio is this app's (Remy's own voice, your file, your microphone). Atmee renders only the face, in the app's own LiveKit room.</p>
         </section>
       </main>

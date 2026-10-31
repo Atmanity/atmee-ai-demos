@@ -22,6 +22,9 @@ for (const dir of readdirSync('apps').sort()) {
   }
 }
 
+/** What takes an app's socket, if it has one. */
+export const appSocket = (id: string) => apps.get(id)?.socket;
+
 // Which app's agenda each avatar carries now, so a shared avatar is switched
 // only when the app changes.
 const conductorOf = new Map<string, string>();

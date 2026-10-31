@@ -95,12 +95,26 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .fc-talk:disabled { opacity: .4; cursor: default; }
 .fc-meter { position: absolute; inset: 0; z-index: -1; border-radius: 50%; box-shadow: 0 0 0 6px var(--fc-red-soft); transition: transform .08s; }
 .fc-check { display: flex; gap: 8px; align-items: center; justify-content: center; font-size: 14px; color: var(--fc-muted); }
+.fc-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.fc-choice { display: grid; gap: 6px; min-width: 0; }
+.fc-choice > span { font-size: 12px; font-weight: 700; color: var(--fc-muted); }
+.fc-choice select { width: 100%; min-height: 44px; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--fc-line); background: var(--fc-bg); }
+.fc-caption { margin: 0; padding: 10px 14px; border-radius: 12px; background: var(--fc-panel-2); color: var(--fc-muted); font-style: italic; }
+.fc-paused { margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--fc-red-soft); color: #fecdd3; font-size: 13px; font-weight: 600; }
+.fc-delay { margin: 0; font-size: 14px; color: var(--fc-muted); }
+.fc-delay b { font-family: var(--fc-mono); color: var(--fc-teal); }
+.fc-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 340px; overflow-y: auto; }
+.fc-rows li { display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; background: var(--fc-bg); border: 1px solid var(--fc-line); overflow-wrap: anywhere; }
+.fc-heard { font-size: 13px; color: var(--fc-muted); }
+.fc-said { font-weight: 600; line-height: 1.4; }
+.fc-rows small { font-family: var(--fc-mono); font-size: 11px; color: var(--fc-muted); }
 .fc-cut { justify-self: start; border: 1px solid var(--fc-red); border-radius: 999px; padding: 8px 16px; background: transparent; color: var(--fc-red); font-weight: 700; cursor: pointer; }
 .fc-problem { margin: 0; padding: 10px 14px; border-radius: 12px; background: var(--fc-red-soft); color: #fecdd3; font-size: 14px; }
 .fc-note { margin: 0; font-size: 13px; color: var(--fc-muted); line-height: 1.5; border-top: 1px solid var(--fc-line); padding-top: 12px; }
 
 @media (max-width: 860px) {
   .fc-main { grid-template-columns: minmax(0, 1fr); padding-top: 14px; }
+  .fc-choices { grid-template-columns: minmax(0, 1fr); }
   .fc-screen { max-height: none; }
 }
 @media (max-width: 420px) {
