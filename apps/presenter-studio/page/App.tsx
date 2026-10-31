@@ -185,7 +185,7 @@ export function App() {
         <section className="fc-desk" aria-label="What Remy says">
           <div className="fc-tabs" role="tablist" aria-label="Where the audio comes from">
             {(['script', 'recording', 'live', 'standin'] as const).map((s) => (
-              <button key={s} type="button" role="tab" aria-selected={source === s} className={source === s ? 'is-on' : ''} onClick={() => { if (!writer.current && !standIn.on) setSource(s); }}>
+              <button key={s} type="button" role="tab" aria-selected={source === s} className={source === s ? 'is-on' : ''} onClick={() => { if (!writer.current && !standIn.on && !standIn.starting) setSource(s); }}>
                 {TAB[s]}
               </button>
             ))}
@@ -236,10 +236,10 @@ export function App() {
               <p className="fc-help">Talk normally. Remy says what you mean, cleaned up or translated, a few seconds behind. He only restates you: he never answers.</p>
               <div className="fc-choices">
                 <label className="fc-choice"><span>I speak</span>
-                  <select value={language} disabled={standIn.on} onChange={(e) => setLanguage(e.target.value)}>{HEARD.map((h) => <option key={h.id} value={h.id}>{h.label}</option>)}</select>
+                  <select value={language} disabled={standIn.on || standIn.starting} onChange={(e) => setLanguage(e.target.value)}>{HEARD.map((h) => <option key={h.id} value={h.id}>{h.label}</option>)}</select>
                 </label>
                 <label className="fc-choice"><span>Remy says it in</span>
-                  <select value={target} onChange={(e) => setTarget(e.target.value)}>{TARGETS.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select>
+                  <select value={target} disabled={standIn.on || standIn.starting} onChange={(e) => setTarget(e.target.value)}>{TARGETS.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select>
                 </label>
                 <label className="fc-choice"><span>Tone</span>
                   <select value={tone} onChange={(e) => setTone(e.target.value)}>{TONES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select>
@@ -270,7 +270,7 @@ export function App() {
             </div>
           )}
 
-          {face.speaking && <button type="button" className="fc-cut" onClick={() => void (standIn.on ? standIn.cut() : face.interrupt())}>Cut</button>}
+          {(face.speaking || standIn.behind > 0) && <button type="button" className="fc-cut" onClick={() => void (standIn.on || standIn.behind > 0 ? standIn.cut() : face.interrupt())}>Cut</button>}
           {(problem || mic.error || standIn.problem) && <p className="fc-problem" role="alert">{problem || mic.error || standIn.problem}</p>}
           <p className="fc-note">Avatar-only: the audio is this app's (Remy's own voice, your file, your microphone). Atmee renders only the face, in the app's own LiveKit room.</p>
         </section>

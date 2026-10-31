@@ -72,6 +72,15 @@ describe('the bridge', () => {
     client.emit('message', Buffer.from('{"type":"CloseStream"}'), false);
     expect(upstream.sent).toEqual(['{"type":"Finalize"}']);
   });
+  test('a finalize sent before Deepgram is ready goes after the held audio', () => {
+    const { client, upstream } = peers();
+    const a = audio(10);
+    client.emit('message', a, true);
+    client.emit('message', Buffer.from('finalize'), false);
+    upstream.readyState = 1;
+    upstream.emit('open');
+    expect(upstream.sent).toEqual([a, '{"type":"Finalize"}']);
+  });
   test('the stream is kept alive through silence', () => {
     const { upstream } = peers(1);
     vi.advanceTimersByTime(5_000);

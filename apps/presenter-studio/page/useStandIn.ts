@@ -193,7 +193,7 @@ export function useStandIn(face: AvatarOnly, mic: MicTap, settings: Settings) {
   useEffect(() => () => { socket.current?.close(); }, []);
 
   /** Clauses said but not yet on air: translated speech can run longer than the speech, and this grows. */
-  const behind = rows.filter((r) => r.status === 'working' || (r.status === 'on air' && r.faceMs === undefined)).length;
+  const behind = rows.filter((r) => r.status === 'working').length;
 
   return { on, starting, rows, caption, problem, micPaused: on && micPaused, behind, start, stop, cut };
 }

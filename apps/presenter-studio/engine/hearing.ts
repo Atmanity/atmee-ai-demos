@@ -16,6 +16,7 @@ const OPEN = 1;
 const MAX_HELD_BYTES = 16_000 * 2 * 5;     // five seconds of 16 kHz speech while Deepgram connects
 const KEEP_ALIVE_MS = 5_000;               // Deepgram closes an idle stream after about ten seconds
 export const MAX_LISTEN_MS = 15 * 60_000;
+const FINALIZE = JSON.stringify({ type: 'Finalize' });
 
 export function listenUrl(language: string): string {
   const query = new URLSearchParams({
@@ -42,6 +43,7 @@ export function bridgeHearing(client: Peer, upstream: Peer, limitMs = MAX_LISTEN
   const held: Uint8Array[] = [];
   let heldBytes = 0;
   let finished = false;
+  let finalizeHeld = false;
   const toUpstream = (data: string | Uint8Array) => { if (upstream.readyState === OPEN) upstream.send(data); };
   const finish = (lost: boolean) => {
     if (finished) return;
@@ -58,7 +60,12 @@ export function bridgeHearing(client: Peer, upstream: Peer, limitMs = MAX_LISTEN
   const keepAlive = setInterval(() => toUpstream(JSON.stringify({ type: 'KeepAlive' })), KEEP_ALIVE_MS);
   const limit = setTimeout(() => finish(false), limitMs);
 
-  upstream.on('open', () => { for (const audio of held) toUpstream(audio); held.length = 0; heldBytes = 0; });
+  upstream.on('open', () => {
+    for (const audio of held) toUpstream(audio);
+    held.length = 0;
+    heldBytes = 0;
+    if (finalizeHeld) toUpstream(FINALIZE);
+  });
   upstream.on('message', (data: Buffer) => {
     const result = readResult(data.toString());
     if (result && client.readyState === OPEN) client.send(JSON.stringify(result));
@@ -67,7 +74,12 @@ export function bridgeHearing(client: Peer, upstream: Peer, limitMs = MAX_LISTEN
   upstream.on('error', () => finish(true));
 
   client.on('message', (data: Buffer, isBinary: boolean) => {
-    if (!isBinary) { if (data.toString() === 'finalize') toUpstream(JSON.stringify({ type: 'Finalize' })); return; }
+    if (!isBinary) {
+      if (data.toString() !== 'finalize') return;
+      if (upstream.readyState === OPEN) upstream.send(FINALIZE);
+      else finalizeHeld = true;
+      return;
+    }
     if (upstream.readyState === OPEN) return void upstream.send(data);
     if (heldBytes + data.length <= MAX_HELD_BYTES) { held.push(data); heldBytes += data.length; }
   });
