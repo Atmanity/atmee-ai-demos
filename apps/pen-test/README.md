@@ -39,13 +39,21 @@ page (apps/pen-test/page)            server (server.ts)                 Atmee
 
 ## Guests leaving the frame (open)
 
-v2 guests still leave the frame in sessions from this app, and strangers can appear in their place. The
-cause is not settled. With `CAUSEUR_GENERATED_AVATAR_PROMPTS` on, Causeur's `avatar2` writer directs the
-renderer from the persona, the emotion and the recent conversation, so walking and leaving language was
-removed from the personas and directions. That helped Marisol, whose final takes held at 2 second
-sampling, but it is not a fix: Theo, with the same wording and a different background, left in all four
-takes reviewed on 2026-11-02, once within seconds of arriving, before the seller's first line. The next step
-is to read the generated prompts of a bad session and compare the same avatar on its website chat.
+v2 guests still leave the frame in this app's sessions, and strangers can appear in their place. The
+same avatar held on its website chat in one short test. On 2026-11-02 Theo, through this app's API
+session, gave these results by frame sheets:
+
+| Session | Result |
+|---|---|
+| Full app text (reviewed takes) | Left in 4 of 4 |
+| No instructions, tools or directions | Held in 1, a brief dip in 1 |
+| No instructions or tools, directions on | Left, replaced by another man |
+| Instructions and tools on, no directions | Left and returned repeatedly |
+| No app text, 14 s pauses between seller lines | Left in 1, held in 1 |
+
+App text and short replies make it more likely, but neither is required, and these are too few runs to
+rank causes. Session instructions and directions do not reach `avatar2`'s persona input directly. Next
+step: read `causeur.avatar.prompt` for a bad session and compare a website chat session's settings.
 
 ## Live runs, 2026-11-02 (local, production API)
 
