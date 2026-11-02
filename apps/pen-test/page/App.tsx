@@ -27,10 +27,10 @@ interface RoundView { index: number; guest: GuestView; outcome: string; offer: n
 interface Clue { id: string; label: string; x: number; y: number; points: string }
 interface Reveal {
   clues: Clue[]; keyClue: string; motive: string; top: number; left: number; read: { motive: boolean; clue: boolean };
-  score: { total: number; penalties: number }; falseClaims: string[]; coach: { best: string; worst: string; note: string };
+  score: { total: number; penalties: number }; falseClaims: string[]; coach: { did: string; improve: string[]; best: string; worst: string };
   board: { money: number; sold: number }; next: RoundView | null; view: RoundView;
 }
-interface Report { money: number; sold: number; left: number; skills: { label: string; score: number; max: number }[]; drill: string; delivery: { talkShare: number; questions: number; fillers: number } }
+interface Report { money: number; sold: number; left: number; skills: { label: string; score: number; max: number }[]; drill: string; delivery: { talkShare: number; questions: number; fillers: number }; guests: { name: string; outcome: string; did: string; improve: string[] }[] }
 type Screen = 'door' | 'meet' | 'live' | 'read' | 'reveal' | 'report' | 'lost';
 
 async function post<T>(path: string, body?: unknown): Promise<T> {
@@ -66,6 +66,14 @@ export function App() {
   screenRef.current = screen;
 
   const finish = useRef<(reason: string) => void>(() => {});
+  // The guest is gone: the stream stops at once, and the stamp stays up briefly over their photo.
+  const walkedAway = useRef(() => {
+    if (live.current.finishing) return;
+    live.current.finishing = true;
+    setStamp('WALKED AWAY');
+    void avatarRef.current?.end();
+    setTimeout(() => finish.current('walked'), 2000);
+  });
 
   const onUserSaid = useCallback(async (text: string) => {
     if (!live.current.arrived || live.current.finishing) return;
@@ -74,11 +82,12 @@ export function App() {
     const r = await post<{ view: RoundView; direction?: string; closing?: string; refused?: number }>(`${roundPath.current}/line`, { who: 'seller', text });
     setRound(r.view);
     if (r.view.price) setBoard((b) => ({ money: b.money + r.view.earned, sold: b.sold + 1 }));
+    if (r.view.outcome === 'walked') return walkedAway.current();
     if (r.direction) avatarRef.current?.state(r.direction);
     if (r.refused) { setNote(`$${r.refused} is under your lowest price. That offer can't stand.`); setTimeout(() => setNote(''), 5000); }
     if (r.closing) {
       avatarRef.current?.event(r.closing, 10);
-      setStamp(r.view.outcome === 'sold' ? r.view.earned > (r.view.price ?? 0) ? `SOLD $${r.view.earned}` : `SOLD $${r.view.price}` : 'WALKED AWAY');
+      setStamp(r.view.earned > (r.view.price ?? 0) ? `SOLD $${r.view.earned}` : `SOLD $${r.view.price}`);
       live.current.finishing = true;
       setTimeout(() => finish.current(r.view.outcome), 6000);
     }
@@ -92,11 +101,7 @@ export function App() {
   const onToolCall = useCallback(async ({ name, arguments: args }: ToolCall) => {
     if (name !== 'decide') return 'Unknown tool.';
     const r = await post<{ view: RoundView }>(`${roundPath.current}/decide`, { choice: args.choice });
-    if (r.view.outcome === 'walked' && !live.current.finishing) {
-      live.current.finishing = true;
-      setStamp('WALKED AWAY');
-      setTimeout(() => finish.current('walked'), 3500);
-    }
+    if (r.view.outcome === 'walked') walkedAway.current();
     return 'Noted.';
   }, []);
 
@@ -213,8 +218,9 @@ export function App() {
   }
 
   async function replay() {
-    const r = await post<{ view: RoundView }>(`${roundPath.current}/replay`);
+    const r = await post<{ view: RoundView; board: { money: number; sold: number } }>(`${roundPath.current}/replay`);
     await avatarRef.current.end().catch(() => {});
+    setBoard(r.board);
     await meet(runId, r.view);
   }
 
@@ -278,7 +284,7 @@ export function App() {
           <div className="pen-screen">
             <HostVideo avatar={avatar} name={round.guest.name} captions={false} className="pen-video" />
             {/* The photo covers the guest's arrival; once the meeting starts it is all live video. */}
-            <img className={`pen-still ${screen === 'live' ? 'is-off' : ''}`} src={IMAGES[round.guest.image]} alt={round.guest.name} />
+            <img className={`pen-still ${screen === 'live' && stamp !== 'WALKED AWAY' ? 'is-off' : ''}`} src={IMAGES[round.guest.image]} alt={round.guest.name} />
             {screen === 'meet' && (
               <div className="pen-meet" role="status">
                 <span className="call-spinner" aria-hidden="true" />
@@ -336,14 +342,23 @@ export function App() {
               <h2>{reveal.view.outcome === 'sold' ? reveal.view.earned > (reveal.view.price ?? 0) ? `Bulk order: $${reveal.view.earned}` : `Sold at $${reveal.view.price}` : reveal.view.outcome === 'walked' ? `${round.guest.name} walked` : 'No sale'}</h2>
               <p className="pen-score">{reveal.score.total}<small>/100</small></p>
             </div>
-            <p><b>Real reason:</b> {reveal.motive} <span className={reveal.read.motive ? 'pen-ok' : 'pen-red'}>{reveal.read.motive ? 'You read it.' : 'You missed it.'}</span></p>
+            <section className="pen-feedback">
+              <h3>What you did</h3>
+              <p>{reveal.coach.did}</p>
+              <h3>How to improve</h3>
+              <ul>{reveal.coach.improve.map((tip) => <li key={tip}>{tip}</li>)}</ul>
+            </section>
+            {reveal.falseClaims.length > 0 && <p className="pen-red">False claims: {reveal.falseClaims.join('; ')}</p>}
+            <h3>What {round.guest.name} was hiding</h3>
+            <p>{reveal.motive}. <span className={reveal.read.motive ? 'pen-ok' : 'pen-red'}>{reveal.read.motive ? 'You read it.' : 'You missed it.'}</span></p>
             <ul>{reveal.clues.map((c) => <li key={c.id} className={c.id === reveal.keyClue ? 'is-key' : ''}><b>{c.label}.</b> {c.points}</li>)}</ul>
             <p><b>{reveal.view.price ? `${round.guest.name} would have paid $${reveal.top}.` : `${round.guest.name} might have paid up to $${reveal.top}.`}</b> {reveal.view.price ? (reveal.left ? `$${reveal.left} left on the table.` : 'You left nothing on the table.') : ''}</p>
-            {reveal.falseClaims.length > 0 && <p className="pen-red">False claims: {reveal.falseClaims.join('; ')}</p>}
             {reveal.coach.best && <p><b>Best line:</b> "{reveal.coach.best}"</p>}
             {reveal.coach.worst && <p className="pen-red"><b>Worst line:</b> "{reveal.coach.worst}"</p>}
-            {reveal.coach.note && <p>{reveal.coach.note}</p>}
-            <button type="button" className="pen-go" onClick={() => void goOn()}>{reveal.next ? 'Next guest' : 'See your report card'}</button>
+            <div className="pen-actions">
+              <button type="button" className="pen-go" onClick={() => void replay()}>Try again</button>
+              <button type="button" className="pen-go is-quiet" onClick={() => void goOn()}>{reveal.next ? 'Next guest' : 'See your report card'}</button>
+            </div>
           </div>
         </main>
       )}
@@ -358,8 +373,15 @@ export function App() {
             ))}
           </div>
           <p>You did {report.delivery.talkShare}% of the talking, asked {report.delivery.questions} questions, and used {report.delivery.fillers} filler words.</p>
+          {report.guests.map((g) => (
+            <section key={g.name} className="pen-feedback">
+              <h3>{g.name}</h3>
+              <p>{g.did}</p>
+              <ul>{g.improve.map((tip) => <li key={tip}>{tip}</li>)}</ul>
+            </section>
+          ))}
           <p className="pen-drill"><b>Next drill:</b> {report.drill}</p>
-          <button type="button" className="pen-go" onClick={() => { setScreen('door'); setRound(null); }}>Try another run</button>
+          <button type="button" className="pen-go" onClick={() => { setScreen('door'); setRound(null); }}>Try again</button>
         </main>
       )}
 

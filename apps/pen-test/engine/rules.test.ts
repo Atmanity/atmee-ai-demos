@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { GUESTS } from './guests.ts';
 import { direction } from './director.ts';
 import { normalise, wordRules } from './judge.ts';
-import { applyVerdict, clockFor, earned, gateOpen, LEVELS, levelById, moneyLeft, newRound, pickGuests, priceIn, report, score, topNow, type Round } from './rules.ts';
+import { applyVerdict, clockFor, earned, plainCoach, gateOpen, LEVELS, levelById, moneyLeft, newRound, pickGuests, priceIn, report, score, topNow, type Round } from './rules.ts';
 
 const round = (level = 'walkin', motive = 0): Round => newRound(GUESTS[0], levelById(level)!, () => motive / 2);
 const say = (r: Round, text: string, v = {}) => applyVerdict(r, text, normalise(v));
@@ -120,6 +120,20 @@ describe('money and scores', () => {
     r.read = { motive: true, clue: true };
     r.score = score(r);
     expect(report([r]).drill).toContain('question');
+  });
+});
+
+describe('feedback without a model', () => {
+  it('says so when the seller never spoke', () => {
+    expect(plainCoach(round()).did).toContain('did not speak');
+  });
+  it('sums up what happened and gives two things to improve', () => {
+    const r = round();
+    r.outcome = 'walked';
+    r.lines.push({ who: 'seller', text: 'It is a great pen', at: 0 });
+    const coach = plainCoach(r);
+    expect(coach.did).toContain('walked away');
+    expect(coach.improve).toHaveLength(2);
   });
 });
 

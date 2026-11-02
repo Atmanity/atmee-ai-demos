@@ -60,7 +60,10 @@ export interface Round {
   pressure: number;
   read?: { motive: boolean; clue: boolean };
   score?: Scores;
+  coach?: Coach;
 }
+
+export interface Coach { did: string; improve: string[]; best: string; worst: string }
 
 export interface Scores { read: number; discovery: number; fit: number; objections: number; close: number; pricing: number; penalties: number; total: number }
 export const SKILLS: { key: keyof Omit<Scores, 'penalties' | 'total'>; label: string; max: number; drill: string }[] = [
@@ -227,6 +230,7 @@ export interface Report {
   skills: { label: string; score: number; max: number }[];
   drill: string;
   delivery: ReturnType<typeof delivery>;
+  guests: { name: string; outcome: Outcome; did: string; improve: string[] }[];
 }
 
 export function report(rounds: Round[]): Report {
@@ -241,7 +245,18 @@ export function report(rounds: Round[]): Report {
     skills: skills.map(({ label, score: s, max }) => ({ label, score: s, max })),
     drill: weakest.drill,
     delivery: delivery(rounds.flatMap((r) => r.lines)),
+    guests: played.map((r) => ({ name: guestById(r.guestId)!.name, outcome: r.outcome, did: r.coach?.did ?? '', improve: r.coach?.improve ?? [] })),
   };
+}
+
+/** Feedback without a model: what the numbers alone can say. */
+export function plainCoach(round: Round): Coach {
+  const said = round.lines.filter((l) => l.who === 'seller').length;
+  if (!said) return { did: 'You did not speak to the guest before time ran out.', improve: ['Open within the first few seconds, starting from something you can see.'], best: '', worst: '' };
+  const scores = score(round);
+  const weakest = [...SKILLS].sort((a, b) => scores[a.key] / a.max - scores[b.key] / b.max);
+  const outcome = round.outcome === 'sold' ? `and sold at $${round.price}` : round.outcome === 'walked' ? 'and the guest walked away' : 'and the clock ran out';
+  return { did: `You spoke ${said} ${said === 1 ? 'time' : 'times'} ${outcome}.`, improve: weakest.slice(0, 2).map((s) => s.drill), best: '', worst: '' };
 }
 
 /** The motive chips: the real one and the other guests' decoys, in a stable shuffled order. */

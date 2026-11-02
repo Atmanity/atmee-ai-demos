@@ -8,7 +8,7 @@ import { llmAvailable, structured } from '../../server/llm.ts';
 import { closingEvent, direction, secretInstructions, TOOLS } from './engine/director.ts';
 import { guestById } from './engine/guests.ts';
 import { COACH_SCHEMA, COACH_SYSTEM, coachPrompt, JUDGE_SYSTEM, judgePrompt, normalise, VERDICT_SCHEMA, wordRules } from './engine/judge.ts';
-import { applyVerdict, clockFor, earned, LEVELS, levelById, moneyLeft, newRound, PEN, LIST_PRICE, pickGuests, readOptions, report, score, topNow, type Level, type Round, type Step, type Verdict } from './engine/rules.ts';
+import { applyVerdict, clockFor, earned, LEVELS, levelById, moneyLeft, newRound, PEN, LIST_PRICE, pickGuests, plainCoach, readOptions, report, score, topNow, type Coach, type Level, type Round, type Step, type Verdict } from './engine/rules.ts';
 
 const ID = 'pen-test';
 // The plan's session cap: the clock has to end inside it.
@@ -52,10 +52,11 @@ async function judged(round: Round, text: string): Promise<Verdict> {
   }
 }
 
-async function coached(round: Round) {
-  const fallback = { best: '', worst: '', note: '' };
-  if (!llmAvailable() || !round.lines.some((l) => l.who === 'seller')) return fallback;
-  return structured<typeof fallback>({ system: COACH_SYSTEM, user: coachPrompt(round), schema: COACH_SCHEMA }).catch(() => fallback);
+async function coached(round: Round): Promise<Coach> {
+  const plain = plainCoach(round);
+  if (!llmAvailable() || !round.lines.some((l) => l.who === 'seller')) return plain;
+  const coach = await structured<Coach>({ system: COACH_SYSTEM, user: coachPrompt(round), schema: COACH_SCHEMA }).catch(() => plain);
+  return { did: coach.did || plain.did, improve: coach.improve?.length ? coach.improve.slice(0, 3) : plain.improve, best: coach.best ?? '', worst: coach.worst ?? '' };
 }
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
@@ -158,19 +159,20 @@ const app: AppServer = {
       const guest = guestById(round.guestId)!;
       round.read = { motive: req.body?.motive === round.motive.label, clue: req.body?.clue === round.motive.clue };
       round.score = score(round);
+      round.coach = await coached(round);
       res.json({
         view: view(run, index), clues: guest.clues, keyClue: round.motive.clue, motive: round.motive.label, top: round.price === null ? round.motive.top : topNow(round), left: moneyLeft(round),
-        read: round.read, score: round.score, falseClaims: round.falseClaims, coach: await coached(round), board: scoreboard(run),
+        read: round.read, score: round.score, falseClaims: round.falseClaims, coach: round.coach, board: scoreboard(run),
         next: index + 1 < run.rounds.length ? view(run, index + 1) : null,
       });
     });
 
-    // A guest lost to the connection is met again, at no cost to the seller.
+    // A guest met again, after a lost connection or to try again: that round's result is cleared.
     router.post('/run/:run/:n/replay', (req, res) => {
       const found = roundOf(req.params.run, req.params.n);
       if (!found) return void res.status(404).json({ error: 'not_found' });
       found.run.rounds[found.index] = newRound(guestById(found.round.guestId)!, found.run.level);
-      res.json({ view: view(found.run, found.index) });
+      res.json({ view: view(found.run, found.index), board: scoreboard(found.run) });
     });
 
     router.get('/run/:run/report', (req, res) => {
