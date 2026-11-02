@@ -8,15 +8,18 @@ import { llmAvailable, structured } from '../../server/llm.ts';
 import { closingEvent, direction, secretInstructions, TOOLS } from './engine/director.ts';
 import { guestById } from './engine/guests.ts';
 import { COACH_SCHEMA, COACH_SYSTEM, coachPrompt, JUDGE_SYSTEM, judgePrompt, normalise, VERDICT_SCHEMA, wordRules } from './engine/judge.ts';
-import { applyVerdict, clockFor, LEVELS, levelById, moneyLeft, newRound, PEN, LIST_PRICE, pickGuests, readOptions, report, score, topNow, type Level, type Round, type Step, type Verdict } from './engine/rules.ts';
+import { applyVerdict, clockFor, earned, LEVELS, levelById, moneyLeft, newRound, PEN, LIST_PRICE, pickGuests, readOptions, report, score, topNow, type Level, type Round, type Step, type Verdict } from './engine/rules.ts';
 
 const ID = 'pen-test';
 // The plan's session cap: the clock has to end inside it.
 const CAP_S = Number(process.env.PEN_TEST_SESSION_CAP) || 180;
 
 // A local test can meet one guest first; the live game never sets it.
-const guestOrder = () => {
-  const order = pickGuests();
+const guestOrder = (level: Level) => {
+  const order = pickGuests(level);
+  if (!process.env.PEN_TEST_FIRST) return order;
+  const forced = guestById(process.env.PEN_TEST_FIRST);
+  if (forced && !order.includes(forced)) order[0] = forced;
   const first = order.findIndex((g) => g.id === process.env.PEN_TEST_FIRST);
   if (first > 0) order.unshift(...order.splice(first, 1));
   return order;
@@ -35,9 +38,9 @@ const roundOf = (runId: string, n: unknown) => {
 function view(run: Run, index: number) {
   const round = run.rounds[index];
   const guest = guestById(round.guestId)!;
-  return { index, guest: { id: guest.id, name: guest.name, role: guest.role, spotted: guest.spotted, image: guest.image }, outcome: round.outcome, offer: round.offer, price: round.price };
+  return { index, guest: { id: guest.id, name: guest.name, role: guest.role, spotted: guest.spotted, image: guest.image }, outcome: round.outcome, offer: round.offer, price: round.price, earned: earned(round) };
 }
-const scoreboard = (run: Run) => ({ money: run.rounds.reduce((n, r) => n + (r.price ?? 0), 0), sold: run.rounds.filter((r) => r.outcome === 'sold').length });
+const scoreboard = (run: Run) => ({ money: run.rounds.reduce((n, r) => n + earned(r), 0), sold: run.rounds.filter((r) => r.outcome === 'sold').length });
 
 async function judged(round: Round, text: string): Promise<Verdict> {
   if (!llmAvailable()) return wordRules(round, text);
@@ -74,7 +77,7 @@ const app: AppServer = {
       const level = levelById(req.body?.level);
       if (!level) return void res.status(400).json({ error: 'unknown_level' });
       const id = randomBytes(9).toString('hex');
-      const run: Run = { level, rounds: guestOrder().map((g) => newRound(g, level)), sessions: new Map(), at: Date.now() };
+      const run: Run = { level, rounds: guestOrder(level).map((g) => newRound(g, level)), sessions: new Map(), at: Date.now() };
       runs.set(id, run);
       for (const [key, old] of runs) if (Date.now() - old.at > 3600_000) runs.delete(key);
       res.status(201).json({ id, seconds: clockFor(level, CAP_S), first: view(run, 0) });

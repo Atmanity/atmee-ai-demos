@@ -14,6 +14,8 @@ export interface Motive {
   haggles: boolean;
   /** The clue that points to this motive. */
   clue: string;
+  /** How many pens they take once the seller has found the need: a bulk order. */
+  quantity?: number;
 }
 export interface Guest {
   id: string;
@@ -23,6 +25,8 @@ export interface Guest {
   image: string;
   /** Where the seller finds them in the mall. */
   spotted: string;
+  /** Their looks point the wrong way: only on the harder levels. */
+  falseClue?: boolean;
   clues: Clue[];
   motives: Motive[];
 }
@@ -32,7 +36,7 @@ export const GUESTS: Guest[] = [
     id: 'ray', name: 'Ray', role: 'Site foreman', avatarId: '7b3e60f3-376f-477b-82e9-8f37baeb60e1', image: 'ray',
     spotted: 'Someone in a hi-vis vest, walking fast, clipboard in hand.',
     clues: [
-      { id: 'pencil', label: 'Pencil behind the ear', x: 33, y: 23, points: 'He writes all day, and he has given up on pens.' },
+      { id: 'pencil', label: 'Pencil behind the ear', x: 33, y: 17, points: 'He writes all day, and he has given up on pens.' },
       { id: 'vest', label: 'Hi-vis vest', x: 73, y: 71, points: 'He works outdoors, in the wet and the cold.' },
       { id: 'clipboard', label: 'Clipboard of site notes', x: 47, y: 92, points: 'Paper records he signs and has to trust.' },
     ],
@@ -65,6 +69,43 @@ export const GUESTS: Guest[] = [
     motives: [
       { id: 'letters', label: 'A better pen for his weekly letters', need: 'You write to your granddaughter every week, and it is the best hour you have. A pen that flows well would make it nicer.', top: 23, objection: "I've had mine thirty years.", haggles: false, clue: 'letters' },
       { id: 'grip', label: 'A comfortable grip for stiff hands', need: 'Your hands have grown stiff and thin pens hurt after a page. A wide soft grip would let you keep writing.', top: 25, objection: 'My old pen does the job.', haggles: true, clue: 'glasses' },
+    ],
+  },
+  {
+    id: 'helen', name: 'Helen', role: 'Partner at a law firm', avatarId: 'b9b62691-d3f8-4164-979d-531c1c236f76', image: 'helen',
+    spotted: 'Someone in a tailored suit, leather folder in hand.',
+    clues: [
+      { id: 'clip', label: 'Silver pen in the breast pocket', x: 72, y: 79, points: 'She already cares what she writes with.' },
+      { id: 'folder', label: 'Leather document folder', x: 42, y: 92, points: 'Papers to sign, in front of clients.' },
+      { id: 'suit', label: 'Tailored suit', x: 26, y: 72, points: 'Appearances matter in her work.' },
+    ],
+    motives: [
+      { id: 'clients', label: 'A pen that looks right in front of clients', need: 'Clients watch what you sign with at closings. Your good pen stays at the office, and you are often caught without it.', top: 25, objection: 'I own a Montblanc.', haggles: false, clue: 'folder' },
+      { id: 'permanent', label: 'Ink that will not smudge on signed documents', need: 'A smudged signature on a contract cost you an afternoon last month. Ink that dries clean matters to you.', top: 24, objection: 'Any decent pen signs a contract.', haggles: true, clue: 'clip' },
+    ],
+  },
+  {
+    id: 'theo', name: 'Theo', role: 'Startup founder', avatarId: '528e3e99-d035-4065-80a2-07955f20e3e5', image: 'theo', falseClue: true,
+    spotted: 'Someone in a worn hoodie, clutching a battered laptop.',
+    clues: [
+      { id: 'hoodie', label: 'Worn hoodie', x: 22, y: 72, points: 'A false clue: it reads as no budget, and he has plenty.' },
+      { id: 'laptop', label: 'Stickered laptop', x: 62, y: 84, points: 'He is building something: a company, with a team.' },
+      { id: 'earbuds', label: 'Earbuds in, between calls', x: 67, y: 37, points: 'Busy and in charge, with no time for small talk.' },
+    ],
+    motives: [
+      { id: 'gifts', label: '40 welcome gifts for his team', need: 'Your company just hit forty people and you want a small gift for each of them this week. You have the budget and no time to shop.', top: 18, objection: 'Nobody uses pens.', haggles: true, clue: 'laptop', quantity: 40 },
+    ],
+  },
+  {
+    id: 'daniel', name: 'Daniel', role: 'Between jobs', avatarId: 'afb3f1b7-0ae2-4aa9-90ff-4c315926df34', image: 'daniel', falseClue: true,
+    spotted: 'Someone in a sharp suit and a big steel watch.',
+    clues: [
+      { id: 'watch', label: 'Big steel watch', x: 54, y: 95, points: 'A false clue: it reads as easy money, and he is careful with every dollar.' },
+      { id: 'resume', label: 'Folder of résumés', x: 53, y: 76, points: 'He is looking for work, not closing deals.' },
+      { id: 'pause', label: 'He goes quiet about work', x: 50, y: 25, points: 'The confident voice stops when you ask what he does.' },
+    ],
+    motives: [
+      { id: 'interview', label: 'A pen to look the part at an interview', need: 'You were laid off last month and have an interview tomorrow. You want to look like you still belong, but money is tight.', top: 14, objection: "What's your best price?", haggles: true, clue: 'resume' },
     ],
   },
 ];

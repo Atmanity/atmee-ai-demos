@@ -1,28 +1,29 @@
-// The Pen Test: walk the mall, spot a guest, open the conversation, sell the pen.
+// The Pen Test: study a guest, open the conversation, sell the pen.
 //
 // The platform has every avatar greet when it arrives, and here the seller speaks first. So the
-// guest arrives behind the mall walk, with sound off and the seller's mic closed. Once that
-// greeting has passed the walk ends, the mic opens and the clock starts. The seller never hears it.
+// guest arrives behind their still photo, with sound off and the seller's mic closed. Once that
+// greeting has passed the mic opens and the clock starts. The seller never hears it.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BackToApps, HostVideo, useAvatar, type ToolCall } from '../../../src/kit/index.ts';
 import ray from '../host/ray.jpg';
 import marisol from '../host/marisol.jpg';
 import walter from '../host/walter.jpg';
-import mall from '../host/mall.jpg';
-import hand from '../host/hand.webp';
+import helen from '../host/helen.jpg';
+import theo from '../host/theo.jpg';
+import daniel from '../host/daniel.jpg';
 import './pen.css';
 
 const API = '/api/apps/pen-test';
-const IMAGES: Record<string, string> = { ray, marisol, walter };
+const IMAGES: Record<string, string> = { ray, marisol, walter, helen, theo, daniel };
 // The join mute plus the agent linking the page: words before this are not heard.
 const MIN_HIDDEN_MS = 8000;
 const MAX_HIDDEN_MS = 16000;
-const SLOW_WALK_MS = 45000;
+const SLOW_MEET_MS = 45000;
 
 interface Level { id: string; name: string; blurb: string; lowest: number; hints: number; seconds: number }
 interface Pen { name: string; facts: string[]; list: number }
 interface GuestView { id: string; name: string; role: string; spotted: string; image: string }
-interface RoundView { index: number; guest: GuestView; outcome: string; offer: number | null; price: number | null }
+interface RoundView { index: number; guest: GuestView; outcome: string; offer: number | null; price: number | null; earned: number }
 interface Clue { id: string; label: string; x: number; y: number; points: string }
 interface Reveal {
   clues: Clue[]; keyClue: string; motive: string; top: number; left: number; read: { motive: boolean; clue: boolean };
@@ -30,7 +31,7 @@ interface Reveal {
   board: { money: number; sold: number }; next: RoundView | null; view: RoundView;
 }
 interface Report { money: number; sold: number; left: number; skills: { label: string; score: number; max: number }[]; drill: string; delivery: { talkShare: number; questions: number; fillers: number } }
-type Screen = 'door' | 'walk' | 'live' | 'read' | 'reveal' | 'report' | 'lost';
+type Screen = 'door' | 'meet' | 'live' | 'read' | 'reveal' | 'report' | 'lost';
 
 async function post<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) });
@@ -72,12 +73,12 @@ export function App() {
     setNote('');
     const r = await post<{ view: RoundView; direction?: string; closing?: string; refused?: number }>(`${roundPath.current}/line`, { who: 'seller', text });
     setRound(r.view);
-    if (r.view.price) setBoard((b) => ({ money: b.money + r.view.price!, sold: b.sold + 1 }));
+    if (r.view.price) setBoard((b) => ({ money: b.money + r.view.earned, sold: b.sold + 1 }));
     if (r.direction) avatarRef.current?.state(r.direction);
     if (r.refused) { setNote(`$${r.refused} is under your lowest price. That offer can't stand.`); setTimeout(() => setNote(''), 5000); }
     if (r.closing) {
       avatarRef.current?.event(r.closing, 10);
-      setStamp(r.view.outcome === 'sold' ? `SOLD $${r.view.price}` : 'WALKED AWAY');
+      setStamp(r.view.outcome === 'sold' ? r.view.earned > (r.view.price ?? 0) ? `SOLD $${r.view.earned}` : `SOLD $${r.view.price}` : 'WALKED AWAY');
       live.current.finishing = true;
       setTimeout(() => finish.current(r.view.outcome), 6000);
     }
@@ -109,7 +110,7 @@ export function App() {
   avatarRef.current = avatar;
 
   useEffect(() => {
-    fetch(`${API}/levels`).then((r) => r.json()).then((d) => { setPen(d.pen); setLevels(d.levels); setLevel(d.levels[0]); }).catch(() => setNote('The mall is closed right now. Try again in a moment.'));
+    fetch(`${API}/levels`).then((r) => r.json()).then((d) => { setPen(d.pen); setLevels(d.levels); setLevel(d.levels[0]); }).catch(() => setNote('The game did not load. Try again in a moment.'));
   }, []);
 
   // Set the guest's direction once they can hear it, then keep their voice off until the walk ends.
@@ -117,14 +118,14 @@ export function App() {
     live.current = { arrived: false, finishing: false, liveAt: 0 };
     roundPath.current = `/run/${run}/${next.index}`;
     setRound(next); setStamp(''); setNote(''); setSlow(false); setSellerSpoke(false); setPick({}); setReveal(null); setOptions(null);
-    setScreen('walk');
+    setScreen('meet');
   }, []);
 
   // Starts each call once useAvatar points at this guest (the app id comes from the round).
   useEffect(() => {
-    if (screen !== 'walk' || !round) return;
+    if (screen !== 'meet' || !round) return;
     let cancelled = false;
-    const slowTimer = setTimeout(() => setSlow(true), SLOW_WALK_MS);
+    const slowTimer = setTimeout(() => setSlow(true), SLOW_MEET_MS);
     void (async () => {
       const a = avatarRef.current;
       if (a.audioRef.current) a.audioRef.current.muted = true;
@@ -138,14 +139,14 @@ export function App() {
   }, [screen, round?.index, runId]);
 
   useEffect(() => {
-    if (screen !== 'walk') return;
+    if (screen !== 'meet') return;
     if (avatar.phase === 'failed') { setNote(avatar.detail || 'We lost them in the crowd.'); setScreen('lost'); }
     if (avatar.phase === 'live' && !live.current.liveAt) live.current.liveAt = Date.now();
   }, [screen, avatar.phase, avatar.detail]);
 
-  // The walk ends once the hidden greeting has passed.
+  // The meeting starts once the hidden greeting has passed.
   useEffect(() => {
-    if (screen !== 'walk') return;
+    if (screen !== 'meet') return;
     const id = setInterval(() => {
       const a = avatarRef.current;
       const since = live.current.liveAt && Date.now() - live.current.liveAt;
@@ -218,79 +219,103 @@ export function App() {
   }
 
   const urgent = screen === 'live' && left <= 10;
-  const close = stamp || screen === 'read';
+  const inRoom = round && (screen === 'meet' || screen === 'live');
 
   return (
-    <div className={`pen is-${screen}`}>
-      <img className="pen-world" src={mall} alt="" aria-hidden="true" />
+    <div className="pen">
+      <header className="pen-bar">
+        <BackToApps />
+        <strong className="pen-logo">The Pen Test</strong>
+        {screen !== 'door' && (
+          <span className="pen-tally">
+            {round && (
+              <span className="pen-pips" aria-label={`Guest ${round.index + 1} of 3`}>
+                {[0, 1, 2].map((i) => <i key={i} className={i < round.index ? 'is-done' : i === round.index ? 'is-now' : ''} />)}
+              </span>
+            )}
+            <b>${board.money}</b>
+          </span>
+        )}
+      </header>
 
       {screen === 'door' && pen && (
         <main className="pen-door">
-          <header className="pen-bar"><BackToApps /></header>
           <div className="pen-pitch">
-            <p className="pen-kicker">The Pen Test</p>
             <h1>Sell me this pen.</h1>
-            <p>One pen. Three strangers in a mall. Walk up, read them, and earn as much as you can.</p>
+            <p>Three strangers, one pen, and a clock. Read each guest, ask the right question, and earn as much as you can.</p>
           </div>
-          <div className="pen-choices">
-            <section className="pen-levels" aria-label="How long you get with each guest">
+          <div className="pen-lineup" aria-hidden="true">
+            {[ray, helen, theo].map((src) => <img key={src} src={src} alt="" />)}
+          </div>
+          <section className="pen-panel pen-levelbox" aria-label="Level">
+            <h2>Time with each guest</h2>
+            <div className="pen-levels">
               {levels.map((l) => (
                 <button type="button" key={l.id} className={l.id === level?.id ? 'is-on' : ''} onClick={() => setLevel(l)}>
-                  <span className="pen-time">{clock(l.seconds)}</span><b>{l.name}</b><small>{l.blurb}</small>
+                  <span className="pen-time">{clock(l.seconds)}</span>
+                  <b>{l.name}</b>
+                  <small>{l.blurb}</small>
                 </button>
               ))}
-            </section>
-            <section className="pen-tag" aria-label="The pen">
-              <h2>{pen.name}</h2>
-              <p className="pen-price">List ${pen.list}{level ? ` · lowest $${level.lowest}` : ''}</p>
-              <ul>{pen.facts.map((f) => <li key={f}>{f}</li>)}</ul>
-            </section>
-          </div>
+            </div>
+          </section>
+          <section className="pen-tag pen-penbox" aria-label="The pen">
+            <h2>{pen.name}</h2>
+            <p className="pen-price">List ${pen.list}{level ? ` · lowest $${level.lowest}` : ''}</p>
+            <ul>{pen.facts.map((f) => <li key={f}>{f}</li>)}</ul>
+            <p className="pen-small">Claim anything else and you'll be called on it.</p>
+          </section>
           <div className="pen-start">
-            <button type="button" className="pen-go" onClick={() => void startRun()}>Walk into the mall</button>
-            <span>Microphone on. You speak first.</span>
+            <button type="button" className="pen-go" onClick={() => void startRun()}>Meet your first guest</button>
+            <span className="pen-small">Uses your microphone. You speak first.</span>
           </div>
-          {note && <p className="pen-note">{note}</p>}
-          <img className="pen-hand" src={hand} alt="" aria-hidden="true" />
+          {note && <p className="pen-alert">{note}</p>}
         </main>
       )}
 
-      {round && (screen === 'walk' || screen === 'live') && (
-        <main className="pen-floor">
-          <div className={`pen-stage is-${round.guest.id}`}>
+      {inRoom && round && (
+        <main className="pen-room">
+          <div className="pen-screen">
             <HostVideo avatar={avatar} name={round.guest.name} captions={false} className="pen-video" />
-            {/* Live video can lose a photorealistic guest while they listen, so they hold still until they speak. */}
-            <img className={`pen-hold ${avatar.speaking ? 'is-off' : ''}`} src={IMAGES[round.guest.image]} alt="" aria-hidden="true" />
+            {/* The photo covers the guest's arrival; once the meeting starts it is all live video. */}
+            <img className={`pen-still ${screen === 'live' ? 'is-off' : ''}`} src={IMAGES[round.guest.image]} alt={round.guest.name} />
+            {screen === 'meet' && (
+              <div className="pen-meet" role="status">
+                <span className="call-spinner" aria-hidden="true" />
+                <p>{slow ? 'Still getting them ready…' : round.guest.spotted}</p>
+              </div>
+            )}
+            {screen === 'live' && !sellerSpoke && <p className="pen-cue">You speak first</p>}
+            {screen === 'live' && sellerSpoke && avatar.caption && <p className="pen-subtitle">{avatar.caption}</p>}
+            {stamp && <div className="pen-stamp">{stamp}</div>}
           </div>
-          {screen === 'live' && sellerSpoke && avatar.caption && <p className="pen-subtitle">{avatar.caption}</p>}
-          {screen === 'walk' && (
-            <div className="pen-walk" role="status">
-              <img className="pen-stroll" src={mall} alt="" />
-              <img className={`pen-approach is-${round.guest.id}`} src={IMAGES[round.guest.image]} alt={`${round.guest.name} ahead in the mall`} />
-              <p>{slow ? "The mall's busy. Still looking for them…" : round.guest.spotted}</p>
+          <div className={`pen-panel pen-clockbox ${urgent ? 'is-urgent' : ''}`}>
+            <div className="pen-dial">
+              <svg viewBox="0 0 120 120" aria-hidden="true">
+                <circle cx="60" cy="60" r="54" />
+                <circle className="is-left" cx="60" cy="60" r="54" style={{ strokeDashoffset: 339.3 * (1 - (screen === 'live' && seconds ? Math.max(0, left) / seconds : 1)) }} />
+              </svg>
+              <div className="pen-clock" {...(screen === 'live' ? { 'data-testid': 'clock' } : {})}>{clock(screen === 'live' ? left : level?.seconds ?? 0)}</div>
             </div>
-          )}
-          {stamp && <div className="pen-stamp">{stamp}</div>}
-          {screen === 'live' && (
-            <>
-              <div className={`pen-clock ${urgent ? 'is-urgent' : ''}`} data-testid="clock">{clock(left)}</div>
-              <div className="pen-tally">{board.sold} sold · ${board.money}<small>Guest {round.index + 1} of 3</small></div>
-              {!sellerSpoke && <p className="pen-cue">You speak first</p>}
-              {note && <p className="pen-note">{note}</p>}
-              {avatar.heard && <p className="pen-heard">{avatar.heard}</p>}
-              <aside className="pen-tag is-held">
-                <p className="pen-price">Offer {round.offer ? `$${round.offer}` : `$${pen?.list}`} · lowest ${level?.lowest}</p>
-                <ul>{pen?.facts.map((f) => <li key={f}>{f}</li>)}</ul>
-              </aside>
-            </>
-          )}
-          <img className={`pen-hand ${close ? 'is-down' : ''}`} src={hand} alt="" aria-hidden="true" />
+            <p className="pen-small">{screen === 'live' ? 'Time left' : 'Starts when they are ready'}</p>
+          </div>
+          <aside className="pen-info">
+            <div className="pen-panel pen-offer">
+              <div><small>Your offer</small><b>{round.offer ? `$${round.offer}` : `$${pen?.list}`}</b></div>
+              <div><small>Lowest</small><b>${level?.lowest}</b></div>
+            </div>
+            <div className="pen-tag">
+              <h2>{pen?.name}</h2>
+              <ul>{pen?.facts.map((f) => <li key={f}>{f}</li>)}</ul>
+            </div>
+            {note && <p className="pen-alert">{note}</p>}
+            {avatar.heard && <p className="pen-heard"><small>You</small> {avatar.heard}</p>}
+          </aside>
         </main>
       )}
 
       {screen === 'read' && round && options && (
-        <main className="pen-sheet">
-          <p className="pen-kicker">Before you walk on</p>
+        <main className="pen-page pen-panel">
           <h2>What did you read in {round.guest.name}?</h2>
           <h3>What were they really after?</h3>
           <div className="pen-chips">{options.motives.map((m) => <button type="button" key={m} className={pick.motive === m ? 'is-on' : ''} onClick={() => setPick((p) => ({ ...p, motive: m }))}>{m}</button>)}</div>
@@ -306,9 +331,9 @@ export function App() {
             <img src={IMAGES[round.guest.image]} alt={round.guest.name} />
             {reveal.clues.map((c) => <span key={c.id} className={`pen-circle ${c.id === reveal.keyClue ? 'is-key' : ''}`} style={{ left: `${c.x}%`, top: `${c.y}%` }} aria-hidden="true" />)}
           </figure>
-          <div className="pen-notes">
+          <div className="pen-panel pen-notes">
             <div className="pen-head">
-              <h2>{reveal.view.outcome === 'sold' ? `Sold at $${reveal.view.price}` : reveal.view.outcome === 'walked' ? `${round.guest.name} walked` : 'No sale'}</h2>
+              <h2>{reveal.view.outcome === 'sold' ? reveal.view.earned > (reveal.view.price ?? 0) ? `Bulk order: $${reveal.view.earned}` : `Sold at $${reveal.view.price}` : reveal.view.outcome === 'walked' ? `${round.guest.name} walked` : 'No sale'}</h2>
               <p className="pen-score">{reveal.score.total}<small>/100</small></p>
             </div>
             <p><b>Real reason:</b> {reveal.motive} <span className={reveal.read.motive ? 'pen-ok' : 'pen-red'}>{reveal.read.motive ? 'You read it.' : 'You missed it.'}</span></p>
@@ -318,14 +343,13 @@ export function App() {
             {reveal.coach.best && <p><b>Best line:</b> "{reveal.coach.best}"</p>}
             {reveal.coach.worst && <p className="pen-red"><b>Worst line:</b> "{reveal.coach.worst}"</p>}
             {reveal.coach.note && <p>{reveal.coach.note}</p>}
-            <button type="button" className="pen-go" onClick={() => void goOn()}>{reveal.next ? 'Back into the mall' : 'See your report card'}</button>
+            <button type="button" className="pen-go" onClick={() => void goOn()}>{reveal.next ? 'Next guest' : 'See your report card'}</button>
           </div>
         </main>
       )}
 
       {screen === 'report' && report && (
-        <main className="pen-sheet">
-          <p className="pen-kicker">End of shift</p>
+        <main className="pen-page pen-panel">
           <p className="pen-money">${report.money}</p>
           <h2>{report.sold} of 3 pens sold · ${report.left} left on the table</h2>
           <div className="pen-skills">
@@ -340,10 +364,10 @@ export function App() {
       )}
 
       {screen === 'lost' && (
-        <main className="pen-sheet">
-          <h2>You lost them in the crowd</h2>
-          <p>{note || 'The connection dropped. This one doesn\'t count against you.'}</p>
-          <button type="button" className="pen-go" onClick={() => void replay()}>Find them again</button>
+        <main className="pen-page pen-panel">
+          <h2>We lost the connection</h2>
+          <p>{note || 'This one doesn\'t count against you.'}</p>
+          <button type="button" className="pen-go" onClick={() => void replay()}>Try this guest again</button>
         </main>
       )}
     </div>

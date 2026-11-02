@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { GUESTS } from './guests.ts';
 import { direction } from './director.ts';
 import { normalise, wordRules } from './judge.ts';
-import { applyVerdict, clockFor, gateOpen, LEVELS, levelById, moneyLeft, newRound, pickGuests, priceIn, report, score, topNow, type Round } from './rules.ts';
+import { applyVerdict, clockFor, earned, gateOpen, LEVELS, levelById, moneyLeft, newRound, pickGuests, priceIn, report, score, topNow, type Round } from './rules.ts';
 
 const round = (level = 'walkin', motive = 0): Round => newRound(GUESTS[0], levelById(level)!, () => motive / 2);
 const say = (r: Round, text: string, v = {}) => applyVerdict(r, text, normalise(v));
@@ -130,7 +130,22 @@ describe('the guest', () => {
     expect(direction(r, { sold: 20 })).toContain('YOU MAY BUY at $20');
   });
   it('gets three different guests a run', () => {
-    expect(new Set(pickGuests().map((g) => g.id)).size).toBe(3);
+    expect(new Set(pickGuests(levelById('walkin')!).map((g) => g.id)).size).toBe(3);
+  });
+  it('keeps false clues to the harder levels', () => {
+    const tricky = (id: string) => pickGuests(levelById(id)!).filter((g) => g.falseClue).length;
+    expect(tricky('walkin')).toBe(0);
+    expect(tricky('floor')).toBe(0);
+    expect(tricky('closer')).toBe(1);
+    expect(tricky('thirty')).toBe(2);
+  });
+  it('counts a bulk order only when the seller found the need', () => {
+    const theo = GUESTS.find((g) => g.id === 'theo')!;
+    const r = newRound(theo, levelById('walkin')!, () => 0);
+    r.price = 15;
+    expect(earned(r)).toBe(15);
+    r.needUncovered = true;
+    expect(earned(r)).toBe(600);
   });
   it('has word rules that work without a model', () => {
     const r = round();

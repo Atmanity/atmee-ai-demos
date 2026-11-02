@@ -80,15 +80,27 @@ export function newRound(guest: Guest, level: Level, pick = Math.random): Round 
   };
 }
 
-/** Three guests in a shuffled order. */
-export function pickGuests(pick = Math.random): Guest[] {
-  const pool = [...GUESTS];
+const shuffled = <T,>(list: T[], pick: () => number) => {
+  const pool = [...list];
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(pick() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
-  return pool.slice(0, 3);
+  return pool;
+};
+
+/** Three guests for a level: false clues only where the level promises them. */
+export function pickGuests(level: Level, pick = Math.random): Guest[] {
+  const open = shuffled(GUESTS.filter((g) => !g.falseClue), pick);
+  const tricky = shuffled(GUESTS.filter((g) => g.falseClue), pick);
+  const wanted = level.id === 'closer' ? 1 : level.id === 'thirty' ? 2 : 0;
+  return shuffled([...tricky.slice(0, wanted), ...open.slice(0, 3 - wanted)], pick);
 }
+
+/** Pens in the sale: a bulk order only if the seller found out about it. */
+export const quantityOf = (round: Round) => (round.needUncovered ? round.motive.quantity ?? 1 : 1);
+/** What the sale earned. */
+export const earned = (round: Round) => (round.price ?? 0) * quantityOf(round);
 
 /** What the guest would pay now: their top price grows as they come to want it. */
 export const topNow = (round: Round) => Math.round(round.motive.top * (0.8 + 0.2 * Math.min(round.interest, 100) / 100));
@@ -178,7 +190,7 @@ export function gateOpen(round: Round): boolean {
 }
 
 export function moneyLeft(round: Round): number {
-  return round.price === null ? 0 : Math.max(0, topNow(round) - round.price);
+  return round.price === null ? 0 : Math.max(0, topNow(round) - round.price) * quantityOf(round);
 }
 
 export function score(round: Round): Scores {
@@ -223,7 +235,7 @@ export function report(rounds: Round[]): Report {
   const skills = SKILLS.map((s) => ({ ...s, score: Math.round(played.reduce((sum, r) => sum + r.score![s.key], 0) / n) }));
   const weakest = [...skills].sort((a, b) => a.score / a.max - b.score / b.max)[0];
   return {
-    money: rounds.reduce((sum, r) => sum + (r.price ?? 0), 0),
+    money: rounds.reduce((sum, r) => sum + earned(r), 0),
     sold: rounds.filter((r) => r.outcome === 'sold').length,
     left: rounds.reduce((sum, r) => sum + moneyLeft(r), 0),
     skills: skills.map(({ label, score: s, max }) => ({ label, score: s, max })),

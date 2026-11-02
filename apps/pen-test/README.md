@@ -1,6 +1,6 @@
 # The Pen Test
 
-"Sell me this pen", played for real. The seller walks a mall, spots a stranger, opens the
+"Sell me this pen", played for real. The seller studies a stranger's photo, opens the
 conversation by voice and tries to earn as much as possible from three guests before the clock
 runs out. Clues are in how each guest looks and talks. The seller learns from a red-pen reveal
 after each guest, and a report card at the end.
@@ -9,7 +9,7 @@ after each guest, and a report card at the end.
 
 ```
 page (apps/pen-test/page)            server (server.ts)                 Atmee
-  mall walk, clock, HUD      --->      run, guests' secrets      --->   POST /v1/session
+  guest video, clock, offer  --->      run, guests' secrets      --->   POST /v1/session
   seller's lines (captions)  --->      judge + rules (engine/)          per guest, with secrets
   state / event to the guest <---      direction, sale, walk            in appTools.instructions
   atmee.tool decide          <---------------------------------------   the guest's call
@@ -29,7 +29,7 @@ page (apps/pen-test/page)            server (server.ts)                 Atmee
 ## What the API could not do
 
 - **The seller must speak first, and every avatar greets on arrival.** No session option turns the
-  greeting off. The page keeps the guest behind the mall walk, with sound off and the mic closed,
+  greeting off. The page keeps the guest behind their still photo, with sound off and the mic closed,
   until the greeting has passed. That hidden time bills.
 - **Check-ins can't be turned off.** After about 10 s of silence a guest says "Hm?", which fits.
 - **Plan session cap.** On a 180 s plan Walk-in runs 2:40, so the clock ends inside the session.
@@ -37,21 +37,19 @@ page (apps/pen-test/page)            server (server.ts)                 Atmee
 - **No server-side transcript.** The page relays lines, so a score could be forged. Accepted until
   there is a public ranking.
 
-## Portraits
+## Open platform problem
 
-**Open platform problem:** photorealistic guests can leave the frame while listening. Ray and
-Marisol walked away and rendered only the mall; Walter held in his one run. Marisol did it in a busy
-mall, an empty mall, against a plain wall and with a larger face, so background and framing are not
-the cause. The previews never show it. The page works around it by holding the portrait while the
-guest listens and showing live video only while they speak. A guest therefore stands still between
-lines.
+Photorealistic guests can leave the frame while listening. Ray and Marisol walked away and the
+render showed only the mall; Walter held in his one run. Marisol did it in a busy mall, an empty
+mall, against a plain wall and with a larger face, so background and framing are not the cause.
+Previews never show it. The page shows live video throughout and does not hide this.
 
 ## Live runs, 2026-11-02 (local, production API)
 
 - Good seller, Marisol: greeting hidden, seller spoke first, she haggled once, sold at $16, 85/100.
 - Spec reciter: Walter walked after three lines (7/100), Ray likewise (8 and 12/100).
-- Ray with the portrait hold: on screen in all 14 frames sampled while speaking.
-- Not yet run live: all three guests in one run, the report card, Closer and Thirty, a false claim.
+- Helen, Theo, Daniel on Thirty: all three reached the reveal and the report card; Helen challenged a false claim. The test mic reached only the first guest, so the later guests' sales are unproven.
+- Not yet run live: a sale after the first guest, Floor rep and Closer, a false-clue guest being sold to.
 
 ## Run it locally
 
