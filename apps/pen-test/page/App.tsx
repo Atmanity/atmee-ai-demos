@@ -4,7 +4,7 @@
 // Elsewhere every avatar greets on arrival, so the guest arrives behind their still photo with the
 // volume at zero, and the sound and the clock start once that greeting has passed.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BackToApps, HostVideo, useAvatar, type ToolCall } from '../../../src/kit/index.ts';
+import { BackToApps, HangUpIcon, HostVideo, MicIcon, MicOffIcon, useAvatar, type ToolCall } from '../../../src/kit/index.ts';
 import ray from '../host/ray.jpg';
 import marisol from '../host/marisol.jpg';
 import walter from '../host/walter.jpg';
@@ -72,6 +72,9 @@ export function App() {
   const talkBox = useRef<HTMLOListElement>(null);
   // Set once the guest has bought: the call stays open so the seller can close the conversation too.
   const [sold, setSold] = useState('');
+  // Call controls: the conversation panel starts open where there is room for it.
+  const [chatOpen, setChatOpen] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1100);
+  const [penOpen, setPenOpen] = useState(false);
 
   const live = useRef({ quietStart: false, arrived: false, finishing: false, liveAt: 0, sold: '', lastTalk: 0 });
   const roundPath = useRef('');
@@ -243,6 +246,16 @@ export function App() {
     setReveal(feedback); setBoard(feedback.board); setScreen('reveal');
   };
 
+  // Hanging up: after a sale it is a wrap-up, before one the guest goes unsold.
+  function leave() {
+    if (live.current.finishing) return;
+    if (live.current.sold) return wrapUp.current();
+    if (screen !== 'live') { void avatarRef.current.end(); setScreen('door'); setRound(null); return; }
+    live.current.finishing = true;
+    setStamp('NO SALE');
+    finish.current('time');
+  }
+
   async function startRun() {
     if (!level) return;
     const run = await post<{ id: string; seconds: number; first: RoundView }>('/run', { level: level.id });
@@ -272,7 +285,7 @@ export function App() {
 
   return (
     <div className="pen">
-      <header className="pen-bar">
+      {!inRoom && <header className="pen-bar">
         <BackToApps />
         <strong className="pen-logo">The Pen Test</strong>
         {screen !== 'door' && (
@@ -285,7 +298,7 @@ export function App() {
             <b>${board.money}</b>
           </span>
         )}
-      </header>
+      </header>}
 
       {screen === 'door' && pen && (
         <main className="pen-door">
@@ -324,69 +337,94 @@ export function App() {
       )}
 
       {inRoom && round && (
-        <main className="pen-room">
-          <div className="pen-screen">
-            <HostVideo avatar={avatar} name={round.guest.name} captions={false} className="pen-video" />
-            {/* The photo covers the guest's arrival; once the meeting starts it is all live video. */}
-            <img className={`pen-still ${screen === 'live' && stamp !== 'WALKED AWAY' ? 'is-off' : ''}`} src={IMAGES[round.guest.image]} alt={round.guest.name} />
-            <p className="pen-nameplate">Guest {round.index + 1} of 3</p>
-            {screen === 'meet' && (
-              <div className="pen-meet" role="status">
-                <span className="call-spinner" aria-hidden="true" />
-                <p>{slow ? 'Still getting them ready…' : round.guest.spotted}</p>
-              </div>
-            )}
+        <main className={`pen-call ${chatOpen ? 'has-chat' : ''}`}>
+          <section className="pen-stagewrap">
+            <div className="pen-backdrop" style={{ backgroundImage: `url(${IMAGES[round.guest.image]})` }} aria-hidden="true" />
+            <div className="pen-screen">
+              <HostVideo avatar={avatar} name={round.guest.name} captions={false} className="pen-video" />
+              {/* The photo covers the guest's arrival; once the meeting starts it is all live video. */}
+              <img className={`pen-still ${screen === 'live' && stamp !== 'WALKED AWAY' ? 'is-off' : ''}`} src={IMAGES[round.guest.image]} alt={round.guest.name} />
+              {screen === 'meet' && (
+                <div className="pen-meet" role="status">
+                  <span className="call-spinner" aria-hidden="true" />
+                  <p><small>{slow ? 'Still connecting…' : 'Connecting…'}</small>{round.guest.spotted}</p>
+                </div>
+              )}
+              {stamp && <div className="pen-stamp">{stamp}</div>}
+              {sold && !stamp && <p className="pen-soldbadge">{sold}</p>}
+            </div>
+
+            <header className="pen-callbar">
+              <span className={`pen-timepill ${urgent ? 'is-urgent' : ''} ${sold ? 'is-done' : ''}`}>
+                <i aria-hidden="true" />
+                <b {...(screen === 'live' ? { 'data-testid': 'clock' } : {})}>{clock(screen === 'live' ? left : level?.seconds ?? 0)}</b>
+                <span>{sold ? 'Deal closed' : screen === 'live' ? 'left' : 'starts when they are ready'}</span>
+              </span>
+              <span className="pen-callinfo">Guest {round.index + 1} of 3</span>
+              <span className="pen-earned">${board.money}</span>
+            </header>
+
+            {(note || whisper) && <p className={note ? 'pen-toast is-alert' : 'pen-toast'}>{note || whisper}</p>}
+
+            <div className="pen-chips" aria-live="polite">
+              {round.read && (
+                <span className={`pen-chip-read is-${round.read.mood.toLowerCase()}`}>
+                  <small>Guest</small><b>{round.read.mood}</b><i><em style={{ width: `${round.read.meter}%` }} /></i>
+                  {round.read.price && <span className={`pen-chip is-${round.read.price.replace(/ /g, '-').toLowerCase()}`}>{round.read.price}</span>}
+                </span>
+              )}
+              <span className="pen-chip-offer"><small>Your offer</small><b>{round.offer ? `$${round.offer}` : `$${pen?.list}`}</b><small>lowest ${level?.lowest}</small></span>
+            </div>
+
             {screen === 'live' && !sellerSpoke && !subtitle && <p className="pen-cue">You speak first</p>}
             {subtitle && <p className="pen-subtitle">{subtitle}</p>}
-            {stamp && <div className="pen-stamp">{stamp}</div>}
-            {sold && !stamp && <p className="pen-soldbadge">{sold}</p>}
-          </div>
-          <aside className="pen-side">
-            {sold ? (
-              <div className="pen-wrap" role="status">
-                <p><b>{sold}</b> The deal is done. Keep the conversation going, then wrap up.</p>
-                <button type="button" className="pen-go" onClick={() => wrapUp.current()}>Wrap up</button>
-              </div>
-            ) : (
-            <div className={`pen-timer ${urgent ? 'is-urgent' : ''}`}>
-              <div className="pen-timer-row">
-                <span>{screen === 'live' ? 'Time left' : 'Starts when they are ready'}</span>
-                <b className="pen-clock" {...(screen === 'live' ? { 'data-testid': 'clock' } : {})}>{clock(screen === 'live' ? left : level?.seconds ?? 0)}</b>
-              </div>
-              <div className="pen-timer-bar"><i style={{ width: `${100 * (screen === 'live' && seconds ? Math.max(0, left) / seconds : 1)}%` }} /></div>
+
+            <div className={`pen-self ${avatar.heard ? 'is-talking' : ''} ${avatar.micOn ? '' : 'is-muted'}`} aria-label="You">
+              <span className="pen-self-ring">{avatar.micOn ? <MicIcon /> : <MicOffIcon />}</span>
+              <b>You</b>
+              {avatar.heard && <small>{avatar.heard}</small>}
             </div>
+
+            {penOpen && (
+              <div className="pen-tag pen-pop">
+                <img className="pen-photo" src={penPhoto} alt="The Kestrel No. 4, a steel pen with a soft black grip" />
+                <h2>{pen?.name}</h2>
+                <p className="pen-price">List ${pen?.list} · lowest ${level?.lowest}</p>
+                <ul>{pen?.facts.map((f) => <li key={f}>{f}</li>)}</ul>
+              </div>
             )}
-            <div className={`pen-card pen-read${round.read ? ` is-${round.read.mood.toLowerCase()}` : ''}`} aria-live="polite">
-              {round.read && (
-                <>
-                  <div className="pen-read-mood">
-                    <span><small>Read the guest</small><b>{round.read.mood}</b></span>
-                    {round.read.price && <span className={`pen-chip is-${round.read.price.replace(/ /g, '-').toLowerCase()}`}>{round.read.price}</span>}
-                  </div>
-                  <div className="pen-meter"><i style={{ width: `${round.read.meter}%` }} /></div>
-                </>
-              )}
-              <div className="pen-offer-row">
-                <span><small>Your offer</small> <b>{round.offer ? `$${round.offer}` : `$${pen?.list}`}</b></span>
-                <span><small>Lowest</small> <b>${level?.lowest}</b></span>
-              </div>
-            </div>
-            <div className="pen-card pen-talk">
-              {note ? <p className="pen-alert">{note}</p> : whisper ? <p className="pen-whisper">{whisper}</p> : null}
-              <ol ref={talkBox} aria-live="polite" aria-label="The conversation">
-                {talk.length === 0 && !avatar.heard && <li className="pen-talk-empty">{screen === 'live' ? 'Open with something you can see.' : 'Your conversation shows here.'}</li>}
-                {talk.map((l, i) => (
-                  <li key={i} className={`is-${l.who}`}><small>{l.who === 'seller' ? 'You' : round.guest.name}</small>{l.text}</li>
-                ))}
-                {avatar.heard && <li className="is-seller is-live"><small>You</small>{avatar.heard}</li>}
-              </ol>
-            </div>
-            <div className="pen-tag pen-tag-mini">
-              <img className="pen-photo" src={penPhoto} alt="The Kestrel No. 4, a steel pen with a soft black grip" />
-              <h2>{pen?.name}</h2>
-              <ul>{pen?.facts.map((f) => <li key={f}>{f}</li>)}</ul>
-            </div>
+          </section>
+
+          <aside className="pen-chat" aria-label="Conversation" hidden={!chatOpen}>
+            <header><b>Conversation</b><button type="button" onClick={() => setChatOpen(false)} aria-label="Close the conversation">×</button></header>
+            <ol ref={talkBox} aria-live="polite">
+              {talk.length === 0 && !avatar.heard && <li className="pen-talk-empty">{screen === 'live' ? 'Open with something you can see.' : 'Your conversation shows here.'}</li>}
+              {talk.map((l, i) => (
+                <li key={i} className={`is-${l.who}`}><small>{l.who === 'seller' ? 'You' : round.guest.name}</small>{l.text}</li>
+              ))}
+              {avatar.heard && <li className="is-seller is-live"><small>You</small>{avatar.heard}</li>}
+            </ol>
           </aside>
+
+          <nav className="pen-controls" aria-label="Call controls">
+            <button type="button" className={avatar.micOn ? '' : 'is-off'} onClick={() => avatar.setMic(!avatar.micOn)} aria-pressed={!avatar.micOn}>
+              <span>{avatar.micOn ? <MicIcon /> : <MicOffIcon />}</span>{avatar.micOn ? 'Mute' : 'Unmute'}
+            </button>
+            <button type="button" className={penOpen ? 'is-on' : ''} onClick={() => setPenOpen((o) => !o)} aria-pressed={penOpen}>
+              <span aria-hidden="true">✎</span>The pen
+            </button>
+            <button type="button" className={chatOpen ? 'is-on' : ''} onClick={() => setChatOpen((o) => !o)} aria-pressed={chatOpen}>
+              <span aria-hidden="true">☰</span>Conversation
+            </button>
+            {sold && (
+              <button type="button" className="is-wrap" data-testid="wrap-up" onClick={() => wrapUp.current()}>
+                <span aria-hidden="true">✓</span>Wrap up
+              </button>
+            )}
+            <button type="button" className="is-leave" onClick={() => leave()} aria-label="Leave the meeting">
+              <span><HangUpIcon /></span>Leave
+            </button>
+          </nav>
         </main>
       )}
 

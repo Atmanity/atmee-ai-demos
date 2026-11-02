@@ -74,70 +74,93 @@ small { font-size: .78rem; }
 .pen-start { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
 .pen-door > .pen-alert { grid-column: 1 / -1; }
 
-/* The room: the guest on the left, the seller's rail on the right, both the height of the screen. */
-.pen-room { --h: calc(100dvh - 76px); width: 100%; margin: 0 auto; padding: 12px 16px; display: grid; gap: 16px; justify-content: center; grid-template-columns: minmax(0, var(--h)) minmax(300px, 340px); }
-.pen-screen { position: relative; aspect-ratio: 1; width: 100%; max-height: var(--h); border-radius: 16px; overflow: hidden; background: var(--call-bg); box-shadow: 0 0 0 1px rgba(255, 255, 255, .14), 0 24px 70px rgba(5, 10, 30, .65), 0 0 140px rgba(120, 150, 255, .2); }
+/* The call: a video call with the guest, full height, controls along the bottom like any call app. */
+.pen-call { --bar: 76px; position: relative; height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) var(--bar); background: #05091a; overflow: hidden; }
+.pen-call.has-chat { grid-template-columns: minmax(0, 1fr) 340px; }
+.pen-stagewrap { position: relative; grid-column: 1; grid-row: 1; display: grid; place-items: center; overflow: hidden; min-height: 0; }
+.pen-backdrop { position: absolute; inset: -40px; background-size: cover; background-position: center 20%; filter: blur(38px) brightness(.45) saturate(1.2); transform: scale(1.1); }
+.pen-screen { position: relative; z-index: 1; height: calc(100% - 16px); max-width: calc(100% - 32px); aspect-ratio: 1; border-radius: 18px; overflow: hidden; background: var(--call-bg); box-shadow: 0 30px 80px rgba(0, 0, 0, .55); }
 .pen-video.pen-video { position: absolute; inset: 0; border-radius: 0; }
 .pen-video::after { display: none; }
 .pen-still { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 2; transition: opacity .18s; }
 .pen-still.is-off { opacity: 0; }
-.pen-nameplate { position: absolute; top: 12px; left: 12px; z-index: 3; font: 600 .82rem var(--body); letter-spacing: .02em; color: #fff; background: rgba(11, 20, 51, .62); backdrop-filter: blur(6px); border-radius: 999px; padding: 4px 12px; }
-.pen-meet, .pen-cue, .pen-subtitle { position: absolute; left: 14px; right: 14px; bottom: 14px; z-index: 3; border-radius: 12px; }
-.pen-meet { display: flex; align-items: center; gap: 14px; background: rgba(11, 20, 51, .86); color: #fff; padding: 14px 18px; font: 600 clamp(1.1rem, 2.4vw, 1.5rem)/1.25 var(--body); }
+.pen-meet { position: absolute; inset: auto 0 0 0; z-index: 3; display: flex; align-items: center; gap: 14px; padding: 60px 22px 22px; background: linear-gradient(transparent, rgba(5, 9, 26, .85)); color: #fff; font: 600 clamp(1.05rem, 2.2vw, 1.35rem)/1.3 var(--body); }
+.pen-meet small { display: block; font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: rgba(255, 255, 255, .7); }
 .pen-meet .call-spinner { flex: none; width: 26px; height: 26px; border-color: rgba(255, 255, 255, .3); border-top-color: #fff; }
-.pen-cue { width: max-content; max-width: calc(100% - 28px); margin: 0 auto; padding: 8px 18px; background: #fff; color: #0f1b42; font: 700 1.05rem var(--display); text-align: center; }
-.pen-subtitle { padding: 10px 16px; background: rgba(11, 20, 51, .78); backdrop-filter: blur(6px); color: #fff; font-size: 1.15rem; line-height: 1.35; text-align: center; }
-.pen-stamp { position: absolute; left: 50%; bottom: 14%; z-index: 4; transform: translateX(-50%) rotate(-6deg); font: 700 clamp(1.8rem, 5vw, 2.8rem) var(--display); color: #d3232f; background: rgba(255, 255, 255, .95); border: 5px solid #d3232f; border-radius: 10px; padding: 4px 18px; white-space: nowrap; animation: pen-stamp .28s cubic-bezier(.2, 1.4, .5, 1) both; }
-@keyframes pen-stamp { from { transform: translateX(-50%) rotate(-6deg) scale(1.6); opacity: 0; } }
+.pen-stamp { position: absolute; left: 50%; top: 42%; z-index: 4; transform: translate(-50%, -50%) rotate(-6deg); font: 700 clamp(1.8rem, 5vw, 3rem) var(--display); color: #d3232f; background: rgba(255, 255, 255, .95); border: 5px solid #d3232f; border-radius: 10px; padding: 4px 18px; white-space: nowrap; animation: pen-stamp .28s cubic-bezier(.2, 1.4, .5, 1) both; }
+@keyframes pen-stamp { from { transform: translate(-50%, -50%) rotate(-6deg) scale(1.6); opacity: 0; } }
+.pen-soldbadge { position: absolute; top: 14px; right: 14px; z-index: 3; font: 700 1rem var(--display); color: #d3232f; background: rgba(255, 255, 255, .95); border: 3px solid #d3232f; border-radius: 8px; padding: 2px 10px; transform: rotate(-4deg); }
 
-.pen-soldbadge { position: absolute; top: 12px; right: 12px; z-index: 3; font: 700 1rem var(--display); color: #d3232f; background: rgba(255, 255, 255, .95); border: 3px solid #d3232f; border-radius: 8px; padding: 2px 10px; transform: rotate(-4deg); }
-.pen-wrap { display: grid; gap: 10px; padding: 12px 14px; border-radius: 12px; background: rgba(79, 209, 139, .14); border: 1px solid rgba(79, 209, 139, .4); }
-.pen-wrap p { font-size: .95rem; line-height: 1.35; }
-.pen-wrap b { display: block; font: 700 1.6rem var(--display); color: #fff; }
-.pen-wrap .pen-go { justify-self: stretch; }
-.pen-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; max-height: var(--h); }
-.pen-timer { padding: 2px 2px 0; }
-.pen-timer-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.pen-timer-row span { font-size: .85rem; color: var(--soft); }
-.pen-clock { font: 700 2.6rem/1 var(--mono); letter-spacing: -.02em; color: #fff; }
-.pen-timer-bar { height: 6px; margin-top: 8px; border-radius: 3px; background: rgba(255, 255, 255, .14); overflow: hidden; }
-.pen-timer-bar i { display: block; height: 100%; border-radius: 3px; background: #fff; transition: width 1s linear, background-color .3s; }
-.pen-timer.is-urgent .pen-clock { color: #ff8b93; }
-.pen-timer.is-urgent .pen-timer-bar i { background: #ff5d68; }
+/* Overlays on the stage */
+.pen-callbar { position: absolute; z-index: 5; top: 14px; left: 18px; right: 18px; display: flex; align-items: center; gap: 10px; pointer-events: none; }
+.pen-callbar > * { pointer-events: auto; }
+.pen-timepill, .pen-callinfo, .pen-earned { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px; border-radius: 999px; background: rgba(8, 12, 30, .62); backdrop-filter: blur(10px); color: #fff; font-size: .9rem; }
+.pen-timepill i { width: 9px; height: 9px; border-radius: 50%; background: #4fd18b; box-shadow: 0 0 0 4px rgba(79, 209, 139, .2); }
+.pen-timepill b { font: 700 1.25rem var(--mono); letter-spacing: -.02em; }
+.pen-timepill span { color: rgba(255, 255, 255, .7); }
+.pen-timepill.is-urgent i { background: #ff5d68; box-shadow: 0 0 0 4px rgba(255, 93, 104, .25); animation: pen-blink 1s steps(2) infinite; }
+.pen-timepill.is-urgent b { color: #ff8b93; }
+.pen-timepill.is-done i { background: #f2d45c; box-shadow: none; }
+@keyframes pen-blink { 50% { opacity: .3; } }
+.pen-earned { margin-left: auto; font: 700 1rem var(--mono); }
+.pen-toast { position: absolute; z-index: 6; top: 64px; left: 50%; transform: translateX(-50%); max-width: min(520px, calc(100% - 32px)); padding: 9px 16px; border-radius: 12px; background: rgba(243, 166, 74, .95); color: #2b1600; font-weight: 600; font-size: .95rem; box-shadow: 0 10px 30px rgba(0, 0, 0, .35); }
+.pen-toast.is-alert { background: #ffe1e1; color: #a3172a; }
 
-.pen-read { display: grid; gap: 8px; }
-.pen-read-mood { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.pen-read-mood small { display: block; color: var(--faint); font-weight: 700; letter-spacing: .03em; text-transform: uppercase; font-size: .7rem; }
-.pen-read-mood b { font: 700 1.15rem var(--display); }
-.pen-meter { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, .14); overflow: hidden; }
-.pen-meter i { display: block; height: 100%; border-radius: 4px; transition: width .6s ease, background-color .6s ease; }
-.pen-read.is-annoyed .pen-meter i { background: #ff6b6b; }
-.pen-read.is-unconvinced .pen-meter i { background: var(--amber); }
-.pen-read.is-curious .pen-meter i { background: #f2d45c; }
-.pen-read.is-interested .pen-meter i { background: #4fd18b; }
-.pen-chip { font-size: .78rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.pen-chips { position: absolute; z-index: 5; left: 18px; bottom: 18px; display: grid; gap: 8px; justify-items: start; }
+.pen-chip-read, .pen-chip-offer { display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px; border-radius: 14px; background: rgba(8, 12, 30, .62); backdrop-filter: blur(10px); color: #fff; }
+.pen-chips small { font-size: .72rem; color: rgba(255, 255, 255, .65); letter-spacing: .04em; text-transform: uppercase; }
+.pen-chips b { font: 700 1.05rem var(--display); }
+.pen-chip-offer b { font-family: var(--mono); }
+.pen-chip-read i { width: 90px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .16); overflow: hidden; }
+.pen-chip-read em { display: block; height: 100%; border-radius: 3px; transition: width .6s ease, background-color .6s ease; }
+.pen-chip-read.is-annoyed em { background: #ff6b6b; }
+.pen-chip-read.is-unconvinced em { background: var(--amber); }
+.pen-chip-read.is-curious em { background: #f2d45c; }
+.pen-chip-read.is-interested em { background: #4fd18b; }
+.pen-chip { font-size: .75rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
 .pen-chip.is-too-pricey { background: #ffe1e1; color: #a3172a; }
 .pen-chip.is-fair { background: #fff2c9; color: #7a5a00; }
 .pen-chip.is-good-deal { background: #d9f7e6; color: #11663a; }
-.pen-offer-row { display: flex; justify-content: space-between; gap: 8px; }
-.pen-read-mood + .pen-meter + .pen-offer-row { padding-top: 8px; border-top: 1px solid var(--glass-line); }
-.pen-offer-row small { color: var(--faint); }
-.pen-offer-row b { font: 700 1.05rem var(--mono); color: #fff; }
 
-/* The conversation: the seller's own words, so they can hear themselves. */
-.pen-talk { flex: 1 1 auto; min-height: 120px; display: flex; flex-direction: column; gap: 8px; padding: 10px; }
-.pen-talk ol { list-style: none; margin: 0; padding: 0 2px; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; flex: 1 1 0; min-height: 0; scrollbar-width: thin; }
-.pen-talk li { max-width: 88%; padding: 6px 10px 7px; border-radius: 12px; font-size: .92rem; line-height: 1.3; }
-.pen-talk li small { display: block; font-size: .68rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; opacity: .7; }
-.pen-talk li.is-guest { align-self: flex-start; background: rgba(255, 255, 255, .92); color: var(--ink); border-bottom-left-radius: 4px; }
-.pen-talk li.is-seller { align-self: flex-end; background: var(--you); color: #fff; border-bottom-right-radius: 4px; }
-.pen-talk li.is-live { opacity: .6; }
-.pen-talk li.pen-talk-empty { align-self: center; max-width: none; margin: auto 0; color: var(--faint); font-size: .9rem; }
+.pen-cue, .pen-subtitle { position: absolute; z-index: 5; left: 50%; bottom: 18px; transform: translateX(-50%); max-width: min(640px, calc(100% - 520px)); min-width: 260px; text-align: center; border-radius: 14px; }
+.pen-cue { padding: 9px 20px; background: #fff; color: #0f1b42; font: 700 1.05rem var(--display); }
+.pen-subtitle { padding: 10px 18px; background: rgba(8, 12, 30, .72); backdrop-filter: blur(10px); color: #fff; font-size: 1.1rem; line-height: 1.35; }
 
-.pen-tag-mini { display: grid; grid-template-columns: 92px minmax(0, 1fr); column-gap: 10px; align-items: center; padding: 8px 12px 9px 28px; flex: none; }
-.pen-tag-mini .pen-photo { grid-row: 1 / span 2; width: 100%; margin: 0; }
-.pen-tag-mini h2 { font-size: .92rem; }
-.pen-tag-mini ul { grid-column: 1 / -1; margin-top: 4px; columns: 2; column-gap: 16px; font-size: .78rem; line-height: 1.28; }
+.pen-self { position: absolute; z-index: 5; right: 18px; bottom: 18px; width: 168px; height: 112px; border-radius: 14px; background: linear-gradient(160deg, #2a3a78, #141d44); border: 1px solid rgba(255, 255, 255, .14); box-shadow: 0 10px 30px rgba(0, 0, 0, .4); display: grid; place-items: center; align-content: center; gap: 4px; color: #fff; overflow: hidden; }
+.pen-self b { font: 600 .85rem var(--body); }
+.pen-self small { position: absolute; left: 8px; right: 8px; bottom: 6px; font-size: .7rem; line-height: 1.2; color: rgba(255, 255, 255, .75); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+.pen-self-ring { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: rgba(255, 255, 255, .12); transition: box-shadow .2s; }
+.pen-self-ring svg { width: 20px; height: 20px; }
+.pen-self.is-talking .pen-self-ring { box-shadow: 0 0 0 3px #4fd18b, 0 0 18px rgba(79, 209, 139, .6); }
+.pen-self.is-talking { border-color: rgba(79, 209, 139, .7); }
+.pen-self.is-muted .pen-self-ring { background: #d3232f; }
+
+.pen-pop { position: absolute; z-index: 6; left: 50%; bottom: 16px; transform: translateX(-50%) rotate(-1.2deg); width: min(320px, calc(100% - 32px)); }
+
+/* The conversation panel, like a call app's chat */
+.pen-chat { grid-column: 2; grid-row: 1 / span 2; display: flex; flex-direction: column; min-height: 0; background: #0d1430; border-left: 1px solid rgba(255, 255, 255, .08); }
+.pen-chat[hidden] { display: none; }
+.pen-chat header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid rgba(255, 255, 255, .08); }
+.pen-chat header button { background: none; border: 0; color: var(--soft); font-size: 1.5rem; line-height: 1; cursor: pointer; }
+.pen-chat ol { list-style: none; margin: 0; padding: 14px 12px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; flex: 1 1 0; min-height: 0; scrollbar-width: thin; }
+.pen-chat li { max-width: 88%; padding: 7px 11px 8px; border-radius: 14px; font-size: .92rem; line-height: 1.32; }
+.pen-chat li small { display: block; font-size: .66rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; opacity: .7; }
+.pen-chat li.is-guest { align-self: flex-start; background: #fff; color: var(--ink); border-bottom-left-radius: 4px; }
+.pen-chat li.is-seller { align-self: flex-end; background: var(--you); color: #fff; border-bottom-right-radius: 4px; }
+.pen-chat li.is-live { opacity: .6; }
+.pen-chat li.pen-talk-empty { align-self: center; max-width: none; margin: auto 0; color: var(--faint); }
+
+/* The control bar */
+.pen-controls { grid-column: 1; grid-row: 2; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 0 16px; background: #090f26; border-top: 1px solid rgba(255, 255, 255, .06); }
+.pen-controls button { display: grid; justify-items: center; gap: 3px; min-width: 76px; padding: 6px 10px; border: 0; border-radius: 12px; background: none; color: #dfe5f7; font: 600 .74rem var(--body); cursor: pointer; }
+.pen-controls button > span { display: grid; place-items: center; width: 44px; height: 36px; border-radius: 12px; background: rgba(255, 255, 255, .1); font-size: 1.05rem; transition: background .15s; }
+.pen-controls button > span svg { width: 20px; height: 20px; }
+.pen-controls button:hover > span { background: rgba(255, 255, 255, .18); }
+.pen-controls button.is-on > span { background: #fff; color: #0f1b42; }
+.pen-controls button.is-off > span { background: #d3232f; color: #fff; }
+.pen-controls button.is-wrap > span { background: #1d8a5a; color: #fff; width: 64px; }
+.pen-controls button.is-leave > span { background: #d3232f; color: #fff; width: 64px; }
+.pen-controls button.is-leave:hover > span { background: #b51c28; }
 
 /* After each guest: the photo marked in red pen beside the scorecard. */
 .pen-marking { --h: calc(100dvh - 76px); width: 100%; max-width: 1180px; margin: 0 auto; padding: 12px 16px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 18px; align-items: start; }
@@ -185,14 +208,21 @@ small { font-size: .78rem; }
 .pen-drill { background: var(--blue-soft); padding: 12px 14px; border-radius: 10px; }
 
 @media (max-width: 820px) {
+  .pen-call, .pen-call.has-chat { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto var(--bar); }
+  .pen-chat { grid-column: 1; grid-row: 2; max-height: 34dvh; border-left: 0; border-top: 1px solid rgba(255, 255, 255, .08); }
+  .pen-controls { grid-row: 3; gap: 4px; }
+  .pen-controls button { min-width: 0; flex: 1; }
+  .pen-screen { height: auto; width: calc(100% - 16px); max-width: none; }
+  .pen-self { width: 96px; height: 72px; right: 12px; bottom: 12px; }
+  .pen-self small { display: none; }
+  .pen-chips { left: 12px; bottom: 12px; }
+  .pen-chip-read i { width: 50px; }
+  .pen-cue, .pen-subtitle { bottom: auto; top: 62px; max-width: calc(100% - 24px); min-width: 0; font-size: .95rem; }
   .pen-door, .pen-marking { grid-template-columns: minmax(0, 1fr); }
   .pen-pitch, .pen-lineup { grid-column: 1; }
   .pen-lineup { justify-content: center; }
-  .pen-room { grid-template-columns: minmax(0, 1fr); padding: 10px 12px; gap: 10px; }
-  .pen-screen, .pen-marked { max-height: none; }
-  .pen-side, .pen-notes { max-height: none; }
-  .pen-clock { font-size: 2rem; }
-  .pen-talk { min-height: 180px; max-height: 260px; }
+  .pen-marked { max-height: none; }
+  .pen-notes { max-height: none; }
   .pen-skillbars, .pen-quotes { grid-template-columns: minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) { .pen-still { transition: none; } .pen-stamp { animation: none; } }
