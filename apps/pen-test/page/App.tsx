@@ -22,6 +22,8 @@ const MAX_HIDDEN_MS = 16000;
 const SLOW_MEET_MS = 45000;
 // From this score up, a round is strong enough that the feedback skips its "worst line".
 const STRONG = 85;
+// After a sale the talk goes on until the seller wraps up, or this long passes with nobody speaking.
+const AFTER_SALE_IDLE_MS = 45000;
 
 interface Level { id: string; name: string; blurb: string; lowest: number; hints: number; seconds: number }
 interface Pen { name: string; facts: string[]; list: number }
@@ -68,13 +70,22 @@ export function App() {
   // The conversation so far, so the seller can see what they actually said.
   const [talk, setTalk] = useState<Said[]>([]);
   const talkBox = useRef<HTMLOListElement>(null);
+  // Set once the guest has bought: the call stays open so the seller can close the conversation too.
+  const [sold, setSold] = useState('');
 
-  const live = useRef({ quietStart: false, arrived: false, finishing: false, liveAt: 0 });
+  const live = useRef({ quietStart: false, arrived: false, finishing: false, liveAt: 0, sold: '', lastTalk: 0 });
   const roundPath = useRef('');
   const screenRef = useRef<Screen>('door');
   screenRef.current = screen;
 
   const finish = useRef<(reason: string) => void>(() => {});
+  // The seller is done talking after a sale.
+  const wrapUp = useRef(() => {
+    if (live.current.finishing || !live.current.sold) return;
+    live.current.finishing = true;
+    setStamp(live.current.sold);
+    finish.current('sold');
+  });
   // The guest is gone: the stream stops at once, and the stamp stays up briefly over their photo.
   const walkedAway = useRef(() => {
     if (live.current.finishing) return;
@@ -89,23 +100,26 @@ export function App() {
     setSellerSpoke(true);
     setNote('');
     setTalk((t) => [...t, { who: 'seller', text }]);
+    live.current.lastTalk = Date.now();
     const r = await post<{ view: RoundView; direction?: string; closing?: string; refused?: number }>(`${roundPath.current}/line`, { who: 'seller', text });
     setRound(r.view);
-    if (r.view.price) setBoard((b) => ({ money: b.money + r.view.earned, sold: b.sold + 1 }));
+    if (r.closing && r.view.price) setBoard((b) => ({ money: b.money + r.view.earned, sold: b.sold + 1 }));
     if (r.view.outcome === 'walked') return walkedAway.current();
     if (r.direction) avatarRef.current?.state(r.direction);
     if (r.refused) { setNote(`$${r.refused} is under your lowest price. That offer can't stand.`); setTimeout(() => setNote(''), 5000); }
     if (r.closing) {
       avatarRef.current?.event(r.closing, 10);
-      setStamp(r.view.earned > (r.view.price ?? 0) ? `SOLD $${r.view.earned}` : `SOLD $${r.view.price}`);
-      live.current.finishing = true;
-      setTimeout(() => finish.current(r.view.outcome), 6000);
+      const label = r.view.earned > (r.view.price ?? 0) ? `SOLD $${r.view.earned}` : `SOLD $${r.view.price}`;
+      live.current.sold = label;
+      setStamp(label); setSold(label);
+      setTimeout(() => { if (!live.current.finishing) setStamp(''); }, 3500);
     }
   }, []);
 
   const onAvatarSaid = useCallback((text: string) => {
     if (!live.current.arrived) return;   // the greeting nobody heard
     setTalk((t) => [...t, { who: 'guest', text }]);
+    live.current.lastTalk = Date.now();
     void post(`${roundPath.current}/line`, { who: 'guest', text });
   }, []);
 
@@ -117,8 +131,11 @@ export function App() {
   }, []);
 
   const onEnded = useCallback(() => {
+    if (screenRef.current !== 'live' || live.current.finishing) return;
+    // The call dropped after the sale: the sale stands.
+    if (live.current.sold) return wrapUp.current();
     // The guest vanished mid-sale: the connection, not the seller.
-    if (screenRef.current === 'live' && !live.current.finishing) { live.current.finishing = true; setScreen('lost'); }
+    live.current.finishing = true; setScreen('lost');
   }, []);
 
   const avatar = useAvatar(round && runId ? `pen-test/run/${runId}/${round.index}` : 'pen-test', { onUserSaid, onAvatarSaid, onToolCall, onEnded });
@@ -136,7 +153,8 @@ export function App() {
 
   // Set the guest's direction once they can hear it, then keep their voice off until the walk ends.
   const meet = useCallback(async (run: string, next: RoundView) => {
-    live.current = { arrived: false, finishing: false, liveAt: 0, quietStart: false };
+    live.current = { arrived: false, finishing: false, liveAt: 0, quietStart: false, sold: '', lastTalk: 0 };
+    setSold('');
     roundPath.current = `/run/${run}/${next.index}`;
     setRound(next); setStamp(''); setNote(''); setSlow(false); setSellerSpoke(false); setReveal(null); setTalk([]);
     setScreen('meet');
@@ -192,17 +210,23 @@ export function App() {
   useEffect(() => {
     if (screen !== 'live') return;
     // The clock stops once the round is decided: a sale or a walk is not a race against the stamp.
-    const id = setInterval(() => { if (!live.current.finishing) setLeft((s) => s - 1); }, 1000);
+    const id = setInterval(() => { if (!live.current.finishing && !live.current.sold) setLeft((s) => s - 1); }, 1000);
     return () => clearInterval(id);
   }, [screen]);
 
   useEffect(() => {
-    if (screen === 'live' && left <= 0 && !live.current.finishing) {
+    if (screen === 'live' && left <= 0 && !live.current.finishing && !live.current.sold) {
       live.current.finishing = true;
       setStamp("TIME'S UP");
       setTimeout(() => finish.current('time'), 1500);
     }
   }, [screen, left]);
+
+  useEffect(() => {
+    if (screen !== 'live' || !sold) return;
+    const id = setInterval(() => { if (Date.now() - live.current.lastTalk > AFTER_SALE_IDLE_MS) wrapUp.current(); }, 1000);
+    return () => clearInterval(id);
+  }, [screen, sold]);
 
   // A whisper from the manager when the seller stalls, on the levels that have them.
   useEffect(() => {
@@ -315,8 +339,15 @@ export function App() {
             {screen === 'live' && !sellerSpoke && !subtitle && <p className="pen-cue">You speak first</p>}
             {subtitle && <p className="pen-subtitle">{subtitle}</p>}
             {stamp && <div className="pen-stamp">{stamp}</div>}
+            {sold && !stamp && <p className="pen-soldbadge">{sold}</p>}
           </div>
           <aside className="pen-side">
+            {sold ? (
+              <div className="pen-wrap" role="status">
+                <p><b>{sold}</b> The deal is done. Keep the conversation going, then wrap up.</p>
+                <button type="button" className="pen-go" onClick={() => wrapUp.current()}>Wrap up</button>
+              </div>
+            ) : (
             <div className={`pen-timer ${urgent ? 'is-urgent' : ''}`}>
               <div className="pen-timer-row">
                 <span>{screen === 'live' ? 'Time left' : 'Starts when they are ready'}</span>
@@ -324,6 +355,7 @@ export function App() {
               </div>
               <div className="pen-timer-bar"><i style={{ width: `${100 * (screen === 'live' && seconds ? Math.max(0, left) / seconds : 1)}%` }} /></div>
             </div>
+            )}
             <div className={`pen-card pen-read${round.read ? ` is-${round.read.mood.toLowerCase()}` : ''}`} aria-live="polite">
               {round.read && (
                 <>

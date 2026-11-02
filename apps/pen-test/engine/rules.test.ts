@@ -128,6 +128,18 @@ describe('the sale gate', () => {
     expect(direction(slow, say(slow, q, { askedAboutNeed: true, interest: 8 }))).toContain('one small piece');
   });
 
+  it('keeps the guest a settled buyer when the talk goes on after a sale', () => {
+    const r = round();
+    say(r, 'This pen writes on wet paper, so your site notes survive the rain.', fit);
+    say(r, 'A pencil smudges, but this ink stays on the sheet.', { ...fit, handledObjection: true });
+    say(r, 'Eighteen dollars, shall we do it?', ask);
+    say(r, 'Eighteen is my best price, deal?', ask);
+    expect(r.outcome).toBe('sold');
+    const after = direction(r);
+    expect(after).toContain('already bought at $18');
+    expect(after).not.toContain('hold off on buying');
+  });
+
   it('keeps an interested guest through two weak answers', () => {
     const r = round();
     say(r, 'This pen writes on wet paper, so your site notes survive the rain.', fit);

@@ -31,6 +31,10 @@ const mood = (interest: number) => (interest < 25 ? 'You are not interested.'
 
 /** The state line after each thing the seller says. */
 export function direction(round: Round, step: Step = {}): string {
+  // The deal is done and the conversation goes on: the guest stays a happy buyer.
+  if (round.outcome === 'sold' && !step.sold) {
+    return `GUEST DIRECTION: You have already bought at $${round.price} a pen and you are happy with it. The deal is closed: answer what they just said warmly, in a few words, and never reopen the price or the order. Never say you are leaving or in a hurry.`;
+  }
   const parts = ['GUEST DIRECTION:', mood(round.interest)];
   if (step.sold) parts.push(`YOU MAY BUY at $${step.sold}. Say yes in a few words and call decide with buy.`);
   else if (step.walked) parts.push('You have had enough. Say you are not interested and call decide with end.');

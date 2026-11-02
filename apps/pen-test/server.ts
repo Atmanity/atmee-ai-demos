@@ -141,6 +141,11 @@ const app: AppServer = {
         round.lines.push({ who: 'guest', text, at: Date.now() });
         return void res.json({ view: view(found.run, found.index) });
       }
+      // After a sale the talk goes on, but the score is settled: no judging, only the guest's direction.
+      if (round.outcome === 'sold') {
+        round.lines.push({ who: 'seller', text, at: Date.now() });
+        return void res.json({ view: view(found.run, found.index), direction: direction(round) });
+      }
       const verdict = await judged(round, text);
       // The recogniser can send one utterance twice: the same words change nothing.
       const said = round.lines.filter((l) => l.who === 'seller').at(-1);

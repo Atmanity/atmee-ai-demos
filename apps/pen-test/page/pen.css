@@ -90,6 +90,11 @@ small { font-size: .78rem; }
 .pen-stamp { position: absolute; left: 50%; bottom: 14%; z-index: 4; transform: translateX(-50%) rotate(-6deg); font: 700 clamp(1.8rem, 5vw, 2.8rem) var(--display); color: #d3232f; background: rgba(255, 255, 255, .95); border: 5px solid #d3232f; border-radius: 10px; padding: 4px 18px; white-space: nowrap; animation: pen-stamp .28s cubic-bezier(.2, 1.4, .5, 1) both; }
 @keyframes pen-stamp { from { transform: translateX(-50%) rotate(-6deg) scale(1.6); opacity: 0; } }
 
+.pen-soldbadge { position: absolute; top: 12px; right: 12px; z-index: 3; font: 700 1rem var(--display); color: #d3232f; background: rgba(255, 255, 255, .95); border: 3px solid #d3232f; border-radius: 8px; padding: 2px 10px; transform: rotate(-4deg); }
+.pen-wrap { display: grid; gap: 10px; padding: 12px 14px; border-radius: 12px; background: rgba(79, 209, 139, .14); border: 1px solid rgba(79, 209, 139, .4); }
+.pen-wrap p { font-size: .95rem; line-height: 1.35; }
+.pen-wrap b { display: block; font: 700 1.6rem var(--display); color: #fff; }
+.pen-wrap .pen-go { justify-self: stretch; }
 .pen-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; max-height: var(--h); }
 .pen-timer { padding: 2px 2px 0; }
 .pen-timer-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
