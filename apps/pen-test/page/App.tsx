@@ -392,10 +392,10 @@ export function App() {
 
           <nav className="pen-controls" aria-label="Call controls">
             <div className="pen-meetinfo">
-              <b className={urgent ? 'is-urgent' : ''} {...(screen === 'live' ? { 'data-testid': 'clock' } : {})}>{clock(screen === 'live' ? left : level?.seconds ?? 0)}</b>
-              <span>{sold ? 'deal closed' : screen === 'live' ? 'left' : 'starts when they are ready'}</span>
+              <b className={urgent && !sold ? 'is-urgent' : ''} {...(screen === 'live' ? { 'data-testid': 'clock' } : {})}>{clock(screen === 'live' ? left : level?.seconds ?? 0)}</b>
+              <span>{sold ? 'sold' : screen === 'live' ? 'left' : 'to go'}</span>
               <i aria-hidden="true" />
-              <span>The Pen Test · Guest {round.index + 1} of 3</span>
+              <span>Guest {round.index + 1} of 3</span>
             </div>
             <div className="pen-buttons">
               <button type="button" className={`pen-round ${avatar.micOn ? '' : 'is-off'}`} onClick={() => avatar.setMic(!avatar.micOn)} aria-pressed={!avatar.micOn} aria-label={avatar.micOn ? 'Mute' : 'Unmute'} title={avatar.micOn ? 'Mute' : 'Unmute'}>
