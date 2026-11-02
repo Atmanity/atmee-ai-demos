@@ -112,3 +112,17 @@ export const GUESTS: Guest[] = [
 ];
 
 export const guestById = (id: string) => GUESTS.find((g) => g.id === id);
+
+// An avatar lives on one server: the same guests, built again on staging.
+const STAGING_AVATARS: Record<string, string> = {
+  ray: '02d68dc0-ae64-4eb7-919b-8bb7e3c1fd41',
+  marisol: '34f57f93-c23e-4d0c-a3f7-0348d3927ed1',
+  walter: '8761ba2a-71bf-4e05-a6cc-f82fc8a7f362',
+  helen: '251ec953-1200-41f1-899d-fa2b62de4e9b',
+  theo: '188fcfbc-2b13-4fdc-913d-6096b062a355',
+  daniel: '0931603a-aa3b-4a17-8d26-92231daf3d03',
+};
+
+/** The guest's avatar on the server this app talks to. */
+export const avatarIdOf = (guest: Guest, baseUrl = '') => (baseUrl.includes('staging') ? STAGING_AVATARS[guest.id] : guest.avatarId);
+

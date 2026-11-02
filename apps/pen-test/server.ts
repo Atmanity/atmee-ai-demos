@@ -6,7 +6,7 @@ import type { AppServer } from '../../server/app-server.ts';
 import { endSession, startSession } from '../../server/atmee.ts';
 import { llmAvailable, structured } from '../../server/llm.ts';
 import { closingEvent, direction, secretInstructions, TOOLS } from './engine/director.ts';
-import { guestById, type Guest } from './engine/guests.ts';
+import { avatarIdOf, guestById, type Guest } from './engine/guests.ts';
 import { COACH_SCHEMA, COACH_SYSTEM, coachPrompt, JUDGE_SYSTEM, judgePrompt, normalise, VERDICT_SCHEMA, wordRules } from './engine/judge.ts';
 import { applyVerdict, clockFor, earned, LEVELS, mayLeave, levelById, moneyLeft, newRound, PEN, LIST_PRICE, pickGuests, plainCoach, report, score, topNow, type Coach, type Level, type Round, type Step, type Verdict } from './engine/rules.ts';
 
@@ -96,7 +96,7 @@ const app: AppServer = {
       const found = roundOf(req.params.run, req.params.n);
       if (!found) return void res.status(404).json({ error: 'not_found' });
       const guest = guestById(found.round.guestId)!;
-      const r = await startSession(guest.avatarId, CAP_S, { app: 'atmee-usecase-demos', usecase: ID, guest: guest.id }, { instructions: secretInstructions(found.round), tools: TOOLS });
+      const r = await startSession(avatarIdOf(guest, process.env.ATMEE_BASE_URL), CAP_S, { app: 'atmee-usecase-demos', usecase: ID, guest: guest.id }, { instructions: secretInstructions(found.round), tools: TOOLS });
       if (!r.ok) {
         console.warn('[%s] POST /v1/session -> %d %s %s', ID, r.status, r.json?.error ?? '', r.json?.message ?? '');
         return void res.status(r.status).json({ error: r.json?.error || `http_${r.status}`, retryAfter: r.retryAfter });
