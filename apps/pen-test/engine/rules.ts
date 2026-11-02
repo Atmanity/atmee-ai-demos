@@ -12,6 +12,7 @@ export const PEN = {
 /** The most interest one line can lose, and how many lines a guest hears before they may leave. */
 const MAX_LOSS = 12;
 const MIN_LINES_TO_WALK = 3;
+const PITCHES_TO_WALK = 2;
 
 export type LevelId = 'walkin' | 'floor' | 'closer' | 'thirty';
 export interface Level { id: LevelId; name: string; seconds: number; lowest: number; interestToBuy: number; hints: number; blurb: string }
@@ -60,6 +61,7 @@ export interface Round {
   askedForSale: boolean;
   haggled: boolean;
   pushbacks: number;
+  unheard: number;
   traded: boolean;
   falseClaims: string[];
   pressure: number;
@@ -84,7 +86,7 @@ export function newRound(guest: Guest, level: Level, pick = Math.random): Round 
   return {
     guestId: guest.id, motive: guest.motives[Math.floor(pick() * guest.motives.length)], level, outcome: 'live',
     interest: 20, offer: null, price: null, lines: [], needUncovered: false, needAskedFirst: false, pitched: false, fitPitches: 0,
-    objectionRaised: false, objectionHandled: false, askedForSale: false, haggled: false, pushbacks: 0, traded: false, falseClaims: [], pressure: 0, sellerLines: 0,
+    objectionRaised: false, objectionHandled: false, askedForSale: false, haggled: false, pushbacks: 0, unheard: 0, traded: false, falseClaims: [], pressure: 0, sellerLines: 0,
   };
 }
 
@@ -155,6 +157,8 @@ export function applyVerdict(round: Round, text: string, v: Verdict): Step {
     if (price < round.level.lowest) step.refused = price;
     else round.offer = price;
   }
+  // Being pitched at without a single question: a stranger only takes so much of that.
+  round.unheard = v.interest >= 0 || v.askedAboutNeed || v.pitchFits || v.handledObjection ? 0 : round.unheard + 1;
   if (v.askedAboutNeed && !round.pitched) round.needAskedFirst = true;
   if (v.askedAboutNeed) step.revealNeed = true;
   if (v.needUncovered) round.needUncovered = true;
@@ -173,7 +177,7 @@ export function applyVerdict(round: Round, text: string, v: Verdict): Step {
   round.sellerLines++;
   round.interest = Math.max(0, Math.min(Math.max(cap, round.interest), round.interest + moved));
   if (round.interest <= 0 && !mayLeave(round)) round.interest = 5;
-  if (round.interest <= 0) {
+  if (round.interest <= 0 || round.unheard >= PITCHES_TO_WALK) {
     round.outcome = 'walked';
     step.walked = true;
     return step;

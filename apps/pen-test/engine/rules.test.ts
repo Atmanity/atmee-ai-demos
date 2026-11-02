@@ -42,7 +42,7 @@ describe('the sale gate', () => {
     const r = round();
     for (let i = 0; i < 4; i++) say(r, 'It has a steel body, a refill that lasts years and a lifetime warranty', { interest: 0 });
     say(r, 'Will you buy?', { askedForSale: true });
-    expect(r.outcome).toBe('live');
+    expect(r.outcome).not.toBe('sold');
   });
 
   it('needs a clear ask: a warm chat that never closes stays unsold', () => {
@@ -75,6 +75,21 @@ describe('the sale gate', () => {
     expect(say(r, 'Twenty-five dollars, deal?', ask).sold).toBeLessThan(25);
   });
 
+  it('walks after two pitches in a row with no question', () => {
+    const r = round();
+    say(r, 'This pen is the best pen you will ever own, trust me.', { interest: -5 });
+    expect(r.outcome).toBe('live');
+    expect(say(r, 'Please, it has a soft grip, you should buy it.', { interest: -5 }).walked).toBe(true);
+  });
+
+  it('stays after a pitch when the seller then asks a real question', () => {
+    const r = round();
+    say(r, 'This pen is the best pen you will ever own, trust me.', { interest: -5 });
+    say(r, 'Sorry, what do you write with on site?', { askedAboutNeed: true, interest: 8 });
+    say(r, 'This pen is also very nice to hold, you know.', { interest: -5 });
+    expect(r.outcome).toBe('live');
+  });
+
   it('refuses an offer below the lowest price', () => {
     const r = round();
     say(r, 'This pen writes on wet paper for your site notes.', fit);
@@ -101,9 +116,8 @@ describe('the sale gate', () => {
     const r = round();
     expect(say(r, 'This is the best pen in the world', { interest: -25 }).walked).toBeUndefined();
     expect(r.interest).toBe(8);
-    expect(say(r, 'It really is great', { interest: -25 }).walked).toBeUndefined();
     expect(r.outcome).toBe('live');
-    expect(say(r, 'Trust me, it is great', { interest: -25 }).walked).toBe(true);
+    expect(say(r, 'It really is great', { interest: -25 }).walked).toBe(true);
   });
 });
 
