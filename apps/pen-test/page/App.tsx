@@ -27,7 +27,7 @@ interface GuestView { id: string; name: string; role: string; spotted: string; i
 interface RoundView { index: number; guest: GuestView; outcome: string; offer: number | null; price: number | null; earned: number }
 interface Clue { id: string; label: string; x: number; y: number; points: string }
 interface Reveal {
-  clues: Clue[]; keyClue: string; motive: string; top: number; left: number; read: { motive: boolean; clue: boolean };
+  clues: Clue[]; keyClue: string; motive: string; top: number; left: number;
   score: { total: number; penalties: number }; falseClaims: string[]; coach: { did: string; improve: string[]; best: string; worst: string };
   board: { money: number; sold: number }; next: RoundView | null; view: RoundView;
 }
@@ -54,8 +54,6 @@ export function App() {
   const [note, setNote] = useState('');
   const [stamp, setStamp] = useState('');
   const [slow, setSlow] = useState(false);
-  const [options, setOptions] = useState<{ motives: string[]; clues: { id: string; label: string }[] } | null>(null);
-  const [pick, setPick] = useState<{ motive?: string; clue?: string }>({});
   const [reveal, setReveal] = useState<Reveal | null>(null);
   const [report, setReport] = useState<Report | null>(null);
   const [board, setBoard] = useState({ money: 0, sold: 0 });
@@ -124,7 +122,7 @@ export function App() {
   const meet = useCallback(async (run: string, next: RoundView) => {
     live.current = { arrived: false, finishing: false, liveAt: 0 };
     roundPath.current = `/run/${run}/${next.index}`;
-    setRound(next); setStamp(''); setNote(''); setSlow(false); setSellerSpoke(false); setPick({}); setReveal(null); setOptions(null);
+    setRound(next); setStamp(''); setNote(''); setSlow(false); setSellerSpoke(false); setReveal(null);
     setScreen('meet');
   }, []);
 
@@ -196,9 +194,11 @@ export function App() {
   }, [screen, level, sellerSpoke]);
 
   finish.current = async (reason: string) => {
-    const r = await post<{ view: RoundView; read: { motives: string[]; clues: { id: string; label: string }[] }; next: RoundView | null }>(`${roundPath.current}/finish`, { reason });
+    const r = await post<{ view: RoundView; next: RoundView | null }>(`${roundPath.current}/finish`, { reason });
     await avatarRef.current.end().catch(() => {});
-    setRound(r.view); setOptions(r.read); setNextGuest(r.next); setScreen('read');
+    setRound(r.view); setNextGuest(r.next); setScreen('read');
+    const feedback = await post<Reveal>(`${roundPath.current}/feedback`);
+    setReveal(feedback); setBoard(feedback.board); setScreen('reveal');
   };
 
   async function startRun() {
@@ -207,11 +207,6 @@ export function App() {
     setRunId(run.id);
     setBoard({ money: 0, sold: 0 });
     await meet(run.id, run.first);
-  }
-
-  async function submitRead() {
-    const r = await post<Reveal>(`${roundPath.current}/read`, pick);
-    setReveal(r); setBoard(r.board); setScreen('reveal');
   }
 
   async function goOn() {
@@ -333,19 +328,8 @@ export function App() {
             {reveal?.clues.map((c) => <span key={c.id} className={`pen-circle ${c.id === reveal.keyClue ? 'is-key' : ''}`} style={{ left: `${c.x}%`, top: `${c.y}%` }} aria-hidden="true" />)}
           </figure>
           <div className="pen-panel pen-notes">
-            {!reveal && options && (
-              <>
-                <h2>What did you read in {round.guest.name}?</h2>
-                <h3>What were they really after?</h3>
-                <div className="pen-chips">{options.motives.map((m) => <button type="button" key={m} className={pick.motive === m ? 'is-on' : ''} onClick={() => setPick((p) => ({ ...p, motive: m }))}>{m}</button>)}</div>
-                <h3>Which clue told you?</h3>
-                <div className="pen-chips">{options.clues.map((c) => <button type="button" key={c.id} className={pick.clue === c.id ? 'is-on' : ''} onClick={() => setPick((p) => ({ ...p, clue: c.id }))}>{c.label}</button>)}</div>
-                <button type="button" className="pen-go" disabled={!pick.motive || !pick.clue} onClick={() => void submitRead()}>See your feedback</button>
-                <div className="pen-actions">
-                  <button type="button" className="pen-go is-quiet" onClick={() => void replay()}>Try again</button>
-                  <button type="button" className="pen-go is-quiet" onClick={() => void goOn()}>{nextGuest ? 'Find another guest' : 'See your report card'}</button>
-                </div>
-              </>
+            {!reveal && (
+              <p className="pen-writing"><span className="call-spinner" aria-hidden="true" /> Writing your feedback…</p>
             )}
             {reveal && (
               <>
@@ -361,7 +345,7 @@ export function App() {
                 </section>
                 {reveal.falseClaims.length > 0 && <p className="pen-red">False claims: {reveal.falseClaims.join('; ')}</p>}
                 <h3>What {round.guest.name} was hiding</h3>
-                <p>{reveal.motive}. <span className={reveal.read.motive ? 'pen-ok' : 'pen-red'}>{reveal.read.motive ? 'You read it.' : 'You missed it.'}</span></p>
+                <p>{reveal.motive}.</p>
                 <ul>{reveal.clues.map((c) => <li key={c.id} className={c.id === reveal.keyClue ? 'is-key' : ''}><b>{c.label}.</b> {c.points}</li>)}</ul>
                 <p><b>{reveal.view.price ? `${round.guest.name} would have paid $${reveal.top}.` : `${round.guest.name} might have paid up to $${reveal.top}.`}</b> {reveal.view.price ? (reveal.left ? `$${reveal.left} left on the table.` : 'You left nothing on the table.') : ''}</p>
                 {reveal.coach.best && <p><b>Best line:</b> "{reveal.coach.best}"</p>}

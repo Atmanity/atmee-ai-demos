@@ -102,7 +102,6 @@ describe('money and scores', () => {
     say(r, 'Inspectors want ink. This pen does not smudge.', fit);
     say(r, 'Any cheap pen smudges in rain, this one does not.', { ...fit, handledObjection: true });
     say(r, `${price} dollars, deal?`, ask);
-    r.read = { motive: true, clue: true };
     r.score = score(r);
     return r;
   };
@@ -127,7 +126,6 @@ describe('money and scores', () => {
   it('reports the weakest skill as the drill', () => {
     const r = round();
     r.outcome = 'time';
-    r.read = { motive: true, clue: true };
     r.score = score(r);
     expect(report([r]).drill).toContain('question');
   });

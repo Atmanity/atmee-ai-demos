@@ -49,9 +49,9 @@ export const GUESTS: Guest[] = [
     id: 'marisol', name: 'Marisol', role: 'Night-shift nurse', avatarId: '82437255-abfc-4687-9fa6-8ab6b307a267', image: 'marisol',
     spotted: 'Someone in scrubs, walking slowly, looking half asleep.',
     clues: [
-      { id: 'pens', label: 'Four cheap pens in the pocket', x: 71, y: 89, points: 'She carries spares because pens keep failing or vanishing.' },
-      { id: 'eyes', label: 'Tired eyes', x: 50, y: 28, points: 'End of a long shift: she wants less hassle, not a speech.' },
-      { id: 'lanyard', label: 'Staff lanyard', x: 48, y: 73, points: 'Hospital staff: she writes charts all night.' },
+      { id: 'pens', label: 'Four cheap pens in the pocket', x: 68, y: 67, points: 'She carries spares because pens keep failing or vanishing.' },
+      { id: 'eyes', label: 'Tired eyes', x: 52, y: 26, points: 'End of a long shift: she wants less hassle, not a speech.' },
+      { id: 'lanyard', label: 'Staff lanyard', x: 61, y: 80, points: 'Hospital staff: she writes charts all night.' },
     ],
     motives: [
       { id: 'stolen', label: "A pen that is hers and doesn't walk off", need: 'Colleagues keep walking off with your pens on the ward. You want one nice enough that it feels like yours and comes home with you.', top: 18, objection: 'The hospital gives us these.', haggles: true, clue: 'pens' },

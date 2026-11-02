@@ -63,7 +63,6 @@ export interface Round {
   falseClaims: string[];
   pressure: number;
   sellerLines: number;
-  read?: { motive: boolean; clue: boolean };
   score?: Scores;
   coach?: Coach;
 }
@@ -72,7 +71,7 @@ export interface Coach { did: string; improve: string[]; best: string; worst: st
 
 export interface Scores { read: number; discovery: number; fit: number; objections: number; close: number; pricing: number; penalties: number; total: number }
 export const SKILLS: { key: keyof Omit<Scores, 'penalties' | 'total'>; label: string; max: number; drill: string }[] = [
-  { key: 'read', label: 'Reading the guest', max: 20, drill: 'Before you speak, name one thing the guest is carrying and what it tells you.' },
+  { key: 'read', label: 'Reading the guest', max: 20, drill: 'Before you speak, name one thing the guest is carrying and ask a question about it.' },
   { key: 'discovery', label: 'Discovery', max: 20, drill: 'Ask one question about their day before you mention the pen.' },
   { key: 'fit', label: 'Pitch fit', max: 20, drill: 'Use only the one fact that answers what they told you.' },
   { key: 'objections', label: 'Objections', max: 15, drill: 'Agree with the objection first, then answer it.' },
@@ -208,7 +207,8 @@ export function moneyLeft(round: Round): number {
 }
 
 export function score(round: Round): Scores {
-  const read = (round.read?.motive ? 12 : 0) + (round.read?.clue ? 8 : 0);
+  // Reading the guest shows in the sale: finding the need, then selling to it.
+  const read = (round.needUncovered ? 12 : 0) + (round.fitPitches ? 8 : 0);
   const discovery = (round.needUncovered ? 12 : 0) + (round.needAskedFirst ? 8 : 0);
   const fit = round.fitPitches ? Math.min(20, 12 + 4 * round.fitPitches) : 0;
   const objections = !round.objectionRaised ? 0 : round.objectionHandled ? 15 : 4;
@@ -268,12 +268,4 @@ export function plainCoach(round: Round): Coach {
   const weakest = [...SKILLS].sort((a, b) => scores[a.key] / a.max - scores[b.key] / b.max);
   const outcome = round.outcome === 'sold' ? `and sold at $${round.price}` : round.outcome === 'walked' ? 'and the guest walked away' : 'and the clock ran out';
   return { did: `You spoke ${said} ${said === 1 ? 'time' : 'times'} ${outcome}.`, improve: weakest.slice(0, 2).map((s) => s.drill), best: '', worst: '' };
-}
-
-/** The motive chips: the real one and the other guests' decoys, in a stable shuffled order. */
-export function readOptions(round: Round) {
-  const guest = guestById(round.guestId)!;
-  const decoys = GUESTS.filter((g) => g.id !== guest.id).map((g) => g.motives[0].label).slice(0, 2);
-  const motives = [round.motive.label, ...decoys].sort((a, b) => a.length - b.length);
-  return { motives, clues: guest.clues.map((c) => ({ id: c.id, label: c.label })) };
 }

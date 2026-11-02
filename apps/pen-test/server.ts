@@ -8,7 +8,7 @@ import { llmAvailable, structured } from '../../server/llm.ts';
 import { closingEvent, direction, secretInstructions, TOOLS } from './engine/director.ts';
 import { guestById } from './engine/guests.ts';
 import { COACH_SCHEMA, COACH_SYSTEM, coachPrompt, JUDGE_SYSTEM, judgePrompt, normalise, VERDICT_SCHEMA, wordRules } from './engine/judge.ts';
-import { applyVerdict, clockFor, earned, LEVELS, mayLeave, levelById, moneyLeft, newRound, PEN, LIST_PRICE, pickGuests, plainCoach, readOptions, report, score, topNow, type Coach, type Level, type Round, type Step, type Verdict } from './engine/rules.ts';
+import { applyVerdict, clockFor, earned, LEVELS, mayLeave, levelById, moneyLeft, newRound, PEN, LIST_PRICE, pickGuests, plainCoach, report, score, topNow, type Coach, type Level, type Round, type Step, type Verdict } from './engine/rules.ts';
 
 const ID = 'pen-test';
 // The plan's session cap: the clock has to end inside it.
@@ -148,21 +148,20 @@ const app: AppServer = {
       const found = roundOf(req.params.run, req.params.n);
       if (!found) return void res.status(404).json({ error: 'not_found' });
       if (found.round.outcome === 'live') found.round.outcome = req.body?.reason === 'void' ? 'void' : 'time';
-      res.json({ view: view(found.run, found.index), read: readOptions(found.round), next: found.index + 1 < found.run.rounds.length ? view(found.run, found.index + 1) : null });
+      res.json({ view: view(found.run, found.index), next: found.index + 1 < found.run.rounds.length ? view(found.run, found.index + 1) : null });
     });
 
-    // The read check, then the reveal: everything the guest was hiding.
-    router.post('/run/:run/:n/read', async (req, res) => {
+    // The feedback, and everything the guest was hiding.
+    router.post('/run/:run/:n/feedback', async (req, res) => {
       const found = roundOf(req.params.run, req.params.n);
       if (!found) return void res.status(404).json({ error: 'not_found' });
       const { round, run, index } = found;
       const guest = guestById(round.guestId)!;
-      round.read = { motive: req.body?.motive === round.motive.label, clue: req.body?.clue === round.motive.clue };
       round.score = score(round);
       round.coach = await coached(round);
       res.json({
         view: view(run, index), clues: guest.clues, keyClue: round.motive.clue, motive: round.motive.label, top: round.price === null ? round.motive.top : topNow(round), left: moneyLeft(round),
-        read: round.read, score: round.score, falseClaims: round.falseClaims, coach: round.coach, board: scoreboard(run),
+        score: round.score, falseClaims: round.falseClaims, coach: round.coach, board: scoreboard(run),
         next: index + 1 < run.rounds.length ? view(run, index + 1) : null,
       });
     });
