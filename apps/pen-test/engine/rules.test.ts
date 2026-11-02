@@ -113,6 +113,15 @@ describe('the sale gate', () => {
     expect(say(r, 'Sure, you have a deal.', ask).sold).toBe(step.counter);
   });
 
+  it('keeps an interested guest through two weak answers', () => {
+    const r = round();
+    say(r, 'This pen writes on wet paper, so your site notes survive the rain.', fit);
+    say(r, 'A pencil smudges, but this ink stays on the sheet.', { ...fit, handledObjection: true });
+    say(r, 'I will get to that later.', { interest: -2 });
+    say(r, 'Let me focus on something else.', { interest: -2 });
+    expect(r.outcome).toBe('live');
+  });
+
   it('refuses an offer below the lowest price', () => {
     const r = round();
     say(r, 'This pen writes on wet paper for your site notes.', fit);

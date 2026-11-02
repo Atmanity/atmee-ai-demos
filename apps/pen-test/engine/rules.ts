@@ -178,7 +178,7 @@ export function applyVerdict(round: Round, text: string, v: Verdict): Step {
   round.sellerLines++;
   round.interest = Math.max(0, Math.min(Math.max(cap, round.interest), round.interest + moved));
   if (round.interest <= 0 && !mayLeave(round)) round.interest = 5;
-  if (round.interest <= 0 || round.unheard >= PITCHES_TO_WALK) {
+  if (round.interest <= 0 || (round.unheard >= PITCHES_TO_WALK && round.interest < round.level.interestToBuy)) {
     round.outcome = 'walked';
     step.walked = true;
     return step;

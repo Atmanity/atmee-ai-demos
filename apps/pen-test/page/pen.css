@@ -202,3 +202,6 @@ body { background: radial-gradient(90% 80% at 42% 30%, #24397f 0%, #14224f 52%, 
 .pen-offer-row small { color: rgba(255, 255, 255, .72); font-size: .78rem; }
 .pen-offer-row b { font: 700 1.05rem var(--display); color: #fff; }
 .pen-read .pen-read-mood b { font-size: 1.05rem; }
+.pen-slot { height: 6.2em; flex: none; }
+.pen-slot > p { height: 100%; margin: 0; box-sizing: border-box; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
+.pen-slot .pen-heard { min-height: 0; }

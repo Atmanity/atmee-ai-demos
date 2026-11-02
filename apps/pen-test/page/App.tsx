@@ -327,9 +327,11 @@ export function App() {
                 <span><small>Lowest</small> <b>${level?.lowest}</b></span>
               </div>
             </div>
-            {note && <p className="pen-alert">{note}</p>}
-            {whisper && <p className="pen-whisper">{whisper}</p>}
-            {avatar.heard && <p className="pen-heard"><small>You</small> {avatar.heard}</p>}
+            <div className="pen-slot" aria-live="polite">
+              {note ? <p className="pen-alert">{note}</p>
+                : whisper ? <p className="pen-whisper">{whisper}</p>
+                  : <p className="pen-heard"><small>You</small> {avatar.heard || '\u00a0'}</p>}
+            </div>
             <div className="pen-tag">
               <img className="pen-photo" src={penPhoto} alt="The Kestrel No. 4, a steel pen with a soft black grip" />
               <h2>{pen?.name}</h2>

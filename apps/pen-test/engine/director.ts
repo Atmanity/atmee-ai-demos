@@ -38,14 +38,14 @@ export function direction(round: Round, step: Step = {}): string {
     parts.push('You are still making up your mind, so hold off on buying. Answer what they just said in your own words, and never open with a yes or a no out of habit.');
     if (step.challenge) parts.push(`That sounded untrue: challenge this claim briefly: ${step.challenge}.`);
     else if (step.haggle) parts.push(`You want the pen, so say so, but the price has to come down: ask for $${step.counter} a pen. Do not close the deal yet.`);
-    else if (step.objection) parts.push(`Say your objection now: "${round.motive.objection}"`);
+    else if (step.objection) parts.push(`You are getting interested, but one doubt is holding you back. Raise it once, as an honest question in your own words: "${round.motive.objection}"`);
     else if (step.refused) parts.push(`They offered $${step.refused}, which sounds suspiciously cheap. Say so briefly.`);
     else if (step.revealNeed) parts.push('That was a fair question: let one small piece of your need out, in a few words.');
     else if (gateOpen(round)) parts.push('If they ask you to buy, you would consider it.');
     if (round.objectionRaised && !step.objection) parts.push('You have said your objection already: do not repeat it.');
     if (round.offer !== null && round.offer > topNow(round)) parts.push(`$${round.offer} is more than you want to pay.`);
   }
-  parts.push('Reply in one short sentence, under twelve words, and never repeat a line you have said. Never say you are leaving or in a hurry.');
+  parts.push('Reply in one short sentence, under twelve words. Never repeat a line or a question you have already asked: if an answer was honest, accept it and move on. Never say you are leaving or in a hurry.');
   return parts.join(' ');
 }
 

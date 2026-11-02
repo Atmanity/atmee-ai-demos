@@ -95,7 +95,7 @@ export const GUESTS: Guest[] = [
       { id: 'earbuds', label: 'Earbuds in, between calls', x: 67, y: 41, w: 8, h: 11, points: 'Busy and in charge, with no time for small talk.' },
     ],
     motives: [
-      { id: 'gifts', label: '40 welcome gifts for his team', need: 'Your company just hit forty people and you want a small gift for each of them this week. You have the budget and no time to shop.', top: 24, objection: 'Nobody uses pens.', haggles: true, counter: 20, clue: 'laptop', quantity: 40 },
+      { id: 'gifts', label: '40 welcome gifts for his team', need: 'Your company just hit forty people and you want a small gift for each of them this week. You have the budget and no time to shop.', top: 24, objection: 'Do people even use pens anymore, though?', haggles: true, counter: 20, clue: 'laptop', quantity: 40 },
     ],
   },
   {
