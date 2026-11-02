@@ -58,6 +58,7 @@ export function App() {
   const [report, setReport] = useState<Report | null>(null);
   const [board, setBoard] = useState({ money: 0, sold: 0 });
   const [sellerSpoke, setSellerSpoke] = useState(false);
+  const [greeting, setGreeting] = useState('');
   const [nextGuest, setNextGuest] = useState<RoundView | null>(null);
 
   const live = useRef({ arrived: false, finishing: false, liveAt: 0 });
@@ -162,6 +163,7 @@ export function App() {
       if ((!a.speaking && faceReady) || since > MAX_HIDDEN_MS) {
         clearInterval(id);
         live.current.arrived = true;
+        setGreeting(a.caption);   // what was said before arrival is never shown
         if (a.audioRef.current) a.audioRef.current.volume = 1;
         setSeconds(level?.seconds ?? 60);
         setLeft(level?.seconds ?? 60);
@@ -223,6 +225,7 @@ export function App() {
 
   const urgent = screen === 'live' && left <= 10;
   const inRoom = round && (screen === 'meet' || screen === 'live');
+  const subtitle = screen === 'live' && avatar.caption !== greeting ? avatar.caption : '';
 
   return (
     <div className="pen">
@@ -289,8 +292,8 @@ export function App() {
                 <p>{slow ? 'Still getting them ready…' : round.guest.spotted}</p>
               </div>
             )}
-            {screen === 'live' && !sellerSpoke && <p className="pen-cue">You speak first</p>}
-            {screen === 'live' && sellerSpoke && avatar.caption && <p className="pen-subtitle">{avatar.caption}</p>}
+            {screen === 'live' && !sellerSpoke && !subtitle && <p className="pen-cue">You speak first</p>}
+            {subtitle && <p className="pen-subtitle">{subtitle}</p>}
             {stamp && <div className="pen-stamp">{stamp}</div>}
           </div>
           <div className={`pen-panel pen-clockbox ${urgent ? 'is-urgent' : ''}`}>
