@@ -6,7 +6,7 @@ import { GUESTS, guestById, type Guest, type Motive } from './guests.ts';
 export const LIST_PRICE = 25;
 export const PEN = {
   name: 'Kestrel No. 4',
-  facts: ['Writes on wet paper', 'Wide soft grip', 'Ink does not smudge once dry', 'One refill lasts about three years', 'Steel body, lifetime warranty', 'In stock, any quantity, ready this week'],
+  facts: ['Writes on wet paper', 'Soft wide grip', 'Ink never smudges once dry', 'Refill lasts 3 years', 'Steel body, lifetime warranty', 'In stock, any quantity'],
 };
 
 /** The most interest one line can lose, and how many lines a guest hears before they may leave. */
