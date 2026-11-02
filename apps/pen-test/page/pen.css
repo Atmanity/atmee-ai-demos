@@ -183,3 +183,17 @@ body { background: radial-gradient(90% 80% at 42% 30%, #24397f 0%, #14224f 52%, 
   .pen-skills div { grid-template-columns: 110px minmax(0, 1fr) 46px; }
 }
 @media (prefers-reduced-motion: reduce) { .pen-still { transition: none; } }
+.pen-read { display: grid; gap: 6px; padding: 10px 12px; color: #fff; }
+.pen-read small { color: rgba(255, 255, 255, .72); font-size: .78rem; font-weight: 700; letter-spacing: .02em; }
+.pen-read-mood { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pen-read-mood b { font: 700 1.15rem var(--display); }
+.pen-meter { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, .16); overflow: hidden; }
+.pen-meter i { display: block; height: 100%; border-radius: 4px; transition: width .6s ease, background-color .6s ease; }
+.pen-read.is-annoyed .pen-meter i { background: #ff6b6b; }
+.pen-read.is-unconvinced .pen-meter i { background: #f3a64a; }
+.pen-read.is-curious .pen-meter i { background: #f2d45c; }
+.pen-read.is-interested .pen-meter i { background: #4fd18b; }
+.pen-chip { font-size: .8rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.pen-chip.is-too-pricey { background: #ffe1e1; color: #a3172a; }
+.pen-chip.is-fair { background: #fff2c9; color: #7a5a00; }
+.pen-chip.is-good-deal { background: #d9f7e6; color: #11663a; }

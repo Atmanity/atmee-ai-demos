@@ -206,6 +206,19 @@ export function applyVerdict(round: Round, text: string, v: Verdict): Step {
   return step;
 }
 
+/** What a seller could read off the guest, in broad words: shown only on levels that give hints. */
+export interface GuestRead { mood: 'Annoyed' | 'Unconvinced' | 'Curious' | 'Interested'; meter: number; price: 'Too pricey' | 'Fair' | 'Good deal' | null }
+
+export function readOf(round: Round): GuestRead | null {
+  if (!round.level.hints || round.outcome !== 'live') return null;
+  const need = round.level.interestToBuy;
+  const mood = round.interest <= 12 ? 'Annoyed' : round.interest < need * 0.6 ? 'Unconvinced' : round.interest < need ? 'Curious' : 'Interested';
+  const meter = Math.max(4, Math.min(100, Math.round((round.interest / (need * 1.3)) * 100)));
+  const top = topNow(round);
+  const price = round.offer === null ? null : round.offer > top ? 'Too pricey' : round.offer >= top * 0.85 ? 'Fair' : 'Good deal';
+  return { mood, meter, price };
+}
+
 /** The guest wants this pen and only the price is left to settle. */
 const soldOnThePen = (round: Round) => round.outcome === 'live' && round.fitPitches > 0
   && round.interest >= round.level.interestToBuy && (round.offer ?? LIST_PRICE) >= round.level.lowest;

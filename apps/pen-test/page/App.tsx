@@ -24,7 +24,7 @@ const SLOW_MEET_MS = 45000;
 interface Level { id: string; name: string; blurb: string; lowest: number; hints: number; seconds: number }
 interface Pen { name: string; facts: string[]; list: number }
 interface GuestView { id: string; name: string; role: string; spotted: string; image: string }
-interface RoundView { index: number; guest: GuestView; outcome: string; offer: number | null; price: number | null; earned: number }
+interface RoundView { index: number; guest: GuestView; outcome: string; offer: number | null; price: number | null; earned: number ; read?: { mood: string; meter: number; price: string | null } | null }
 interface Clue { id: string; label: string; x: number; y: number; w: number; h: number; points: string }
 interface Reveal {
   clues: Clue[]; keyClue: string; motive: string; top: number; left: number;
@@ -314,6 +314,13 @@ export function App() {
             <p className="pen-small">{screen === 'live' ? 'Time left' : 'Starts when they are ready'}</p>
           </div>
           <aside className="pen-info">
+            {round.read && (
+              <div className={`pen-panel pen-read is-${round.read.mood.toLowerCase()}`} aria-live="polite">
+                <small>Read the guest</small>
+                <div className="pen-read-mood"><b>{round.read.mood}</b>{round.read.price && <span className={`pen-chip is-${round.read.price.replace(/ /g, '-').toLowerCase()}`}>{round.read.price}</span>}</div>
+                <div className="pen-meter"><i style={{ width: `${round.read.meter}%` }} /></div>
+              </div>
+            )}
             <div className="pen-panel pen-offer">
               <div><small>Your offer</small><b>{round.offer ? `$${round.offer}` : `$${pen?.list}`}</b></div>
               <div><small>Lowest</small><b>${level?.lowest}</b></div>

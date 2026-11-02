@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { GUESTS } from './guests.ts';
 import { direction } from './director.ts';
 import { normalise, wordRules } from './judge.ts';
-import { applyVerdict, clockFor, earned, plainCoach, gateOpen, LEVELS, levelById, moneyLeft, newRound, pickGuests, priceIn, report, score, topNow, type Round } from './rules.ts';
+import { readOf, applyVerdict, clockFor, earned, plainCoach, gateOpen, LEVELS, levelById, moneyLeft, newRound, pickGuests, priceIn, report, score, topNow, type Round } from './rules.ts';
 
 const round = (level = 'walkin', motive = 0): Round => newRound(GUESTS[0], levelById(level)!, () => motive / 2);
 const say = (r: Round, text: string, v = {}) => applyVerdict(r, text, normalise(v));
@@ -88,6 +88,20 @@ describe('the sale gate', () => {
     say(r, 'Sorry, what do you write with on site?', { askedAboutNeed: true, interest: 8 });
     say(r, 'This pen is also very nice to hold, you know.', { interest: -5 });
     expect(r.outcome).toBe('live');
+  });
+
+  it('reads the guest in broad words, and only on levels with hints', () => {
+    const r = round();
+    expect(readOf(r)?.mood).toBe('Unconvinced');
+    expect(readOf(r)?.price).toBeNull();
+    say(r, 'This pen writes on wet paper, so your site notes survive the rain.', fit);
+    say(r, 'A pencil smudges, but this ink stays on the sheet.', { ...fit, handledObjection: true });
+    expect(['Curious', 'Interested']).toContain(readOf(r)?.mood);
+    r.offer = 99;
+    expect(readOf(r)?.price).toBe('Too pricey');
+    r.offer = r.level.lowest;
+    expect(readOf(r)?.price).toBe('Good deal');
+    expect(readOf({ ...r, level: levelById('closer')! })).toBeNull();
   });
 
   it('refuses an offer below the lowest price', () => {

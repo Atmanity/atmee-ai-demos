@@ -8,7 +8,7 @@ import { llmAvailable, structured } from '../../server/llm.ts';
 import { closingEvent, direction, secretInstructions, TOOLS } from './engine/director.ts';
 import { avatarIdOf, guestById, type Guest } from './engine/guests.ts';
 import { COACH_SCHEMA, COACH_SYSTEM, coachPrompt, JUDGE_SYSTEM, judgePrompt, normalise, VERDICT_SCHEMA, wordRules } from './engine/judge.ts';
-import { applyVerdict, clockFor, earned, LEVELS, mayLeave, levelById, moneyLeft, newRound, PEN, LIST_PRICE, pickGuests, plainCoach, report, score, topNow, type Coach, type Level, type Round, type Step, type Verdict } from './engine/rules.ts';
+import { applyVerdict, clockFor, earned, LEVELS, mayLeave, levelById, moneyLeft, newRound, PEN, LIST_PRICE, pickGuests, plainCoach, report, score, topNow, type Coach, type Level, type Round, type Step, type Verdict, readOf } from './engine/rules.ts';
 
 const ID = 'pen-test';
 // The plan's session cap: the clock has to end inside it.
@@ -51,7 +51,7 @@ const roundOf = (runId: string, n: unknown) => {
 function view(run: Run, index: number) {
   const round = run.rounds[index];
   const guest = guestById(round.guestId)!;
-  return { index, guest: { id: guest.id, name: guest.name, role: guest.role, spotted: guest.spotted, image: guest.image }, outcome: round.outcome, offer: round.offer, price: round.price, earned: earned(round) };
+  return { index, guest: { id: guest.id, name: guest.name, role: guest.role, spotted: guest.spotted, image: guest.image }, outcome: round.outcome, offer: round.offer, price: round.price, earned: earned(round), read: readOf(round) };
 }
 const scoreboard = (run: Run) => ({ money: run.rounds.reduce((n, r) => n + earned(r), 0), sold: run.rounds.filter((r) => r.outcome === 'sold').length });
 
