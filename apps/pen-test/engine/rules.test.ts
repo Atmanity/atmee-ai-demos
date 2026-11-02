@@ -159,7 +159,8 @@ describe('feedback without a model', () => {
 describe('the guest', () => {
   it('is told not to buy until the rules say so', () => {
     const r = round();
-    expect(direction(r)).toContain('NOT decided');
+    expect(direction(r)).toContain('hold off on buying');
+    expect(direction(r)).not.toContain('YOU MAY BUY');
     expect(direction(r, { sold: 20 })).toContain('YOU MAY BUY at $20');
   });
   it('gets three different guests a run', () => {
