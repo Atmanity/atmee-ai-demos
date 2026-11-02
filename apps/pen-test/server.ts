@@ -58,10 +58,11 @@ function view(run: Run, index: number) {
 }
 const scoreboard = (run: Run) => ({ money: run.rounds.reduce((n, r) => n + earned(r), 0), sold: run.rounds.filter((r) => r.outcome === 'sold').length });
 
+// The guest waits on this verdict for their next direction, so the judge thinks briefly.
 async function judged(round: Round, text: string): Promise<Verdict> {
   if (!llmAvailable()) return wordRules(round, text);
   try {
-    return normalise(await structured<Verdict>({ system: JUDGE_SYSTEM, user: judgePrompt(round, text), schema: VERDICT_SCHEMA }));
+    return normalise(await structured<Verdict>({ system: JUDGE_SYSTEM, user: judgePrompt(round, text), schema: VERDICT_SCHEMA, thinking: 'low' }));
   } catch (err) {
     console.warn('[%s] judge failed (%s); using word rules', ID, (err as Error).message);
     return wordRules(round, text);

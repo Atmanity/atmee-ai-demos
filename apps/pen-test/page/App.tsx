@@ -40,7 +40,7 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
   return res.json();
 }
 
-const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.max(0, s) % 60).padStart(2, '0')}`;
+const clock = (s: number) => { const t = Math.max(0, s); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
 
 export function App() {
   const [pen, setPen] = useState<Pen | null>(null);
@@ -182,7 +182,8 @@ export function App() {
 
   useEffect(() => {
     if (screen !== 'live') return;
-    const id = setInterval(() => setLeft((s) => s - 1), 1000);
+    // The clock stops once the round is decided: a sale or a walk is not a race against the stamp.
+    const id = setInterval(() => { if (!live.current.finishing) setLeft((s) => s - 1); }, 1000);
     return () => clearInterval(id);
   }, [screen]);
 

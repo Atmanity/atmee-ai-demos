@@ -10,6 +10,8 @@ export interface StructuredRequest {
   schema: Record<string, unknown>;   // a JSON schema (Gemini's responseSchema subset)
   images?: { mimeType: string; base64: string }[];
   temperature?: number;
+  /** How long the model may think: 'low' answers about twice as fast, for calls on a live conversation's path. */
+  thinking?: 'low' | 'high';
 }
 
 export const llmAvailable = () => Boolean(KEY);
@@ -24,7 +26,8 @@ export async function structured<T>(req: StructuredRequest): Promise<T> {
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: req.system }] },
       contents: [{ role: 'user', parts }],
-      generationConfig: { responseMimeType: 'application/json', responseSchema: req.schema, temperature: req.temperature ?? 0.2 },
+      generationConfig: { responseMimeType: 'application/json', responseSchema: req.schema, temperature: req.temperature ?? 0.2,
+        ...(req.thinking ? { thinkingConfig: { thinkingLevel: req.thinking } } : {}) },
     }),
   });
   const json: any = await res.json();
