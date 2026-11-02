@@ -353,11 +353,6 @@ export function App() {
               {sold && !stamp && <p className="pen-soldbadge">✓ {sold.replace('SOLD', 'Sold')}</p>}
               {screen === 'live' && !sellerSpoke && !subtitle && <p className="pen-cue">You speak first</p>}
               {subtitle && <p className="pen-subtitle"><img src={IMAGES[round.guest.image]} alt="" /><small>{round.guest.name}</small><span>{subtitle}</span></p>}
-              <div className={`pen-self ${avatar.heard ? 'is-talking' : ''} ${avatar.micOn ? '' : 'is-muted'}`} aria-label="You">
-                <span className="pen-self-face" aria-hidden="true">Y</span>
-                <span className="pen-self-mic">{avatar.micOn ? <MicIcon /> : <MicOffIcon />}</span>
-                <b>You</b>
-              </div>
               {(note || whisper) && <p className={note ? 'pen-toast is-alert' : 'pen-toast'}>{note || whisper}</p>}
               {penOpen && (
                 <div className="pen-tag pen-pop">

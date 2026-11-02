@@ -97,15 +97,6 @@ small { font-size: .78rem; }
 @keyframes pen-stamp { from { transform: translate(-50%, -50%) rotate(-6deg) scale(1.6); opacity: 0; } }
 .pen-soldbadge { position: absolute; z-index: 4; top: 12px; left: 12px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; background: #e6f4ea; color: #137333; font: 700 .85rem var(--body); }
 
-/* Self view: a picture-in-picture tile, ringed in blue while you talk */
-.pen-self { position: absolute; z-index: 4; right: 12px; top: 12px; width: 200px; height: 112px; color: #fff; border-radius: 10px; background: var(--tile); box-shadow: 0 4px 16px rgba(0, 0, 0, .4); display: grid; place-items: center; transition: box-shadow .15s; }
-.pen-self-face { display: grid; place-items: center; width: 54px; height: 54px; border-radius: 50%; background: #5f6368; color: #fff; font: 500 1.4rem var(--body); }
-.pen-self b { position: absolute; left: 10px; bottom: 7px; font: 500 .8rem var(--body); color: #fff; }
-.pen-self .pen-self-mic { position: absolute; right: 8px; top: 8px; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: rgba(32, 33, 36, .6); }
-.pen-self .pen-self-mic svg { width: 14px; height: 14px; }
-.pen-self.is-talking { box-shadow: 0 0 0 3px var(--blue), 0 4px 16px rgba(0, 0, 0, .4); }
-.pen-self.is-talking .pen-self-mic { background: var(--blue); color: #202124; }
-.pen-self.is-muted .pen-self-mic { background: var(--red); }
 
 /* Captions, with who is speaking */
 .pen-cue, .pen-subtitle { position: absolute; z-index: 5; left: 50%; bottom: 44px; transform: translateX(-50%); width: min(600px, calc(100% - 48px)); }
@@ -228,8 +219,6 @@ small { font-size: .78rem; }
   .pen-round { width: 44px; }
   .pen-pill { padding: 0 14px; }
   .pen-earned { display: none; }
-  .pen-self { width: 96px; height: 64px; }
-  .pen-self-face { width: 34px; height: 34px; font-size: 1rem; }
   .pen-subtitle { bottom: 36px; font-size: .95rem; }
   .pen-door, .pen-marking { grid-template-columns: minmax(0, 1fr); }
   .pen-pitch, .pen-lineup { grid-column: 1; }
