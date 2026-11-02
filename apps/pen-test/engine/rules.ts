@@ -62,6 +62,7 @@ export interface Round {
   haggled: boolean;
   pushbacks: number;
   unheard: number;
+  counterAsked: number | null;
   traded: boolean;
   falseClaims: string[];
   pressure: number;
@@ -86,7 +87,7 @@ export function newRound(guest: Guest, level: Level, pick = Math.random): Round 
   return {
     guestId: guest.id, motive: guest.motives[Math.floor(pick() * guest.motives.length)], level, outcome: 'live',
     interest: 20, offer: null, price: null, lines: [], needUncovered: false, needAskedFirst: false, pitched: false, fitPitches: 0,
-    objectionRaised: false, objectionHandled: false, askedForSale: false, haggled: false, pushbacks: 0, unheard: 0, traded: false, falseClaims: [], pressure: 0, sellerLines: 0,
+    objectionRaised: false, objectionHandled: false, askedForSale: false, haggled: false, pushbacks: 0, unheard: 0, counterAsked: null, traded: false, falseClaims: [], pressure: 0, sellerLines: 0,
   };
 }
 
@@ -194,13 +195,16 @@ export function applyVerdict(round: Round, text: string, v: Verdict): Step {
       round.haggled = true;
       step.haggle = true;
       step.counter = counterOffer(round);
+      round.counterAsked = step.counter;
     } else {
       // One round of bargaining, then the deal: never above what the guest would pay.
-      const price = Math.min(offer, topNow(round));
-      round.offer = price;
-      round.price = price;
+      // A yes with no new number takes the guest's own price.
+      const agreed = price === null && round.counterAsked ? round.counterAsked : offer;
+      const finalPrice = Math.min(agreed, topNow(round));
+      round.offer = finalPrice;
+      round.price = finalPrice;
       round.outcome = 'sold';
-      step.sold = price;
+      step.sold = finalPrice;
     }
   }
   return step;

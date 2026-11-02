@@ -104,6 +104,15 @@ describe('the sale gate', () => {
     expect(readOf({ ...r, level: levelById('closer')! })).toBeNull();
   });
 
+  it('closes at the guest\'s own price when the seller just says yes', () => {
+    const r = round();
+    say(r, 'This pen writes on wet paper, so your site notes survive the rain.', fit);
+    say(r, 'A pencil smudges, but this ink stays on the sheet.', { ...fit, handledObjection: true });
+    const step = say(r, 'Twenty-five dollars, shall we do it?', ask);
+    expect(step.counter).toBeDefined();
+    expect(say(r, 'Sure, you have a deal.', ask).sold).toBe(step.counter);
+  });
+
   it('refuses an offer below the lowest price', () => {
     const r = round();
     say(r, 'This pen writes on wet paper for your site notes.', fit);

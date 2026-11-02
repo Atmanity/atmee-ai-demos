@@ -314,25 +314,27 @@ export function App() {
             <p className="pen-small">{screen === 'live' ? 'Time left' : 'Starts when they are ready'}</p>
           </div>
           <aside className="pen-info">
-            {round.read && (
-              <div className={`pen-panel pen-read is-${round.read.mood.toLowerCase()}`} aria-live="polite">
-                <small>Read the guest</small>
-                <div className="pen-read-mood"><b>{round.read.mood}</b>{round.read.price && <span className={`pen-chip is-${round.read.price.replace(/ /g, '-').toLowerCase()}`}>{round.read.price}</span>}</div>
-                <div className="pen-meter"><i style={{ width: `${round.read.meter}%` }} /></div>
+            <div className={`pen-panel pen-read${round.read ? ` is-${round.read.mood.toLowerCase()}` : ''}`} aria-live="polite">
+              {round.read && (
+                <>
+                  <small>Read the guest</small>
+                  <div className="pen-read-mood"><b>{round.read.mood}</b>{round.read.price && <span className={`pen-chip is-${round.read.price.replace(/ /g, '-').toLowerCase()}`}>{round.read.price}</span>}</div>
+                  <div className="pen-meter"><i style={{ width: `${round.read.meter}%` }} /></div>
+                </>
+              )}
+              <div className="pen-offer-row">
+                <span><small>Your offer</small> <b>{round.offer ? `$${round.offer}` : `$${pen?.list}`}</b></span>
+                <span><small>Lowest</small> <b>${level?.lowest}</b></span>
               </div>
-            )}
-            <div className="pen-panel pen-offer">
-              <div><small>Your offer</small><b>{round.offer ? `$${round.offer}` : `$${pen?.list}`}</b></div>
-              <div><small>Lowest</small><b>${level?.lowest}</b></div>
             </div>
+            {note && <p className="pen-alert">{note}</p>}
+            {whisper && <p className="pen-whisper">{whisper}</p>}
+            {avatar.heard && <p className="pen-heard"><small>You</small> {avatar.heard}</p>}
             <div className="pen-tag">
               <img className="pen-photo" src={penPhoto} alt="The Kestrel No. 4, a steel pen with a soft black grip" />
               <h2>{pen?.name}</h2>
               <ul>{pen?.facts.map((f) => <li key={f}>{f}</li>)}</ul>
             </div>
-            {note && <p className="pen-alert">{note}</p>}
-            {whisper && <p className="pen-whisper">{whisper}</p>}
-            {avatar.heard && <p className="pen-heard"><small>You</small> {avatar.heard}</p>}
           </aside>
         </main>
       )}

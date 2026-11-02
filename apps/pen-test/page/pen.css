@@ -197,3 +197,8 @@ body { background: radial-gradient(90% 80% at 42% 30%, #24397f 0%, #14224f 52%, 
 .pen-chip.is-too-pricey { background: #ffe1e1; color: #a3172a; }
 .pen-chip.is-fair { background: #fff2c9; color: #7a5a00; }
 .pen-chip.is-good-deal { background: #d9f7e6; color: #11663a; }
+.pen-offer-row { display: flex; justify-content: space-between; gap: 8px; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, .14); }
+.pen-read > .pen-offer-row:first-child { border-top: 0; padding-top: 0; }
+.pen-offer-row small { color: rgba(255, 255, 255, .72); font-size: .78rem; }
+.pen-offer-row b { font: 700 1.05rem var(--display); color: #fff; }
+.pen-read .pen-read-mood b { font-size: 1.05rem; }
