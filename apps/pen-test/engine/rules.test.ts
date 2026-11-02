@@ -140,6 +140,18 @@ describe('the sale gate', () => {
     expect(after).not.toContain('hold off on buying');
   });
 
+  it.each([['forty pens for $1,000 total', 1000], ['a thousand dollars for all of them', 1000], ['eight hundred total', 800]])('reads a bulk total: %s', (text, total) => {
+    expect(priceIn(text)).toBe(total);
+  });
+
+  it('turns a bulk total back into a price per pen', () => {
+    const theo = GUESTS.find((g) => g.id === 'theo')!;
+    const motive = theo.motives.findIndex((m) => m.quantity);
+    const r = newRound(theo, levelById('walkin')!, () => (motive + 0.5) / theo.motives.length);
+    say(r, 'Forty pens for $1,000, shall I write that up?', { interest: 0 });
+    expect(r.offer).toBe(Math.round(1000 / r.motive.quantity!));
+  });
+
   it('keeps an interested guest through two weak answers', () => {
     const r = round();
     say(r, 'This pen writes on wet paper, so your site notes survive the rain.', fit);

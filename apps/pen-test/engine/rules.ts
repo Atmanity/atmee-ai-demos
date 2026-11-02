@@ -122,8 +122,11 @@ const UNITS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five:
 /** The price in a line, if it names one: "$20", "20 bucks", "twenty-two dollars", "let's say eighteen". */
 export function priceIn(text: string): number | null {
   const t = text.toLowerCase().replace(/-/g, ' ');
-  const digits = t.match(/\$\s*(\d{1,3})|\b(\d{1,3})\s*(?:dollars?|bucks?)\b/);
-  if (digits) return Number(digits[1] ?? digits[2]);
+  // "$1,000" is a thousand, not one: read the whole number, commas and all.
+  const digits = t.match(/\$\s*(\d[\d,]*)|\b(\d[\d,]*)\s*(?:dollars?|bucks?)\b/);
+  if (digits) return Number((digits[1] ?? digits[2]).replace(/,/g, ''));
+  const big = t.match(/\b(a|one|two|three|four|five|six|seven|eight|nine|ten|twelve|fifteen|twenty)\s+(hundred|thousand)\b/);
+  if (big) return (big[1] === 'a' ? 1 : UNITS[big[1]] ?? WORDS[big[1]]) * (big[2] === 'thousand' ? 1000 : 100);
   const spoken = t.match(/\b(twenty|thirty)\s+(one|two|three|four|five|six|seven|eight|nine)\b/);
   if (spoken) return WORDS[spoken[1]] + UNITS[spoken[2]];
   const word = t.match(/\b(five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty)\b(?:\s*(?:dollars?|bucks?))?/g);
@@ -149,11 +152,18 @@ export interface Step {
 /** A guest stays for a few lines, unless the seller keeps pushing. */
 export const mayLeave = (round: Round) => round.sellerLines >= MIN_LINES_TO_WALK || round.pressure >= 2;
 
+/** A bulk order's total ("a thousand dollars for forty") is not a price per pen: divide it back out. */
+function perPen(round: Round, price: number | null): number | null {
+  if (price === null || price <= LIST_PRICE * 2) return price;
+  const each = price / (round.motive.quantity ?? 1);
+  return each >= 1 && each <= LIST_PRICE * 2 ? Math.round(each) : null;
+}
+
 /** One seller line, as judged: updates the round and says what happens next. */
 export function applyVerdict(round: Round, text: string, v: Verdict): Step {
   const step: Step = {};
   if (round.outcome !== 'live') return step;
-  const price = priceIn(text);
+  const price = perPen(round, priceIn(text));
   if (price !== null) {
     if (price < round.level.lowest) step.refused = price;
     else round.offer = price;
