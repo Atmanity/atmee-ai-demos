@@ -6,7 +6,7 @@ import { GUESTS, guestById, type Guest, type Motive } from './guests.ts';
 export const LIST_PRICE = 25;
 export const PEN = {
   name: 'Kestrel No. 4',
-  facts: ['Writes on wet paper', 'Wide soft grip', 'Ink does not smudge once dry', 'One refill lasts about three years', 'Steel body, lifetime warranty'],
+  facts: ['Writes on wet paper', 'Wide soft grip', 'Ink does not smudge once dry', 'One refill lasts about three years', 'Steel body, lifetime warranty', 'In stock, any quantity, ready this week'],
 };
 
 /** The most interest one line can lose, and how many lines a guest hears before they may leave. */
@@ -210,7 +210,7 @@ const soldOnThePen = (round: Round) => round.outcome === 'live' && round.fitPitc
 const pushbacksOf = (round: Round) => (round.motive.haggles || round.level.seconds > 30 ? 1 : 0);
 
 /** The guest's own number. */
-const counterOffer = (round: Round) => Math.max(round.level.lowest, Math.round(topNow(round) * 0.8));
+const counterOffer = (round: Round) => round.motive.counter ?? Math.max(round.level.lowest, Math.round(topNow(round) * 0.8));
 
 /** The guest may say yes: they want it, it fits, and the price is within reach. */
 export function gateOpen(round: Round): boolean {

@@ -13,6 +13,7 @@ export interface Motive {
   objection: string;
   /** Asks for a better price once, even when they would pay more. */
   haggles: boolean;
+  counter?: number;   // the price this guest names when bargaining, when it is fixed
   /** The clue that points to this motive. */
   clue: string;
   /** How many pens they take once the seller has found the need: a bulk order. */
@@ -94,7 +95,7 @@ export const GUESTS: Guest[] = [
       { id: 'earbuds', label: 'Earbuds in, between calls', x: 65, y: 37, w: 10, h: 12, points: 'Busy and in charge, with no time for small talk.' },
     ],
     motives: [
-      { id: 'gifts', label: '40 welcome gifts for his team', need: 'Your company just hit forty people and you want a small gift for each of them this week. You have the budget and no time to shop.', top: 18, objection: 'Nobody uses pens.', haggles: true, clue: 'laptop', quantity: 40 },
+      { id: 'gifts', label: '40 welcome gifts for his team', need: 'Your company just hit forty people and you want a small gift for each of them this week. You have the budget and no time to shop.', top: 24, objection: 'Nobody uses pens.', haggles: true, counter: 20, clue: 'laptop', quantity: 40 },
     ],
   },
   {

@@ -1,8 +1,8 @@
 // The Pen Test: study a guest, open the conversation, sell the pen.
 //
-// The platform has every avatar greet when it arrives, and here the seller speaks first. So the
-// guest arrives behind their still photo, with volume at zero. Once that
-// greeting has passed the sound comes on and the clock starts. The seller never hears it.
+// Here the seller speaks first. Where the server takes `welcome: false` the guest simply waits.
+// Elsewhere every avatar greets on arrival, so the guest arrives behind their still photo with the
+// volume at zero, and the sound and the clock start once that greeting has passed.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BackToApps, HostVideo, useAvatar, type ToolCall } from '../../../src/kit/index.ts';
 import ray from '../host/ray.jpg';
@@ -59,9 +59,10 @@ export function App() {
   const [board, setBoard] = useState({ money: 0, sold: 0 });
   const [sellerSpoke, setSellerSpoke] = useState(false);
   const [greeting, setGreeting] = useState('');
+  const [whisper, setWhisper] = useState('');
   const [nextGuest, setNextGuest] = useState<RoundView | null>(null);
 
-  const live = useRef({ arrived: false, finishing: false, liveAt: 0 });
+  const live = useRef({ quietStart: false, arrived: false, finishing: false, liveAt: 0 });
   const roundPath = useRef('');
   const screenRef = useRef<Screen>('door');
   screenRef.current = screen;
@@ -126,7 +127,7 @@ export function App() {
 
   // Set the guest's direction once they can hear it, then keep their voice off until the walk ends.
   const meet = useCallback(async (run: string, next: RoundView) => {
-    live.current = { arrived: false, finishing: false, liveAt: 0 };
+    live.current = { arrived: false, finishing: false, liveAt: 0, quietStart: false };
     roundPath.current = `/run/${run}/${next.index}`;
     setRound(next); setStamp(''); setNote(''); setSlow(false); setSellerSpoke(false); setReveal(null);
     setScreen('meet');
@@ -141,8 +142,9 @@ export function App() {
       const a = avatarRef.current;
       // Volume, not muted: LiveKit resets `muted` when it attaches the track.
       if (a.audioRef.current) a.audioRef.current.volume = 0;
-      const { direction } = await (await fetch(`${API}${roundPath.current}/direction`)).json();
+      const { direction, quietStart } = await (await fetch(`${API}${roundPath.current}/direction`)).json();
       if (cancelled) return;
+      live.current.quietStart = Boolean(quietStart);
       a.state(direction);
       await a.start({ mic: true });
     })();
@@ -162,7 +164,7 @@ export function App() {
     const id = setInterval(() => {
       const a = avatarRef.current;
       const since = live.current.liveAt && Date.now() - live.current.liveAt;
-      if (!since || since < MIN_HIDDEN_MS) return;
+      if (!since || since < (live.current.quietStart ? 0 : MIN_HIDDEN_MS)) return;
       const video = a.videoRef.current;
       const faceReady = Boolean(video && video.videoWidth > 0);
       if ((!a.speaking && faceReady) || since > MAX_HIDDEN_MS) {
@@ -195,8 +197,8 @@ export function App() {
   // A whisper from the manager when the seller stalls, on the levels that have them.
   useEffect(() => {
     if (screen !== 'live' || !level?.hints || sellerSpoke) return;
-    const id = setTimeout(() => setNote('Manager: say something. Start with what you see.'), 6000);
-    return () => clearTimeout(id);
+    const id = setTimeout(() => setWhisper('Manager: say something. Start with what you see.'), 10000);
+    return () => { clearTimeout(id); setWhisper(''); };
   }, [screen, level, sellerSpoke]);
 
   finish.current = async (reason: string) => {
@@ -322,6 +324,7 @@ export function App() {
               <ul>{pen?.facts.map((f) => <li key={f}>{f}</li>)}</ul>
             </div>
             {note && <p className="pen-alert">{note}</p>}
+            {whisper && <p className="pen-whisper">{whisper}</p>}
             {avatar.heard && <p className="pen-heard"><small>You</small> {avatar.heard}</p>}
           </aside>
         </main>

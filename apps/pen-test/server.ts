@@ -13,6 +13,8 @@ import { applyVerdict, clockFor, earned, LEVELS, mayLeave, levelById, moneyLeft,
 const ID = 'pen-test';
 // The plan's session cap: the clock has to end inside it.
 const CAP_S = Number(process.env.PEN_TEST_SESSION_CAP) || 180;
+// Staging takes `welcome: false`, so the guest waits for the seller. Production still greets.
+const QUIET_START = Boolean(process.env.ATMEE_BASE_URL?.includes('staging'));
 
 // A local test can meet one guest first; the live game never sets it.
 const guestOrder = (level: Level) => {
@@ -96,7 +98,7 @@ const app: AppServer = {
       const found = roundOf(req.params.run, req.params.n);
       if (!found) return void res.status(404).json({ error: 'not_found' });
       const guest = guestById(found.round.guestId)!;
-      const r = await startSession(avatarIdOf(guest, process.env.ATMEE_BASE_URL), CAP_S, { app: 'atmee-usecase-demos', usecase: ID, guest: guest.id }, { instructions: secretInstructions(found.round), tools: TOOLS });
+      const r = await startSession(avatarIdOf(guest, process.env.ATMEE_BASE_URL), CAP_S, { app: 'atmee-usecase-demos', usecase: ID, guest: guest.id }, { instructions: secretInstructions(found.round), tools: TOOLS }, undefined, QUIET_START ? { welcome: false } : {});
       if (!r.ok) {
         console.warn('[%s] POST /v1/session -> %d %s %s', ID, r.status, r.json?.error ?? '', r.json?.message ?? '');
         return void res.status(r.status).json({ error: r.json?.error || `http_${r.status}`, retryAfter: r.retryAfter });
@@ -117,7 +119,7 @@ const app: AppServer = {
     router.get('/run/:run/:n/direction', (req, res) => {
       const found = roundOf(req.params.run, req.params.n);
       if (!found) return void res.status(404).json({ error: 'not_found' });
-      res.json({ direction: direction(found.round) });
+      res.json({ direction: direction(found.round), quietStart: QUIET_START });
     });
 
     // A finished line of the conversation. The seller's are judged; the answer steers the guest.
