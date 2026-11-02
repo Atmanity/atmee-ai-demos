@@ -397,7 +397,7 @@ export function App() {
 
       {screen === 'lost' && (
         <main className="pen-page pen-panel">
-          <h2>We lost the connection</h2>
+          <h2>{note ? 'The call didn\'t start' : 'We lost the connection'}</h2>
           <p>{note || 'This one doesn\'t count against you.'}</p>
           <button type="button" className="pen-go" onClick={() => void replay()}>Try this guest again</button>
         </main>
