@@ -43,8 +43,8 @@ v2 guests still leave the frame in sessions from this app, and strangers can app
 cause is not settled. With `CAUSEUR_GENERATED_AVATAR_PROMPTS` on, Causeur's `avatar2` writer directs the
 renderer from the persona, the emotion and the recent conversation, so walking and leaving language was
 removed from the personas and directions. That helped Marisol, whose final takes held at 2 second
-sampling, but it is not a fix: Theo, with the same wording and a different background, left in three of
-four takes on 2026-11-02, once within seconds of arriving, before the seller's first line. The next step
+sampling, but it is not a fix: Theo, with the same wording and a different background, left in all four
+takes reviewed on 2026-11-02, once within seconds of arriving, before the seller's first line. The next step
 is to read the generated prompts of a bad session and compare the same avatar on its website chat.
 
 ## Live runs, 2026-11-02 (local, production API)
