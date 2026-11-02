@@ -185,16 +185,18 @@ export function applyVerdict(round: Round, text: string, v: Verdict): Step {
   } else if (v.askedForSale && soldOnThePen(round)) {
     const offer = round.offer ?? LIST_PRICE;
     // Agreeing to the pen is not agreeing to the price: the guest bargains first.
-    if (round.pushbacks < pushbacksOf(round) || offer > topNow(round)) {
+    if (round.pushbacks < pushbacksOf(round)) {
       round.pushbacks++;
       round.haggled = true;
       step.haggle = true;
       step.counter = counterOffer(round);
     } else {
-      round.offer = offer;
-      round.price = offer;
+      // One round of bargaining, then the deal: never above what the guest would pay.
+      const price = Math.min(offer, topNow(round));
+      round.offer = price;
+      round.price = price;
       round.outcome = 'sold';
-      step.sold = offer;
+      step.sold = price;
     }
   }
   return step;
@@ -204,14 +206,11 @@ export function applyVerdict(round: Round, text: string, v: Verdict): Step {
 const soldOnThePen = (round: Round) => round.outcome === 'live' && round.fitPitches > 0
   && round.interest >= round.level.interestToBuy && (round.offer ?? LIST_PRICE) >= round.level.lowest;
 
-/** How many times the guest pushes on price before taking a fair offer. */
-const pushbacksOf = (round: Round) => (round.motive.haggles ? 2 : round.level.seconds <= 30 ? 0 : 1);
+/** Whether the guest pushes on price: once, or not at all when a round is thirty seconds. */
+const pushbacksOf = (round: Round) => (round.motive.haggles || round.level.seconds > 30 ? 1 : 0);
 
-/** The guest's own number: low at first, closer to their top each time. */
-const counterOffer = (round: Round) => {
-  const top = topNow(round);
-  return Math.max(round.level.lowest, Math.round(top * (round.pushbacks > 1 ? 0.92 : 0.8)));
-};
+/** The guest's own number. */
+const counterOffer = (round: Round) => Math.max(round.level.lowest, Math.round(topNow(round) * 0.8));
 
 /** The guest may say yes: they want it, it fits, and the price is within reach. */
 export function gateOpen(round: Round): boolean {
