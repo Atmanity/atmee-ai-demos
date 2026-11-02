@@ -15,6 +15,7 @@ const ID = 'pen-test';
 const CAP_S = Number(process.env.PEN_TEST_SESSION_CAP) || 180;
 // A guest who is still interested stays, whatever the model decides.
 const LEAVE_BELOW = 25;
+const REPEAT_MS = 8000;
 
 // Staging takes `welcome: false`, so the guest waits for the seller. Production still greets.
 const QUIET_START = Boolean(process.env.ATMEE_BASE_URL?.includes('staging'));
@@ -137,6 +138,11 @@ const app: AppServer = {
         return void res.json({ view: view(found.run, found.index) });
       }
       const verdict = await judged(round, text);
+      // The recogniser can send one utterance twice: the same words change nothing.
+      const said = round.lines.filter((l) => l.who === 'seller').at(-1);
+      if (said?.text === text && Date.now() - said.at < REPEAT_MS) return void res.json({ view: view(found.run, found.index) });
+      // After the guest names a price, a deal waits for their turn to finish.
+      if (round.pushbacks > 0 && round.lines.at(-1)?.who === 'seller') verdict.askedForSale = false;
       round.lines.push({ who: 'seller', text, at: Date.now() });
       const step: Step = applyVerdict(round, text, verdict);
       console.log('[%s] %s interest %d offer %s top %d %s verdict %s', ID, round.guestId, round.interest, round.offer, topNow(round), JSON.stringify(step), JSON.stringify(verdict));
