@@ -39,10 +39,12 @@ page (apps/pen-test/page)            server (server.ts)                 Atmee
 
 ## Open platform problem
 
-Photorealistic guests can leave the frame while listening. Ray and Marisol walked away and the
-render showed only the mall; Walter held in his one run. Marisol did it in a busy mall, an empty
-mall, against a plain wall and with a larger face, so background and framing are not the cause.
-Previews never show it. The page shows live video throughout and does not hide this.
+Photorealistic guests can leave the frame while listening, and the render shows only the mall. Ray
+and Marisol did it; Marisol did it in a busy mall, an empty mall, against a plain wall and with a
+larger face, and previews never show it. Her latest portrait, chest-up with a chart and no corridor
+behind her, held for all 17 frames of one test, which is too little to call it fixed. The user sees
+no such thing in production chat. Session start applies the same render settings on every route,
+so the suspect is the runtime behind each kind of session; that is not yet confirmed.
 
 ## Live runs, 2026-11-02 (local, production API)
 
