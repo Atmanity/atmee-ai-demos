@@ -148,7 +148,7 @@ const app: AppServer = {
       const found = roundOf(req.params.run, req.params.n);
       if (!found) return void res.status(404).json({ error: 'not_found' });
       if (found.round.outcome === 'live') found.round.outcome = req.body?.reason === 'void' ? 'void' : 'time';
-      res.json({ view: view(found.run, found.index), read: readOptions(found.round) });
+      res.json({ view: view(found.run, found.index), read: readOptions(found.round), next: found.index + 1 < found.run.rounds.length ? view(found.run, found.index + 1) : null });
     });
 
     // The read check, then the reveal: everything the guest was hiding.

@@ -59,6 +59,7 @@ export function App() {
   const [report, setReport] = useState<Report | null>(null);
   const [board, setBoard] = useState({ money: 0, sold: 0 });
   const [sellerSpoke, setSellerSpoke] = useState(false);
+  const [nextGuest, setNextGuest] = useState<RoundView | null>(null);
 
   const live = useRef({ arrived: false, finishing: false, liveAt: 0 });
   const roundPath = useRef('');
@@ -194,9 +195,9 @@ export function App() {
   }, [screen, level, sellerSpoke]);
 
   finish.current = async (reason: string) => {
-    const r = await post<{ view: RoundView; read: { motives: string[]; clues: { id: string; label: string }[] } }>(`${roundPath.current}/finish`, { reason });
+    const r = await post<{ view: RoundView; read: { motives: string[]; clues: { id: string; label: string }[] }; next: RoundView | null }>(`${roundPath.current}/finish`, { reason });
     await avatarRef.current.end().catch(() => {});
-    setRound(r.view); setOptions(r.read); setScreen('read');
+    setRound(r.view); setOptions(r.read); setNextGuest(r.next); setScreen('read');
   };
 
   async function startRun() {
@@ -213,7 +214,7 @@ export function App() {
   }
 
   async function goOn() {
-    if (reveal?.next) return meet(runId, reveal.next);
+    if (nextGuest) return meet(runId, nextGuest);
     setReport(await (await fetch(`${API}/run/${runId}/report`)).json());
     setScreen('report');
   }
@@ -337,6 +338,10 @@ export function App() {
                 <h3>Which clue told you?</h3>
                 <div className="pen-chips">{options.clues.map((c) => <button type="button" key={c.id} className={pick.clue === c.id ? 'is-on' : ''} onClick={() => setPick((p) => ({ ...p, clue: c.id }))}>{c.label}</button>)}</div>
                 <button type="button" className="pen-go" disabled={!pick.motive || !pick.clue} onClick={() => void submitRead()}>See your feedback</button>
+                <div className="pen-actions">
+                  <button type="button" className="pen-go is-quiet" onClick={() => void replay()}>Try again</button>
+                  <button type="button" className="pen-go is-quiet" onClick={() => void goOn()}>{nextGuest ? 'Find another guest' : 'See your report card'}</button>
+                </div>
               </>
             )}
             {reveal && (
@@ -360,7 +365,7 @@ export function App() {
                 {reveal.coach.worst && <p className="pen-red"><b>Worst line:</b> "{reveal.coach.worst}"</p>}
                 <div className="pen-actions">
                   <button type="button" className="pen-go" onClick={() => void replay()}>Try again</button>
-                  <button type="button" className="pen-go is-quiet" onClick={() => void goOn()}>{reveal.next ? 'Next guest' : 'See your report card'}</button>
+                  <button type="button" className="pen-go is-quiet" onClick={() => void goOn()}>{nextGuest ? 'Find another guest' : 'See your report card'}</button>
                 </div>
               </>
             )}

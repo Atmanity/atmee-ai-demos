@@ -158,7 +158,8 @@ export async function joinAvatar(opts: JoinOptions): Promise<AvatarSession> {
   addEventListener('pagehide', onPageHide);
   opts.onPhase?.('connecting');
 
-  const room = new Room({ adaptiveStream: true, dynacast: true });
+  // As the main site joins: no layer switching, so the video never stalls behind the voice for a keyframe.
+  const room = new Room();
   // The avatar's tool calls arrive as an RPC from its agent; registered before
   // connecting so no early call finds nobody to answer it.
   room.registerRpcMethod(TOOL_RPC, async ({ payload }) => {

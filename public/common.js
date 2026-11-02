@@ -106,7 +106,7 @@
     const s = await startSession(opts.usecase, phase);
     phase('connecting');
 
-    const room = new Room({ adaptiveStream: true, dynacast: true });
+    const room = new Room();
     let linked = false, ended = false, micTrack = null;
     const drops = createDrops();
     const stamp = () => new Date().toISOString().slice(11, 23);

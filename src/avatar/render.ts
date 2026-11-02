@@ -171,7 +171,7 @@ export async function renderAvatar(opts: RenderOptions): Promise<RenderedAvatar>
   const endOnServer = () => fetch(`/api/apps/${opts.app}/render/${info.sessionId}/end`, { method: 'POST', keepalive: true }).catch(() => {});
 
   opts.onPhase?.('connecting');
-  const room = new Room({ adaptiveStream: true, dynacast: true });
+  const room = new Room();
   const playback = createPlayback();
   let ended = false;
   let speaking = false;
