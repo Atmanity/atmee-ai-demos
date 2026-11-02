@@ -11,6 +11,7 @@ import walter from '../host/walter.jpg';
 import helen from '../host/helen.jpg';
 import theo from '../host/theo.jpg';
 import daniel from '../host/daniel.jpg';
+import penPhoto from '../host/pen.jpg';
 import './pen.css';
 
 const API = '/api/apps/pen-test';
@@ -268,6 +269,7 @@ export function App() {
             </div>
           </section>
           <section className="pen-tag pen-penbox" aria-label="The pen">
+            <img className="pen-photo" src={penPhoto} alt="The Kestrel No. 4, a steel pen with a soft black grip" />
             <h2>{pen.name}</h2>
             <p className="pen-price">List ${pen.list}{level ? ` · lowest $${level.lowest}` : ''}</p>
             <ul>{pen.facts.map((f) => <li key={f}>{f}</li>)}</ul>
@@ -313,6 +315,7 @@ export function App() {
               <div><small>Lowest</small><b>${level?.lowest}</b></div>
             </div>
             <div className="pen-tag">
+              <img className="pen-photo" src={penPhoto} alt="The Kestrel No. 4, a steel pen with a soft black grip" />
               <h2>{pen?.name}</h2>
               <ul>{pen?.facts.map((f) => <li key={f}>{f}</li>)}</ul>
             </div>
