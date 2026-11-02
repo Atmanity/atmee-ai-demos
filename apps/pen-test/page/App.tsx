@@ -339,64 +339,48 @@ export function App() {
       {inRoom && round && (
         <main className={`pen-call ${chatOpen ? 'has-chat' : ''}`}>
           <section className="pen-stagewrap">
-            <div className="pen-backdrop" style={{ backgroundImage: `url(${IMAGES[round.guest.image]})` }} aria-hidden="true" />
-            <div className="pen-screen">
-              <HostVideo avatar={avatar} name={round.guest.name} captions={false} className="pen-video" />
-              {/* The photo covers the guest's arrival; once the meeting starts it is all live video. */}
-              <img className={`pen-still ${screen === 'live' && stamp !== 'WALKED AWAY' ? 'is-off' : ''}`} src={IMAGES[round.guest.image]} alt={round.guest.name} />
+            <div className={`pen-tile ${screen === 'live' && avatar.speaking ? 'is-speaking' : ''}`}>
+              <div className="pen-screen">
+                <HostVideo avatar={avatar} name={round.guest.name} captions={false} className="pen-video" />
+                {/* The photo covers the guest's arrival; once the meeting starts it is all live video. */}
+                <img className={`pen-still ${screen === 'live' && stamp !== 'WALKED AWAY' ? 'is-off' : ''}`} src={IMAGES[round.guest.image]} alt={round.guest.name} />
+                {stamp && <div className="pen-stamp">{stamp}</div>}
+              </div>
               {screen === 'meet' && (
-                <div className="pen-meet" role="status">
-                  <span className="call-spinner" aria-hidden="true" />
-                  <p><small>{slow ? 'Still connecting…' : 'Connecting…'}</small>{round.guest.spotted}</p>
+                <div className="pen-meet" role="status"><span className="call-spinner" aria-hidden="true" />{slow ? 'Still connecting…' : round.guest.spotted}</div>
+              )}
+              <p className="pen-tilename">{screen === 'live' ? round.guest.name : 'Connecting'} <small>· Guest {round.index + 1} of 3</small></p>
+              {sold && !stamp && <p className="pen-soldbadge">✓ {sold.replace('SOLD', 'Sold')}</p>}
+              {screen === 'live' && !sellerSpoke && !subtitle && <p className="pen-cue">You speak first</p>}
+              {subtitle && <p className="pen-subtitle"><img src={IMAGES[round.guest.image]} alt="" /><small>{round.guest.name}</small><span>{subtitle}</span></p>}
+              <div className={`pen-self ${avatar.heard ? 'is-talking' : ''} ${avatar.micOn ? '' : 'is-muted'}`} aria-label="You">
+                <span className="pen-self-face" aria-hidden="true">Y</span>
+                <span className="pen-self-mic">{avatar.micOn ? <MicIcon /> : <MicOffIcon />}</span>
+                <b>You</b>
+              </div>
+              {(note || whisper) && <p className={note ? 'pen-toast is-alert' : 'pen-toast'}>{note || whisper}</p>}
+              {penOpen && (
+                <div className="pen-tag pen-pop">
+                  <img className="pen-photo" src={penPhoto} alt="The Kestrel No. 4, a steel pen with a soft black grip" />
+                  <h2>{pen?.name}</h2>
+                  <p className="pen-price">List ${pen?.list} · lowest ${level?.lowest}</p>
+                  <ul>{pen?.facts.map((f) => <li key={f}>{f}</li>)}</ul>
                 </div>
               )}
-              {stamp && <div className="pen-stamp">{stamp}</div>}
-              {sold && !stamp && <p className="pen-soldbadge">{sold}</p>}
             </div>
-
-            <header className="pen-callbar">
-              <span className={`pen-timepill ${urgent ? 'is-urgent' : ''} ${sold ? 'is-done' : ''}`}>
-                <i aria-hidden="true" />
-                <b {...(screen === 'live' ? { 'data-testid': 'clock' } : {})}>{clock(screen === 'live' ? left : level?.seconds ?? 0)}</b>
-                <span>{sold ? 'Deal closed' : screen === 'live' ? 'left' : 'starts when they are ready'}</span>
-              </span>
-              <span className="pen-callinfo">Guest {round.index + 1} of 3</span>
-              <span className="pen-earned">${board.money}</span>
-            </header>
-
-            {(note || whisper) && <p className={note ? 'pen-toast is-alert' : 'pen-toast'}>{note || whisper}</p>}
-
-            <div className="pen-chips" aria-live="polite">
-              {round.read && (
-                <span className={`pen-chip-read is-${round.read.mood.toLowerCase()}`}>
-                  <small>Guest</small><b>{round.read.mood}</b><i><em style={{ width: `${round.read.meter}%` }} /></i>
-                  {round.read.price && <span className={`pen-chip is-${round.read.price.replace(/ /g, '-').toLowerCase()}`}>{round.read.price}</span>}
-                </span>
-              )}
-              <span className="pen-chip-offer"><small>Your offer</small><b>{round.offer ? `$${round.offer}` : `$${pen?.list}`}</b><small>lowest ${level?.lowest}</small></span>
-            </div>
-
-            {screen === 'live' && !sellerSpoke && !subtitle && <p className="pen-cue">You speak first</p>}
-            {subtitle && <p className="pen-subtitle">{subtitle}</p>}
-
-            <div className={`pen-self ${avatar.heard ? 'is-talking' : ''} ${avatar.micOn ? '' : 'is-muted'}`} aria-label="You">
-              <span className="pen-self-ring">{avatar.micOn ? <MicIcon /> : <MicOffIcon />}</span>
-              <b>You</b>
-              {avatar.heard && <small>{avatar.heard}</small>}
-            </div>
-
-            {penOpen && (
-              <div className="pen-tag pen-pop">
-                <img className="pen-photo" src={penPhoto} alt="The Kestrel No. 4, a steel pen with a soft black grip" />
-                <h2>{pen?.name}</h2>
-                <p className="pen-price">List ${pen?.list} · lowest ${level?.lowest}</p>
-                <ul>{pen?.facts.map((f) => <li key={f}>{f}</li>)}</ul>
-              </div>
-            )}
           </section>
 
           <aside className="pen-chat" aria-label="Conversation" hidden={!chatOpen}>
             <header><b>Conversation</b><button type="button" onClick={() => setChatOpen(false)} aria-label="Close the conversation">×</button></header>
+            <div className={`pen-deal${round.read ? ` is-${round.read.mood.toLowerCase()}` : ''}`} aria-live="polite">
+              {round.read && (
+                <>
+                  <div className="pen-deal-mood"><span>Guest is <b>{round.read.mood}</b></span>{round.read.price && <span className={`pen-chip is-${round.read.price.replace(/ /g, '-').toLowerCase()}`}>{round.read.price}</span>}</div>
+                  <i><em style={{ width: `${round.read.meter}%` }} /></i>
+                </>
+              )}
+              <div className="pen-deal-row"><span>Your offer<b>{round.offer ? `$${round.offer}` : `$${pen?.list}`}</b></span><span>Lowest<b>${level?.lowest}</b></span></div>
+            </div>
             <ol ref={talkBox} aria-live="polite">
               {talk.length === 0 && !avatar.heard && <li className="pen-talk-empty">{screen === 'live' ? 'Open with something you can see.' : 'Your conversation shows here.'}</li>}
               {talk.map((l, i) => (
@@ -407,23 +391,34 @@ export function App() {
           </aside>
 
           <nav className="pen-controls" aria-label="Call controls">
-            <button type="button" className={avatar.micOn ? '' : 'is-off'} onClick={() => avatar.setMic(!avatar.micOn)} aria-pressed={!avatar.micOn}>
-              <span>{avatar.micOn ? <MicIcon /> : <MicOffIcon />}</span>{avatar.micOn ? 'Mute' : 'Unmute'}
-            </button>
-            <button type="button" className={penOpen ? 'is-on' : ''} onClick={() => setPenOpen((o) => !o)} aria-pressed={penOpen}>
-              <span aria-hidden="true">✎</span>The pen
-            </button>
-            <button type="button" className={chatOpen ? 'is-on' : ''} onClick={() => setChatOpen((o) => !o)} aria-pressed={chatOpen}>
-              <span aria-hidden="true">☰</span>Conversation
-            </button>
-            {sold && (
-              <button type="button" className="is-wrap" data-testid="wrap-up" onClick={() => wrapUp.current()}>
-                <span aria-hidden="true">✓</span>Wrap up
+            <div className="pen-meetinfo">
+              <b className={urgent ? 'is-urgent' : ''} {...(screen === 'live' ? { 'data-testid': 'clock' } : {})}>{clock(screen === 'live' ? left : level?.seconds ?? 0)}</b>
+              <span>{sold ? 'deal closed' : screen === 'live' ? 'left' : 'starts when they are ready'}</span>
+              <i aria-hidden="true" />
+              <span>The Pen Test · Guest {round.index + 1} of 3</span>
+            </div>
+            <div className="pen-buttons">
+              <button type="button" className={`pen-round ${avatar.micOn ? '' : 'is-off'}`} onClick={() => avatar.setMic(!avatar.micOn)} aria-pressed={!avatar.micOn} aria-label={avatar.micOn ? 'Mute' : 'Unmute'} title={avatar.micOn ? 'Mute' : 'Unmute'}>
+                {avatar.micOn ? <MicIcon /> : <MicOffIcon />}
               </button>
-            )}
-            <button type="button" className="is-leave" onClick={() => leave()} aria-label="Leave the meeting">
-              <span><HangUpIcon /></span>Leave
-            </button>
+              <button type="button" className={`pen-round ${penOpen ? 'is-on' : ''}`} onClick={() => setPenOpen((o) => !o)} aria-pressed={penOpen} aria-label="The pen" title="The pen">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true"><path d="M15 4l5 5L9 20H4v-5z" /></svg>
+              </button>
+              {sold && (
+                <button type="button" className="pen-pill is-wrap" data-testid="wrap-up" onClick={() => wrapUp.current()}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7" /></svg>Wrap up
+                </button>
+              )}
+              <button type="button" className="pen-pill is-leave" onClick={() => leave()} aria-label="Leave the meeting" title="Leave">
+                <HangUpIcon />
+              </button>
+            </div>
+            <div className="pen-side-toggles">
+              <span className="pen-earned">${board.money}</span>
+              <button type="button" className={`pen-round ${chatOpen ? 'is-on' : ''}`} onClick={() => setChatOpen((o) => !o)} aria-pressed={chatOpen} aria-label="Conversation" title="Conversation">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true"><path d="M4 5h16v11H8l-4 4z" /></svg>
+              </button>
+            </div>
           </nav>
         </main>
       )}
