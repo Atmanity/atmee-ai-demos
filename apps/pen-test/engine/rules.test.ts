@@ -113,6 +113,14 @@ describe('the sale gate', () => {
     expect(say(r, 'Sure, you have a deal.', ask).sold).toBe(step.counter);
   });
 
+  it('closes a thirty-second round on one fitted pitch and a clear ask, without haggling', () => {
+    const r = round('thirty');
+    say(r, 'What are you building, and who is it for?', { askedAboutNeed: true, interest: 15 });
+    const step = say(r, 'A steel pen for each of your forty people, twenty-five each. Shall we?', { ...fit, askedForSale: true });
+    expect(step.haggle).toBeUndefined();
+    expect(step.sold).toBe(Math.min(25, topNow(r)));
+  });
+
   it('keeps an interested guest through two weak answers', () => {
     const r = round();
     say(r, 'This pen writes on wet paper, so your site notes survive the rain.', fit);

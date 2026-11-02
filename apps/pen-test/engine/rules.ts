@@ -229,8 +229,9 @@ export function readOf(round: Round): GuestRead | null {
 const soldOnThePen = (round: Round) => round.outcome === 'live' && round.fitPitches > 0
   && round.interest >= round.level.interestToBuy && (round.offer ?? LIST_PRICE) >= round.level.lowest;
 
-/** Whether the guest pushes on price: once, or not at all when a round is thirty seconds. */
-const pushbacksOf = (round: Round) => (round.motive.haggles || round.level.seconds > 30 ? 1 : 0);
+/** Whether the guest pushes on price: once, or not at all when a round is thirty seconds, which only
+ * leaves time for one question and one fitted pitch with a clear ask. */
+const pushbacksOf = (round: Round) => (round.level.seconds > 30 ? 1 : 0);
 
 /** The guest's own number. */
 const counterOffer = (round: Round) => round.motive.counter ?? Math.max(round.level.lowest, Math.round(topNow(round) * 0.8));
