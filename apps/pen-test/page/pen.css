@@ -118,7 +118,8 @@ body { background: radial-gradient(90% 80% at 42% 30%, #24397f 0%, #14224f 52%, 
 .pen-levels button.is-on { background: #fff; color: #0f1b42; border-color: #fff; }
 .pen-levels button.is-on small { color: #4a5570; }
 
-.pen-meet { background: rgba(13, 23, 54, .86); color: #fff; }
+.pen-meet { background: rgba(13, 23, 54, .86); color: #fff; padding: 16px 20px; gap: 14px; font: 600 clamp(1.2rem, 2.6vw, 1.7rem)/1.25 var(--body); }
+.pen-meet .call-spinner { flex: none; width: 28px; height: 28px; }
 .pen-meet .call-spinner { border-color: rgba(255, 255, 255, .3); border-top-color: #fff; }
 
 .pen-feedback { display: grid; gap: 4px; background: var(--blue-soft); border-radius: 8px; padding: 10px 14px; }
