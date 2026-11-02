@@ -121,6 +121,13 @@ describe('the sale gate', () => {
     expect(step.sold).toBe(Math.min(25, topNow(r)));
   });
 
+  it('gives the whole need to one good question on the thirty-second level only', () => {
+    const quick = round('thirty'), slow = round();
+    const q = 'What are you building, and who is it for?';
+    expect(direction(quick, say(quick, q, { askedAboutNeed: true, interest: 8 }))).toContain('say plainly what you need');
+    expect(direction(slow, say(slow, q, { askedAboutNeed: true, interest: 8 }))).toContain('one small piece');
+  });
+
   it('keeps an interested guest through two weak answers', () => {
     const r = round();
     say(r, 'This pen writes on wet paper, so your site notes survive the rain.', fit);

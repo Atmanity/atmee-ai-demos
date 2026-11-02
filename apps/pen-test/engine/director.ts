@@ -40,7 +40,10 @@ export function direction(round: Round, step: Step = {}): string {
     else if (step.haggle) parts.push(`You want the pen, so say so, but the price has to come down: ask for $${step.counter} a pen. Do not close the deal yet.`);
     else if (step.objection) parts.push(`You are getting interested, but one doubt is holding you back. Raise it once, as an honest question in your own words: "${round.motive.objection}"`);
     else if (step.refused) parts.push(`They offered $${step.refused}, which sounds suspiciously cheap. Say so briefly.`);
-    else if (step.revealNeed) parts.push('That was a fair question: let one small piece of your need out, in a few words.');
+    // Thirty seconds leaves room for one question: a good one gets the whole need, plainly.
+    else if (step.revealNeed) parts.push(round.level.seconds <= 30
+      ? 'That was a fair question: say plainly what you need right now, in one short sentence.'
+      : 'That was a fair question: let one small piece of your need out, in a few words.');
     else if (gateOpen(round)) parts.push('If they ask you to buy, you would consider it.');
     if (round.objectionRaised && !step.objection) parts.push('You have said your objection already: do not repeat it.');
     if (round.offer !== null && round.offer > topNow(round)) parts.push(`$${round.offer} is more than you want to pay.`);
