@@ -8,7 +8,7 @@ import { llmAvailable, structured } from '../../server/llm.ts';
 import { closingEvent, direction, secretInstructions, TOOLS } from './engine/director.ts';
 import { guestById } from './engine/guests.ts';
 import { COACH_SCHEMA, COACH_SYSTEM, coachPrompt, JUDGE_SYSTEM, judgePrompt, normalise, VERDICT_SCHEMA, wordRules } from './engine/judge.ts';
-import { applyVerdict, clockFor, earned, LEVELS, levelById, moneyLeft, newRound, PEN, LIST_PRICE, pickGuests, plainCoach, readOptions, report, score, topNow, type Coach, type Level, type Round, type Step, type Verdict } from './engine/rules.ts';
+import { applyVerdict, clockFor, earned, LEVELS, mayLeave, levelById, moneyLeft, newRound, PEN, LIST_PRICE, pickGuests, plainCoach, readOptions, report, score, topNow, type Coach, type Level, type Round, type Step, type Verdict } from './engine/rules.ts';
 
 const ID = 'pen-test';
 // The plan's session cap: the clock has to end inside it.
@@ -140,7 +140,7 @@ const app: AppServer = {
     router.post('/run/:run/:n/decide', (req, res) => {
       const found = roundOf(req.params.run, req.params.n);
       if (!found) return void res.status(404).json({ error: 'not_found' });
-      if (String(req.body?.choice ?? '').toLowerCase().includes('walk') && found.round.outcome === 'live') found.round.outcome = 'walked';
+      if (String(req.body?.choice ?? '').toLowerCase().includes('walk') && found.round.outcome === 'live' && mayLeave(found.round)) found.round.outcome = 'walked';
       res.json({ view: view(found.run, found.index) });
     });
 

@@ -142,6 +142,9 @@ export interface Step {
   revealNeed?: boolean;      // a good question: let a piece of the need out
 }
 
+/** A guest stays for a few lines, unless the seller keeps pushing. */
+export const mayLeave = (round: Round) => round.sellerLines >= MIN_LINES_TO_WALK || round.pressure >= 2;
+
 /** One seller line, as judged: updates the round and says what happens next. */
 export function applyVerdict(round: Round, text: string, v: Verdict): Step {
   const step: Step = {};
@@ -168,8 +171,7 @@ export function applyVerdict(round: Round, text: string, v: Verdict): Step {
   const moved = Math.max(-MAX_LOSS, Math.min(25, v.interest) - (v.falseClaims.length ? 10 : 0) - (v.pressure ? 10 : 0));
   round.sellerLines++;
   round.interest = Math.max(0, Math.min(Math.max(cap, round.interest), round.interest + moved));
-  const mayLeave = round.sellerLines >= MIN_LINES_TO_WALK || round.pressure >= 2;
-  if (round.interest <= 0 && !mayLeave) round.interest = 5;
+  if (round.interest <= 0 && !mayLeave(round)) round.interest = 5;
   if (round.interest <= 0) {
     round.outcome = 'walked';
     step.walked = true;
