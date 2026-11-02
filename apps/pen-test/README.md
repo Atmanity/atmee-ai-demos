@@ -29,7 +29,7 @@ page (apps/pen-test/page)            server (server.ts)                 Atmee
 ## What the API could not do
 
 - **The seller must speak first, and every avatar greets on arrival.** No session option turns the
-  greeting off. The page keeps the guest behind their still photo, with sound off and the mic closed,
+  greeting off. The page keeps the guest behind their still photo, with the volume at zero,
   until the greeting has passed. That hidden time bills.
 - **Check-ins can't be turned off.** After about 10 s of silence a guest says "Hm?", which fits.
 - **Plan session cap.** On a 180 s plan Walk-in runs 2:40, so the clock ends inside the session.

@@ -1,8 +1,8 @@
 // The Pen Test: study a guest, open the conversation, sell the pen.
 //
 // The platform has every avatar greet when it arrives, and here the seller speaks first. So the
-// guest arrives behind their still photo, with volume at zero and the seller's mic closed. Once that
-// greeting has passed the mic opens and the clock starts. The seller never hears it.
+// guest arrives behind their still photo, with volume at zero. Once that
+// greeting has passed the sound comes on and the clock starts. The seller never hears it.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BackToApps, HostVideo, useAvatar, type ToolCall } from '../../../src/kit/index.ts';
 import ray from '../host/ray.jpg';
@@ -138,7 +138,7 @@ export function App() {
       const { direction } = await (await fetch(`${API}${roundPath.current}/direction`)).json();
       if (cancelled) return;
       a.state(direction);
-      await a.start({ mic: true, micMuted: true });
+      await a.start({ mic: true });
     })();
     return () => { cancelled = true; clearTimeout(slowTimer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -163,7 +163,6 @@ export function App() {
         clearInterval(id);
         live.current.arrived = true;
         if (a.audioRef.current) a.audioRef.current.volume = 1;
-        a.setMic(true);
         setSeconds(level?.seconds ?? 60);
         setLeft(level?.seconds ?? 60);
         setScreen('live');
