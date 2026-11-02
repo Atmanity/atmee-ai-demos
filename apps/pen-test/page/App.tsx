@@ -25,7 +25,7 @@ interface Level { id: string; name: string; blurb: string; lowest: number; hints
 interface Pen { name: string; facts: string[]; list: number }
 interface GuestView { id: string; name: string; role: string; spotted: string; image: string }
 interface RoundView { index: number; guest: GuestView; outcome: string; offer: number | null; price: number | null; earned: number }
-interface Clue { id: string; label: string; x: number; y: number; points: string }
+interface Clue { id: string; label: string; x: number; y: number; w: number; h: number; points: string }
 interface Reveal {
   clues: Clue[]; keyClue: string; motive: string; top: number; left: number;
   score: { total: number; penalties: number }; falseClaims: string[]; coach: { did: string; improve: string[]; best: string; worst: string };
@@ -114,6 +114,11 @@ export function App() {
   const avatar = useAvatar(round && runId ? `pen-test/run/${runId}/${round.index}` : 'pen-test', { onUserSaid, onAvatarSaid, onToolCall, onEnded });
   const avatarRef = useRef(avatar);
   avatarRef.current = avatar;
+
+  // For recording a demo: `?script` lets a driver send the seller's lines as text.
+  useEffect(() => {
+    if (location.search.includes('script')) Object.assign(window, { __say: (text: string) => avatarRef.current.say(text) });
+  }, []);
 
   useEffect(() => {
     fetch(`${API}/levels`).then((r) => r.json()).then((d) => { setPen(d.pen); setLevels(d.levels); setLevel(d.levels[0]); }).catch(() => setNote('The game did not load. Try again in a moment.'));
@@ -324,11 +329,13 @@ export function App() {
 
       {(screen === 'read' || screen === 'reveal') && round && (
         <main className="pen-marking">
-          <figure className={`pen-marked ${reveal ? 'is-marked' : ''}`}>
-            <img src={IMAGES[round.guest.image]} alt={round.guest.name} />
+          <div className="pen-left">
+            <figure className="pen-marked">
+              <img src={IMAGES[round.guest.image]} alt={round.guest.name} />
+              {reveal?.clues.filter((c) => c.w > 0).map((c) => <span key={c.id} className={`pen-circle ${c.id === reveal.keyClue ? 'is-key' : ''}`} style={{ left: `${c.x}%`, top: `${c.y}%`, width: `${c.w}%`, height: `${c.h}%` }} aria-hidden="true" />)}
+            </figure>
             {stamp && <div className="pen-stamp">{stamp}</div>}
-            {reveal?.clues.map((c) => <span key={c.id} className={`pen-circle ${c.id === reveal.keyClue ? 'is-key' : ''}`} style={{ left: `${c.x}%`, top: `${c.y}%` }} aria-hidden="true" />)}
-          </figure>
+          </div>
           <div className="pen-panel pen-notes">
             {!reveal && (
               <p className="pen-writing"><span className="call-spinner" aria-hidden="true" /> Writing your feedback…</p>

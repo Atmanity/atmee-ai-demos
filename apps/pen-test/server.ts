@@ -6,7 +6,7 @@ import type { AppServer } from '../../server/app-server.ts';
 import { endSession, startSession } from '../../server/atmee.ts';
 import { llmAvailable, structured } from '../../server/llm.ts';
 import { closingEvent, direction, secretInstructions, TOOLS } from './engine/director.ts';
-import { guestById } from './engine/guests.ts';
+import { guestById, type Guest } from './engine/guests.ts';
 import { COACH_SCHEMA, COACH_SYSTEM, coachPrompt, JUDGE_SYSTEM, judgePrompt, normalise, VERDICT_SCHEMA, wordRules } from './engine/judge.ts';
 import { applyVerdict, clockFor, earned, LEVELS, mayLeave, levelById, moneyLeft, newRound, PEN, LIST_PRICE, pickGuests, plainCoach, report, score, topNow, type Coach, type Level, type Round, type Step, type Verdict } from './engine/rules.ts';
 
@@ -23,6 +23,13 @@ const guestOrder = (level: Level) => {
   const first = order.findIndex((g) => g.id === process.env.PEN_TEST_FIRST);
   if (first > 0) order.unshift(...order.splice(first, 1));
   return order;
+};
+
+// The same, for a guest's reason to buy.
+const roundFor = (guest: Guest, level: Level) => {
+  const round = newRound(guest, level);
+  round.motive = guest.motives.find((m) => m.id === process.env.PEN_TEST_MOTIVE) ?? round.motive;
+  return round;
 };
 
 interface Run { level: Level; rounds: Round[]; sessions: Map<number, string>; at: number }
@@ -78,7 +85,7 @@ const app: AppServer = {
       const level = levelById(req.body?.level);
       if (!level) return void res.status(400).json({ error: 'unknown_level' });
       const id = randomBytes(9).toString('hex');
-      const run: Run = { level, rounds: guestOrder(level).map((g) => newRound(g, level)), sessions: new Map(), at: Date.now() };
+      const run: Run = { level, rounds: guestOrder(level).map((g) => roundFor(g, level)), sessions: new Map(), at: Date.now() };
       runs.set(id, run);
       for (const [key, old] of runs) if (Date.now() - old.at > 3600_000) runs.delete(key);
       res.status(201).json({ id, seconds: clockFor(level, CAP_S), first: view(run, 0) });
@@ -170,7 +177,7 @@ const app: AppServer = {
     router.post('/run/:run/:n/replay', (req, res) => {
       const found = roundOf(req.params.run, req.params.n);
       if (!found) return void res.status(404).json({ error: 'not_found' });
-      found.run.rounds[found.index] = newRound(guestById(found.round.guestId)!, found.run.level);
+      found.run.rounds[found.index] = roundFor(guestById(found.round.guestId)!, found.run.level);
       res.json({ view: view(found.run, found.index), board: scoreboard(found.run) });
     });
 
