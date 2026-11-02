@@ -13,6 +13,9 @@ import { applyVerdict, clockFor, earned, LEVELS, mayLeave, levelById, moneyLeft,
 const ID = 'pen-test';
 // The plan's session cap: the clock has to end inside it.
 const CAP_S = Number(process.env.PEN_TEST_SESSION_CAP) || 180;
+// A guest who is still interested stays, whatever the model decides.
+const LEAVE_BELOW = 25;
+
 // Staging takes `welcome: false`, so the guest waits for the seller. Production still greets.
 const QUIET_START = Boolean(process.env.ATMEE_BASE_URL?.includes('staging'));
 
@@ -149,7 +152,7 @@ const app: AppServer = {
     router.post('/run/:run/:n/decide', (req, res) => {
       const found = roundOf(req.params.run, req.params.n);
       if (!found) return void res.status(404).json({ error: 'not_found' });
-      if (/walk|end/.test(String(req.body?.choice ?? '').toLowerCase()) && found.round.outcome === 'live' && mayLeave(found.round)) found.round.outcome = 'walked';
+      if (/walk|end/.test(String(req.body?.choice ?? '').toLowerCase()) && found.round.outcome === 'live' && mayLeave(found.round) && found.round.interest < LEAVE_BELOW) found.round.outcome = 'walked';
       res.json({ view: view(found.run, found.index) });
     });
 

@@ -5,7 +5,7 @@ import { PEN, gateOpen, topNow, type Round, type Step } from './rules.ts';
 
 export const TOOLS: AppTool[] = [{
   type: 'function', name: 'decide',
-  description: 'Says what you decided. Call it when you are done talking for good ("end"), or when GUEST DIRECTION says YOU MAY BUY and you agree ("buy").',
+  description: 'Says what you decided. Call it with "end" only when GUEST DIRECTION says you have had enough, or with "buy" when it says YOU MAY BUY and you agree.',
   parameters: { type: 'object', properties: { choice: { type: 'string', description: 'buy or end' } }, required: ['choice'] },
   'x-atmee': { mode: 'notify' },
 }];
@@ -14,7 +14,7 @@ export const TOOLS: AppTool[] = [{
 export function secretInstructions(round: Round): string {
   return [
     'You stay calm and still, facing the camera. The seller always speaks first and leads the conversation.',
-    'Be brief: most replies are under eight words, one sentence at most. Never ask what they want, never offer help, never fill a silence, never carry the conversation. Only answer what was said.',
+    'Be brief: one short natural sentence, under twelve words. A real question about you gets a real answer with a small detail; a generic pitch gets a flat reply. Never offer help, never fill a silence, never carry the conversation.',
     `Your private need, which you never state outright: ${round.motive.need}`,
     'Let a small piece of it out only when the seller asks a real question about your day, your work or what you use.',
     `Your objection, to say once and only when the direction asks for it: "${round.motive.objection}"`,
@@ -45,7 +45,7 @@ export function direction(round: Round, step: Step = {}): string {
     if (round.objectionRaised && !step.objection) parts.push('You have said your objection already: do not repeat it.');
     if (round.offer !== null && round.offer > topNow(round)) parts.push(`$${round.offer} is more than you want to pay.`);
   }
-  parts.push('Reply in under eight words, and never repeat a line you have said. Never say you are leaving or in a hurry.');
+  parts.push('Reply in one short sentence, under twelve words, and never repeat a line you have said. Never say you are leaving or in a hurry.');
   return parts.join(' ');
 }
 
