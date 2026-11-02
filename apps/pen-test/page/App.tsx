@@ -20,6 +20,8 @@ const IMAGES: Record<string, string> = { ray, marisol, walter, helen, theo, dani
 const MIN_HIDDEN_MS = 8000;
 const MAX_HIDDEN_MS = 16000;
 const SLOW_MEET_MS = 45000;
+// From this score up, a round is strong enough that the feedback skips its "worst line".
+const STRONG = 85;
 
 interface Level { id: string; name: string; blurb: string; lowest: number; hints: number; seconds: number }
 interface Pen { name: string; facts: string[]; list: number }
@@ -30,7 +32,9 @@ interface Reveal {
   clues: Clue[]; keyClue: string; motive: string; top: number; left: number;
   score: { total: number; penalties: number }; falseClaims: string[]; coach: { did: string; improve: string[]; best: string; worst: string };
   board: { money: number; sold: number }; next: RoundView | null; view: RoundView;
+  skills: { label: string; max: number; score: number }[];
 }
+interface Said { who: 'seller' | 'guest'; text: string }
 interface Report { money: number; sold: number; left: number; skills: { label: string; score: number; max: number }[]; drill: string; delivery: { talkShare: number; questions: number; fillers: number }; guests: { name: string; outcome: string; did: string; improve: string[] }[] }
 type Screen = 'door' | 'meet' | 'live' | 'read' | 'reveal' | 'report' | 'lost';
 
@@ -61,6 +65,9 @@ export function App() {
   const [greeting, setGreeting] = useState('');
   const [whisper, setWhisper] = useState('');
   const [nextGuest, setNextGuest] = useState<RoundView | null>(null);
+  // The conversation so far, so the seller can see what they actually said.
+  const [talk, setTalk] = useState<Said[]>([]);
+  const talkBox = useRef<HTMLOListElement>(null);
 
   const live = useRef({ quietStart: false, arrived: false, finishing: false, liveAt: 0 });
   const roundPath = useRef('');
@@ -81,6 +88,7 @@ export function App() {
     if (!live.current.arrived || live.current.finishing) return;
     setSellerSpoke(true);
     setNote('');
+    setTalk((t) => [...t, { who: 'seller', text }]);
     const r = await post<{ view: RoundView; direction?: string; closing?: string; refused?: number }>(`${roundPath.current}/line`, { who: 'seller', text });
     setRound(r.view);
     if (r.view.price) setBoard((b) => ({ money: b.money + r.view.earned, sold: b.sold + 1 }));
@@ -97,6 +105,7 @@ export function App() {
 
   const onAvatarSaid = useCallback((text: string) => {
     if (!live.current.arrived) return;   // the greeting nobody heard
+    setTalk((t) => [...t, { who: 'guest', text }]);
     void post(`${roundPath.current}/line`, { who: 'guest', text });
   }, []);
 
@@ -129,7 +138,7 @@ export function App() {
   const meet = useCallback(async (run: string, next: RoundView) => {
     live.current = { arrived: false, finishing: false, liveAt: 0, quietStart: false };
     roundPath.current = `/run/${run}/${next.index}`;
-    setRound(next); setStamp(''); setNote(''); setSlow(false); setSellerSpoke(false); setReveal(null);
+    setRound(next); setStamp(''); setNote(''); setSlow(false); setSellerSpoke(false); setReveal(null); setTalk([]);
     setScreen('meet');
   }, []);
 
@@ -231,6 +240,8 @@ export function App() {
     await meet(runId, r.view);
   }
 
+  useEffect(() => { const el = talkBox.current; if (el) el.scrollTop = el.scrollHeight; }, [talk, avatar.heard]);
+
   const urgent = screen === 'live' && left <= 10;
   const inRoom = round && (screen === 'meet' || screen === 'live');
   const subtitle = screen === 'live' && avatar.caption !== greeting ? avatar.caption : '';
@@ -294,6 +305,7 @@ export function App() {
             <HostVideo avatar={avatar} name={round.guest.name} captions={false} className="pen-video" />
             {/* The photo covers the guest's arrival; once the meeting starts it is all live video. */}
             <img className={`pen-still ${screen === 'live' && stamp !== 'WALKED AWAY' ? 'is-off' : ''}`} src={IMAGES[round.guest.image]} alt={round.guest.name} />
+            <p className="pen-nameplate">Guest {round.index + 1} of 3</p>
             {screen === 'meet' && (
               <div className="pen-meet" role="status">
                 <span className="call-spinner" aria-hidden="true" />
@@ -304,22 +316,21 @@ export function App() {
             {subtitle && <p className="pen-subtitle">{subtitle}</p>}
             {stamp && <div className="pen-stamp">{stamp}</div>}
           </div>
-          <div className={`pen-panel pen-clockbox ${urgent ? 'is-urgent' : ''}`}>
-            <div className="pen-dial">
-              <svg viewBox="0 0 120 120" aria-hidden="true">
-                <circle cx="60" cy="60" r="54" />
-                <circle className="is-left" cx="60" cy="60" r="54" style={{ strokeDashoffset: 339.3 * (1 - (screen === 'live' && seconds ? Math.max(0, left) / seconds : 1)) }} />
-              </svg>
-              <div className="pen-clock" {...(screen === 'live' ? { 'data-testid': 'clock' } : {})}>{clock(screen === 'live' ? left : level?.seconds ?? 0)}</div>
+          <aside className="pen-side">
+            <div className={`pen-timer ${urgent ? 'is-urgent' : ''}`}>
+              <div className="pen-timer-row">
+                <span>{screen === 'live' ? 'Time left' : 'Starts when they are ready'}</span>
+                <b className="pen-clock" {...(screen === 'live' ? { 'data-testid': 'clock' } : {})}>{clock(screen === 'live' ? left : level?.seconds ?? 0)}</b>
+              </div>
+              <div className="pen-timer-bar"><i style={{ width: `${100 * (screen === 'live' && seconds ? Math.max(0, left) / seconds : 1)}%` }} /></div>
             </div>
-            <p className="pen-small">{screen === 'live' ? 'Time left' : 'Starts when they are ready'}</p>
-          </div>
-          <aside className="pen-info">
-            <div className={`pen-panel pen-read${round.read ? ` is-${round.read.mood.toLowerCase()}` : ''}`} aria-live="polite">
+            <div className={`pen-card pen-read${round.read ? ` is-${round.read.mood.toLowerCase()}` : ''}`} aria-live="polite">
               {round.read && (
                 <>
-                  <small>Read the guest</small>
-                  <div className="pen-read-mood"><b>{round.read.mood}</b>{round.read.price && <span className={`pen-chip is-${round.read.price.replace(/ /g, '-').toLowerCase()}`}>{round.read.price}</span>}</div>
+                  <div className="pen-read-mood">
+                    <span><small>Read the guest</small><b>{round.read.mood}</b></span>
+                    {round.read.price && <span className={`pen-chip is-${round.read.price.replace(/ /g, '-').toLowerCase()}`}>{round.read.price}</span>}
+                  </div>
                   <div className="pen-meter"><i style={{ width: `${round.read.meter}%` }} /></div>
                 </>
               )}
@@ -328,12 +339,17 @@ export function App() {
                 <span><small>Lowest</small> <b>${level?.lowest}</b></span>
               </div>
             </div>
-            <div className="pen-slot" aria-live="polite">
-              {note ? <p className="pen-alert">{note}</p>
-                : whisper ? <p className="pen-whisper">{whisper}</p>
-                  : <p className="pen-heard"><small>You</small> {avatar.heard || '\u00a0'}</p>}
+            <div className="pen-card pen-talk">
+              {note ? <p className="pen-alert">{note}</p> : whisper ? <p className="pen-whisper">{whisper}</p> : null}
+              <ol ref={talkBox} aria-live="polite" aria-label="The conversation">
+                {talk.length === 0 && !avatar.heard && <li className="pen-talk-empty">{screen === 'live' ? 'Open with something you can see.' : 'Your conversation shows here.'}</li>}
+                {talk.map((l, i) => (
+                  <li key={i} className={`is-${l.who}`}><small>{l.who === 'seller' ? 'You' : round.guest.name}</small>{l.text}</li>
+                ))}
+                {avatar.heard && <li className="is-seller is-live"><small>You</small>{avatar.heard}</li>}
+              </ol>
             </div>
-            <div className="pen-tag">
+            <div className="pen-tag pen-tag-mini">
               <img className="pen-photo" src={penPhoto} alt="The Kestrel No. 4, a steel pen with a soft black grip" />
               <h2>{pen?.name}</h2>
               <ul>{pen?.facts.map((f) => <li key={f}>{f}</li>)}</ul>
@@ -344,36 +360,49 @@ export function App() {
 
       {(screen === 'read' || screen === 'reveal') && round && (
         <main className="pen-marking">
-          <div className="pen-left">
-            <figure className="pen-marked">
-              <img src={IMAGES[round.guest.image]} alt={round.guest.name} />
-              {reveal?.clues.filter((c) => c.w > 0).map((c) => <span key={c.id} className={`pen-circle ${c.id === reveal.keyClue ? 'is-key' : ''}`} style={{ left: `${c.x}%`, top: `${c.y}%`, width: `${c.w}%`, height: `${c.h}%` }} aria-hidden="true" />)}
-            </figure>
+          <figure className="pen-marked">
+            <img src={IMAGES[round.guest.image]} alt={round.guest.name} />
+            {reveal?.clues.filter((c) => c.w > 0).map((c) => <span key={c.id} className={`pen-circle ${c.id === reveal.keyClue ? 'is-key' : ''}`} style={{ left: `${c.x}%`, top: `${c.y}%`, width: `${c.w}%`, height: `${c.h}%` }} aria-hidden="true" />)}
             {stamp && <div className="pen-stamp">{stamp}</div>}
-          </div>
-          <div className="pen-panel pen-notes">
+          </figure>
+          <div className="pen-notes">
             {!reveal && (
               <p className="pen-writing"><span className="call-spinner" aria-hidden="true" /> Writing your feedback…</p>
             )}
             {reveal && (
               <>
                 <div className="pen-head">
-                  <h2>{reveal.view.outcome === 'sold' ? reveal.view.earned > (reveal.view.price ?? 0) ? `Bulk order: $${reveal.view.earned}` : `Sold at $${reveal.view.price}` : reveal.view.outcome === 'walked' ? `${round.guest.name} walked` : 'No sale'}</h2>
+                  <div>
+                    <small>Guest {round.index + 1} of 3 · {round.guest.name}</small>
+                    <h2>{reveal.view.outcome === 'sold' ? reveal.view.earned > (reveal.view.price ?? 0) ? `Bulk order: $${reveal.view.earned}` : `Sold at $${reveal.view.price}` : reveal.view.outcome === 'walked' ? `${round.guest.name} walked` : 'No sale'}</h2>
+                  </div>
                   <p className="pen-score">{reveal.score.total}<small>/100</small></p>
                 </div>
+                <div className="pen-skillbars">
+                  {reveal.skills.map((k) => (
+                    <div key={k.label} className={k.score >= k.max * 0.75 ? 'is-good' : k.score <= k.max * 0.25 ? 'is-low' : ''}>
+                      <span>{k.label}</span><i><b style={{ width: `${(100 * k.score) / k.max}%` }} /></i><small>{k.score}/{k.max}</small>
+                    </div>
+                  ))}
+                </div>
                 <section className="pen-feedback">
-                  <h3>What you did</h3>
                   <p>{reveal.coach.did}</p>
-                  <h3>How to improve</h3>
+                  <h3>Next time</h3>
                   <ul>{reveal.coach.improve.map((tip) => <li key={tip}>{tip}</li>)}</ul>
                 </section>
+                {/* A strong round has no worst line worth learning from: the coach would pick a good one. */}
+                {(reveal.coach.best || (reveal.coach.worst && reveal.score.total < STRONG)) && (
+                  <div className="pen-quotes">
+                    {reveal.coach.best && <blockquote className="is-best"><small>Best line</small>“{reveal.coach.best}”</blockquote>}
+                    {reveal.coach.worst && reveal.score.total < STRONG && <blockquote className="is-worst"><small>Worst line</small>“{reveal.coach.worst}”</blockquote>}
+                  </div>
+                )}
                 {reveal.falseClaims.length > 0 && <p className="pen-red">False claims: {reveal.falseClaims.join('; ')}</p>}
-                <h3>What {round.guest.name} was hiding</h3>
-                <p>{reveal.motive}.</p>
-                <ul>{reveal.clues.map((c) => <li key={c.id} className={c.id === reveal.keyClue ? 'is-key' : ''}><b>{c.label}.</b> {c.points}</li>)}</ul>
-                <p><b>{reveal.view.price ? `${round.guest.name} would have paid $${reveal.top}.` : `${round.guest.name} might have paid up to $${reveal.top}.`}</b> {reveal.view.price ? (reveal.left ? `$${reveal.left} left on the table.` : 'You left nothing on the table.') : ''}</p>
-                {reveal.coach.best && <p><b>Best line:</b> "{reveal.coach.best}"</p>}
-                {reveal.coach.worst && <p className="pen-red"><b>Worst line:</b> "{reveal.coach.worst}"</p>}
+                <section className="pen-hiding">
+                  <h3>What {round.guest.name} was hiding: {reveal.motive}</h3>
+                  <ul>{reveal.clues.map((c) => <li key={c.id} className={c.id === reveal.keyClue ? 'is-key' : ''}><b>{c.label}.</b> {c.points}</li>)}</ul>
+                  <p><b>{reveal.view.price ? `${round.guest.name} would have paid $${reveal.top}.` : `${round.guest.name} might have paid up to $${reveal.top}.`}</b> {reveal.view.price ? (reveal.left ? `$${reveal.left} left on the table.` : 'You left nothing on the table.') : ''}</p>
+                </section>
                 <div className="pen-actions">
                   <button type="button" className="pen-go" onClick={() => void replay()}>Try again</button>
                   <button type="button" className="pen-go is-quiet" onClick={() => void goOn()}>{nextGuest ? 'Find another guest' : 'See your report card'}</button>
@@ -388,9 +417,11 @@ export function App() {
         <main className="pen-page pen-panel">
           <p className="pen-money">${report.money}</p>
           <h2>{report.sold} of 3 pens sold · ${report.left} left on the table</h2>
-          <div className="pen-skills">
-            {report.skills.map((s) => (
-              <div key={s.label}><span>{s.label}</span><meter min={0} max={s.max} value={s.score} /><b>{s.score}/{s.max}</b></div>
+          <div className="pen-skillbars">
+            {report.skills.map((k) => (
+              <div key={k.label} className={k.score >= k.max * 0.75 ? 'is-good' : k.score <= k.max * 0.25 ? 'is-low' : ''}>
+                <span>{k.label}</span><i><b style={{ width: `${(100 * k.score) / k.max}%` }} /></i><small>{k.score}/{k.max}</small>
+              </div>
             ))}
           </div>
           <p>You did {report.delivery.talkShare}% of the talking, asked {report.delivery.questions} questions, and used {report.delivery.fillers} filler words.</p>

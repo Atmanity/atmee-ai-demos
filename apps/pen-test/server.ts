@@ -8,7 +8,7 @@ import { llmAvailable, structured } from '../../server/llm.ts';
 import { closingEvent, direction, secretInstructions, TOOLS } from './engine/director.ts';
 import { avatarIdOf, guestById, type Guest } from './engine/guests.ts';
 import { COACH_SCHEMA, COACH_SYSTEM, coachPrompt, JUDGE_SYSTEM, judgePrompt, normalise, VERDICT_SCHEMA, wordRules } from './engine/judge.ts';
-import { applyVerdict, clockFor, earned, LEVELS, mayLeave, levelById, moneyLeft, newRound, PEN, LIST_PRICE, pickGuests, plainCoach, report, score, topNow, type Coach, type Level, type Round, type Step, type Verdict, readOf } from './engine/rules.ts';
+import { applyVerdict, SKILLS, clockFor, earned, LEVELS, mayLeave, levelById, moneyLeft, newRound, PEN, LIST_PRICE, pickGuests, plainCoach, report, score, topNow, type Coach, type Level, type Round, type Step, type Verdict, readOf } from './engine/rules.ts';
 
 const ID = 'pen-test';
 // The plan's session cap: the clock has to end inside it.
@@ -184,6 +184,7 @@ const app: AppServer = {
       res.json({
         view: view(run, index), clues: guest.clues, keyClue: round.motive.clue, motive: round.motive.label, top: round.price === null ? round.motive.top : topNow(round), left: moneyLeft(round),
         score: round.score, falseClaims: round.falseClaims, coach: round.coach, board: scoreboard(run),
+        skills: SKILLS.map((k) => ({ label: k.label, max: k.max, score: round.score![k.key] })),
         next: index + 1 < run.rounds.length ? view(run, index + 1) : null,
       });
     });
