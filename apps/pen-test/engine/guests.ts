@@ -88,11 +88,11 @@ export const GUESTS: Guest[] = [
   },
   {
     id: 'theo', name: 'Theo', role: 'Startup founder', avatarId: '528e3e99-d035-4065-80a2-07955f20e3e5', image: 'theo', falseClue: true,
-    spotted: 'Someone in a worn hoodie, clutching a battered laptop.',
+    spotted: 'Someone in a worn hoodie, a stickered laptop under one hand.',
     clues: [
-      { id: 'hoodie', label: 'Worn hoodie', x: 20, y: 74, w: 28, h: 28, points: 'A false clue: it reads as no budget, and he has plenty.' },
-      { id: 'laptop', label: 'Stickered laptop', x: 59, y: 85, w: 54, h: 31, points: 'He is building something: a company, with a team.' },
-      { id: 'earbuds', label: 'Earbuds in, between calls', x: 65, y: 37, w: 10, h: 12, points: 'Busy and in charge, with no time for small talk.' },
+      { id: 'hoodie', label: 'Worn hoodie', x: 14, y: 78, w: 24, h: 24, points: 'A false clue: it reads as no budget, and he has plenty.' },
+      { id: 'laptop', label: 'Stickered laptop', x: 56, y: 88, w: 52, h: 24, points: 'He is building something: a company, with a team.' },
+      { id: 'earbuds', label: 'Earbuds in, between calls', x: 67, y: 41, w: 8, h: 11, points: 'Busy and in charge, with no time for small talk.' },
     ],
     motives: [
       { id: 'gifts', label: '40 welcome gifts for his team', need: 'Your company just hit forty people and you want a small gift for each of them this week. You have the budget and no time to shop.', top: 24, objection: 'Nobody uses pens.', haggles: true, counter: 20, clue: 'laptop', quantity: 40 },
