@@ -53,15 +53,27 @@ describe('the sale gate', () => {
     expect(r.outcome).toBe('live');
   });
 
-  it('sells a fitted pitch once asked, and a haggler pushes back once', () => {
+  it('sells a fitted pitch once asked, after a haggler bargains twice', () => {
     const r = round();
     expect(r.motive.haggles).toBe(true);
     say(r, 'This pen writes on wet paper, so your site notes survive the rain.', fit);
     say(r, 'A pencil smudges, but this ink stays on the sheet.', { ...fit, handledObjection: true });
     expect(say(r, 'Eighteen dollars, shall we do it?', ask).haggle).toBe(true);
     expect(r.outcome).toBe('live');
-    expect(say(r, 'Eighteen dollars and it is yours, deal?', ask).sold).toBe(18);
+    expect(say(r, 'Eighteen dollars and it is yours, deal?', ask).haggle).toBe(true);
+    expect(say(r, 'Eighteen is my best price, deal?', ask).sold).toBe(18);
     expect(r.price).toBe(18);
+  });
+
+  it('wants the pen before bargaining, and names a price above the lowest', () => {
+    const r = round();
+    say(r, 'This pen writes on wet paper, so your site notes survive the rain.', fit);
+    say(r, 'A pencil smudges, but this ink stays on the sheet.', { ...fit, handledObjection: true });
+    const step = say(r, 'Twenty-five dollars, shall we do it?', ask);
+    expect(step.haggle).toBe(true);
+    expect(step.counter).toBeGreaterThanOrEqual(r.level.lowest);
+    expect(step.counter).toBeLessThan(25);
+    expect(say(r, 'Twenty-five dollars, deal?', ask).sold).toBeUndefined();
   });
 
   it('refuses an offer below the lowest price', () => {
@@ -101,7 +113,7 @@ describe('money and scores', () => {
     const r = round('walkin', 1);
     say(r, 'Inspectors want ink. This pen does not smudge.', fit);
     say(r, 'Any cheap pen smudges in rain, this one does not.', { ...fit, handledObjection: true });
-    say(r, `${price} dollars, deal?`, ask);
+    for (let i = 0; i < 3 && r.outcome === 'live'; i++) say(r, `${price} dollars, deal?`, ask);
     r.score = score(r);
     return r;
   };

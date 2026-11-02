@@ -59,6 +59,7 @@ export interface Round {
   objectionHandled: boolean;
   askedForSale: boolean;
   haggled: boolean;
+  pushbacks: number;
   traded: boolean;
   falseClaims: string[];
   pressure: number;
@@ -83,7 +84,7 @@ export function newRound(guest: Guest, level: Level, pick = Math.random): Round 
   return {
     guestId: guest.id, motive: guest.motives[Math.floor(pick() * guest.motives.length)], level, outcome: 'live',
     interest: 20, offer: null, price: null, lines: [], needUncovered: false, needAskedFirst: false, pitched: false, fitPitches: 0,
-    objectionRaised: false, objectionHandled: false, askedForSale: false, haggled: false, traded: false, falseClaims: [], pressure: 0, sellerLines: 0,
+    objectionRaised: false, objectionHandled: false, askedForSale: false, haggled: false, pushbacks: 0, traded: false, falseClaims: [], pressure: 0, sellerLines: 0,
   };
 }
 
@@ -135,7 +136,8 @@ export interface Step {
   refused?: number;          // an offer under the level's lowest price
   sold?: number;             // the sale just closed, at this price
   walked?: boolean;
-  haggle?: boolean;          // the guest pushes back on the price once
+  haggle?: boolean;          // the guest wants the pen and bargains on the price
+  counter?: number;          // the price the guest names
   objection?: boolean;       // the guest should voice their objection now
   challenge?: string;        // a claim to challenge
   revealNeed?: boolean;      // a good question: let a piece of the need out
@@ -180,11 +182,14 @@ export function applyVerdict(round: Round, text: string, v: Verdict): Step {
   if (!round.objectionRaised && round.fitPitches && round.interest >= 30) {
     round.objectionRaised = true;
     step.objection = true;
-  } else if (v.askedForSale && gateOpen(round)) {
+  } else if (v.askedForSale && soldOnThePen(round)) {
     const offer = round.offer ?? LIST_PRICE;
-    if (round.motive.haggles && !round.haggled) {
+    // Agreeing to the pen is not agreeing to the price: the guest bargains first.
+    if (round.pushbacks < pushbacksOf(round) || offer > topNow(round)) {
+      round.pushbacks++;
       round.haggled = true;
       step.haggle = true;
+      step.counter = counterOffer(round);
     } else {
       round.offer = offer;
       round.price = offer;
@@ -194,6 +199,19 @@ export function applyVerdict(round: Round, text: string, v: Verdict): Step {
   }
   return step;
 }
+
+/** The guest wants this pen and only the price is left to settle. */
+const soldOnThePen = (round: Round) => round.outcome === 'live' && round.fitPitches > 0
+  && round.interest >= round.level.interestToBuy && (round.offer ?? LIST_PRICE) >= round.level.lowest;
+
+/** How many times the guest pushes on price before taking a fair offer. */
+const pushbacksOf = (round: Round) => (round.motive.haggles ? 2 : round.level.seconds <= 30 ? 0 : 1);
+
+/** The guest's own number: low at first, closer to their top each time. */
+const counterOffer = (round: Round) => {
+  const top = topNow(round);
+  return Math.max(round.level.lowest, Math.round(top * (round.pushbacks > 1 ? 0.92 : 0.8)));
+};
 
 /** The guest may say yes: they want it, it fits, and the price is within reach. */
 export function gateOpen(round: Round): boolean {

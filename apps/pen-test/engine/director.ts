@@ -37,7 +37,7 @@ export function direction(round: Round, step: Step = {}): string {
   else {
     parts.push('You have NOT decided. Do not agree to buy.');
     if (step.challenge) parts.push(`That sounded untrue: challenge this claim briefly: ${step.challenge}.`);
-    else if (step.haggle) parts.push('Ask for a better price, once, in a few words. Do not agree yet.');
+    else if (step.haggle) parts.push(`You want the pen, so say so, but the price has to come down: offer $${step.counter} a pen. Do not close the deal yet.`);
     else if (step.objection) parts.push(`Say your objection now: "${round.motive.objection}"`);
     else if (step.refused) parts.push(`They offered $${step.refused}, which sounds suspiciously cheap. Say so briefly.`);
     else if (step.revealNeed) parts.push('That was a fair question: let one small piece of your need out, in a few words.');
