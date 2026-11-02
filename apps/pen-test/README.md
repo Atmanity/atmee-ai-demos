@@ -37,14 +37,15 @@ page (apps/pen-test/page)            server (server.ts)                 Atmee
 - **No server-side transcript.** The page relays lines, so a score could be forged. Accepted until
   there is a public ranking.
 
-## Open platform problem
+## Guests leaving the frame
 
-Photorealistic guests can leave the frame while listening, and the render shows only the mall. Ray
-and Marisol did it; Marisol did it in a busy mall, an empty mall, against a plain wall and with a
-larger face, and previews never show it. Her latest portrait, chest-up with a chart and no corridor
-behind her, held for all 17 frames of one test, which is too little to call it fixed. The user sees
-no such thing in production chat. Session start applies the same render settings on every route,
-so the suspect is the runtime behind each kind of session; that is not yet confirmed.
+With `CAUSEUR_GENERATED_AVATAR_PROMPTS` on, Causeur's `avatar2` writer directs the renderer from the
+persona, the emotion and the recent conversation. Words about walking, leaving or other people turn
+into what is on screen: "walking through a mall" and "I need to get going" walked guests away, and
+"the person in front of you" brought strangers into the shot. Personas now describe a calm video
+call, and guests never talk about leaving. In the worst case, a bad seller, Marisol then held for
+15 of 24 samples and left again near the end, so the risk is reduced, not gone. Her background is
+still a corridor the writer can read as a place to go. Keep this wording in any new guest.
 
 ## Live runs, 2026-11-02 (local, production API)
 

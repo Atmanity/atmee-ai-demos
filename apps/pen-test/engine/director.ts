@@ -5,15 +5,15 @@ import { PEN, gateOpen, topNow, type Round, type Step } from './rules.ts';
 
 export const TOOLS: AppTool[] = [{
   type: 'function', name: 'decide',
-  description: 'Says what you decided. Call it when you walk away for good ("walk"), or when GUEST DIRECTION says YOU MAY BUY and you agree ("buy").',
-  parameters: { type: 'object', properties: { choice: { type: 'string', description: 'buy or walk' } }, required: ['choice'] },
+  description: 'Says what you decided. Call it when you are done talking for good ("end"), or when GUEST DIRECTION says YOU MAY BUY and you agree ("buy").',
+  parameters: { type: 'object', properties: { choice: { type: 'string', description: 'buy or end' } }, required: ['choice'] },
   'x-atmee': { mode: 'notify' },
 }];
 
 /** The secrets of this run, sent with the session so the seller's page never holds them. */
 export function secretInstructions(round: Round): string {
   return [
-    'You are a passer-by. The seller always speaks first and leads the conversation.',
+    'You stay calm and still, facing the camera. The seller always speaks first and leads the conversation.',
     'Be brief: most replies are under eight words, one sentence at most. Never ask what they want, never offer help, never fill a silence, never carry the conversation. Only answer what was said.',
     `Your private need, which you never state outright: ${round.motive.need}`,
     'Let a small piece of it out only when the seller asks a real question about your day, your work or what you use.',
@@ -24,7 +24,7 @@ export function secretInstructions(round: Round): string {
   ].join('\n');
 }
 
-const mood = (interest: number) => (interest < 25 ? 'You are not interested and want to keep walking.'
+const mood = (interest: number) => (interest < 25 ? 'You are not interested.'
   : interest < 45 ? 'You are mildly curious, but still guarded.'
     : interest < 65 ? 'You are warming up, and you listen properly now.'
       : 'You like this pen and can see yourself using it.');
@@ -33,7 +33,7 @@ const mood = (interest: number) => (interest < 25 ? 'You are not interested and 
 export function direction(round: Round, step: Step = {}): string {
   const parts = ['GUEST DIRECTION:', mood(round.interest)];
   if (step.sold) parts.push(`YOU MAY BUY at $${step.sold}. Say yes in a few words and call decide with buy.`);
-  else if (step.walked) parts.push('You have had enough. Say a few words, leave, and call decide with walk.');
+  else if (step.walked) parts.push('You have had enough. Say you are not interested and call decide with end.');
   else {
     parts.push('You have NOT decided. Do not agree to buy.');
     if (step.challenge) parts.push(`That sounded untrue: challenge this claim briefly: ${step.challenge}.`);
@@ -44,11 +44,11 @@ export function direction(round: Round, step: Step = {}): string {
     else if (gateOpen(round)) parts.push('If they ask you to buy, you would consider it.');
     if (round.offer !== null && round.offer > topNow(round)) parts.push(`$${round.offer} is more than you want to pay.`);
   }
-  parts.push('Reply in under eight words.');
+  parts.push('Reply in under eight words. Never say you are leaving or in a hurry.');
   return parts.join(' ');
 }
 
 /** After a sale, or when the guest walks, the guest speaks one last time at once. */
 export const closingEvent = (step: Step) => (step.sold
   ? `You have decided to buy at $${step.sold}. Say yes in a few words and take the pen.`
-  : 'You have had enough. Say a few words and walk away.');
+  : 'You have had enough. Say you are not interested.');

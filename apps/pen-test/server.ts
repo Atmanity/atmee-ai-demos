@@ -147,7 +147,7 @@ const app: AppServer = {
     router.post('/run/:run/:n/decide', (req, res) => {
       const found = roundOf(req.params.run, req.params.n);
       if (!found) return void res.status(404).json({ error: 'not_found' });
-      if (String(req.body?.choice ?? '').toLowerCase().includes('walk') && found.round.outcome === 'live' && mayLeave(found.round)) found.round.outcome = 'walked';
+      if (/walk|end/.test(String(req.body?.choice ?? '').toLowerCase()) && found.round.outcome === 'live' && mayLeave(found.round)) found.round.outcome = 'walked';
       res.json({ view: view(found.run, found.index) });
     });
 

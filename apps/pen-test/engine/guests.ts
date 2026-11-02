@@ -42,7 +42,7 @@ export const GUESTS: Guest[] = [
       { id: 'clipboard', label: 'Clipboard of site notes', x: 49, y: 93, w: 48, h: 21, points: 'Paper records he signs and has to trust.' },
     ],
     motives: [
-      { id: 'weather', label: 'A pen that works outdoors in the wet', need: 'Pens die on you on site in the cold and the rain, so you use a pencil. A pen that writes on a wet clipboard would actually help.', top: 22, objection: "A pencil's free.", haggles: true, clue: 'pencil' },
+      { id: 'weather', label: 'A pen that works outdoors in the wet', need: 'Pens die on you at work in the cold and the rain, so you use a pencil. A pen that writes on a wet clipboard would actually help.', top: 22, objection: "A pencil's free.", haggles: true, clue: 'pencil' },
       { id: 'signoff', label: 'A pen for permanent site sign-offs', need: 'Inspectors now refuse pencil on the safety sheets you sign off. You need ink that does not smudge in the rain.', top: 24, objection: 'Any cheap pen signs a sheet.', haggles: false, clue: 'clipboard' },
     ],
   },
