@@ -1,0 +1,114 @@
+/* The Pen Test: you are standing in the mall. The world fills the screen; everything else floats in it. */
+:root {
+  --ink: #1f4fd0; --night: #0b1228; --glass: rgba(11, 18, 40, .58); --edge: rgba(255, 255, 255, .22); --paper: #f7f6f1; --red: #d3232f; --ok: #14764f; --mute: #5c6680;
+  --display: 'Bricolage Grotesque', 'Avenir Next', sans-serif; --body: 'Source Sans 3', 'Helvetica Neue', sans-serif; --mono: 'JetBrains Mono', Menlo, monospace;
+  --gut-l: max(16px, env(safe-area-inset-left, 0px)); --gut-r: max(16px, env(safe-area-inset-right, 0px));
+}
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body { margin: 0; background: var(--night); color: #fff; font: 17px/1.5 var(--body); overflow: hidden; }
+.pen { position: fixed; inset: 0; overflow: hidden; isolation: isolate; }
+h1, h2, h3 { font-family: var(--display); line-height: 1.08; margin: 0; text-wrap: balance; }
+.pen-world { position: absolute; inset: -4%; width: 108%; height: 108%; object-fit: cover; z-index: -1; filter: blur(14px) brightness(.62) saturate(1.05); transition: filter .8s; }
+.is-door .pen-world { filter: blur(3px) brightness(.5); animation: drift 40s ease-in-out infinite alternate; }
+@keyframes drift { to { transform: scale(1.08); } }
+.pen-go { font: 700 1.1rem var(--display); background: #fff; color: var(--night); border: 0; border-radius: 999px; padding: 14px 28px; cursor: pointer; }
+.pen-go:hover:not(:disabled) { background: #dfe7ff; }
+.pen-go:disabled { opacity: .4; cursor: default; }
+.pen-kicker { font: 500 .8rem var(--mono); letter-spacing: .1em; text-transform: uppercase; margin: 0; opacity: .85; }
+:focus-visible { outline: 3px solid #9db6ff; outline-offset: 2px; }
+
+/* The hand that holds the pen: the seller's own, in every scene. */
+.pen-hand { position: absolute; right: -9vmin; bottom: -30vmin; width: 74vmin; pointer-events: none; z-index: 6; filter: drop-shadow(0 12px 28px rgba(0, 0, 0, .45)); transition: transform .6s; }
+.pen-hand.is-down { transform: translateY(45%); }
+
+/* Front door */
+.pen-door { position: absolute; inset: 0; overflow-y: auto; padding-block: 16px 32px; padding-left: var(--gut-l); padding-right: var(--gut-r); display: flex; flex-direction: column; gap: 22px; }
+.pen-door > * { position: relative; z-index: 7; }
+.pen-door > .pen-hand { position: fixed; z-index: 1; }
+.pen-door h1 { font-size: clamp(3rem, 10vw, 6.4rem); letter-spacing: -.025em; margin-top: 6px; }
+.pen-pitch { margin-top: clamp(4px, 5vh, 56px); max-width: 760px; }
+.pen-pitch > p:last-child { font-size: 1.25rem; max-width: 44ch; margin: 10px 0 0; }
+.pen-choices { display: flex; flex-wrap: wrap; gap: 14px; align-items: stretch; max-width: 1040px; }
+.pen-levels { flex: 2 1 420px; min-width: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.pen-levels button { text-align: left; background: var(--glass); backdrop-filter: blur(10px); border: 1px solid var(--edge); border-radius: 12px; padding: 12px 14px; cursor: pointer; display: grid; gap: 1px; font: inherit; color: #fff; }
+.pen-levels button.is-on { background: #fff; color: var(--night); }
+.pen-levels small { opacity: .8; line-height: 1.25; }
+.pen-time { font: 700 1.7rem var(--mono); }
+.pen-tag { background: var(--paper); color: var(--night); border-radius: 4px; padding: 12px 16px; flex: 1 1 250px; min-width: 0; transform: rotate(-1deg); box-shadow: 0 10px 28px rgba(0, 0, 0, .35); }
+.pen-tag ul { margin: 6px 0 0; padding-left: 18px; font-size: .95rem; line-height: 1.35; }
+.pen-price { font: 700 .9rem var(--mono); color: var(--ink); margin: 2px 0 0; }
+.pen-start { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; }
+
+/* The floor: the guest stands in the mall, fading into it at the edges. */
+.pen-floor { position: absolute; inset: 0; }
+.pen-stage { position: absolute; top: 0; bottom: 0; left: 50%; height: 100%; aspect-ratio: 1; transform: translateX(-50%); box-shadow: 0 0 70px rgba(0, 0, 0, .5); }
+
+.pen-video.pen-video { position: absolute; inset: 0; border-radius: 0; background: transparent; }
+.pen-video::after { display: none; }
+.pen-subtitle { position: absolute; left: 50%; bottom: 13%; transform: translateX(-50%); width: min(620px, calc(100% - 32px)); margin: 0; z-index: 7; text-align: center; font-size: 1.25rem; font-weight: 600; text-shadow: 0 2px 8px #000, 0 0 2px #000; }
+
+.pen-hold { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 2; transition: opacity .18s; }
+.pen-hold.is-off { opacity: 0; }
+.pen-walk { position: absolute; inset: 0; overflow: hidden; background: var(--night); z-index: 4; }
+.pen-stroll { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform-origin: 50% 46%; animation: stroll 3.4s ease-in-out infinite alternate, advance 30s linear forwards; }
+@keyframes stroll { from { translate: -.7% .5%; } to { translate: .7% -.5%; } }
+@keyframes advance { from { scale: 1.04; } to { scale: 1.6; } }
+.pen-approach { position: absolute; left: 50%; bottom: 0; height: 100%; aspect-ratio: 1; opacity: 0; transform-origin: 50% 50%; -webkit-mask-image: radial-gradient(closest-side, #000 72%, transparent); mask-image: radial-gradient(closest-side, #000 72%, transparent); animation: spot 11s 3s cubic-bezier(.3, 0, .5, 1) forwards; }
+@keyframes spot { from { opacity: 0; transform: translateX(-50%) scale(.22); } 18% { opacity: 1; } to { opacity: 1; transform: translateX(-50%) scale(1); } }
+.pen-walk p { position: absolute; left: 50%; bottom: 7%; transform: translateX(-50%); margin: 0; width: min(560px, calc(100% - 32px)); text-align: center; background: var(--glass); backdrop-filter: blur(8px); padding: 8px 14px; border-radius: 10px; font-size: 1.1rem; }
+
+.pen-clock { position: absolute; top: max(14px, env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); font: 700 2.5rem/1 var(--mono); padding: 8px 18px; border-radius: 12px; background: var(--glass); backdrop-filter: blur(10px); z-index: 7; }
+.pen-clock.is-urgent { color: #fff; background: var(--red); }
+.pen-tally { position: absolute; top: max(14px, env(safe-area-inset-top, 0px)); right: var(--gut-r); text-align: right; font: 700 1rem var(--mono); background: var(--glass); backdrop-filter: blur(10px); padding: 8px 12px; border-radius: 10px; z-index: 7; }
+.pen-tally small { display: block; font: 400 .82rem var(--body); opacity: .85; }
+.pen-cue { position: absolute; left: 50%; bottom: 13%; transform: translateX(-50%); margin: 0; z-index: 7; font: 700 clamp(1.3rem, 4vw, 2rem) var(--display); background: #fff; color: var(--night); padding: 8px 20px; border-radius: 999px; animation: pulse 1.4s ease-in-out infinite alternate; white-space: nowrap; }
+@keyframes pulse { to { transform: translateX(-50%) scale(1.05); } }
+.pen-note { position: absolute; top: 88px; left: 50%; transform: translateX(-50%); width: min(460px, calc(100% - 32px)); margin: 0; z-index: 7; background: var(--red); color: #fff; font-weight: 600; text-align: center; padding: 6px 12px; border-radius: 8px; }
+.pen-door .pen-note { position: relative; top: 0; left: 0; transform: none; }
+.pen-heard { position: absolute; left: 50%; bottom: 6%; transform: translateX(-50%); width: min(620px, calc(100% - 32px)); margin: 0; z-index: 7; text-align: center; font-size: .98rem; opacity: .85; text-shadow: 0 1px 6px #000; }
+.pen-tag.is-held { position: absolute; left: var(--gut-l); bottom: 16px; width: 248px; z-index: 7; flex: none; padding: 10px 12px; opacity: .95; transform: rotate(-2deg); }
+.pen-tag.is-held ul { font-size: .84rem; }
+.pen-stamp { position: absolute; top: 42%; left: 50%; transform: translate(-50%, -50%) rotate(-7deg); z-index: 8; font: 700 clamp(2rem, 8vw, 4.6rem) var(--display); color: var(--red); border: 6px solid var(--red); border-radius: 10px; padding: 6px 22px; background: rgba(255, 255, 255, .92); white-space: nowrap; animation: thud .28s ease-out; }
+@keyframes thud { from { transform: translate(-50%, -50%) rotate(-7deg) scale(1.9); opacity: 0; } }
+
+/* Paper: the seller's clipboard, held up over the blurred mall. */
+.pen-sheet, .pen-marking { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-height: calc(100dvh - 24px); overflow-y: auto; background: var(--paper); color: var(--night); border-radius: 6px; box-shadow: 0 24px 70px rgba(0, 0, 0, .55); }
+.pen-sheet { width: min(640px, calc(100% - 32px)); padding: 26px; display: grid; gap: 12px; }
+.pen-sheet p { margin: 0; }
+.pen-sheet .pen-go, .pen-notes .pen-go { background: var(--ink); color: #fff; justify-self: start; }
+.pen-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.pen-chips button { font: inherit; background: #fff; border: 2px solid #d7dae3; border-radius: 8px; padding: 8px 12px; cursor: pointer; color: inherit; text-align: left; }
+.pen-chips button.is-on { border-color: var(--ink); background: #e6ecfb; }
+.pen-marking { width: min(1080px, calc(100% - 32px)); padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+.pen-marked { position: relative; margin: 0; align-self: start; background-size: cover; background-position: center; border-radius: 4px; overflow: hidden; }
+.pen-marked img { display: block; width: 100%; border-radius: 4px; }
+.pen-circle { position: absolute; width: 21%; aspect-ratio: 1.3; transform: translate(-50%, -50%) rotate(-6deg); border: 3px solid var(--red); border-radius: 50%; opacity: .8; }
+.pen-circle.is-key { border-width: 5px; opacity: 1; }
+.pen-notes { min-width: 0; display: grid; gap: 8px; align-content: start; }
+.pen-notes p { margin: 0; }
+.pen-notes ul { margin: 0; padding-left: 20px; }
+.pen-notes li.is-key b { color: var(--red); }
+.pen-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.pen-red { color: var(--red); }
+.pen-ok { color: var(--ok); font-weight: 600; }
+.pen-score { font: 700 2.2rem/1 var(--mono); color: var(--red); transform: rotate(-3deg); }
+.pen-score small { font-size: .9rem; }
+.pen-money { font: 700 clamp(3.4rem, 12vw, 5rem)/1 var(--mono); color: var(--ink); }
+.pen-skills { display: grid; gap: 6px; }
+.pen-skills div { display: grid; grid-template-columns: 150px minmax(0, 1fr) 54px; gap: 10px; align-items: center; }
+.pen-skills meter { width: 100%; }
+.pen-drill { background: #fbe7e9; padding: 12px 14px; border-radius: 8px; }
+
+@media (max-width: 760px) {
+  .pen-marking { grid-template-columns: minmax(0, 1fr); }
+  .pen-stage { -webkit-mask-image: none; mask-image: none; }
+  .pen-hand { width: 92vmin; right: -22vmin; bottom: -38vmin; }
+  .pen-tag.is-held { width: 190px; }
+  .pen-tag.is-held ul { display: none; }
+  .pen-door > .pen-hand { display: none; }
+  .pen-clock { font-size: 2rem; }
+  .pen-tally { padding: 6px 8px; font-size: .85rem; }
+  .pen-skills div { grid-template-columns: 110px minmax(0, 1fr) 46px; }
+}
+@media (prefers-reduced-motion: reduce) { .pen-world, .pen-stroll, .pen-approach, .pen-cue, .pen-stamp { animation-duration: .01s; animation-iteration-count: 1; } }
