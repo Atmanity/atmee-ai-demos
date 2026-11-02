@@ -265,3 +265,11 @@ an app acting on speech acts twice on typed text.
 - `lk.transcription_final` is now set on the avatar's captions (it was always
   interim on 2026-10-22); the user's interim transcripts are separate streams of
   one segment with the final flag on the last.
+
+## No way to start a session without the welcome
+
+Every avatar greets on arrival, and neither the avatar settings nor `POST /v1/session` can stop it. An app
+where the user speaks first (The Pen Test) has to hide the greeting: a still photo over the video, volume 0
+on the audio element (`muted` is reset by LiveKit), and the greeting's text filtered from the captions.
+Causeur's `WELCOME` setting is server-wide, and `session.start.modules.welcome` takes only instructions.
+Ask: `modules.welcome: false` in Causeur and an option on `POST /v1/session` that passes it through.
