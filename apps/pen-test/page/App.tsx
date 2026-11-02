@@ -1,7 +1,7 @@
 // The Pen Test: study a guest, open the conversation, sell the pen.
 //
 // The platform has every avatar greet when it arrives, and here the seller speaks first. So the
-// guest arrives behind their still photo, with sound off and the seller's mic closed. Once that
+// guest arrives behind their still photo, with volume at zero and the seller's mic closed. Once that
 // greeting has passed the mic opens and the clock starts. The seller never hears it.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BackToApps, HostVideo, useAvatar, type ToolCall } from '../../../src/kit/index.ts';
@@ -72,7 +72,7 @@ export function App() {
     live.current.finishing = true;
     setStamp('WALKED AWAY');
     void avatarRef.current?.end();
-    setTimeout(() => finish.current('walked'), 2000);
+    finish.current('walked');
   });
 
   const onUserSaid = useCallback(async (text: string) => {
@@ -133,7 +133,8 @@ export function App() {
     const slowTimer = setTimeout(() => setSlow(true), SLOW_MEET_MS);
     void (async () => {
       const a = avatarRef.current;
-      if (a.audioRef.current) a.audioRef.current.muted = true;
+      // Volume, not muted: LiveKit resets `muted` when it attaches the track.
+      if (a.audioRef.current) a.audioRef.current.volume = 0;
       const { direction } = await (await fetch(`${API}${roundPath.current}/direction`)).json();
       if (cancelled) return;
       a.state(direction);
@@ -161,7 +162,7 @@ export function App() {
       if ((!a.speaking && faceReady) || since > MAX_HIDDEN_MS) {
         clearInterval(id);
         live.current.arrived = true;
-        if (a.audioRef.current) a.audioRef.current.muted = false;
+        if (a.audioRef.current) a.audioRef.current.volume = 1;
         a.setMic(true);
         setSeconds(level?.seconds ?? 60);
         setLeft(level?.seconds ?? 60);
@@ -320,45 +321,49 @@ export function App() {
         </main>
       )}
 
-      {screen === 'read' && round && options && (
-        <main className="pen-page pen-panel">
-          <h2>What did you read in {round.guest.name}?</h2>
-          <h3>What were they really after?</h3>
-          <div className="pen-chips">{options.motives.map((m) => <button type="button" key={m} className={pick.motive === m ? 'is-on' : ''} onClick={() => setPick((p) => ({ ...p, motive: m }))}>{m}</button>)}</div>
-          <h3>Which clue told you?</h3>
-          <div className="pen-chips">{options.clues.map((c) => <button type="button" key={c.id} className={pick.clue === c.id ? 'is-on' : ''} onClick={() => setPick((p) => ({ ...p, clue: c.id }))}>{c.label}</button>)}</div>
-          <button type="button" className="pen-go" disabled={!pick.motive || !pick.clue} onClick={() => void submitRead()}>See what you missed</button>
-        </main>
-      )}
-
-      {screen === 'reveal' && reveal && round && (
+      {(screen === 'read' || screen === 'reveal') && round && (
         <main className="pen-marking">
-          <figure className="pen-marked">
+          <figure className={`pen-marked ${reveal ? 'is-marked' : ''}`}>
             <img src={IMAGES[round.guest.image]} alt={round.guest.name} />
-            {reveal.clues.map((c) => <span key={c.id} className={`pen-circle ${c.id === reveal.keyClue ? 'is-key' : ''}`} style={{ left: `${c.x}%`, top: `${c.y}%` }} aria-hidden="true" />)}
+            {stamp && <div className="pen-stamp">{stamp}</div>}
+            {reveal?.clues.map((c) => <span key={c.id} className={`pen-circle ${c.id === reveal.keyClue ? 'is-key' : ''}`} style={{ left: `${c.x}%`, top: `${c.y}%` }} aria-hidden="true" />)}
           </figure>
           <div className="pen-panel pen-notes">
-            <div className="pen-head">
-              <h2>{reveal.view.outcome === 'sold' ? reveal.view.earned > (reveal.view.price ?? 0) ? `Bulk order: $${reveal.view.earned}` : `Sold at $${reveal.view.price}` : reveal.view.outcome === 'walked' ? `${round.guest.name} walked` : 'No sale'}</h2>
-              <p className="pen-score">{reveal.score.total}<small>/100</small></p>
-            </div>
-            <section className="pen-feedback">
-              <h3>What you did</h3>
-              <p>{reveal.coach.did}</p>
-              <h3>How to improve</h3>
-              <ul>{reveal.coach.improve.map((tip) => <li key={tip}>{tip}</li>)}</ul>
-            </section>
-            {reveal.falseClaims.length > 0 && <p className="pen-red">False claims: {reveal.falseClaims.join('; ')}</p>}
-            <h3>What {round.guest.name} was hiding</h3>
-            <p>{reveal.motive}. <span className={reveal.read.motive ? 'pen-ok' : 'pen-red'}>{reveal.read.motive ? 'You read it.' : 'You missed it.'}</span></p>
-            <ul>{reveal.clues.map((c) => <li key={c.id} className={c.id === reveal.keyClue ? 'is-key' : ''}><b>{c.label}.</b> {c.points}</li>)}</ul>
-            <p><b>{reveal.view.price ? `${round.guest.name} would have paid $${reveal.top}.` : `${round.guest.name} might have paid up to $${reveal.top}.`}</b> {reveal.view.price ? (reveal.left ? `$${reveal.left} left on the table.` : 'You left nothing on the table.') : ''}</p>
-            {reveal.coach.best && <p><b>Best line:</b> "{reveal.coach.best}"</p>}
-            {reveal.coach.worst && <p className="pen-red"><b>Worst line:</b> "{reveal.coach.worst}"</p>}
-            <div className="pen-actions">
-              <button type="button" className="pen-go" onClick={() => void replay()}>Try again</button>
-              <button type="button" className="pen-go is-quiet" onClick={() => void goOn()}>{reveal.next ? 'Next guest' : 'See your report card'}</button>
-            </div>
+            {!reveal && options && (
+              <>
+                <h2>What did you read in {round.guest.name}?</h2>
+                <h3>What were they really after?</h3>
+                <div className="pen-chips">{options.motives.map((m) => <button type="button" key={m} className={pick.motive === m ? 'is-on' : ''} onClick={() => setPick((p) => ({ ...p, motive: m }))}>{m}</button>)}</div>
+                <h3>Which clue told you?</h3>
+                <div className="pen-chips">{options.clues.map((c) => <button type="button" key={c.id} className={pick.clue === c.id ? 'is-on' : ''} onClick={() => setPick((p) => ({ ...p, clue: c.id }))}>{c.label}</button>)}</div>
+                <button type="button" className="pen-go" disabled={!pick.motive || !pick.clue} onClick={() => void submitRead()}>See your feedback</button>
+              </>
+            )}
+            {reveal && (
+              <>
+                <div className="pen-head">
+                  <h2>{reveal.view.outcome === 'sold' ? reveal.view.earned > (reveal.view.price ?? 0) ? `Bulk order: $${reveal.view.earned}` : `Sold at $${reveal.view.price}` : reveal.view.outcome === 'walked' ? `${round.guest.name} walked` : 'No sale'}</h2>
+                  <p className="pen-score">{reveal.score.total}<small>/100</small></p>
+                </div>
+                <section className="pen-feedback">
+                  <h3>What you did</h3>
+                  <p>{reveal.coach.did}</p>
+                  <h3>How to improve</h3>
+                  <ul>{reveal.coach.improve.map((tip) => <li key={tip}>{tip}</li>)}</ul>
+                </section>
+                {reveal.falseClaims.length > 0 && <p className="pen-red">False claims: {reveal.falseClaims.join('; ')}</p>}
+                <h3>What {round.guest.name} was hiding</h3>
+                <p>{reveal.motive}. <span className={reveal.read.motive ? 'pen-ok' : 'pen-red'}>{reveal.read.motive ? 'You read it.' : 'You missed it.'}</span></p>
+                <ul>{reveal.clues.map((c) => <li key={c.id} className={c.id === reveal.keyClue ? 'is-key' : ''}><b>{c.label}.</b> {c.points}</li>)}</ul>
+                <p><b>{reveal.view.price ? `${round.guest.name} would have paid $${reveal.top}.` : `${round.guest.name} might have paid up to $${reveal.top}.`}</b> {reveal.view.price ? (reveal.left ? `$${reveal.left} left on the table.` : 'You left nothing on the table.') : ''}</p>
+                {reveal.coach.best && <p><b>Best line:</b> "{reveal.coach.best}"</p>}
+                {reveal.coach.worst && <p className="pen-red"><b>Worst line:</b> "{reveal.coach.worst}"</p>}
+                <div className="pen-actions">
+                  <button type="button" className="pen-go" onClick={() => void replay()}>Try again</button>
+                  <button type="button" className="pen-go is-quiet" onClick={() => void goOn()}>{reveal.next ? 'Next guest' : 'See your report card'}</button>
+                </div>
+              </>
+            )}
           </div>
         </main>
       )}
