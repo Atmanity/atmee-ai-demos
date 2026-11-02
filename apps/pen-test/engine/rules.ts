@@ -184,7 +184,9 @@ export function applyVerdict(round: Round, text: string, v: Verdict): Step {
     return step;
   }
   if (v.askedForSale) round.askedForSale = true;
-  if (!round.objectionRaised && round.fitPitches && round.interest >= 30) {
+  // A doubt about the pen comes before the haggling: once a price or a close is on the table it is dropped.
+  const priceTalk = round.offer !== null || round.askedForSale;
+  if (!round.objectionRaised && !priceTalk && round.fitPitches && round.interest >= 30) {
     round.objectionRaised = true;
     step.objection = true;
   } else if (v.askedForSale && soldOnThePen(round)) {
@@ -249,7 +251,8 @@ export function score(round: Round): Scores {
   const read = (round.needUncovered ? 12 : 0) + (round.fitPitches ? 8 : 0);
   const discovery = (round.needUncovered ? 12 : 0) + (round.needAskedFirst ? 8 : 0);
   const fit = round.fitPitches ? Math.min(20, 12 + 4 * round.fitPitches) : 0;
-  const objections = !round.objectionRaised ? 0 : round.objectionHandled ? 15 : 4;
+  // A seller who fits the pitch and closes before any doubt surfaces loses nothing for it.
+  const objections = !round.objectionRaised ? (round.fitPitches ? 15 : 0) : round.objectionHandled ? 15 : 4;
   const close = round.outcome === 'sold' ? 15 : round.askedForSale ? 8 : 0;
   let pricing = 0;
   if (round.price !== null) {

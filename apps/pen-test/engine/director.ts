@@ -35,7 +35,7 @@ export function direction(round: Round, step: Step = {}): string {
   if (step.sold) parts.push(`YOU MAY BUY at $${step.sold}. Say yes in a few words and call decide with buy.`);
   else if (step.walked) parts.push('You have had enough. Say you are not interested and call decide with end.');
   else {
-    parts.push('You are still making up your mind, so hold off on buying. Answer what they just said in your own words, and never open with a yes or a no out of habit.');
+    parts.push('You are still making up your mind, so hold off on buying. Answer what they just said, directly and in your own words. Never stall with "let me think", "let me see" or "let me check", and never open with a yes or a no out of habit.');
     if (step.challenge) parts.push(`That sounded untrue: challenge this claim briefly: ${step.challenge}.`);
     else if (step.haggle) parts.push(`You want the pen, so say so, but the price has to come down: ask for $${step.counter} a pen. Do not close the deal yet.`);
     else if (step.objection) parts.push(`You are getting interested, but one doubt is holding you back. Raise it once, as an honest question in your own words: "${round.motive.objection}"`);
