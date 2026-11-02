@@ -81,8 +81,18 @@ describe('the sale gate', () => {
 
   it('walks when interest runs out', () => {
     const r = round();
-    expect(say(r, 'Just buy it, you must', { interest: -25, pressure: true }).walked).toBe(true);
+    say(r, 'Just buy it, you must', { interest: -25, pressure: true });
+    expect(say(r, 'Buy it now, you have to', { interest: -25, pressure: true }).walked).toBe(true);
     expect(r.outcome).toBe('walked');
+  });
+
+  it('never walks on one bad line', () => {
+    const r = round();
+    expect(say(r, 'This is the best pen in the world', { interest: -25 }).walked).toBeUndefined();
+    expect(r.interest).toBe(8);
+    expect(say(r, 'It really is great', { interest: -25 }).walked).toBeUndefined();
+    expect(r.outcome).toBe('live');
+    expect(say(r, 'Trust me, it is great', { interest: -25 }).walked).toBe(true);
   });
 });
 

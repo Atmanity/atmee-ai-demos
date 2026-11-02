@@ -128,8 +128,7 @@ body { background: radial-gradient(90% 80% at 42% 30%, #24397f 0%, #14224f 52%, 
 
 .pen-panel.pen-notes ul, .pen-panel.pen-page ul { color: #1a2240; }
 
-.pen-marked .pen-stamp { z-index: 2; }
-.pen-marked.is-marked .pen-stamp { top: 9%; left: 26%; font-size: 1.15rem; border-width: 3px; padding: 3px 10px; animation: none; }
+.pen-marked .pen-stamp { top: 9%; left: 26%; font-size: 1.15rem; border-width: 3px; padding: 3px 10px; animation: none; z-index: 2; }
 
 /* A paper price tag, punched and tied on. */
 .pen-tag { position: relative; background: #fbf8ef; color: #1a2240; border-radius: 6px 6px 6px 22px; padding: 14px 16px 14px 34px; box-shadow: 0 10px 24px rgba(5, 10, 30, .45); transform: rotate(-1.2deg); min-width: 0; }

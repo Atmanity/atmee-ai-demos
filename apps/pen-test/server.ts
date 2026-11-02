@@ -127,7 +127,7 @@ const app: AppServer = {
       const verdict = await judged(round, text);
       round.lines.push({ who: 'seller', text, at: Date.now() });
       const step: Step = applyVerdict(round, text, verdict);
-      console.log('[%s] %s interest %d offer %s top %d %s', ID, round.guestId, round.interest, round.offer, topNow(round), JSON.stringify(step));
+      console.log('[%s] %s interest %d offer %s top %d %s verdict %s', ID, round.guestId, round.interest, round.offer, topNow(round), JSON.stringify(step), JSON.stringify(verdict));
       res.json({
         view: view(found.run, found.index),
         direction: direction(round, step),

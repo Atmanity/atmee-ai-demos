@@ -9,6 +9,10 @@ export const PEN = {
   facts: ['Writes on wet paper', 'Wide soft grip', 'Ink does not smudge once dry', 'One refill lasts about three years', 'Steel body, lifetime warranty'],
 };
 
+/** The most interest one line can lose, and how many lines a guest hears before they may leave. */
+const MAX_LOSS = 12;
+const MIN_LINES_TO_WALK = 3;
+
 export type LevelId = 'walkin' | 'floor' | 'closer' | 'thirty';
 export interface Level { id: LevelId; name: string; seconds: number; lowest: number; interestToBuy: number; hints: number; blurb: string }
 export const LEVELS: Level[] = [
@@ -58,6 +62,7 @@ export interface Round {
   traded: boolean;
   falseClaims: string[];
   pressure: number;
+  sellerLines: number;
   read?: { motive: boolean; clue: boolean };
   score?: Scores;
   coach?: Coach;
@@ -79,7 +84,7 @@ export function newRound(guest: Guest, level: Level, pick = Math.random): Round 
   return {
     guestId: guest.id, motive: guest.motives[Math.floor(pick() * guest.motives.length)], level, outcome: 'live',
     interest: 20, offer: null, price: null, lines: [], needUncovered: false, needAskedFirst: false, pitched: false, fitPitches: 0,
-    objectionRaised: false, objectionHandled: false, askedForSale: false, haggled: false, traded: false, falseClaims: [], pressure: 0,
+    objectionRaised: false, objectionHandled: false, askedForSale: false, haggled: false, traded: false, falseClaims: [], pressure: 0, sellerLines: 0,
   };
 }
 
@@ -159,8 +164,12 @@ export function applyVerdict(round: Round, text: string, v: Verdict): Step {
   }
   // Charm without substance tops out: without a fitted pitch the guest stays short of buying.
   const cap = round.fitPitches ? 100 : Math.min(round.level.interestToBuy - 5, 45);
-  const moved = Math.max(-25, Math.min(25, v.interest)) - (v.falseClaims.length ? 10 : 0) - (v.pressure ? 10 : 0);
+  // One bad or misheard line costs something, but never the whole guest.
+  const moved = Math.max(-MAX_LOSS, Math.min(25, v.interest) - (v.falseClaims.length ? 10 : 0) - (v.pressure ? 10 : 0));
+  round.sellerLines++;
   round.interest = Math.max(0, Math.min(Math.max(cap, round.interest), round.interest + moved));
+  const mayLeave = round.sellerLines >= MIN_LINES_TO_WALK || round.pressure >= 2;
+  if (round.interest <= 0 && !mayLeave) round.interest = 5;
   if (round.interest <= 0) {
     round.outcome = 'walked';
     step.walked = true;
