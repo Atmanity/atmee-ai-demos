@@ -143,19 +143,19 @@ small { font-size: .78rem; }
 .pen-side-toggles .pen-round.is-on { background: transparent; color: var(--blue); }
 .pen-earned { font: 600 1rem var(--mono); margin-right: 8px; }
 
-/* Side panel: white, like a meeting app's chat panel */
-.pen-chat { grid-column: 2; grid-row: 1 / span 2; margin: 16px 16px 16px 0; display: flex; flex-direction: column; min-height: 0; border-radius: 12px; background: #fff; color: #202124; overflow: hidden; }
+/* Side panel: a dark card beside the call, like a meeting app's chat panel */
+.pen-chat { grid-column: 2; grid-row: 1 / span 2; margin: 16px 16px 16px 0; display: flex; flex-direction: column; min-height: 0; border-radius: 12px; background: #2b2d31; color: var(--txt); overflow: hidden; }
 .pen-chat[hidden] { display: none; }
 .pen-chat header { display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 8px 20px; }
 .pen-chat header b { font: 500 1.1rem var(--body); }
-.pen-chat header button { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 50%; background: none; color: #5f6368; font-size: 1.4rem; cursor: pointer; }
-.pen-chat header button:hover { background: #f1f3f4; }
-.pen-deal { margin: 0 16px 8px; padding: 12px 14px; border-radius: 10px; background: #f1f3f4; display: grid; gap: 8px; }
-.pen-deal-row { display: flex; justify-content: space-between; align-items: baseline; font-size: .85rem; color: #5f6368; }
-.pen-deal-row b { font: 600 1.05rem var(--mono); color: #202124; margin-left: 6px; }
-.pen-deal-mood { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: .85rem; color: #5f6368; }
-.pen-deal-mood b { font: 600 1rem var(--body); color: #202124; }
-.pen-deal i { display: block; height: 6px; border-radius: 3px; background: #dadce0; overflow: hidden; }
+.pen-chat header button { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 50%; background: none; color: var(--sub); font-size: 1.4rem; cursor: pointer; }
+.pen-chat header button:hover { background: #3c4043; }
+.pen-deal { margin: 0 16px 8px; padding: 12px 14px; border-radius: 10px; background: #36373b; display: grid; gap: 8px; }
+.pen-deal-row { display: flex; justify-content: space-between; align-items: baseline; font-size: .85rem; color: var(--sub); }
+.pen-deal-row b { font: 600 1.05rem var(--mono); color: var(--txt); margin-left: 6px; }
+.pen-deal-mood { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: .85rem; color: var(--sub); }
+.pen-deal-mood b { font: 600 1rem var(--body); color: var(--txt); }
+.pen-deal i { display: block; height: 6px; border-radius: 3px; background: #5f6368; overflow: hidden; }
 .pen-deal em { display: block; height: 100%; border-radius: 3px; transition: width .6s ease, background-color .6s ease; }
 .pen-deal.is-annoyed em { background: #d93025; }
 .pen-deal.is-unconvinced em { background: #f29900; }
@@ -166,11 +166,11 @@ small { font-size: .78rem; }
 .pen-chip.is-fair { background: #fef7e0; color: #7a5a00; }
 .pen-chip.is-good-deal { background: #e6f4ea; color: #137333; }
 .pen-chat ol { list-style: none; margin: 0; padding: 8px 16px 16px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; flex: 1 1 0; min-height: 0; scrollbar-width: thin; }
-.pen-chat li { display: grid; gap: 2px; font-size: .92rem; line-height: 1.4; color: #202124; }
-.pen-chat li small { font-size: .8rem; font-weight: 600; color: #202124; }
-.pen-chat li.is-seller small { color: #1a73e8; }
-.pen-chat li.is-live { color: #80868b; }
-.pen-chat li.pen-talk-empty { margin: auto 0; text-align: center; color: #80868b; }
+.pen-chat li { display: grid; gap: 2px; font-size: .92rem; line-height: 1.4; color: var(--txt); }
+.pen-chat li small { font-size: .8rem; font-weight: 600; color: var(--txt); }
+.pen-chat li.is-seller small { color: var(--blue); }
+.pen-chat li.is-live { color: var(--sub); }
+.pen-chat li.pen-talk-empty { margin: auto 0; text-align: center; color: var(--sub); }
 
 /* After each guest: the photo marked in red pen beside the scorecard. */
 .pen-marking { --h: calc(100dvh - 76px); width: 100%; max-width: 1180px; margin: 0 auto; padding: 12px 16px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 18px; align-items: start; }
