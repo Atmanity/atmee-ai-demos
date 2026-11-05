@@ -11,6 +11,33 @@ type Scene = 'door' | 'lock' | 'call' | 'end';
 interface Film { ready: boolean; cast: boolean; welcomes: boolean }
 
 const READY_TIMEOUT_MS = 75_000;
+// Your phone's own apps. Only Maps, Notes and Messages open; the rest wiggle.
+const APPS = [
+  { id: 'messages', name: 'Messages', glyph: '💬', bg: 'linear-gradient(#5bd66f, #2fb24c)' },
+  { id: 'maps', name: 'Maps', glyph: '🗺️', bg: 'linear-gradient(#7fd3a0, #3f9fd8)' },
+  { id: 'notes', name: 'Notes', glyph: '📝', bg: 'linear-gradient(#fff3a6, #f5d33f)' },
+  { id: 'camera', name: 'Camera', glyph: '📷', bg: 'linear-gradient(#9aa0a6, #5f6368)' },
+  { id: 'photos', name: 'Photos', glyph: '🌼', bg: 'linear-gradient(#fff, #e8e8e8)' },
+  { id: 'clock', name: 'Clock', glyph: '⏰', bg: 'linear-gradient(#333, #111)' },
+  { id: 'weather', name: 'Weather', glyph: '🌧️', bg: 'linear-gradient(#5aa0e6, #2a6cc0)' },
+  { id: 'music', name: 'Music', glyph: '🎵', bg: 'linear-gradient(#ff6b81, #e0294a)' },
+  { id: 'mail', name: 'Mail', glyph: '✉️', bg: 'linear-gradient(#6ab8ff, #1d7cf2)' },
+  { id: 'settings', name: 'Settings', glyph: '⚙️', bg: 'linear-gradient(#b0b3b8, #7c8087)' },
+  { id: 'calendar', name: 'Calendar', glyph: '📅', bg: 'linear-gradient(#fff, #f1f1f1)' },
+  { id: 'files', name: 'Files', glyph: '📁', bg: 'linear-gradient(#7cc3ff, #3c8fe8)' },
+];
+const DOCK = [
+  { id: 'phone', glyph: '📞', bg: 'linear-gradient(#5bd66f, #2fb24c)' },
+  { id: 'safari', glyph: '🧭', bg: 'linear-gradient(#fff, #e6f0ff)' },
+  { id: 'chat', glyph: '💭', bg: 'linear-gradient(#a78bfa, #7c3aed)' },
+  { id: 'music2', glyph: '🎧', bg: 'linear-gradient(#ff9f43, #ee5a24)' },
+];
+// Tonight's texts: who she was with, never where she is.
+const TEXTS = [
+  { who: 'Mom', at: '12:58 a.m.', lines: ["Is Lily with you? She's not answering", 'Call me when you see this'] },
+  { who: 'Maddie (Lily’s friend)', at: '12:41 a.m.', lines: ['hey is lily ok?? she left the party with some guy idk', 'he said he was giving her a ride home'] },
+  { who: 'Lily', at: '11:52 p.m.', lines: ['party is kinda lame lol', 'ill be home by 1 dont tell mom 🙏'] },
+];
 const FOOTSTEPS_AT_S = 95;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const timeline: { at: number; what: string }[] = [];
@@ -27,7 +54,12 @@ export function App() {
   const [scene, setScene] = useState<Scene>('door');
   const [runId, setRunId] = useState('');
   const [ready, setReady] = useState(false);
-  const [mapOpen, setMapOpen] = useState(false);
+  // Where you are on your own phone: in the call, or away from it (then the call shrinks to a corner).
+  const [app, setApp] = useState<'call' | 'home' | 'maps' | 'notes' | 'messages'>('call');
+  const [hinted, setHinted] = useState(false);
+  const [seenClues, setSeenClues] = useState(0);
+  const [wiggle, setWiggle] = useState('');
+  const mapOpen = app !== 'call';
   const [view, setView] = useState<View | null>(null);
   const [found, setFound] = useState<Clue[]>([]);
   const [toast, setToast] = useState('');
@@ -36,6 +68,7 @@ export function App() {
   const [sent, setSent] = useState<string | null>(null);
   const [ending, setEnding] = useState<Ending | null>(null);
   const [black, setBlack] = useState(false);
+  const [sirens, setSirens] = useState(false);
   const seen = useRef<View[]>([]);
   const foundRef = useRef<Clue[]>([]);
   const endingRef = useRef<Ending | null>(null);
@@ -43,6 +76,7 @@ export function App() {
   const captionAt = useRef(0);
   const liveAt = useRef(0);
   const drained = useRef(0);
+  const stepsDone = useRef(false);
 
   useEffect(() => { fetch(`${API}/film`).then((r) => r.json()).then(setFilm).catch(() => setFilm(null)); }, []);
 
@@ -91,7 +125,7 @@ export function App() {
     mark(`flip ${v}`);
     avatarRef.current.event(VIEWS[v].event, 15);
     await sleep(900);
-    setMapOpen(false);
+    // You stay where you are on your phone; the corner window shows what she shows.
     setView(v);
     addClues(VIEWS[v].clues);
     await sleep(6500);
@@ -124,8 +158,8 @@ export function App() {
     stop('ring');
     const a = avatarRef.current;
     a.setMic(true);
+    // Production greets on its own as the call connects; elsewhere she is cued.
     if (!film?.welcomes) a.event(OPENING, 20);
-    else a.interrupt(OPENING);
     liveAt.current = Date.now();
     play('water', 0.12, true);
     mark('answered');
@@ -135,15 +169,15 @@ export function App() {
   // ---- the clock: battery, trains, the footsteps.
   useEffect(() => {
     if (scene !== 'call') return;
-    let trains = 0, steps = false;
+    let trains = 0;
     const id = setInterval(() => {
       const s = (Date.now() - liveAt.current) / 1000;
       const b = Math.max(0, START_BATTERY - Math.floor(s / SECONDS_PER_PERCENT) - drained.current);
       setBattery(b);
       if (b <= 2 && b > 0 && Math.floor(s) % 20 === 0) play('lowbatt', 0.5);
       if (s > 25 + trains * 50) { trains += 1; play('train', 0.55); }
-      if (!steps && s > FOOTSTEPS_AT_S && !endingRef.current) {
-        steps = true; play('steps', 0.8); setTimeout(() => play('bang', 0.7), 4800);
+      if (!stepsDone.current && s > FOOTSTEPS_AT_S && !endingRef.current) {
+        stepsDone.current = true; play('steps', 0.8); setTimeout(() => play('bang', 0.7), 4800);
         avatarRef.current.interrupt(FOOTSTEPS); mark('footsteps');
       }
       if (b === 0 && !endingRef.current && !sent) void finish('dead');
@@ -154,7 +188,7 @@ export function App() {
   // ---- sending the police
   const send = async (placeId: string) => {
     if (sent) return;
-    setSent(placeId); setPicked(null); setMapOpen(false);
+    setSent(placeId); setPicked(null); setApp('call');
     mark(`sent ${placeId}`);
     const place = PLACES.find((p) => p.id === placeId)!;
     avatarRef.current.event(`Your sibling just told you they sent the police to ${place.name}. Whisper thank you, and that you will stay on the line.`, 12);
@@ -166,10 +200,10 @@ export function App() {
     if (endingRef.current) return;
     endingRef.current = e; setEnding(e);
     mark(`ending ${e}`);
-    setMapOpen(false); setView(null);
+    setApp('call'); setView(null);
     const a = avatarRef.current;
     a.setMic(false);
-    if (e === 'found') play('sirens', 0.7);
+    if (e === 'found') { play('sirens', 0.7); setTimeout(() => setSirens(true), 2500); }
     a.interrupt(FINALE[e]);
     await lineDone(16000, 1500);
     if (e === 'found') await sleep(2500);
@@ -202,7 +236,7 @@ export function App() {
           <p className="ly-lede">{fin ? fin.line(sentPlace?.name ?? 'the wrong place') : "Your little sister never came home from the party. It's 1:12 a.m., and your phone is about to ring."}</p>
           {!fin && <p className="ly-how">Talk to her out loud. Ask what she hears and sees, ask her to show you, and use your map. Her battery won't last.</p>}
           <button className="ly-go" disabled={!film?.cast || !film.ready} onClick={() => {
-            endingRef.current = null; setEnding(null); setBlack(false); setSent(null); setFound([]); foundRef.current = []; seen.current = []; drained.current = 0; setBattery(START_BATTERY); setReady(false); setRunId('');
+            endingRef.current = null; setEnding(null); setBlack(false); setSirens(false); setSent(null); setFound([]); foundRef.current = []; seen.current = []; drained.current = 0; stepsDone.current = false; setBattery(START_BATTERY); setReady(false); setRunId('');
             void begin();
           }}>{fin ? 'Try again' : 'Start'}</button>
           {film && !film.cast && <p className="ly-how">Lily is not set up on this server (LILY_AVATAR).</p>}
@@ -214,8 +248,9 @@ export function App() {
   return (
     <main className="ly ly-phone">
       {/* The call: one video element for the whole film; the map only shrinks it. */}
-      <div className={`ly-call${mapOpen ? ' is-pip' : ''}${scene === 'lock' ? ' is-hidden' : ''}`} onClick={() => mapOpen && setMapOpen(false)}>
-        <video ref={avatar.videoRef} autoPlay playsInline muted={false} className="ly-face" />
+      <div className={`ly-call${mapOpen ? ' is-pip' : ''}${scene === 'lock' ? ' is-hidden' : ''}`} onClick={() => mapOpen && setApp('call')}>
+        <div className="ly-hand"><video ref={avatar.videoRef} autoPlay playsInline muted={false} className="ly-face" /></div>
+        {sirens && <div className="ly-sirens" />}
         <audio ref={avatar.audioRef} autoPlay />
         {view && <video key={view} className="ly-back" src={`${API}/film/${view}.mp4`} autoPlay muted playsInline onEnded={(e) => e.currentTarget.pause()} />}
         {!mapOpen && (
@@ -229,16 +264,58 @@ export function App() {
             {sentPlace && !ending && <p className="ly-dispatch">Police on the way to {sentPlace.name}</p>}
             <div className="ly-bar">
               <span className="ly-turn"><span className={`ly-mic${avatar.micOn ? ' is-on' : ''}`}><MicIcon /></span>{ending ? '' : talking ? 'Lily is talking' : 'Your turn: talk to her'}</span>
-              <button className="ly-mapbtn" onClick={(e) => { e.stopPropagation(); setMapOpen(true); }} disabled={Boolean(ending)}>
-                Map{found.length > 0 && <b>{found.length}</b>}
-              </button>
             </div>
+            {!hinted && !ending && <p className="ly-hint">Tap the bar below to go to your home screen. The call keeps going.</p>}
+            {!ending && <button className="ly-homebar" aria-label="Home" onClick={(e) => { e.stopPropagation(); setHinted(true); setApp('home'); }}><i /></button>}
           </>
         )}
       </div>
       {black && <div className="ly-black"><span>Call failed</span></div>}
 
-      {mapOpen && (
+      {app === 'home' && (
+        <section className="ly-home">
+          <div className="ly-status"><span>1:{String(12 + Math.floor((START_BATTERY - battery) * SECONDS_PER_PERCENT / 60)).padStart(2, '0')}</span></div>
+          <div className="ly-grid">
+            {APPS.map((a) => (
+              <button key={a.id} className={`ly-app${wiggle === a.id ? ' is-wiggle' : ''}`} onClick={() => {
+                if (a.id === 'maps' || a.id === 'notes' || a.id === 'messages') { setApp(a.id); if (a.id === 'notes') setSeenClues(found.length); mark(`open ${a.id}`); }
+                else { setWiggle(a.id); setTimeout(() => setWiggle(''), 500); }
+              }}>
+                <i style={{ background: a.bg }}>{a.glyph}{a.id === 'notes' && found.length > seenClues && <b>{found.length - seenClues}</b>}{a.id === 'messages' && <b>3</b>}</i>
+                <span>{a.name}</span>
+              </button>
+            ))}
+          </div>
+          <div className="ly-dock">
+            {DOCK.map((a) => <button key={a.id} className="ly-app" onClick={() => { setWiggle(a.id); setTimeout(() => setWiggle(''), 500); }}><i style={{ background: a.bg }}>{a.glyph}</i></button>)}
+          </div>
+        </section>
+      )}
+
+      {app === 'notes' && (
+        <section className="ly-sheet ly-notesapp">
+          <header><button onClick={() => setApp('home')}>‹ Notes</button></header>
+          <h2>Lily</h2>
+          <p className="ly-meta">Today 1:12 a.m.</p>
+          {found.length ? <ul>{found.map((c) => <li key={c}>{CLUE_NOTE[c]}</li>)}</ul> : <p className="ly-empty">Nothing yet. Ask her what she can hear and see.</p>}
+          <button className="ly-homebar is-dark" aria-label="Home" onClick={() => setApp('home')}><i /></button>
+        </section>
+      )}
+
+      {app === 'messages' && (
+        <section className="ly-sheet ly-msgs">
+          <header><button onClick={() => setApp('home')}>‹ Messages</button></header>
+          {TEXTS.map((t) => (
+            <div key={t.who} className="ly-thread">
+              <p className="ly-from">{t.who}<span>{t.at}</span></p>
+              {t.lines.map((l) => <p key={l} className="ly-bubble">{l}</p>)}
+            </div>
+          ))}
+          <button className="ly-homebar is-dark" aria-label="Home" onClick={() => setApp('home')}><i /></button>
+        </section>
+      )}
+
+      {app === 'maps' && (
         <section className="ly-map">
           <header><h2>Ashford</h2><p>{left.length} of {PLACES.length} places still possible</p></header>
           <div className="ly-area">
@@ -270,6 +347,7 @@ export function App() {
               </div>
             </div>
           ); })()}
+          {!picked && <button className="ly-homebar is-dark" aria-label="Home" onClick={() => setApp('home')}><i /></button>}
         </section>
       )}
 
