@@ -38,7 +38,10 @@ html, body { margin: 0; background: var(--ls-bg); color: var(--ls-ink); }
 .ls-self { position: absolute; top: 88px; right: 14px; width: 26%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 14px; z-index: 7; transform: scaleX(-1); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6); background: #222; }
 .ls-self-off { display: grid; place-items: center; transform: none; font-size: 13px; color: var(--ls-dim); }
 .ls-pip { position: absolute; top: 88px; left: 14px; width: 58%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 12px; z-index: 8; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.2); }
-.ls-poor { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(8px); font-size: 15px; color: var(--ls-dim); }
+/* A stalled call: the caller's face frozen and blurred, as video calls show it. */
+.ls-poor { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; background-size: cover; background-position: center; }
+.ls-poor::before { content: ''; position: absolute; inset: 0; backdrop-filter: blur(14px) brightness(0.6); }
+.ls-poor span { position: relative; padding: 8px 16px; border-radius: 999px; background: rgba(0, 0, 0, 0.55); font-size: 15px; font-weight: 600; }
 .ls-banner { position: absolute; top: 36px; left: 10px; right: 10px; z-index: 20; display: grid; gap: 4px; padding: 12px 14px; border-radius: 18px; background: var(--ls-glass); backdrop-filter: blur(20px) saturate(1.4); animation: ls-drop 0.35s ease-out; }
 .ls-banner b { font-size: 13px; }
 .ls-banner span { font-size: 14px; line-height: 1.3; }

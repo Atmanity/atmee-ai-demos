@@ -390,7 +390,7 @@ export function App() {
             <div className="ls-call-top"><b>{p.name}</b><span>{p.where} · {String(Math.floor(seconds / 60)).padStart(2, '0')}:{String(seconds % 60).padStart(2, '0')}</span></div>
             <video ref={selfView} className="ls-self" playsInline muted autoPlay />
             {!camera.current && <div className="ls-self ls-self-off">You</div>}
-            {poor && <div className="ls-poor">Poor connection…</div>}
+            {poor && <div className="ls-poor" style={{ backgroundImage: `url(${API}/film/${who}.jpg)` }}><span>Poor connection…</span></div>}
             {pip && <video ref={pipPlayer} className="ls-pip" playsInline muted />}
             {banner && (
               <div className="ls-banner" role="status">
