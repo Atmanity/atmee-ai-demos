@@ -14,32 +14,33 @@ export interface Shot { id: string; caption?: string; speaker?: Parent }
 
 /** Every clip in the film, with the line it speaks (the clip's own audio). */
 export const SHOTS: Record<string, Shot> = Object.fromEntries(([
-  { id: 'o1_tension' },
+  { id: 'o0_black', caption: '(Voices from the kitchen. They are fighting again.)' },
   { id: 'o2_six', speaker: 'claire', caption: "You said you'd be home by six. Sam waited at the window for an hour, Mark." },
   { id: 'o3_working', speaker: 'mark', caption: 'I was working. Somebody has to pay for all of this.' },
   { id: 'o4_money', speaker: 'claire', caption: "Don't. Don't make this about money again." },
   { id: 'o5_tired', speaker: 'mark', caption: "Then what is it about, Claire? Tell me, because I'm tired." },
-  { id: 'o6_dadleaves' },
+  { id: 'o6_air', speaker: 'mark', caption: 'I need some air.' },
   { id: 'h_claire' },
   { id: 'h_mark' },
-  { id: 'b_handoff' },
   { id: 'b_scared', speaker: 'claire', caption: "Sam heard everything, Mark. Sam's scared. Go talk to our kid." },
   { id: 'b_sides', speaker: 'claire', caption: "Sam's been listening, and now Sam's picking sides. Go on, then." },
   { id: 'b_wonttalk', speaker: 'claire', caption: "Sam won't talk to me. Maybe you'll have better luck." },
-  { id: 'b_momleaves' },
-  { id: 'e_repair' },
+  { id: 'b_goingup', speaker: 'claire', caption: "I'm going up. Talk to our kid." },
+  { id: 'e_love', speaker: 'mark', caption: 'We love you, kiddo. Both of us. Okay?' },
   { id: 'e_sorry', speaker: 'claire', caption: "Come here, sweetheart. We're sorry. None of this is on you." },
   { id: 'e_split', speaker: 'mark', caption: "I'm going to stay at Uncle Joe's tonight. It's not because of you, okay? It's never because of you." },
-  { id: 'e_silence' },
+  { id: 'e_goon', speaker: 'claire', caption: "Go on up, Sam. It's late." },
 ] as Shot[]).map((s) => [s.id, s]));
 
-export const OPENING = ['o1_tension', 'o2_six', 'o3_working', 'o4_money', 'o5_tired', 'o6_dadleaves'];
-/** Between the calls: Mark comes back, Claire tells him what Sam said, and leaves him alone. */
-export const bridgeShots = (b: Bridge) => ['b_handoff', `b_${b}`, 'b_momleaves'];
+// Every shot is one parent, rendered by their own avatar: the same face, framing and light as the
+// live call. The film opens on black, with the fight heard through the wall.
+export const OPENING = ['o0_black', 'o2_six', 'o3_working', 'o4_money', 'o5_tired', 'o6_air'];
+/** Between the calls: Claire tells Mark what Sam said, and goes up (her scared line already sends him). */
+export const bridgeShots = (b: Bridge) => (b === 'scared' ? ['b_scared'] : [`b_${b}`, 'b_goingup']);
 export const ENDINGS: Record<Ending, { shots: string[]; title: string; line: string }> = {
-  repair: { shots: ['e_repair', 'e_sorry'], title: 'Repair', line: 'Sam said how it felt, plainly, and both of them heard it.' },
-  split: { shots: ['e_split', 'o6_dadleaves'], title: 'Split', line: 'Sam was pulled into the middle, and carried it there.' },
-  silence: { shots: ['e_silence'], title: 'Silence', line: 'Sam kept it inside, and so did they.' },
+  repair: { shots: ['e_love', 'e_sorry'], title: 'Repair', line: 'Sam said how it felt, plainly, and both of them heard it.' },
+  split: { shots: ['e_split'], title: 'Split', line: 'Sam was pulled into the middle, and carried it there.' },
+  silence: { shots: ['e_goon'], title: 'Silence', line: 'Sam kept it inside, and so did they.' },
 };
 
 export interface Said { who: 'sam' | 'parent' | 'noticed'; text: string }
@@ -55,9 +56,10 @@ export interface Met { stance: Stance; summary: string }
 
 const SHARED = [
   'This is an interactive film. You are on camera in your kitchen at night, standing still and facing the camera; you do not walk away.',
+  'Tonight you are shaken and sad after the fight: keep a serious, tired, tender face, and do not laugh or grin.',
   'You are talking with your child Sam, who is ten. Speak like a real parent to a ten-year-old: one or two short, simple sentences per turn, then let Sam talk. No adult details (no sums of money, no blame words like divorce).',
   'Never blame Sam. Never threaten or describe violence. Never say you are an AI, an avatar or in a film.',
-  'If Sam is quiet, wait or ask one gentle question; never lecture.',
+  'If Sam is quiet, wait, or say something new and gentle; never repeat a line you have already said, and never lecture.',
   "Sam is whoever is watching: never guess Sam's gender. Say Sam, sweetheart or kiddo, never boy, girl, son or daughter.",
   'Stay in this conversation with Sam: answer what Sam says, then ask one more question or share one honest feeling, so Sam keeps talking. Only APP STATE WRAP UP ends it.',
 ];

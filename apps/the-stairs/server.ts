@@ -63,6 +63,12 @@ const app: AppServer = {
       res.json({ shots: SHOTS, opening: OPENING, ready: Object.keys(SHOTS).every((id) => existsSync(`${FILM}/${id}.mp4`)), cast: { claire: Boolean(avatarOf('claire')), mark: Boolean(avatarOf('mark')) } });
     });
 
+    // The kitchen's room tone, looped under the whole film.
+    router.get('/film/roomtone.mp3', (_req, res) => {
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      res.sendFile(`${FILM}/roomtone.mp3`);
+    });
+
     router.get('/film/:shot.mp4', (req, res) => {
       if (!SHOTS[req.params.shot]) return void res.status(404).end();
       res.setHeader('Cache-Control', 'public, max-age=86400');

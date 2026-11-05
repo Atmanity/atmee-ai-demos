@@ -18,9 +18,9 @@ interface Done { next: string[]; ending?: string; title?: string; line?: string;
 type Screen = 'door' | 'loading' | 'film' | 'end';
 
 // A live scene: the parent wraps up from WRAP_S, the cut comes after their next line, and never past HARD_S.
-const WRAP_S = 38;
-const END_AFTER_S = 44;
-const HARD_S = 58;
+const WRAP_S = 30;
+const END_AFTER_S = 34;
+const HARD_S = 45;
 // How long a call may take to appear before the scene goes on without it.
 const READY_TIMEOUT_MS = 75_000;
 const CHOICE_MS = 9000;
@@ -43,7 +43,7 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
  * plus a faint tremor, under a small zoom so the edges never show. One camera for every shot, so the
  * motion carries through each cut, the cut to the live face included. Off for reduced motion.
  */
-function useHandheld(ref: React.RefObject<HTMLDivElement | null>) {
+function useHandheld(ref: React.RefObject<HTMLDivElement | null>, push: React.RefObject<{ at: number }>) {
   useEffect(() => {
     if (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     let id = 0;
@@ -53,13 +53,15 @@ function useHandheld(ref: React.RefObject<HTMLDivElement | null>) {
       const x = 0.32 * wave(t, [0.37, 0.91, 2.3], [0, 1.7, 0.4]) + 0.035 * Math.sin(t * 41);
       const y = 0.26 * wave(t, [0.29, 1.13, 2.9], [2.1, 0.3, 1.1]) + 0.03 * Math.sin(t * 37 + 1);
       const r = 0.14 * wave(t, [0.23, 0.71], [0.9, 2.4]);
-      const z = 1.045 + 0.006 * Math.sin(t * 0.21);
+      // A live scene creeps in over 40 s; the next cut hides the step back.
+      const pushed = push.current.at ? Math.min(1, (Date.now() - push.current.at) / 40000) * 0.08 : 0;
+      const z = 1.045 + pushed + 0.006 * Math.sin(t * 0.21);
       if (ref.current) ref.current.style.transform = `translate(${x.toFixed(3)}%, ${y.toFixed(3)}%) rotate(${r.toFixed(3)}deg) scale(${z.toFixed(4)})`;
       id = requestAnimationFrame(tick);
     };
     id = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(id);
-  }, [ref]);
+  }, [ref, push]);
 }
 
 export function App() {
@@ -81,7 +83,9 @@ export function App() {
   const front = useRef(0);
   const liveBox = useRef<HTMLDivElement>(null);
   const camera = useRef<HTMLDivElement>(null);
-  useHandheld(camera);
+  const roomTone = useRef<HTMLAudioElement>(null);
+  const push = useRef({ at: 0 });
+  useHandheld(camera, push);
   const run = useRef('');
   const wantStart = useRef<Parent | null>(null);
   const revealed = useRef(false);
@@ -123,7 +127,17 @@ export function App() {
     void a.start({ mic: true, micMuted: true });
   }, [who, runId, startAsk]);
   useEffect(() => { if (runId) mark(`call ${who} ${avatar.phase}`); }, [runId, who, avatar.phase]);
-  useEffect(() => { if (onLive && avatar.speaking) setParentSpoke(true); }, [onLive, avatar.speaking]);
+  // The parent counts as talking while their subtitle is still moving: `speaking` alone drops out mid-line.
+  const captionAt = useRef(0);
+  useEffect(() => { if (avatar.caption) captionAt.current = Date.now(); }, [avatar.caption]);
+  const talkingNow = () => avatarRef.current.speaking || Date.now() - captionAt.current < 1500;
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!onLive) return;
+    const id = setInterval(() => setTick((n) => n + 1), 300);
+    return () => clearInterval(id);
+  }, [onLive]);
+  useEffect(() => { if (onLive && (avatar.speaking || avatar.caption)) setParentSpoke(true); }, [onLive, avatar.speaking, avatar.caption]);
   // Hidden means silent: LiveKit can reset the element when it attaches a track.
   useEffect(() => {
     if (!revealed.current && avatar.audioRef.current) avatar.audioRef.current.volume = 0;
@@ -198,23 +212,49 @@ export function App() {
     players.forEach((r) => { r.current?.classList.remove('is-front'); r.current?.pause(); });
     setCaption(null);
     setParentSpoke(false);
+    push.current.at = Date.now();
     setOnLive(true);
     a.setMic(true);
     a.event(cue.opening, 20);
     const at = Date.now();
     let wrapped = false;
+    // The live render can go dark mid-line: cut to the parent's holding shot until it comes back.
+    const probe = document.createElement('canvas');
+    probe.width = 16; probe.height = 9;
+    const brightness = () => {
+      const v = avatarRef.current.videoRef.current;
+      const ctx = probe.getContext('2d', { willReadFrequently: true });
+      if (!v || !ctx || !v.videoWidth) return 255;
+      ctx.drawImage(v, 0, 0, 16, 9);
+      const d = ctx.getImageData(0, 0, 16, 9).data;
+      let sum = 0;
+      for (let i = 0; i < d.length; i += 4) sum += d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11;
+      return sum / (d.length / 4);
+    };
+    let dark = 0, light = 0, masked = false;
     for (;;) {
       await sleep(250);
       const s = (Date.now() - at) / 1000;
       if (scene.current.ended) break;
+      const b = brightness();
+      dark = b < 28 ? dark + 1 : 0;
+      light = b > 40 ? light + 1 : 0;
+      if (!masked && dark >= 2) { masked = true; mark(`dark ${p}`); void shot(p === 'claire' ? 'h_claire' : 'h_mark', true); }
+      if (masked && light >= 2) {
+        masked = false; mark(`light ${p}`);
+        liveBox.current?.classList.add('is-front');
+        players.forEach((r) => { r.current?.classList.remove('is-front'); r.current?.pause(); });
+      }
       if (!wrapped && s >= WRAP_S) { wrapped = true; scene.current.spokeAfterWrap = false; avatarRef.current.state(cue.wrap); }
-      const quiet = !avatarRef.current.speaking && Date.now() - scene.current.lastAvatarDone > 1200;
-      if ((s >= END_AFTER_S && wrapped && scene.current.spokeAfterWrap && quiet) || s >= HARD_S) break;
+      const quiet = !talkingNow() && Date.now() - scene.current.lastAvatarDone > 1200;
+      // Past the limit the parent still finishes the sentence, within reason.
+      if ((s >= END_AFTER_S && wrapped && scene.current.spokeAfterWrap && quiet) || (s >= HARD_S && quiet) || s >= HARD_S + 10) break;
     }
     // Out: close the mic, fade the voice, and hang up behind the next shot.
     avatarRef.current.setMic(false);
     const audio = avatarRef.current.audioRef.current;
     for (let i = 10; i >= 0 && audio; i--) { audio.volume = i / 10; await sleep(30); }
+    push.current.at = 0;
     mark(`cut from ${p}`);
     revealed.current = false;
     setOnLive(false);
@@ -234,28 +274,32 @@ export function App() {
       if (id === 'o3_working') warm('claire');
       await shot(id);
     }
-    // The kitchen goes quiet: what does Sam do?
+    // The kitchen goes quiet, Claire alone in it: what does Sam do?
+    await shot('h_claire', true);
     setChoosing(true);
     const c = await Promise.race([new Promise<'step' | 'stay'>((r) => { choice.current = r; }), sleep(CHOICE_MS).then(() => 'stay' as const)]);
     setChoosing(false);
     await post(`/run/${run.current}/choice`, { choice: c });
 
     await liveScene('claire');
-    // Mark comes back in; Claire tells him what Sam said. His call connects under it.
-    const handoff = shot('b_handoff');
-    await hangUp();
+    // Claire's resting face covers the hang-up and the verdict; then she tells Mark what Sam said,
+    // and his call connects under her lines.
+    await shot('h_claire', true);
     const decided = post<Done>(`/run/${run.current}/claire/done`);
-    await handoff;
+    await hangUp();
     warm('mark');
-    const bridge = await decided.catch(() => ({ next: ['b_handoff', 'b_wonttalk', 'b_momleaves'] }) as Done);
-    for (const id of bridge.next.slice(1)) await shot(id);
+    const bridge = await decided.catch(() => ({ next: ['b_wonttalk', 'b_goingup'] }) as Done);
+    for (const id of bridge.next) await shot(id);
 
     await liveScene('mark');
     await shot('h_mark', true);
     const [ending] = await Promise.all([post<Done>(`/run/${run.current}/mark/done`).catch(() => null), hangUp()]);
-    const end = ending ?? { next: ['e_silence'], title: 'Silence', line: 'Sam kept it inside, and so did they.' };
+    const end = ending ?? { next: ['e_goon'], title: 'Silence', line: 'Sam kept it inside, and so did they.' };
     for (const id of end.next) await shot(id);
     setCaption(null);
+    const tone = roomTone.current;
+    for (let i = 10; i >= 0 && tone; i--) { tone.volume = 0.05 * i; await sleep(80); }
+    tone?.pause();
     setResult(end);
     setScreen('end');
   }, [shot, liveScene]);
@@ -279,6 +323,8 @@ export function App() {
     const { id } = await post<{ id: string }>('/run');
     run.current = id;
     setRunId(id);
+    const tone = roomTone.current;
+    if (tone) { tone.volume = 0.5; void tone.play().catch(() => {}); }
     setScreen('film');
   };
 
@@ -301,13 +347,14 @@ export function App() {
           </div>
         </div>
         <div className="st-grain" aria-hidden="true" />
+        <audio ref={roomTone} src={`${API}/film/roomtone.mp3`} loop preload="auto" />
         {screen === 'film' && liveCaption && (
           <p className={`st-caption ${liveCaption.speaker ? `is-${liveCaption.speaker}` : 'is-narration'}`}>{liveCaption.text}</p>
         )}
         {screen === 'film' && onLive && avatar.heard && <p className="st-heard">{avatar.heard}</p>}
         {screen === 'film' && onLive && (() => {
           // Whose turn it is: the parent talking, Sam's turn once they stop, or the parent listening to Sam.
-          const turn = avatar.heard ? 'listening' : avatar.speaking || !parentSpoke ? 'talking' : 'yours';
+          const turn = avatar.heard ? 'listening' : talkingNow() || !parentSpoke ? 'talking' : 'yours';
           const words = { talking: `${NAMES[who]} is talking…`, yours: 'Your turn: say something', listening: `${NAMES[who]} is listening` }[turn];
           return (
             <p className={`st-turn is-${turn}`} aria-live="polite">

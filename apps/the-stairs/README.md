@@ -9,26 +9,26 @@ and how the night ends.
 
 | Time | Beat | Made of |
 |---|---|---|
-| 0:00 | The argument: a silent two-shot, then four close-ups, then Dad walks out | Clips |
-| 0:28 | "The kitchen goes quiet. What do you do?" Step in, or stay in the doorway | Page choice |
-| 0:37 | **Claire (Mum)** notices you and talks with you, about 50 s | Live call |
-| 1:30 | Mark comes back; Claire tells him what you said (one of three lines), and goes upstairs | Clips |
-| 1:45 | **Mark (Dad)** talks with you; he knows what you told Mum, about 50 s | Live call |
-| 2:40 | The ending: Repair, Split or Silence | Clips |
+| 0:00 | Black: the fight heard through the wall | Sound |
+| 0:07 | The fight, cut between Mum and Dad; Dad says he needs some air, a door shuts | Close-ups |
+| 0:28 | "The kitchen goes quiet. What do you do?" over Mum, alone | Page choice |
+| 0:30 | **Claire (Mum)** notices you and talks with you, about 35 s | Live call |
+| 1:15 | Claire tells Mark what you said (one of three lines) and goes up | Close-ups |
+| 1:25 | **Mark (Dad)** talks with you; he knows what you told Mum, about 35 s | Live call |
+| 2:05 | The ending: Repair, Split or Silence | Close-ups |
 
-- **Close-ups are the avatars themselves.** Each parent's lines were set as their avatar's preview
-  message, and the build's own render of them (the same V2 HD model, framing and look as the live
-  call) is cut into the close-ups and the holding shots. A cut from film to live lands on the same
-  face. The clip model keeps only the silent two-shots: from a cropped close-up it kept walking the
-  parent out of frame or cutting to a stranger, and naming that in the prompt made it worse.
-- **Whose turn.** In a live scene a pill at the top says "Mum is talking…", then "Your turn: say
-  something" once she stops, and "Mum is listening" with Sam's words as she hears them.
-- **Handheld camera.** One gentle drift and tremor over the whole frame, carried through every cut.
-- **Two shots, one face each.** Both parents share the frame only in silent two-shots, with motion
-  from the prompt. Every spoken line is a close-up of one parent. In a two-shot with a voice, no
-  face lip-synced reliably (tested 2026-11-05), so the film never asks for one.
-- **One look.** Both portraits are cropped from the same generated two-shot (`host/portrait.jpg`),
-  so the kitchen, light and faces match across clips and live calls.
+- **One engine for every shot.** Each parent's lines were set as their avatar's preview message,
+  and the build's own render (the same V2 HD model, framing and light as the live call) is cut into
+  the close-ups and the holding shots. The film is coverage of two people, cut back and forth, so
+  a cut from film to live lands on the same face. Two-shots from the clip model were dropped: they
+  changed faces and light, walked people out of frame, and moved the wrong person.
+- **One sound world and one look.** A kitchen room tone loops under the whole film, a door thump is
+  mixed into Dad's exits, and one warm grade, grain and handheld camera cover every shot and the
+  live face. A live scene creeps in slowly; the next cut hides the step back.
+- **Whose turn.** In a live scene a pill at the top says "Mum is talking…" (while her subtitle is
+  still moving), then "Your turn: say something", and "Mum is listening" with Sam's words.
+- **If the live picture goes dark** (the renderer can black out mid-line), the page cuts to the
+  parent's holding shot until it comes back.
 - **Branching.** After each call the server reads Sam's lines (Gemini, or word rules) as
   `honest`, `side` or `silent` (`story.ts`). A side taken with either parent splits them, one
   honest talk repairs, nothing at all leaves silence. Mark's session is told what Sam said to Claire.
