@@ -18,8 +18,13 @@ html, body { margin: 0; background: var(--st-bg); color: var(--st-ink); }
 .st-caption.is-mark { color: var(--st-mark); }
 .st-caption.is-narration { font-style: italic; color: var(--st-dim); }
 .st-heard { position: absolute; left: 10%; right: 10%; bottom: 16%; margin: 0; text-align: center; font-size: clamp(13px, 1.8vw, 16px); color: var(--st-warm); font-style: italic; opacity: 0.85; text-shadow: 0 1px 3px #000; }
-.st-you { position: absolute; top: 4%; left: 0; right: 0; margin: 0; text-align: center; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--st-warm); opacity: 0.8; animation: st-breathe 2.4s ease-in-out infinite; }
-@keyframes st-breathe { 50% { opacity: 0.35; } }
+/* Whose turn it is, top centre: dim while the parent talks, a lit pill when it is Sam's turn. */
+.st-turn { position: absolute; top: 4%; left: 50%; transform: translateX(-50%); margin: 0; display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; font-size: clamp(13px, 1.6vw, 16px); font-weight: 600; white-space: nowrap; background: rgba(11, 9, 7, 0.55); color: var(--st-dim); transition: background 0.25s, color 0.25s; }
+.st-turn svg { width: 18px; height: 18px; }
+.st-turn.is-talking { opacity: 0.75; font-weight: 400; }
+.st-turn.is-yours { background: var(--st-warm); color: var(--st-bg); animation: st-breathe 1.6s ease-in-out infinite; }
+.st-turn.is-listening { background: rgba(231, 169, 92, 0.25); color: var(--st-warm); }
+@keyframes st-breathe { 50% { box-shadow: 0 0 0 8px rgba(231, 169, 92, 0.18); } }
 
 .st-door, .st-end, .st-choice { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 6%; box-sizing: border-box; background: linear-gradient(180deg, rgba(11, 9, 7, 0.55), rgba(11, 9, 7, 0.92)); }
 .st-door { background: linear-gradient(180deg, rgba(11, 9, 7, 0.35), rgba(11, 9, 7, 0.95)), url('../host/portrait.jpg') center 30% / cover; }
@@ -40,6 +45,6 @@ html, body { margin: 0; background: var(--st-bg); color: var(--st-ink); }
 .st-timer { margin-top: 18px; width: 160px; height: 2px; background: var(--st-ink); transform-origin: left; animation: st-shrink linear forwards; opacity: 0.6; }
 @keyframes st-shrink { to { transform: scaleX(0); } }
 .st-debug { position: absolute; top: 4px; left: 4px; margin: 0; font-size: 11px; color: #9f9; background: rgba(0, 0, 0, 0.6); padding: 2px 6px; }
-@media (prefers-reduced-motion: reduce) { .st-you { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .st-turn { animation: none; } }
 /* A phone held upright: the title and end screens get room; the film itself stays 16:9. */
 @media (max-width: 700px) { .st:not(.is-playing) .st-stage { aspect-ratio: auto; min-height: 82dvh; } }

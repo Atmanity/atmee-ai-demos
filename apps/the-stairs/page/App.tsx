@@ -7,7 +7,7 @@
 // in the same kitchen, so the viewer never sees a load. One call at a time: Mark's connects
 // under the bridge clips that follow Claire's.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BackToApps, useAvatar, type ToolCall } from '../../../src/kit/index.ts';
+import { BackToApps, MicIcon, useAvatar, type ToolCall } from '../../../src/kit/index.ts';
 import './stairs.css';
 
 const API = '/api/apps/the-stairs';
@@ -71,6 +71,8 @@ export function App() {
   const [caption, setCaption] = useState<{ text: string; speaker?: Parent } | null>(null);
   const [choosing, setChoosing] = useState(false);
   const [onLive, setOnLive] = useState(false);
+  // Set once the live parent has said their first line: until then it is not Sam's turn.
+  const [parentSpoke, setParentSpoke] = useState(false);
   const [result, setResult] = useState<Done | null>(null);
 
   const film = useRef<Film | null>(null);
@@ -121,6 +123,7 @@ export function App() {
     void a.start({ mic: true, micMuted: true });
   }, [who, runId, startAsk]);
   useEffect(() => { if (runId) mark(`call ${who} ${avatar.phase}`); }, [runId, who, avatar.phase]);
+  useEffect(() => { if (onLive && avatar.speaking) setParentSpoke(true); }, [onLive, avatar.speaking]);
   // Hidden means silent: LiveKit can reset the element when it attaches a track.
   useEffect(() => {
     if (!revealed.current && avatar.audioRef.current) avatar.audioRef.current.volume = 0;
@@ -194,6 +197,7 @@ export function App() {
     liveBox.current?.classList.add('is-front');
     players.forEach((r) => { r.current?.classList.remove('is-front'); r.current?.pause(); });
     setCaption(null);
+    setParentSpoke(false);
     setOnLive(true);
     a.setMic(true);
     a.event(cue.opening, 20);
@@ -301,7 +305,16 @@ export function App() {
           <p className={`st-caption ${liveCaption.speaker ? `is-${liveCaption.speaker}` : 'is-narration'}`}>{liveCaption.text}</p>
         )}
         {screen === 'film' && onLive && avatar.heard && <p className="st-heard">{avatar.heard}</p>}
-        {screen === 'film' && onLive && <p className="st-you" aria-live="polite">{avatar.micOn ? 'Talk to them' : ''}</p>}
+        {screen === 'film' && onLive && (() => {
+          // Whose turn it is: the parent talking, Sam's turn once they stop, or the parent listening to Sam.
+          const turn = avatar.heard ? 'listening' : avatar.speaking || !parentSpoke ? 'talking' : 'yours';
+          const words = { talking: `${NAMES[who]} is talking…`, yours: 'Your turn: say something', listening: `${NAMES[who]} is listening` }[turn];
+          return (
+            <p className={`st-turn is-${turn}`} aria-live="polite">
+              {turn !== 'talking' && <MicIcon />}<span>{words}</span>
+            </p>
+          );
+        })()}
         {choosing && (
           <div className="st-choice" role="dialog" aria-label="What do you do?">
             <p>The kitchen goes quiet. What do you do?</p>
@@ -316,7 +329,7 @@ export function App() {
           <div className="st-door">
             <h1>The Stairs</h1>
             <p className="st-premise">It's late. You're Sam, ten years old, and you can't sleep. Voices from the kitchen. They're fighting again.</p>
-            <p className="st-how">Three minutes. When Mum or Dad looks at you, <strong>talk to them out loud</strong>. What you say changes how the night ends. Headphones help.</p>
+            <p className="st-how">Three minutes. When Mum or Dad turns to you and <strong>Your turn</strong> lights up at the top, talk to them out loud. What you say changes how the night ends. Headphones help.</p>
             {problem ? <p className="st-problem">{problem}</p> : (
               <button type="button" className="st-begin" onClick={begin} disabled={screen === 'loading'}>
                 {screen === 'loading' ? `Getting ready ${Math.round(loaded * 100)}%` : 'Begin'}
