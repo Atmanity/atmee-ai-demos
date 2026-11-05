@@ -35,7 +35,7 @@ export const CALLERS: Record<Friend, Caller> = {
       { at: 18, id: 'flicker', sound: 'flicker', event: 'The lights in the food court just flickered off and on. Mention it, half laughing, and carry on chatting.' },
       { at: 33, id: 'scream', sound: 'scream', urgent: true, event: 'You just heard a scream from somewhere deeper in the mall, far away. Go quiet. Ask Sam, quietly, if Sam heard that too.' },
       { at: 47, id: 'figure', urgent: true, event: "You can see a man standing at the far end of the food court, not moving, facing the wall. He was not there before. Whisper: 'hang on, let me turn the camera so you can see', then ask Sam, quietly, if you should go and check on him." },
-      { at: 66, id: 'coming', sound: 'thud', urgent: true, event: 'The man just turned around and he is running at you, fast, wrong. Panic: tell Sam he is coming, he is coming, in a few broken words, then stop talking.' },
+      { at: 66, id: 'coming', sound: 'thud', urgent: true, event: 'The man just turned around and he is running at you, fast, wrong. Panic: tell Sam he is coming, he is coming, in a few broken words.' },
     ],
     chips: [],
   },
@@ -45,7 +45,7 @@ export const CALLERS: Record<Friend, Caller> = {
     opening: "Sam just answered. Speak first, uneasy: you're driving to the mall to get Jake and he isn't answering; ask if Sam has heard from him.",
     beats: [
       { at: 20, id: 'road', event: "Up ahead, people are walking along the edge of the road in the dark, slowly, strangely, more and more of them. Whisper: 'Sam, there are people on the road... look', and keep driving very slowly." },
-      { at: 40, id: 'crash', urgent: true, event: 'People just stepped out into the road right in front of your headlights. Scream, swerve, and stop talking.' },
+      { at: 40, id: 'crash', urgent: true, event: "People just stepped out into the road right in front of your headlights. Scream 'Oh my God!' as you swerve." },
     ],
     chips: [],
   },

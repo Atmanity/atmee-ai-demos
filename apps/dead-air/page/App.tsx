@@ -336,13 +336,17 @@ export function App() {
     shake.current = 0.45;
     await wait(crash.at);
     mark('beat crash');
+    const screamAsked = Date.now();
     avatarRef.current.interrupt(crash.event);
     drone(0.6);
-    await sleep(900);
+    // The crash lands on her scream, not before it.
+    while (Date.now() - screamAsked < 4000 && !(avatarRef.current.speaking && captionAt.current > screamAsked)) await sleep(100);
+    await sleep(300);
     void showPov('crash', 0);
     play('skid', 1);
     shake.current = 1.4;
-    await sleep(1800);
+    // Let her get the words out, then the impact.
+    await lineDone(6000, 1800);
     // Impact: a white flash, the screen cracks, then nothing but the horn.
     play('impact', 1);
     shake.current = 4;
