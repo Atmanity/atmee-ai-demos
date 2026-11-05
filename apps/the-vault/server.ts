@@ -49,7 +49,7 @@ const app: AppServer = {
   async shutdown() { await endAll(); },
   routes(router) {
     router.get('/film', (_req, res) => {
-      res.json({ ready: [...VIDEOS, ...SOUNDS].every((n) => existsSync(`${FILM}/${fileOf(n)}`)), cast: Boolean(WALTER), deadline: DEADLINE_S, endings: ENDINGS, videos: VIDEOS, sounds: SOUNDS });
+      res.json({ ready: [...VIDEOS, ...SOUNDS].every((n) => existsSync(`${FILM}/${fileOf(n)}`)), cast: Boolean(WALTER), welcomes: !STAGING, deadline: DEADLINE_S, endings: ENDINGS, videos: VIDEOS, sounds: SOUNDS });
     });
 
     router.get('/film/:name', (req, res) => {
@@ -72,7 +72,7 @@ const app: AppServer = {
       if (!WALTER) return void res.status(500).json({ error: 'no_avatar', message: 'Set THE_VAULT_WALTER' });
       const ended = await endAll();
       if (ended) console.log('[%s] ended %d stale session(s)', ID, ended);
-      const r = await startSession(WALTER, CAP_S, { app: 'atmee-usecase-demos', usecase: ID }, { instructions: instructions(), tools: TOOLS }, undefined, STAGING ? { welcome: false } : {});
+      const r = await startSession(WALTER, CAP_S, { app: 'atmee-usecase-demos', usecase: ID }, { instructions: instructions(!STAGING), tools: TOOLS }, undefined, STAGING ? { welcome: false } : {});
       if (!r.ok) {
         console.warn('[%s] POST /v1/session -> %d %s %s', ID, r.status, r.json?.error ?? '', r.json?.message ?? '');
         return void res.status(r.status).json({ error: r.json?.error || `http_${r.status}`, retryAfter: r.retryAfter });

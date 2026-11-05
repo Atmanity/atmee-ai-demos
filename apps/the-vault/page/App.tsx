@@ -10,13 +10,13 @@ const API = '/api/apps/the-vault';
 type Ending = 'open' | 'off' | 'breach';
 interface Note { id: string; note: string; said: string }
 interface View { trust: number; read: string; state: string; notes: Note[]; ending?: Ending | null }
-interface Film { ready: boolean; cast: boolean; deadline: number; endings: Record<Ending, { title: string; line: string }> }
+interface Film { ready: boolean; cast: boolean; welcomes?: boolean; deadline: number; endings: Record<Ending, { title: string; line: string }> }
 type Scene = 'door' | 'connecting' | 'live' | 'ending' | 'end';
 
 const READY_TIMEOUT_MS = 75_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const timeline: { at: number; what: string }[] = [];
-const mark = (what: string) => { timeline.push({ at: Math.round(performance.now()), what }); console.log('[vault] %s', what); };
+const mark = (what: string) => { timeline.push({ at: Math.round(performance.now()), what }); console.log(`[vault] ${what}`); };
 if (typeof window !== 'undefined') Object.assign(window, { __vault: timeline });
 async function post<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) });
@@ -111,7 +111,7 @@ export function App() {
         clearInterval(id);
         stop('static'); play('hum', 0.12, true);
         a.state(viewRef.current?.state ?? '');
-        a.event(OPENING, 20);
+        if (!film?.welcomes) a.event(OPENING, 20);
         deadlineAt.current = Date.now() + (film?.deadline ?? 180) * 1000;
         mark('live');
         setScene('live');
