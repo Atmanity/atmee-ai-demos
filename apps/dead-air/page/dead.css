@@ -1,0 +1,41 @@
+/* Dead Air on top of the shared phone: colder, darker, and the things a phone does when it breaks. */
+.da .ls-phone { box-shadow: 0 0 0 10px #0c0c0c, 0 0 0 11px #221616, 0 40px 120px rgba(0, 0, 0, 0.9); }
+.da-door, .da-end { background: radial-gradient(ellipse at 50% 15%, #1a1012, #050304 70%) !important; }
+.da-lock { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; padding-top: 90px; background: radial-gradient(ellipse at 50% 10%, #141a24, #030406 75%); }
+.da-date { margin: 0; color: var(--ls-dim); font-size: 15px; }
+.da-banner { top: 60px; }
+/* The lights flicker: the picture dims and stutters for a moment. */
+.ls-lens.is-flicker { animation: da-flicker 0.9s steps(1) 1; }
+@keyframes da-flicker { 0% { filter: brightness(0.25); } 12% { filter: brightness(1); } 25% { filter: brightness(0.1); } 40% { filter: brightness(0.9); } 55% { filter: brightness(0.3); } 70%, 100% { filter: brightness(1); } }
+.da-black { position: absolute; inset: 0; z-index: 8; background: #000; }
+.da-failed { position: absolute; inset: 0; z-index: 9; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 6px; background: #000; }
+.da-failed b { font-size: 26px; }
+.da-failed span { color: var(--ls-red); font-size: 15px; }
+.da-ghost span { color: var(--ls-dim); }
+/* A security camera: black-and-white, a timestamp and a recording light. */
+.da-cctv { position: absolute; inset: 0; z-index: 9; display: flex; flex-direction: column; justify-content: center; background: #000; }
+.da-cctv video { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; filter: grayscale(1) contrast(1.15); }
+.da-cctv-label, .da-pip p { margin: 8px 12px; font: 600 12px ui-monospace, Menlo, monospace; letter-spacing: 0.06em; color: #cfd5dd; }
+.da-rec { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ls-red); margin-right: 6px; animation: da-rec 1s steps(1) infinite; }
+@keyframes da-rec { 50% { opacity: 0; } }
+.da-pip { position: absolute; top: 88px; left: 14px; right: 14px; z-index: 8; border-radius: 12px; overflow: hidden; background: #000; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.2); }
+.da-pip video { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; filter: grayscale(1) contrast(1.15); }
+.da-pip p { position: absolute; top: 0; left: 0; margin: 6px 8px; }
+@media (prefers-reduced-motion: reduce) { .ls-lens.is-flicker, .da-rec { animation: none; } }
+/* What the phone sees when it stops pointing at a face: over the live face, under the call's chrome. */
+.da-pov { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; pointer-events: none; }
+.da-pov.is-on { opacity: 1; }
+/* Switching cameras, as a phone does it: the picture spins edge-on and blurs, then the other camera. */
+.ls-lens { transition: filter 0.26s ease; }
+.ls-lens.is-flipping > * { transform: perspective(900px) rotateY(90deg); filter: blur(14px) brightness(0.5); transition: transform 0.26s ease-in, filter 0.26s ease-in; }
+.ls-lens > * { transition: transform 0.26s ease-out, filter 0.26s ease-out; }
+.da-backcam { position: absolute; top: 70px; left: 0; right: 0; margin: 0; text-align: center; z-index: 7; font-size: 12px; color: var(--ls-dim); text-shadow: 0 1px 3px #000; }
+@media (prefers-reduced-motion: reduce) { .ls-lens.is-flipping > * { transform: none; } }
+/* Driving at night: a streetlight's glow slides across her face every few seconds. */
+.da-sweep { position: absolute; inset: 0; z-index: 2; pointer-events: none; background: linear-gradient(105deg, transparent 0%, transparent 38%, rgba(255, 176, 92, 0.22) 50%, transparent 62%, transparent 100%); background-size: 260% 100%; mix-blend-mode: screen; animation: da-sweep 3.6s linear infinite; }
+@keyframes da-sweep { from { background-position: 130% 0; } to { background-position: -130% 0; } }
+/* The crash: a white flash, then a cracked screen. */
+.da-flash { position: absolute; inset: 0; z-index: 9; background: #fff; }
+.da-cracks { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 9; pointer-events: none; }
+.da-cracks path { fill: none; stroke: rgba(255, 255, 255, 0.75); stroke-width: 0.35; }
+@media (prefers-reduced-motion: reduce) { .da-sweep { animation: none; opacity: 0.4; } }

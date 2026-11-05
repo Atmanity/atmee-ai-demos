@@ -1,0 +1,94 @@
+/* Last Seen: the whole film is one phone screen, 9:16. On a desktop it stands in the middle of a
+   dark room; on a phone it fills the screen. */
+:root { --ls-bg: #05070b; --ls-ink: #eef2f8; --ls-dim: #93a1b5; --ls-warm: #f2b34a; --ls-red: #ff3b30; --ls-green: #30d158; --ls-glass: rgba(18, 22, 30, 0.62); }
+html, body { margin: 0; background: var(--ls-bg); color: var(--ls-ink); }
+.ls { min-height: 100dvh; display: grid; place-items: center; font-family: -apple-system, 'SF Pro Text', 'Inter', system-ui, sans-serif; padding: 16px; box-sizing: border-box; }
+.ls-phone { position: relative; width: min(100%, calc((100dvh - 32px) * 9 / 16), 430px); aspect-ratio: 9 / 16; overflow: hidden; border-radius: 34px; background: #000; box-shadow: 0 0 0 10px #111, 0 0 0 11px #2a2a2a, 0 40px 120px rgba(0, 0, 0, 0.8); }
+@media (max-width: 520px) { .ls { padding: 0; } .ls-phone { width: 100vw; height: 100dvh; aspect-ratio: auto; border-radius: 0; box-shadow: none; } }
+
+.ls-status { position: absolute; top: 0; left: 0; right: 0; z-index: 30; display: flex; justify-content: space-between; padding: 12px 24px; font-size: 14px; font-weight: 600; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); }
+.ls-bars b { color: var(--ls-red); font-weight: 600; }
+
+/* The live face and Mia's videos fill the screen, as on a video call, inside the moving lens. */
+.ls-lens { position: absolute; inset: 0; will-change: transform; }
+.ls-remote, .ls-message { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; pointer-events: none; }
+.ls-remote video { width: 100%; height: 100%; object-fit: cover; }
+.ls-remote.is-on, .ls-message.is-on { opacity: 1; }
+.ls-label { position: absolute; top: 44px; left: 0; right: 0; margin: 0; text-align: center; font-size: 13px; color: var(--ls-dim); z-index: 5; }
+.ls-caption { position: absolute; left: 6%; right: 6%; bottom: 18%; margin: 0; text-align: center; font-size: 16px; line-height: 1.35; z-index: 5; text-shadow: 0 1px 3px #000, 0 0 10px rgba(0, 0, 0, 0.9); }
+.ls-caption.is-live { bottom: 30%; }
+.ls-heard { position: absolute; left: 8%; right: 8%; bottom: 25%; margin: 0; text-align: center; font-size: 14px; font-style: italic; color: var(--ls-warm); z-index: 5; text-shadow: 0 1px 3px #000; }
+
+/* Ringing: the caller's photo blurred behind their name, and Answer once the call can be taken. */
+.ls-ringing { position: absolute; inset: 0; z-index: 10; display: flex; flex-direction: column; justify-content: space-between; align-items: center; padding: 90px 0 70px; }
+.ls-ring-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: blur(24px) brightness(0.45); transform: scale(1.15); }
+.ls-ring-who { position: relative; text-align: center; }
+.ls-ring-face { width: 108px; height: 108px; border-radius: 50%; object-fit: cover; object-position: center 28%; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5); }
+.ls-ring-who h2 { font-size: 30px; font-weight: 600; margin: 14px 0 4px; }
+.ls-ring-who p { margin: 0; color: var(--ls-dim); }
+.ls-ring-actions { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 13px; }
+.ls-answer { width: 74px; height: 74px; border-radius: 50%; border: 0; background: var(--ls-green); color: #fff; display: grid; place-items: center; cursor: pointer; animation: ls-pulse 1.2s ease-in-out infinite; }
+.ls-answer svg { width: 34px; height: 34px; }
+.ls-answer:disabled { background: #3a3a3c; animation: none; cursor: progress; }
+@keyframes ls-pulse { 50% { box-shadow: 0 0 0 14px rgba(48, 209, 88, 0.25); } }
+
+/* On a call. */
+.ls-call-top { position: absolute; top: 40px; left: 0; right: 0; z-index: 6; display: flex; flex-direction: column; align-items: center; gap: 2px; text-shadow: 0 1px 3px #000; }
+.ls-call-top b { font-size: 18px; }
+.ls-call-top span { font-size: 12px; color: var(--ls-dim); }
+.ls-self { position: absolute; top: 88px; right: 14px; width: 26%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 14px; z-index: 7; transform: scaleX(-1); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6); background: #222; }
+.ls-self-off { display: grid; place-items: center; transform: none; font-size: 13px; color: var(--ls-dim); }
+.ls-pip { position: absolute; top: 88px; left: 14px; width: 58%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 12px; z-index: 8; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.2); }
+/* A stalled call: the caller's face frozen and blurred, as video calls show it. */
+.ls-poor { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; background-size: cover; background-position: center; }
+.ls-poor::before { content: ''; position: absolute; inset: 0; backdrop-filter: blur(14px) brightness(0.6); }
+.ls-poor span { position: relative; padding: 8px 16px; border-radius: 999px; background: rgba(0, 0, 0, 0.55); font-size: 15px; font-weight: 600; }
+.ls-banner { position: absolute; top: 36px; left: 10px; right: 10px; z-index: 20; display: grid; gap: 4px; padding: 12px 14px; border-radius: 18px; background: var(--ls-glass); backdrop-filter: blur(20px) saturate(1.4); animation: ls-drop 0.35s ease-out; }
+.ls-banner b { font-size: 13px; }
+.ls-banner span { font-size: 14px; line-height: 1.3; }
+.ls-banner button { justify-self: start; margin-top: 6px; padding: 8px 16px; border-radius: 999px; border: 0; background: var(--ls-warm); color: #1a1205; font-weight: 700; font-size: 14px; cursor: pointer; }
+@keyframes ls-drop { from { transform: translateY(-120%); } }
+.ls-call-bottom { position: absolute; left: 0; right: 0; bottom: 0; z-index: 9; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 0 14px 26px; background: linear-gradient(transparent, rgba(0, 0, 0, 0.7)); }
+.ls-turn { margin: 0; display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 999px; font-size: 14px; background: rgba(0, 0, 0, 0.5); color: var(--ls-dim); }
+.ls-turn svg { width: 16px; height: 16px; }
+.ls-turn.is-yours { background: var(--ls-warm); color: #1a1205; font-weight: 700; animation: ls-breathe 1.6s ease-in-out infinite; }
+.ls-turn.is-listening { color: var(--ls-warm); }
+@keyframes ls-breathe { 50% { box-shadow: 0 0 0 8px rgba(242, 179, 74, 0.2); } }
+.ls-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.ls-chips button { padding: 7px 12px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.25); background: rgba(255, 255, 255, 0.08); color: var(--ls-ink); font-size: 13px; cursor: pointer; }
+.ls-hangup { width: 62px; height: 62px; border-radius: 50%; border: 0; background: var(--ls-red); color: #fff; display: grid; place-items: center; cursor: pointer; }
+.ls-hangup svg { width: 30px; height: 30px; }
+
+/* Between calls: the map, the texts, and the choice. */
+.ls-map { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; padding: 48px 14px 18px; gap: 10px; background: #0b111a; }
+.ls-map-art { width: 100%; border-radius: 18px; }
+.ls-pin { animation: ls-ping 1.6s ease-in-out infinite; transform-origin: 168px 150px; }
+@keyframes ls-ping { 50% { transform: scale(1.5); opacity: 0.6; } }
+.ls-texts { display: grid; gap: 8px; }
+.ls-texts p { margin: 0; padding: 10px 12px; border-radius: 16px; background: #1c2430; font-size: 14px; line-height: 1.3; animation: ls-drop 0.3s ease-out; }
+.ls-texts b { display: block; font-size: 12px; color: var(--ls-dim); margin-bottom: 2px; }
+.ls-typing { color: var(--ls-dim); font-style: italic; }
+.ls-hint { margin: auto 0 0; text-align: center; color: var(--ls-dim); font-size: 13px; }
+.ls-decide { margin-top: auto; display: grid; gap: 10px; }
+.ls-decide p { margin: 0; text-align: center; font-size: 18px; font-weight: 600; }
+.ls-decide button, .ls-begin { padding: 14px; border-radius: 16px; border: 0; font-size: 16px; font-weight: 700; cursor: pointer; background: var(--ls-ink); color: #0b111a; }
+.ls-decide button + button { background: #1c2430; color: var(--ls-ink); }
+.ls-notes { position: absolute; z-index: 12; left: 14px; right: 14px; bottom: 150px; margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; pointer-events: none; }
+.ls-phone:not(.is-call) .ls-notes { position: static; }
+.ls-notes li { font-size: 12px; padding: 6px 10px; border-radius: 10px; background: rgba(48, 209, 88, 0.16); color: #c9f5d4; }
+.ls-notes s { color: var(--ls-dim); margin-right: 4px; }
+.is-call .ls-notes { display: none; }
+
+/* Lock screen door, and the end. */
+.ls-door, .ls-end { position: absolute; inset: 0; z-index: 25; display: flex; flex-direction: column; justify-content: center; padding: 0 26px; text-align: center; background: radial-gradient(ellipse at 50% 20%, #1b2738, #05070b 70%); }
+.ls-door-time { font-size: 76px; font-weight: 200; margin: 0 0 18px; letter-spacing: -2px; }
+.ls h1 { margin: 0 0 10px; font-size: 32px; }
+.ls h2 { margin: 0 0 10px; font-size: 30px; }
+.ls-premise { margin: 0 0 12px; font-size: 16px; line-height: 1.4; }
+.ls-how, .ls-end p { margin: 0 0 22px; font-size: 14px; line-height: 1.45; color: var(--ls-dim); }
+.ls-end ul { list-style: none; padding: 0; margin: 0 0 22px; display: grid; gap: 6px; font-size: 14px; }
+.ls-problem { color: var(--ls-warm); }
+.ls-begin:disabled { opacity: 0.7; cursor: progress; }
+.ls button:focus-visible { outline: 3px solid var(--ls-warm); outline-offset: 2px; }
+.ls-debug { position: absolute; bottom: 4px; left: 4px; z-index: 40; margin: 0; font-size: 10px; color: #9f9; background: rgba(0, 0, 0, 0.6); padding: 2px 6px; }
+@media (prefers-reduced-motion: reduce) { .ls-answer, .ls-turn, .ls-pin { animation: none; } }
