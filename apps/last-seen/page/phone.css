@@ -9,7 +9,8 @@ html, body { margin: 0; background: var(--ls-bg); color: var(--ls-ink); }
 .ls-status { position: absolute; top: 0; left: 0; right: 0; z-index: 30; display: flex; justify-content: space-between; padding: 12px 24px; font-size: 14px; font-weight: 600; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); }
 .ls-bars b { color: var(--ls-red); font-weight: 600; }
 
-/* The live face and Mia's videos fill the screen, as on a video call. */
+/* The live face and Mia's videos fill the screen, as on a video call, inside the moving lens. */
+.ls-lens { position: absolute; inset: 0; will-change: transform; }
 .ls-remote, .ls-message { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; pointer-events: none; }
 .ls-remote video { width: 100%; height: 100%; object-fit: cover; }
 .ls-remote.is-on, .ls-message.is-on { opacity: 1; }

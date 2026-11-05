@@ -43,6 +43,33 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
 }
 const clockOf = (min: number) => `${Math.floor(min / 60) % 12 || 12}:${String(min % 60).padStart(2, '0')}`;
 
+/** How hard each phone shakes: Theo sits in a car, Mia sits on a bridge, Jonah stands at a party, drunk. */
+const SHAKE: Record<string, number> = { theo: 1, mia: 1.2, jonah: 1.7 };
+
+/**
+ * A phone held at arm's length: slow drift of the arm, a faint hand tremor, and now and then a
+ * jolt that settles like a spring (a shifted grip). Under a small zoom so the edges never show.
+ */
+function useHandheld(ref: React.RefObject<HTMLDivElement | null>, strength: React.RefObject<number>) {
+  useEffect(() => {
+    if (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    let id = 0, jolt = { at: -99, x: 0, y: 0, r: 0 }, next = 4;
+    const wave = (t: number, f: number[], p: number[]) => f.reduce((sum, k, i) => sum + Math.sin(t * k + p[i]) / (i + 1), 0);
+    const tick = (ms: number) => {
+      const t = ms / 1000, k = strength.current;
+      if (t > next) { jolt = { at: t, x: (Math.random() - 0.5) * 2.4, y: (Math.random() - 0.3) * 2.2, r: (Math.random() - 0.5) * 2 }; next = t + 5 + Math.random() * 7; }
+      const since = t - jolt.at, spring = since < 2.5 ? Math.exp(-since * 3) * Math.cos(since * 11) : 0;
+      const x = k * (0.55 * wave(t, [0.43, 1.1, 2.7], [0, 1.7, 0.4]) + 0.06 * Math.sin(t * 47) + jolt.x * spring);
+      const y = k * (0.5 * wave(t, [0.37, 0.95, 3.1], [2.1, 0.3, 1.1]) + 0.06 * Math.sin(t * 53 + 1) + jolt.y * spring);
+      const r = k * (0.35 * wave(t, [0.29, 0.83], [0.9, 2.4]) + jolt.r * spring);
+      if (ref.current) ref.current.style.transform = k ? `translate(${x.toFixed(3)}%, ${y.toFixed(3)}%) rotate(${r.toFixed(3)}deg) scale(1.08)` : 'none';
+      id = requestAnimationFrame(tick);
+    };
+    id = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(id);
+  }, [ref, strength]);
+}
+
 export function App() {
   const [scene, setScene] = useState<Scene>({ kind: 'door' });
   const [film, setFilm] = useState<Film | null>(null);
@@ -84,6 +111,10 @@ export function App() {
   const ring = useRef<HTMLAudioElement>(null);
   const ding = useRef<HTMLAudioElement>(null);
   const debug = typeof location !== 'undefined' && location.search.includes('debug');
+  // The caller's phone is in their hand: the picture moves with it.
+  const lens = useRef<HTMLDivElement>(null);
+  const shake = useRef(0);
+  useHandheld(lens, shake);
 
   const onUserSaid = useCallback((text: string) => {
     if (debug) console.log('[lastseen] sam:', revealed.current ? 'heard' : 'hidden', text);
@@ -347,6 +378,7 @@ export function App() {
     v.onended = () => setPip('');
   }, [pip]);
 
+  shake.current = scene.kind === 'call' ? SHAKE[who] : scene.kind === 'message' ? SHAKE.mia : 0;
   const p = film?.people[who];
   const onCall = scene.kind === 'call';
   const turn = !onCall ? null : avatar.heard ? 'listening' : talkingNow() || !parentSpoke ? 'talking' : 'yours';
@@ -359,11 +391,13 @@ export function App() {
         <div className="ls-status"><span>{clockOf(minute)}</span><span className="ls-bars">▮▮▯ <b>12%</b></span></div>
 
         {/* The live call: mounted from the start, so it can connect hidden behind other screens. */}
-        <div className={`ls-remote ${onCall ? 'is-on' : ''}`}>
-          <video ref={avatar.videoRef} playsInline muted aria-label={p ? `${p.name}, live` : 'Live call'} />
-          <audio ref={avatar.audioRef} autoPlay />
+        <div ref={lens} className="ls-lens">
+          <div className={`ls-remote ${onCall ? 'is-on' : ''}`}>
+            <video ref={avatar.videoRef} playsInline muted aria-label={p ? `${p.name}, live` : 'Live call'} />
+            <audio ref={avatar.audioRef} autoPlay />
+          </div>
+          <video ref={player} className={`ls-message ${scene.kind === 'message' ? 'is-on' : ''}`} playsInline />
         </div>
-        <video ref={player} className={`ls-message ${scene.kind === 'message' ? 'is-on' : ''}`} playsInline />
 
         {scene.kind === 'message' && scene.label && <p className="ls-label">{scene.label}</p>}
         {(scene.kind === 'message' && caption) && <p className="ls-caption">{caption}</p>}
