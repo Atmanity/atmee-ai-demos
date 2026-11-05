@@ -55,13 +55,14 @@ The viewer never waits for an avatar.
 
 ## Making the film
 
-The clips are in `film/` (about 6 MB). They were made on staging with `atmee-staging generate
-clip`: 640x480 two-shots and 480x640 close-ups, 0.1 to 0.3 credits each. Each parent's lines came
+Everything is 16:9. The clips are in `film/`, made on staging with `atmee-staging generate clip` at
+832x468 (0.3 credits up to 5 s), and the live faces are V2 HD at 864x480, so a cut from a clip to
+the live call keeps the frame and nearly the same sharpness. Each parent's lines came
 from one `design_voice` read of all of them, split at the pauses; the same read is that avatar's
 voice sample, so the clips and the live calls sound alike.
 
-Staging avatars: Claire `91411c3f-b675-485a-a740-05636acad0b2`, Mark
-`37472b8f-4236-4551-a053-b9c01581613a` (448x576, v2). For another server set `THE_STAIRS_CLAIRE`
+Staging avatars: Claire `9f4682bc-5edc-4e06-a580-ef6e281fe904`, Mark
+`3f0c69d8-b638-4659-b33f-c949b66675af` (V2 HD, 864x480). For another server set `THE_STAIRS_CLAIRE`
 and `THE_STAIRS_MARK`.
 
 ## Run it locally

@@ -19,8 +19,8 @@ const FILM = resolve('apps/the-stairs/film');
 
 // An avatar lives on one server. Production has none yet: set THE_STAIRS_CLAIRE / _MARK.
 const CAST: Record<Parent, { staging: string; env: string }> = {
-  claire: { staging: '91411c3f-b675-485a-a740-05636acad0b2', env: 'THE_STAIRS_CLAIRE' },
-  mark: { staging: '37472b8f-4236-4551-a053-b9c01581613a', env: 'THE_STAIRS_MARK' },
+  claire: { staging: '9f4682bc-5edc-4e06-a580-ef6e281fe904', env: 'THE_STAIRS_CLAIRE' },
+  mark: { staging: '3f0c69d8-b638-4659-b33f-c949b66675af', env: 'THE_STAIRS_MARK' },
 };
 // server/atmee.ts talks to staging when ATMEE_BASE_URL is unset.
 const STAGING = (process.env.ATMEE_BASE_URL || 'https://staging.atmanity.us').includes('staging');

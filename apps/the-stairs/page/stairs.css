@@ -1,18 +1,20 @@
-/* The Stairs: a dark cinema, one 4:3 frame, subtitles under the picture. */
+/* The Stairs: a dark cinema, one 16:9 frame, subtitles over the bottom of the picture. */
 :root { --st-bg: #0b0907; --st-ink: #f3e6d3; --st-dim: #b9a68d; --st-warm: #e7a95c; --st-claire: #f3e6d3; --st-mark: #d8e2ee; }
 html, body { margin: 0; background: var(--st-bg); color: var(--st-ink); }
 .st { min-height: 100dvh; display: grid; place-items: center; font-family: 'Source Sans 3', system-ui, sans-serif; padding: 0 16px; box-sizing: border-box; }
-.st-stage { position: relative; width: min(100%, calc(100dvh * 4 / 3)); aspect-ratio: 4 / 3; overflow: hidden; background: #000; border-radius: 4px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7); }
+.st-stage { position: relative; width: min(100%, calc(100dvh * 16 / 9)); aspect-ratio: 16 / 9; overflow: hidden; background: #000; border-radius: 4px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7); }
 .st.is-playing { padding: 0; }
 .st.is-playing .st-stage { border-radius: 0; }
 
-/* Every shot fills the frame; the 3:4 close-ups and the live face crop to the face. */
-.st-shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 24%; opacity: 0; pointer-events: none; }
+/* The camera: every shot and the live face move together under one handheld motion (App's useHandheld). */
+.st-camera { position: absolute; inset: 0; will-change: transform; transform: scale(1.045); }
+/* Every shot and the live face are 16:9 and fill the frame. */
+.st-shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; pointer-events: none; }
 .st-shot.is-front { opacity: 1; }
-.st-live video { width: 100%; height: 100%; object-fit: cover; object-position: 50% 24%; }
+.st-live video { width: 100%; height: 100%; object-fit: cover; }
 .st-grain { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.55) 100%); }
 
-.st-caption { position: absolute; left: 8%; right: 8%; bottom: 5%; margin: 0; text-align: center; font-size: clamp(15px, 2.4vw, 22px); line-height: 1.35; text-shadow: 0 1px 3px #000, 0 0 12px rgba(0, 0, 0, 0.8); }
+.st-caption { position: absolute; left: 8%; right: 8%; bottom: 5%; margin: 0; text-align: center; font-size: clamp(14px, 2vw, 22px); line-height: 1.35; text-shadow: 0 1px 3px #000, 0 0 12px rgba(0, 0, 0, 0.8); }
 .st-caption.is-mark { color: var(--st-mark); }
 .st-caption.is-narration { font-style: italic; color: var(--st-dim); }
 .st-heard { position: absolute; left: 10%; right: 10%; bottom: 16%; margin: 0; text-align: center; font-size: clamp(13px, 1.8vw, 16px); color: var(--st-warm); font-style: italic; opacity: 0.85; text-shadow: 0 1px 3px #000; }
@@ -39,3 +41,5 @@ html, body { margin: 0; background: var(--st-bg); color: var(--st-ink); }
 @keyframes st-shrink { to { transform: scaleX(0); } }
 .st-debug { position: absolute; top: 4px; left: 4px; margin: 0; font-size: 11px; color: #9f9; background: rgba(0, 0, 0, 0.6); padding: 2px 6px; }
 @media (prefers-reduced-motion: reduce) { .st-you { animation: none; } }
+/* A phone held upright: the title and end screens get room; the film itself stays 16:9. */
+@media (max-width: 700px) { .st:not(.is-playing) .st-stage { aspect-ratio: auto; min-height: 82dvh; } }

@@ -38,6 +38,30 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
   return res.json();
 }
 
+/**
+ * A handheld camera over the whole frame: slow drift and breathing from a few unrelated sine waves,
+ * plus a faint tremor, under a small zoom so the edges never show. One camera for every shot, so the
+ * motion carries through each cut, the cut to the live face included. Off for reduced motion.
+ */
+function useHandheld(ref: React.RefObject<HTMLDivElement | null>) {
+  useEffect(() => {
+    if (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    let id = 0;
+    const wave = (t: number, f: number[], p: number[]) => f.reduce((sum, k, i) => sum + Math.sin(t * k + p[i]) / (i + 1), 0);
+    const tick = (ms: number) => {
+      const t = ms / 1000;
+      const x = 0.32 * wave(t, [0.37, 0.91, 2.3], [0, 1.7, 0.4]) + 0.035 * Math.sin(t * 41);
+      const y = 0.26 * wave(t, [0.29, 1.13, 2.9], [2.1, 0.3, 1.1]) + 0.03 * Math.sin(t * 37 + 1);
+      const r = 0.14 * wave(t, [0.23, 0.71], [0.9, 2.4]);
+      const z = 1.045 + 0.006 * Math.sin(t * 0.21);
+      if (ref.current) ref.current.style.transform = `translate(${x.toFixed(3)}%, ${y.toFixed(3)}%) rotate(${r.toFixed(3)}deg) scale(${z.toFixed(4)})`;
+      id = requestAnimationFrame(tick);
+    };
+    id = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(id);
+  }, [ref]);
+}
+
 export function App() {
   const [screen, setScreen] = useState<Screen>('door');
   const [problem, setProblem] = useState('');
@@ -54,6 +78,8 @@ export function App() {
   const players = [useRef<HTMLVideoElement>(null), useRef<HTMLVideoElement>(null)];
   const front = useRef(0);
   const liveBox = useRef<HTMLDivElement>(null);
+  const camera = useRef<HTMLDivElement>(null);
+  useHandheld(camera);
   const run = useRef('');
   const wantStart = useRef<Parent | null>(null);
   const revealed = useRef(false);
@@ -62,10 +88,12 @@ export function App() {
   const debug = typeof location !== 'undefined' && location.search.includes('debug');
 
   const onUserSaid = useCallback((text: string) => {
+    if (debug) console.log('[stairs] sam:', revealed.current ? 'heard' : 'hidden', text);
     if (!revealed.current) return;
     void post(`/run/${run.current}/${scene.current.who}/line`, { who: 'sam', text });
   }, []);
   const onAvatarSaid = useCallback((text: string) => {
+    if (debug) console.log('[stairs] parent:', revealed.current ? 'heard' : 'hidden', text);
     if (!revealed.current) return;
     scene.current.lastAvatarDone = Date.now();
     scene.current.spokeAfterWrap = true;
@@ -84,13 +112,15 @@ export function App() {
   avatarRef.current = avatar;
 
   // A call starts once useAvatar points at that parent (the app path carries who).
+  const [startAsk, setStartAsk] = useState(0);
   useEffect(() => {
     if (!runId || wantStart.current !== who) return;
     wantStart.current = null;
     const a = avatarRef.current;
     if (a.audioRef.current) a.audioRef.current.volume = 0;
     void a.start({ mic: true, micMuted: true });
-  }, [who, runId]);
+  }, [who, runId, startAsk]);
+  useEffect(() => { if (runId) mark(`call ${who} ${avatar.phase}`); }, [runId, who, avatar.phase]);
   // Hidden means silent: LiveKit can reset the element when it attaches a track.
   useEffect(() => {
     if (!revealed.current && avatar.audioRef.current) avatar.audioRef.current.volume = 0;
@@ -111,7 +141,8 @@ export function App() {
 
   // ---- the film's pieces
 
-  const warm = (p: Parent) => { mark(`connect ${p}`); wantStart.current = p; setWho(p); };
+  // Asking for a call bumps `startAsk`, so the effect runs even when useAvatar already points at that parent.
+  const warm = (p: Parent) => { mark(`connect ${p}`); wantStart.current = p; setWho(p); setStartAsk((n) => n + 1); };
   const isReady = () => {
     const a = avatarRef.current;
     return a.phase === 'live' && (a.videoRef.current?.videoWidth ?? 0) > 0;
@@ -257,11 +288,13 @@ export function App() {
   return (
     <main className={`st ${screen === 'film' ? 'is-playing' : ''}`}>
       <div className="st-stage" aria-label="The film">
-        <video ref={players[0]} className="st-shot" playsInline preload="auto" />
-        <video ref={players[1]} className="st-shot" playsInline preload="auto" />
-        <div ref={liveBox} className="st-shot st-live">
-          <video ref={avatar.videoRef} playsInline muted aria-label={`${NAMES[who]}, live`} />
-          <audio ref={avatar.audioRef} autoPlay />
+        <div ref={camera} className="st-camera">
+          <video ref={players[0]} className="st-shot" playsInline preload="auto" />
+          <video ref={players[1]} className="st-shot" playsInline preload="auto" />
+          <div ref={liveBox} className="st-shot st-live">
+            <video ref={avatar.videoRef} playsInline muted aria-label={`${NAMES[who]}, live`} />
+            <audio ref={avatar.audioRef} autoPlay />
+          </div>
         </div>
         <div className="st-grain" aria-hidden="true" />
         {screen === 'film' && liveCaption && (
