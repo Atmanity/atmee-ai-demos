@@ -7,7 +7,7 @@
 // in the same kitchen, so the viewer never sees a load. One call at a time: Mark's connects
 // under the bridge clips that follow Claire's.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BackToApps, useAvatar } from '../../../src/kit/index.ts';
+import { BackToApps, useAvatar, type ToolCall } from '../../../src/kit/index.ts';
 import './stairs.css';
 
 const API = '/api/apps/the-stairs';
@@ -28,6 +28,10 @@ const NAMES: Record<Parent, string> = { claire: 'Mum', mark: 'Dad' };
 const STANCE: Record<string, string> = { honest: 'told them how it felt', side: 'took a side', silent: 'kept quiet' };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// What the film did and when, for a test driver to check that no load ever showed.
+const timeline: { at: number; what: string }[] = [];
+const mark = (what: string) => { timeline.push({ at: Math.round(performance.now()), what }); };
+if (typeof window !== 'undefined') Object.assign(window, { __stairs: timeline });
 async function post<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) });
   if (!res.ok) throw new Error(`${path}: ${res.status}`);
@@ -68,8 +72,14 @@ export function App() {
     void post(`/run/${run.current}/${scene.current.who}/line`, { who: 'parent', text });
   }, []);
   const onEnded = useCallback(() => { scene.current.ended = true; }, []);
+  // What the parent noticed: a hint for the server's judge, never shown.
+  const onToolCall = useCallback(({ name, arguments: args }: ToolCall) => {
+    if (name !== 'noticed') return 'Unknown tool.';
+    void post(`/run/${run.current}/${scene.current.who}/line`, { who: 'noticed', text: `${String(args.what ?? '')} ${String(args.words ?? '')}`.trim() });
+    return 'Noted.';
+  }, []);
 
-  const avatar = useAvatar(runId ? `the-stairs/run/${runId}/${who}` : 'the-stairs', { onUserSaid, onAvatarSaid, onEnded });
+  const avatar = useAvatar(runId ? `the-stairs/run/${runId}/${who}` : 'the-stairs', { onUserSaid, onAvatarSaid, onEnded, onToolCall });
   const avatarRef = useRef(avatar);
   avatarRef.current = avatar;
 
@@ -101,7 +111,7 @@ export function App() {
 
   // ---- the film's pieces
 
-  const warm = (p: Parent) => { wantStart.current = p; setWho(p); };
+  const warm = (p: Parent) => { mark(`connect ${p}`); wantStart.current = p; setWho(p); };
   const isReady = () => {
     const a = avatarRef.current;
     return a.phase === 'live' && (a.videoRef.current?.videoWidth ?? 0) > 0;
@@ -122,6 +132,7 @@ export function App() {
     old.pause();
     liveBox.current?.classList.remove('is-front');
     front.current = next;
+    mark(`shot ${id}${loop ? ' (hold)' : ''}`);
     const s = film.current!.shots[id];
     setCaption(s.caption ? { text: s.caption, speaker: s.speaker } : null);
     if (!loop) await ended;
@@ -138,6 +149,7 @@ export function App() {
     }
     if (!isReady()) {
       // The call never came: the parent looks at Sam and says nothing, and the film goes on.
+      mark(`missed ${p}`);
       setCaption({ text: `(${NAMES[p]} looks at you for a long moment, and says nothing.)` });
       await sleep(4000);
       void avatarRef.current.end();
@@ -145,6 +157,7 @@ export function App() {
     }
     const cue = await (await fetch(`${API}/run/${run.current}/${p}/cue`)).json();
     const a = avatarRef.current;
+    mark(`live ${p}`);
     revealed.current = true;
     if (a.audioRef.current) a.audioRef.current.volume = 1;
     liveBox.current?.classList.add('is-front');
@@ -167,6 +180,7 @@ export function App() {
     avatarRef.current.setMic(false);
     const audio = avatarRef.current.audioRef.current;
     for (let i = 10; i >= 0 && audio; i--) { audio.volume = i / 10; await sleep(30); }
+    mark(`cut from ${p}`);
     revealed.current = false;
     setOnLive(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps

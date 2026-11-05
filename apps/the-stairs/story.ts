@@ -42,7 +42,15 @@ export const ENDINGS: Record<Ending, { shots: string[]; title: string; line: str
   silence: { shots: ['e_silence'], title: 'Silence', line: 'Sam kept it inside, and so did they.' },
 };
 
-export interface Said { who: 'sam' | 'parent'; text: string }
+export interface Said { who: 'sam' | 'parent' | 'noticed'; text: string }
+
+/** The one tool each parent has: what they noticed about Sam, as a hint for the branch. */
+export const TOOLS = [{
+  type: 'function' as const, name: 'noticed',
+  description: 'Call this, silently and without mentioning it, when Sam tells you how they feel, blames one parent, or refuses to talk. Keep talking normally.',
+  parameters: { type: 'object', properties: { what: { type: 'string', description: 'honest, side or silent' }, words: { type: 'string', description: "Sam's words, briefly" } }, required: ['what'] },
+  'x-atmee': { mode: 'notify' as const },
+}];
 export interface Met { stance: Stance; summary: string }
 
 const SHARED = [
@@ -117,7 +125,7 @@ export const JUDGE_SCHEMA = {
   required: ['stance', 'summary'],
 };
 export const judgePrompt = (who: Parent, lines: Said[]) => lines
-  .map((l) => `${l.who === 'sam' ? 'Sam' : who === 'claire' ? 'Mum' : 'Dad'}: ${l.text}`).join('\n') || '(nothing was said)';
+  .map((l) => (l.who === 'noticed' ? `(${who === 'claire' ? 'Mum' : 'Dad'} noted: ${l.text})` : `${l.who === 'sam' ? 'Sam' : who === 'claire' ? 'Mum' : 'Dad'}: ${l.text}`)).join('\n') || '(nothing was said)';
 
 export const normalise = (m: Partial<Met> | null | undefined): Met => ({
   stance: m?.stance === 'honest' || m?.stance === 'side' ? m.stance : 'silent',

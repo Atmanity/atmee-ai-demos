@@ -8,7 +8,7 @@ import type { AppServer } from '../../server/app-server.ts';
 import { endSession, startSession } from '../../server/atmee.ts';
 import { llmAvailable, structured } from '../../server/llm.ts';
 import {
-  bridgeFor, bridgeShots, endingFor, ENDINGS, instructions, JUDGE_SCHEMA, JUDGE_SYSTEM, judgePrompt, normalise, OPENING, opening, SHOTS, WRAP, wordRules,
+  bridgeFor, bridgeShots, endingFor, ENDINGS, instructions, TOOLS, JUDGE_SCHEMA, JUDGE_SYSTEM, judgePrompt, normalise, OPENING, opening, SHOTS, WRAP, wordRules,
   type Choice, type Met, type Parent, type Said,
 } from './story.ts';
 
@@ -89,7 +89,7 @@ const app: AppServer = {
       if (!f) return void res.status(404).json({ error: 'not_found' });
       const avatarId = avatarOf(f.who);
       if (!avatarId) return void res.status(500).json({ error: 'no_avatar', message: `Set ${CAST[f.who].env}` });
-      const appTools = { instructions: instructions(f.who, { choice: f.run.choice, claire: f.run.met.claire, claireLines: f.run.lines.claire }), tools: [] };
+      const appTools = { instructions: instructions(f.who, { choice: f.run.choice, claire: f.run.met.claire, claireLines: f.run.lines.claire }), tools: TOOLS };
       const r = await startSession(avatarId, CAP_S, { app: 'atmee-usecase-demos', usecase: ID, parent: f.who }, appTools, undefined, QUIET_START ? { welcome: false } : {});
       if (!r.ok) {
         console.warn('[%s] POST /v1/session -> %d %s %s', ID, r.status, r.json?.error ?? '', r.json?.message ?? '');
@@ -119,7 +119,8 @@ const app: AppServer = {
       const f = found(req.params.run, req.params.who);
       if (!f) return void res.status(404).json({ error: 'not_found' });
       const text = String(req.body?.text ?? '').slice(0, 1000).trim();
-      if (text) f.run.lines[f.who].push({ who: req.body?.who === 'sam' ? 'sam' : 'parent', text });
+      const kind = req.body?.who === 'sam' || req.body?.who === 'noticed' ? req.body.who : 'parent';
+      if (text) f.run.lines[f.who].push({ who: kind, text });
       res.json({ ok: true });
     });
 
