@@ -16,6 +16,14 @@ and how the night ends.
 | 1:45 | **Mark (Dad)** talks with you; he knows what you told Mum, about 50 s | Live call |
 | 2:40 | The ending: Repair, Split or Silence | Clips |
 
+- **Close-ups are the avatars themselves.** Each parent's lines were set as their avatar's preview
+  message, and the build's own render of them (the same V2 HD model, framing and look as the live
+  call) is cut into the close-ups and the holding shots. A cut from film to live lands on the same
+  face. The clip model keeps only the silent two-shots: from a cropped close-up it kept walking the
+  parent out of frame or cutting to a stranger, and naming that in the prompt made it worse.
+- **Whose turn.** In a live scene a pill at the top says "Mum is talking…", then "Your turn: say
+  something" once she stops, and "Mum is listening" with Sam's words as she hears them.
+- **Handheld camera.** One gentle drift and tremor over the whole frame, carried through every cut.
 - **Two shots, one face each.** Both parents share the frame only in silent two-shots, with motion
   from the prompt. Every spoken line is a close-up of one parent. In a two-shot with a voice, no
   face lip-synced reliably (tested 2026-11-05), so the film never asks for one.
@@ -45,6 +53,8 @@ The viewer never waits for an avatar.
 ## What the API could not do
 
 - **No two-person lip sync in a clip**: see above.
+- **Instructions that name a thing plant it.** "Do not send Sam to bed" made Mark send Sam to bed
+  every turn; the instructions now say only what to do.
 - **Clips invent camera moves.** Asking a close-up to talk "to someone off-camera" made the model
   pan to a new person, and an action shorter than the clip ends in an invented cut. Prompts now ask
   for a locked-off single take with nobody else in frame, and each clip is cut at the end of its line.

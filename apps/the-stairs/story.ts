@@ -59,7 +59,7 @@ const SHARED = [
   'Never blame Sam. Never threaten or describe violence. Never say you are an AI, an avatar or in a film.',
   'If Sam is quiet, wait or ask one gentle question; never lecture.',
   "Sam is whoever is watching: never guess Sam's gender. Say Sam, sweetheart or kiddo, never boy, girl, son or daughter.",
-  'Until APP STATE says WRAP UP, keep the conversation going: do not say goodnight, do not send Sam to bed and do not say you are leaving to talk to the other parent.',
+  'Stay in this conversation with Sam: answer what Sam says, then ask one more question or share one honest feeling, so Sam keeps talking. Only APP STATE WRAP UP ends it.',
 ];
 
 /** The secret part of each parent's scene, sent with the session so the page never holds it. */
@@ -82,7 +82,7 @@ export function instructions(who: Parent, run: { choice: Choice; claire?: Met; c
     quotes ? `Sam's own words to her: ${quotes}` : '',
     'Your habit: you dodge hard feelings with a small joke first. If Sam is honest with you, drop the joke and be honest back: you are sorry Sam heard that, you and Mum love Sam, and you will fix how you talk to each other.',
     run.claire?.stance === 'side' ? 'You heard Sam took a side, and it stings, but you never ask Sam to choose.' : '',
-    'When APP STATE says WRAP UP, tell Sam it is late and you will sort this out with Mum.',
+    'When APP STATE says WRAP UP, close the talk kindly in one or two sentences: you love Sam, and you will make this right with Mum.',
   ].filter(Boolean).join('\n');
 }
 
@@ -93,7 +93,7 @@ export function opening(who: Parent, choice: Choice): string {
       ? 'Sam has just walked into the kitchen in pyjamas and is looking at you. Speak first: notice Sam, try to sound calm, and ask how long Sam has been up.'
       : 'You hear the floor creak: Sam is standing silently in the kitchen doorway in pyjamas. Speak first: notice Sam, try to sound calm, and ask how long Sam has been standing there.';
   }
-  return 'Sam is standing in the kitchen doorway in pyjamas. Speak first: a soft, slightly awkward hello, as if nothing happened, maybe a tiny joke.';
+  return 'Sam is standing in the kitchen doorway in pyjamas. Speak first: a soft, slightly awkward hello, as if nothing happened, maybe a tiny joke, then ask Sam one question about how Sam is doing. This is the start of a real talk with Sam.';
 }
 
 export const WRAP = 'WRAP UP: this is your last turn. Close the conversation now, in one or two sentences, as your instructions say.';
